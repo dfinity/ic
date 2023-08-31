@@ -153,7 +153,7 @@ where
 }
 
 /// An in-memory implementation of the neuron following index.
-#[derive(Default)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct HeapNeuronFollowingIndex<NeuronId, Category> {
     category_to_followee_to_followers: BTreeMap<Category, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
 }

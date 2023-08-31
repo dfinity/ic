@@ -51,16 +51,6 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, SECONDS_PER_DAY,
 };
-use ic_nervous_system_governance::index::{
-    neuron_following::{
-        add_neuron_followees, remove_neuron_followees, update_neuron_category_followees,
-        HeapNeuronFollowingIndex, NeuronFollowingIndex,
-    },
-    neuron_principal::{
-        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, HeapNeuronPrincipalIndex,
-        NeuronPrincipalIndex,
-    },
-};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -1427,30 +1417,6 @@ impl LedgerUpdateLock {
     }
 }
 
-fn log_already_present_topic_followee_pairs(
-    neuron_id: NeuronId,
-    already_present_topic_followee_pairs: Vec<(Topic, NeuronId)>,
-) {
-    for (topic, followee) in already_present_topic_followee_pairs {
-        println!(
-            "{} Topic {:?} and followee {:?} already present in the index for neuron {:?}",
-            LOG_PREFIX, topic, followee, neuron_id
-        );
-    }
-}
-
-fn log_already_absent_topic_followee_pairs(
-    neuron_id: NeuronId,
-    already_absent_topic_followee_pairs: Vec<(Topic, NeuronId)>,
-) {
-    for (topic, followee) in already_absent_topic_followee_pairs {
-        println!(
-            "{} Topic {:?} and followee {:?} already absent in the index for neuron {:?}",
-            LOG_PREFIX, topic, followee, neuron_id
-        );
-    }
-}
-
 /// The `Governance` canister implements the full public interface of the
 /// IC's governance system.
 pub struct Governance {
@@ -1470,27 +1436,6 @@ pub struct Governance {
 
     /// Implementation of the interface with the CMC canister.
     cmc: Box<dyn CMC>,
-
-    /// Cached data structure that (for each topic) maps a followee to
-    /// the set of followers. This is the inverse of the mapping from
-    /// neuron (follower) to followees, in the neurons. This is a
-    /// cached index and will be removed and recreated when the state
-    /// is saved and restored.
-    ///
-    /// (Topic, Followee) -> set of followers.
-    pub topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
-
-    /// Maps Principals to the Neuron IDs of all Neurons that have this
-    /// Principal as their controller or as one of their hot keys
-    ///
-    /// This is a cached index and will be removed and recreated when the state
-    /// is saved and restored.
-    pub principal_to_neuron_ids_index: HeapNeuronPrincipalIndex<NeuronId>,
-
-    /// Set of all names given to Known Neurons, to prevent duplication.
-    ///
-    /// This set is cached and will be removed and recreated when the state is saved and restored.
-    pub known_neuron_name_set: HashSet<String>,
 
     /// Timestamp, in seconds since the unix epoch, until which no proposal
     /// needs to be processed.
@@ -1539,23 +1484,16 @@ impl Governance {
 
         let (heap_neurons, heap_governance_proto) = split_governance_proto(governance_proto);
 
-        let mut gov = Self {
+        Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new(heap_neurons),
             env,
             ledger,
             cmc,
-            topic_followee_index: HeapNeuronFollowingIndex::new(),
-            principal_to_neuron_ids_index: HeapNeuronPrincipalIndex::new(),
-            known_neuron_name_set: HashSet::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
-        };
-
-        gov.initialize_indices();
-
-        gov
+        }
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -1622,173 +1560,6 @@ impl Governance {
             }
         }
         Ok(())
-    }
-
-    /// Initializes the indices.
-    /// Must be called after the state has been externally changed (e.g. by
-    /// setting a new proto).
-    fn initialize_indices(&mut self) {
-        self.build_principal_to_neuron_ids_index();
-        self.build_topic_followee_index();
-        self.build_known_neuron_name_index();
-    }
-
-    fn build_principal_to_neuron_ids_index(&mut self) {
-        for neuron in self.neuron_store.heap_neurons().values() {
-            let already_present_principal_ids = add_neuron_id_principal_ids(
-                &mut self.principal_to_neuron_ids_index,
-                &neuron.id.unwrap(),
-                neuron.principal_ids_with_special_permissions(),
-            );
-            for already_present_principal_id in already_present_principal_ids {
-                println!(
-                    "{} Principal {:?}  already present in the index for neuron {:?}",
-                    LOG_PREFIX, already_present_principal_id, neuron.id
-                );
-            }
-        }
-    }
-
-    /// From the `neurons` part of this `Governance` struct, build the
-    /// index (per topic) from followee to set of followers. The
-    /// neurons themselves map followers (the neuron ID) to a set of
-    /// followees (per topic).
-    fn build_topic_followee_index(&mut self) {
-        for neuron in self.neuron_store.heap_neurons().values() {
-            let neuron_id = neuron.id.expect("Neuron must have an id");
-            let already_present_topic_followee_pairs = add_neuron_followees(
-                &mut self.topic_followee_index,
-                &neuron_id,
-                neuron.topic_followee_pairs(),
-            );
-            log_already_present_topic_followee_pairs(
-                neuron_id,
-                already_present_topic_followee_pairs,
-            );
-        }
-    }
-
-    fn build_known_neuron_name_index(&mut self) {
-        for neuron in self.neuron_store.heap_neurons().values() {
-            if let Some(known_neuron_data) = &neuron.known_neuron_data {
-                self.known_neuron_name_set
-                    .insert(known_neuron_data.name.clone());
-            }
-        }
-    }
-
-    /// Update `index` to map all the given Neuron's hot keys and controller to
-    /// `neuron_id`
-    fn add_neuron_to_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_ids: Vec<PrincipalId>,
-    ) {
-        let already_present_principal_ids = add_neuron_id_principal_ids(
-            &mut self.principal_to_neuron_ids_index,
-            &neuron_id,
-            principal_ids,
-        );
-        for already_present_principal_id in already_present_principal_ids {
-            println!(
-                "{} Principal {:?}  already present in the index for neuron {:?}",
-                LOG_PREFIX, already_present_principal_id, neuron_id
-            );
-        }
-    }
-
-    fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_id: PrincipalId,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        if !self
-            .principal_to_neuron_ids_index
-            .add_neuron_id_principal_id(&neuron_id, principal_id)
-        {
-            println!(
-                "{} Principal {:?}  already present in the index for neuron {:?}",
-                LOG_PREFIX, principal_id, neuron_id
-            );
-        }
-    }
-
-    /// Update `index` to remove the neuron from the list of neurons mapped to
-    /// principals.
-    fn remove_neuron_from_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_ids: Vec<PrincipalId>,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        let already_absent_principal_ids = remove_neuron_id_principal_ids(
-            &mut self.principal_to_neuron_ids_index,
-            &neuron_id,
-            principal_ids,
-        );
-        for already_absent_principal_id in already_absent_principal_ids {
-            println!(
-                "{} Principal {:?}  already absent in the index for neuron {:?}",
-                LOG_PREFIX, already_absent_principal_id, neuron_id
-            );
-        }
-    }
-
-    fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-        &mut self,
-        neuron_id: NeuronId,
-        principal_id: PrincipalId,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        if !self
-            .principal_to_neuron_ids_index
-            .remove_neuron_id_principal_id(&neuron_id, principal_id)
-        {
-            println!(
-                "{} Principal {:?}  already absent in the index for neuron {:?}",
-                LOG_PREFIX, principal_id, neuron_id
-            );
-        }
-    }
-
-    fn add_neuron_to_topic_followee_index(
-        &mut self,
-        neuron_id: NeuronId,
-        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        let already_present_topic_followee_pairs = add_neuron_followees(
-            &mut self.topic_followee_index,
-            &neuron_id,
-            topic_followee_pairs,
-        );
-        log_already_present_topic_followee_pairs(neuron_id, already_present_topic_followee_pairs);
-    }
-
-    fn remove_neuron_from_topic_followee_index(
-        &mut self,
-        neuron_id: NeuronId,
-        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
-    ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        let already_absent_topic_followee_pairs = remove_neuron_followees(
-            &mut self.topic_followee_index,
-            &neuron_id,
-            topic_followee_pairs,
-        );
-        log_already_absent_topic_followee_pairs(neuron_id, already_absent_topic_followee_pairs);
-    }
-
-    fn add_known_neuron_to_index(&mut self, known_neuron_name: &str) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.known_neuron_name_set
-            .insert(known_neuron_name.to_string());
-    }
-
-    fn remove_known_neuron_to_index(&mut self, known_neuron_name: &str) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.known_neuron_name_set.remove(known_neuron_name);
     }
 
     fn transaction_fee(&self) -> u64 {
@@ -2117,11 +1888,12 @@ impl Governance {
             ));
         }
 
-        self.add_neuron_to_principal_to_neuron_ids_index(
-            NeuronId { id: neuron_id },
-            neuron.principal_ids_with_special_permissions(),
-        );
-        self.add_neuron_to_topic_followee_index(
+        self.neuron_store
+            .add_neuron_to_principal_to_neuron_ids_index(
+                NeuronId { id: neuron_id },
+                neuron.principal_ids_with_special_permissions(),
+            );
+        self.neuron_store.add_neuron_to_topic_followee_index(
             NeuronId { id: neuron_id },
             neuron.topic_followee_pairs(),
         );
@@ -2148,22 +1920,25 @@ impl Governance {
             ));
         }
 
-        self.remove_neuron_from_principal_to_neuron_ids_index(
-            neuron_id,
-            neuron.principal_ids_with_special_permissions(),
-        );
-        self.remove_neuron_from_topic_followee_index(neuron_id, neuron.topic_followee_pairs());
+        self.neuron_store
+            .remove_neuron_from_principal_to_neuron_ids_index(
+                neuron_id,
+                neuron.principal_ids_with_special_permissions(),
+            );
+        self.neuron_store
+            .remove_neuron_from_topic_followee_index(neuron_id, neuron.topic_followee_pairs());
 
         self.remove_neuron_from_storage(&neuron.id.expect("Neuron must have an id"));
 
         Ok(())
     }
 
+    /// TODO(NNS1-2499): inline this.
     /// Return the Neuron IDs of all Neurons that have `principal` as their
     /// controller or as one of their hot keys.
     pub fn get_neuron_ids_by_principal(&self, principal_id: &PrincipalId) -> Vec<NeuronId> {
-        self.principal_to_neuron_ids_index
-            .get_neuron_ids(*principal_id)
+        self.neuron_store
+            .get_neuron_ids_readable_by_caller(*principal_id)
             .into_iter()
             .collect()
     }
@@ -2171,17 +1946,17 @@ impl Governance {
     /// Return the union of `followees` with the set of Neuron IDs of all
     /// Neurons that directly follow the `followees` w.r.t. the
     /// topic `NeuronManagement`.
-    pub fn get_managed_neuron_ids_for(&self, followees: Vec<NeuronId>) -> Vec<u64> {
+    pub fn get_managed_neuron_ids_for(&self, followees: Vec<NeuronId>) -> Vec<NeuronId> {
         // Tap into the `topic_followee_index` for followers of level zero neurons.
-        let mut managed: HashSet<NeuronId> = followees.iter().copied().collect();
+        let mut managed: Vec<NeuronId> = followees.clone();
         for followee in followees {
             managed.extend(
-                self.topic_followee_index
-                    .get_followers_by_followee_and_category(&followee, Topic::NeuronManagement),
+                self.neuron_store
+                    .get_followers_by_followee_and_topic(followee, Topic::NeuronManagement),
             )
         }
 
-        managed.iter().map(|neuron_id| neuron_id.id).collect()
+        managed
     }
 
     /// See `ListNeurons`.
@@ -2297,14 +2072,16 @@ impl Governance {
                 })
                 .unwrap();
 
-            self.remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                neuron_id,
-                old_controller,
-            );
-            self.add_neuron_to_principal_in_principal_to_neuron_ids_index(
-                neuron_id,
-                new_controller,
-            );
+            self.neuron_store
+                .remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+                    neuron_id,
+                    old_controller,
+                );
+            self.neuron_store
+                .add_neuron_to_principal_in_principal_to_neuron_ids_index(
+                    neuron_id,
+                    new_controller,
+                );
         }
 
         Ok(())
@@ -3498,7 +3275,7 @@ impl Governance {
             None => None,
             Some(pd) => {
                 let caller_neurons: HashSet<NeuronId> =
-                    self.principal_to_neuron_ids_index.get_neuron_ids(*caller);
+                    self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
                 let now = self.env.now();
                 Some(self.proposal_data_to_info(pd, &caller_neurons, now, false))
             }
@@ -3517,7 +3294,7 @@ impl Governance {
     /// each proposal of interest.
     pub fn get_pending_proposals(&self, caller: &PrincipalId) -> Vec<ProposalInfo> {
         let caller_neurons: HashSet<NeuronId> =
-            self.principal_to_neuron_ids_index.get_neuron_ids(*caller);
+            self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
         let now = self.env.now();
         self.get_pending_proposals_data()
             .map(|data| self.proposal_data_to_info(data, &caller_neurons, now, true))
@@ -3687,7 +3464,7 @@ impl Governance {
         req: &ListProposalInfo,
     ) -> ListProposalInfoResponse {
         let caller_neurons: HashSet<NeuronId> =
-            self.principal_to_neuron_ids_index.get_neuron_ids(*caller);
+            self.neuron_store.get_neuron_ids_readable_by_caller(*caller);
         let exclude_topic: HashSet<i32> = req.exclude_topic.iter().cloned().collect();
         let include_reward_status: HashSet<i32> =
             req.include_reward_status.iter().cloned().collect();
@@ -5733,7 +5510,6 @@ impl Governance {
             proposer_id,
             Vote::Yes,
             topic,
-            &self.topic_followee_index,
             &mut self.neuron_store,
         );
         // Finally, add this proposal as an open proposal.
@@ -5754,7 +5530,6 @@ impl Governance {
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         topic: Topic,
-        topic_followee_index: &impl NeuronFollowingIndex<NeuronId, Topic>,
         neuron_store: &mut NeuronStore,
     ) {
         assert!(topic != Topic::NeuronManagement && topic != Topic::Unspecified);
@@ -5774,48 +5549,47 @@ impl Governance {
                 if let Some(k_ballot) = ballots.get_mut(&k.id) {
                     // Neuron with ID k is eligible to vote.
                     if k_ballot.vote == (Vote::Unspecified as i32) {
-                        // Only update a vote if it was previously
-                        // unspecified. Following can trigger votes
-                        // for neurons that have already voted
-                        // (manually) and we don't change these votes.
-                        match neuron_store.with_neuron_mut(&NeuronId { id: k.id }, |k_neuron| {
-                            k_ballot.vote = *v as i32;
-                            // Register the neuron's ballot in the
-                            // neuron itself.
-                            k_neuron.register_recent_ballot(topic, proposal_id, *v);
-                            // Here k is the followee, i.e., the neuron
-                            // that has just cast a vote that may be
-                            // followed by other neurons.
-                            //
-                            // Insert followers from 'topic'
-                            all_followers.extend(
-                                topic_followee_index
-                                    .get_followers_by_followee_and_category(k, topic),
-                            );
-                            // Default following doesn't apply to governance or SNS decentralization sale proposals.
-                            if ![
-                                Topic::Governance,
-                                Topic::SnsDecentralizationSale,
-                                Topic::SnsAndCommunityFund,
-                            ]
-                            .contains(&topic)
-                            {
-                                // Insert followers from 'Unspecified' (default followers)
+                        let register_ballot_result =
+                            neuron_store.with_neuron_mut(&NeuronId { id: k.id }, |k_neuron| {
+                                // Register the neuron's ballot in the
+                                // neuron itself.
+                                k_neuron.register_recent_ballot(topic, proposal_id, *v);
+                            });
+                        match register_ballot_result {
+                            Ok(_) => {
+                                // Only update a vote if it was previously unspecified. Following
+                                // can trigger votes for neurons that have already voted (manually)
+                                // and we don't change these votes.
+                                k_ballot.vote = *v as i32;
+                                // Here k is the followee, i.e., the neuron that has just cast a
+                                // vote that may be followed by other neurons.
+                                //
+                                // Insert followers from 'topic'
                                 all_followers.extend(
-                                    topic_followee_index.get_followers_by_followee_and_category(
-                                        k,
-                                        Topic::Unspecified,
-                                    ),
+                                    neuron_store.get_followers_by_followee_and_topic(*k, topic),
                                 );
+                                // Default following doesn't apply to governance or SNS
+                                // decentralization sale proposals.
+                                if ![
+                                    Topic::Governance,
+                                    Topic::SnsDecentralizationSale,
+                                    Topic::SnsAndCommunityFund,
+                                ]
+                                .contains(&topic)
+                                {
+                                    // Insert followers from 'Unspecified' (default followers)
+                                    all_followers.extend(
+                                        neuron_store.get_followers_by_followee_and_topic(
+                                            *k,
+                                            Topic::Unspecified,
+                                        ),
+                                    );
+                                }
                             }
-                        }) {
-                            Ok(_) => {}
                             Err(e) => {
-                                // The voting neuron not found in the
-                                // neurons table. This is a bad
-                                // inconsistency, but there is nothing
-                                // that can be done about it at this
-                                // place.
+                                // The voting neuron not found in the neurons table. This is a bad
+                                // inconsistency, but there is nothing that can be done about it at
+                                // this place.
                                 eprintln!("error in cast_vote_and_cascade_follow when attempting to cast ballot: {:?}", e);
                             }
                         }
@@ -5974,7 +5748,6 @@ impl Governance {
                 neuron_id,
                 vote,
                 topic,
-                &self.topic_followee_index,
                 &mut self.neuron_store,
             );
         }
@@ -6060,27 +5833,12 @@ impl Governance {
         let old_followee_neuron_ids: BTreeSet<_> = old_followees
             .map(|followees| followees.followees.iter().cloned().collect())
             .unwrap_or_default();
-        let (already_absent_old_followees, already_present_new_followees) =
-            update_neuron_category_followees(
-                &mut self.topic_followee_index,
-                id,
-                topic,
-                old_followee_neuron_ids,
-                follow_request.followees.iter().cloned().collect(),
-            );
-        log_already_present_topic_followee_pairs(
+
+        self.neuron_store.update_neuron_followees_for_topic(
             *id,
-            already_present_new_followees
-                .iter()
-                .map(|followee| (topic, *followee))
-                .collect(),
-        );
-        log_already_absent_topic_followee_pairs(
-            *id,
-            already_absent_old_followees
-                .iter()
-                .map(|followee| (topic, *followee))
-                .collect(),
+            topic,
+            old_followee_neuron_ids,
+            follow_request.followees.iter().cloned().collect(),
         );
 
         Ok(())
@@ -6118,14 +5876,16 @@ impl Governance {
         match op {
             manage_neuron::configure::Operation::AddHotKey(k) => {
                 let hot_key = k.new_hot_key.as_ref().expect("Must have a hot key");
-                self.add_neuron_to_principal_in_principal_to_neuron_ids_index(*id, *hot_key);
+                self.neuron_store
+                    .add_neuron_to_principal_in_principal_to_neuron_ids_index(*id, *hot_key);
             }
             manage_neuron::configure::Operation::RemoveHotKey(k) => {
                 let hot_key = k.hot_key_to_remove.as_ref().expect("Must have a hot key");
                 if neuron_controller != Some(*hot_key) {
-                    self.remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                        *id, *hot_key,
-                    );
+                    self.neuron_store
+                        .remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+                            *id, *hot_key,
+                        );
                 }
             }
             _ => (),
@@ -6403,7 +6163,10 @@ impl Governance {
                 ),
             ));
         }
-        if self.known_neuron_name_set.contains(&known_neuron_data.name) {
+        if self
+            .neuron_store
+            .contains_known_neuron_name(&known_neuron_data.name)
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
@@ -6419,9 +6182,10 @@ impl Governance {
                 .replace(known_neuron_data.clone())
                 .map(|old_known_neuron_data| old_known_neuron_data.name)
         })? {
-            self.remove_known_neuron_to_index(&old_name);
+            self.neuron_store.remove_known_neuron_from_index(&old_name);
         }
-        self.add_known_neuron_to_index(&known_neuron_data.name);
+        self.neuron_store
+            .add_known_neuron_to_index(&known_neuron_data.name);
         Ok(())
     }
 

@@ -1,10 +1,21 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
-    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron},
+    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, Topic},
     storage::NEURON_INDEXES,
 };
+use ic_base_types::PrincipalId;
+use ic_nervous_system_governance::index::{
+    neuron_following::{
+        add_neuron_followees, remove_neuron_followees, update_neuron_category_followees,
+        HeapNeuronFollowingIndex, NeuronFollowingIndex,
+    },
+    neuron_principal::{
+        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, HeapNeuronPrincipalIndex,
+        NeuronPrincipalIndex,
+    },
+};
 use ic_nns_common::pb::v1::NeuronId;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 #[derive(Debug)]
 pub enum NeuronStoreError {
@@ -42,11 +53,40 @@ impl From<NeuronStoreError> for GovernanceError {
 #[cfg_attr(test, derive(Clone, Debug, PartialEq))]
 pub struct NeuronStore {
     heap_neurons: BTreeMap<u64, Neuron>,
+
+    /// Cached data structure that (for each topic) maps a followee to
+    /// the set of followers. This is the inverse of the mapping from
+    /// neuron (follower) to followees, in the neurons. This is a
+    /// cached index and will be removed and recreated when the state
+    /// is saved and restored.
+    ///
+    /// (Topic, Followee) -> set of followers.
+    pub topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
+
+    /// Maps Principals to the Neuron IDs of all Neurons that have this
+    /// Principal as their controller or as one of their hot keys
+    ///
+    /// This is a cached index and will be removed and recreated when the state
+    /// is saved and restored.
+    pub principal_to_neuron_ids_index: HeapNeuronPrincipalIndex<NeuronId>,
+
+    /// Set of all names given to Known Neurons, to prevent duplication.
+    ///
+    /// This set is cached and will be removed and recreated when the state is saved and restored.
+    pub known_neuron_name_set: HashSet<String>,
 }
 
 impl NeuronStore {
     pub fn new(heap_neurons: BTreeMap<u64, Neuron>) -> Self {
-        Self { heap_neurons }
+        let topic_followee_index = build_topic_followee_index(&heap_neurons);
+        let principal_to_neuron_ids_index = build_principal_to_neuron_ids_index(&heap_neurons);
+        let known_neuron_name_set = build_known_neuron_name_index(&heap_neurons);
+        Self {
+            heap_neurons,
+            topic_followee_index,
+            principal_to_neuron_ids_index,
+            known_neuron_name_set,
+        }
     }
 
     /// Takes the heap neurons for serialization. The `self.heap_neurons` will become empty, so
@@ -161,7 +201,7 @@ impl NeuronStore {
         &self,
         nid: &NeuronId,
         f: impl FnOnce(&Neuron) -> R,
-    ) -> Result<R, GovernanceError> {
+    ) -> Result<R, NeuronStoreError> {
         let neuron = self
             .heap_neurons
             .get(&nid.id)
@@ -201,6 +241,250 @@ impl NeuronStore {
             new_last_neuron_id = None
         }
         Ok(new_last_neuron_id)
+    }
+
+    // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
+
+    /// Update `index` to map all the given Neuron's hot keys and controller to
+    /// `neuron_id`
+    pub fn add_neuron_to_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_ids: Vec<PrincipalId>,
+    ) {
+        let already_present_principal_ids = add_neuron_id_principal_ids(
+            &mut self.principal_to_neuron_ids_index,
+            &neuron_id,
+            principal_ids,
+        );
+        for already_present_principal_id in already_present_principal_ids {
+            println!(
+                "{} Principal {:?}  already present in the index for neuron {:?}",
+                LOG_PREFIX, already_present_principal_id, neuron_id
+            );
+        }
+    }
+
+    pub fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_id: PrincipalId,
+    ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        if !self
+            .principal_to_neuron_ids_index
+            .add_neuron_id_principal_id(&neuron_id, principal_id)
+        {
+            println!(
+                "{} Principal {:?}  already present in the index for neuron {:?}",
+                LOG_PREFIX, principal_id, neuron_id
+            );
+        }
+    }
+
+    /// Update `index` to remove the neuron from the list of neurons mapped to
+    /// principals.
+    pub fn remove_neuron_from_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_ids: Vec<PrincipalId>,
+    ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        let already_absent_principal_ids = remove_neuron_id_principal_ids(
+            &mut self.principal_to_neuron_ids_index,
+            &neuron_id,
+            principal_ids,
+        );
+        for already_absent_principal_id in already_absent_principal_ids {
+            println!(
+                "{} Principal {:?}  already absent in the index for neuron {:?}",
+                LOG_PREFIX, already_absent_principal_id, neuron_id
+            );
+        }
+    }
+
+    pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_id: PrincipalId,
+    ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        if !self
+            .principal_to_neuron_ids_index
+            .remove_neuron_id_principal_id(&neuron_id, principal_id)
+        {
+            println!(
+                "{} Principal {:?}  already absent in the index for neuron {:?}",
+                LOG_PREFIX, principal_id, neuron_id
+            );
+        }
+    }
+
+    pub fn add_neuron_to_topic_followee_index(
+        &mut self,
+        neuron_id: NeuronId,
+        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
+    ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        let already_present_topic_followee_pairs = add_neuron_followees(
+            &mut self.topic_followee_index,
+            &neuron_id,
+            topic_followee_pairs,
+        );
+        log_already_present_topic_followee_pairs(neuron_id, already_present_topic_followee_pairs);
+    }
+
+    pub fn remove_neuron_from_topic_followee_index(
+        &mut self,
+        neuron_id: NeuronId,
+        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
+    ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        let already_absent_topic_followee_pairs = remove_neuron_followees(
+            &mut self.topic_followee_index,
+            &neuron_id,
+            topic_followee_pairs,
+        );
+        log_already_absent_topic_followee_pairs(neuron_id, already_absent_topic_followee_pairs);
+    }
+
+    pub fn update_neuron_followees_for_topic(
+        &mut self,
+        follower_id: NeuronId,
+        topic: Topic,
+        old_followee_ids: BTreeSet<NeuronId>,
+        new_followee_ids: BTreeSet<NeuronId>,
+    ) {
+        let (already_absent_old_followees, already_present_new_followees) =
+            update_neuron_category_followees(
+                &mut self.topic_followee_index,
+                &follower_id,
+                topic,
+                old_followee_ids,
+                new_followee_ids,
+            );
+        log_already_present_topic_followee_pairs(
+            follower_id,
+            already_present_new_followees
+                .iter()
+                .map(|followee| (topic, *followee))
+                .collect(),
+        );
+        log_already_absent_topic_followee_pairs(
+            follower_id,
+            already_absent_old_followees
+                .iter()
+                .map(|followee| (topic, *followee))
+                .collect(),
+        );
+    }
+
+    pub fn add_known_neuron_to_index(&mut self, known_neuron_name: &str) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        self.known_neuron_name_set
+            .insert(known_neuron_name.to_string());
+    }
+
+    pub fn remove_known_neuron_from_index(&mut self, known_neuron_name: &str) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        self.known_neuron_name_set.remove(known_neuron_name);
+    }
+
+    // Read methods for indexes.
+
+    // Gets followers by a followee id and topic.
+    pub fn get_followers_by_followee_and_topic(
+        &self,
+        followee: NeuronId,
+        topic: Topic,
+    ) -> Vec<NeuronId> {
+        self.topic_followee_index
+            .get_followers_by_followee_and_category(&followee, topic)
+    }
+
+    // Gets all neuron ids associated with the given principal id (hot-key or controller).
+    pub fn get_neuron_ids_readable_by_caller(
+        &self,
+        principal_id: PrincipalId,
+    ) -> HashSet<NeuronId> {
+        self.principal_to_neuron_ids_index
+            .get_neuron_ids(principal_id)
+    }
+
+    // Returns whether the known neuron name already exists.
+    pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
+        self.known_neuron_name_set.contains(known_neuron_name)
+    }
+}
+
+fn build_principal_to_neuron_ids_index(
+    heap_neurons: &BTreeMap<u64, Neuron>,
+) -> HeapNeuronPrincipalIndex<NeuronId> {
+    let mut index = HeapNeuronPrincipalIndex::new();
+    for neuron in heap_neurons.values() {
+        let already_present_principal_ids = add_neuron_id_principal_ids(
+            &mut index,
+            &neuron.id.unwrap(),
+            neuron.principal_ids_with_special_permissions(),
+        );
+        for already_present_principal_id in already_present_principal_ids {
+            println!(
+                "{} Principal {:?}  already present in the index for neuron {:?}",
+                LOG_PREFIX, already_present_principal_id, neuron.id
+            );
+        }
+    }
+    index
+}
+
+/// From the `neurons` part of this `Governance` struct, build the
+/// index (per topic) from followee to set of followers. The
+/// neurons themselves map followers (the neuron ID) to a set of
+/// followees (per topic).
+fn build_topic_followee_index(
+    heap_neurons: &BTreeMap<u64, Neuron>,
+) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
+    let mut index = HeapNeuronFollowingIndex::new();
+    for neuron in heap_neurons.values() {
+        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let already_present_topic_followee_pairs =
+            add_neuron_followees(&mut index, &neuron_id, neuron.topic_followee_pairs());
+        log_already_present_topic_followee_pairs(neuron_id, already_present_topic_followee_pairs);
+    }
+    index
+}
+
+fn build_known_neuron_name_index(heap_neurons: &BTreeMap<u64, Neuron>) -> HashSet<String> {
+    let mut index = HashSet::new();
+    for neuron in heap_neurons.values() {
+        if let Some(known_neuron_data) = &neuron.known_neuron_data {
+            index.insert(known_neuron_data.name.clone());
+        }
+    }
+    index
+}
+
+fn log_already_present_topic_followee_pairs(
+    neuron_id: NeuronId,
+    already_present_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+) {
+    for (topic, followee) in already_present_topic_followee_pairs {
+        println!(
+            "{} Topic {:?} and followee {:?} already present in the index for neuron {:?}",
+            LOG_PREFIX, topic, followee, neuron_id
+        );
+    }
+}
+
+fn log_already_absent_topic_followee_pairs(
+    neuron_id: NeuronId,
+    already_absent_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+) {
+    for (topic, followee) in already_absent_topic_followee_pairs {
+        println!(
+            "{} Topic {:?} and followee {:?} already absent in the index for neuron {:?}",
+            LOG_PREFIX, topic, followee, neuron_id
+        );
     }
 }
 
