@@ -13256,3 +13256,96 @@ fn randomly_pick_swap_start() {
         );
     }
 }
+
+#[test]
+fn compute_closest_proposal_deadline_timestamp_seconds_no_wfq_fallback() {
+    let proposal_timestamp_seconds = 5;
+    let proposal_voting_period = 2;
+
+    let proposal_1 = ProposalData {
+        proposal_timestamp_seconds,
+        // make sure the proposal is open
+        decided_timestamp_seconds: 0,
+        wait_for_quiet_state: None,
+        proposal: Some(Proposal {
+            action: Some(Action::CreateServiceNervousSystem(
+                CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+            )),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let fake_driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        GovernanceProto {
+            proposals: btreemap! {1 => proposal_1},
+            short_voting_period_seconds: 1,
+            wait_for_quiet_threshold_seconds: proposal_voting_period,
+            ..Default::default()
+        },
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
+    );
+
+    // Check that the closest deadline is the one for the proposal we injected.
+    // Since its wait_for_quiet_state is None, the deadline should default to
+    // the creation time + the voting period.
+    let closest_proposal_deadline_timestamp_seconds =
+        gov.compute_closest_proposal_deadline_timestamp_seconds();
+    let expected_closest_proposal_deadline_timestamp_seconds =
+        proposal_timestamp_seconds + proposal_voting_period;
+    assert_eq!(
+        closest_proposal_deadline_timestamp_seconds,
+        expected_closest_proposal_deadline_timestamp_seconds,
+    );
+}
+
+#[test]
+fn compute_closest_proposal_deadline_timestamp_seconds_incorporates_wfq() {
+    let proposal_timestamp_seconds = 5;
+    let proposal_voting_period = 2;
+
+    let proposal_1 = ProposalData {
+        proposal_timestamp_seconds,
+        // make sure the proposal is open
+        decided_timestamp_seconds: 0,
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: proposal_timestamp_seconds
+                + proposal_voting_period
+                + 1,
+        }),
+        proposal: Some(Proposal {
+            action: Some(Action::CreateServiceNervousSystem(
+                CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+            )),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let fake_driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        GovernanceProto {
+            proposals: btreemap! {1 => proposal_1},
+            short_voting_period_seconds: 1,
+            wait_for_quiet_threshold_seconds: proposal_voting_period,
+            ..Default::default()
+        },
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
+    );
+
+    // Check that the closest deadline is the one for the proposal we injected,
+    // based on its wait_for_quiet period rather than its default deadline.
+    let closest_proposal_deadline_timestamp_seconds =
+        gov.compute_closest_proposal_deadline_timestamp_seconds();
+    let expected_closest_proposal_deadline_timestamp_seconds =
+        proposal_timestamp_seconds + proposal_voting_period + 1;
+    assert_eq!(
+        closest_proposal_deadline_timestamp_seconds,
+        expected_closest_proposal_deadline_timestamp_seconds,
+    );
+}
