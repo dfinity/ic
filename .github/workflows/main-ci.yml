@@ -20,7 +20,7 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 80
     container:
-      image: docker.io/dfinity/ic-build
+      image: dfinity/ic-build:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
       options: --user ubuntu
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
