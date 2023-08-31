@@ -291,16 +291,16 @@ async fn call_instance(
     State(inst_map): State<InstanceMap>,
     Path(id): Path<InstanceId>,
     axum::extract::Json(request): axum::extract::Json<Request>,
-) -> String {
-    // println!("call_instance {} with request: {}", id, serde_json::to_string(&request).unwrap_or("Failed to decode json".to_owned()));
+) -> (StatusCode, String) {
     let guard_map = inst_map.read().await;
     if let Some(rw_lock) = guard_map.get(&id) {
         let guard_sm = rw_lock.write().await;
-        call_sm(&guard_sm, request)
+        (StatusCode::OK, call_sm(&guard_sm, request))
     } else {
-        // id not found in map; return error
-        // TODO: Result Type for this call
-        format!("Instance with ID {} was not found.", &id)
+        (
+            StatusCode::NOT_FOUND,
+            format!("Instance with ID {} was not found.", &id),
+        )
     }
 }
 
@@ -313,10 +313,13 @@ async fn save_checkpoint(
     }): State<AppState>,
     Path(id): Path<InstanceId>,
     axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
-) -> String {
+) -> (StatusCode, String) {
     let mut checkpoints = checkpoints.write().await;
     if checkpoints.contains_key(&checkpoint_name) {
-        return format!("Checkpoint {} already exists.", checkpoint_name);
+        return (
+            StatusCode::CONFLICT,
+            format!("Checkpoint {} already exists.", checkpoint_name),
+        );
     }
     let guard_map = instance_map.read().await;
     if let Some(rw_lock) = guard_map.get(&id) {
@@ -326,11 +329,14 @@ async fn save_checkpoint(
         copy_dir(guard_sm.state_dir.path(), checkpoint_dir.path())
             .expect("Failed to copy state directory");
         checkpoints.insert(checkpoint_name, Arc::new(checkpoint_dir));
-        "Success".to_string()
+        (StatusCode::OK, "Success".to_string())
     } else {
         // id not found in map; return error
         // TODO: Result Type for this call
-        format!("Instance with ID {} was not found.", &id)
+        (
+            StatusCode::NOT_FOUND,
+            format!("Instance with ID {} was not found.", &id),
+        )
     }
 }
 
@@ -343,10 +349,13 @@ async fn load_checkpoint(
         runtime,
     }): State<AppState>,
     axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
-) -> String {
+) -> (StatusCode, String) {
     let checkpoints = checkpoints.read().await;
     if !checkpoints.contains_key(&checkpoint_name) {
-        return format!("Checkpoint {} does not exist.", checkpoint_name);
+        return (
+            StatusCode::NOT_FOUND,
+            format!("Checkpoint {} does not exist.", checkpoint_name),
+        );
     }
     let proto_dir = checkpoints.get(&checkpoint_name).unwrap();
     let new_instance_dir = TempDir::new().expect("Failed to create tempdir");
@@ -359,16 +368,16 @@ async fn load_checkpoint(
     let mut instance_map = instance_map.write().await;
     let instance_id = counter.inc().to_string();
     instance_map.insert(instance_id.clone(), RwLock::new(sm));
-    instance_id
+    (StatusCode::OK, instance_id)
 }
 
 async fn delete_instance(
     State(instance_map): State<InstanceMap>,
     Path(id): Path<InstanceId>,
-) -> String {
+) -> StatusCode {
     let mut guard = instance_map.write().await;
     let _ = guard.remove(&id);
-    id
+    StatusCode::OK
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //
