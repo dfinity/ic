@@ -1,6 +1,6 @@
 use crate::address::Address;
 use crate::endpoints::{EthereumNetwork, InitArg};
-use crate::eth_logs::{EventSource, ReceivedEthEvent};
+use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
 use crate::eth_rpc::BlockNumber;
 use crate::logs::DEBUG;
 use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce};
@@ -12,7 +12,7 @@ use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use strum_macros::EnumIter;
 
 thread_local! {
@@ -41,7 +41,7 @@ pub struct State {
     pub last_finalized_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeSet<ReceivedEthEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
-    pub invalid_events: BTreeSet<EventSource>,
+    pub invalid_events: BTreeMap<EventSource, EventSourceError>,
     pub pending_retrieve_eth_requests: PendingEthTransactions,
     pub next_transaction_nonce: TransactionNonce,
 
@@ -120,12 +120,12 @@ impl State {
         );
 
         debug_assert!(!self.minted_events.contains_key(&event.source()));
-        debug_assert!(!self.invalid_events.contains(&event.source()));
+        debug_assert!(!self.invalid_events.contains_key(&event.source()));
 
         self.events_to_mint.insert(event);
     }
 
-    pub fn record_invalid_deposit(&mut self, source: EventSource) -> bool {
+    pub fn record_invalid_deposit(&mut self, source: EventSource, error: EventSourceError) -> bool {
         debug_assert!(
             self.events_to_mint.iter().all(|e| e.source() != source),
             "attempted to mark an accepted event as invalid"
@@ -135,12 +135,18 @@ impl State {
             "attempted to mark a minted event {source:?} as invalid"
         );
 
-        self.invalid_events.insert(source)
+        match self.invalid_events.entry(source) {
+            btree_map::Entry::Occupied(_) => false,
+            btree_map::Entry::Vacant(entry) => {
+                entry.insert(error);
+                true
+            }
+        }
     }
 
     pub fn record_successful_mint(&mut self, minted_event: MintedEvent) {
         debug_assert!(
-            !self.invalid_events.contains(&minted_event.source()),
+            !self.invalid_events.contains_key(&minted_event.source()),
             "attempted to mint an event previously marked as invalid {minted_event:?}"
         );
 

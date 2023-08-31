@@ -13,6 +13,7 @@ use hex_literal::hex;
 use ic_canister_log::log;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::fmt::{Display, Formatter};
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
@@ -98,26 +99,16 @@ pub fn report_transaction_error(state: &mut State, error: ReceivedEthEventError)
                 "[report_transaction_error]: ignoring pending log entry",
             );
         }
-        ReceivedEthEventError::InvalidLogEntry(err) => {
-            log!(
-                INFO,
-                "[report_transaction_error]: Ignoring invalid log entry: {}. This is either a BUG or there is a problem with the queried provider",
-                err,
-            );
-        }
-        ReceivedEthEventError::InvalidIcPrincipal {
-            event_source,
-            invalid_principal,
-        } => {
-            if state.record_invalid_deposit(event_source) {
+        ReceivedEthEventError::InvalidEventSource { source, error } => {
+            if state.record_invalid_deposit(source, error.clone()) {
                 log!(
                     INFO,
-                    "[report_transaction_error]: cannot process event {event_source} since the given IC principal {invalid_principal:?} is invalid",
+                    "[report_transaction_error]: cannot process {source} due to {error}",
                 );
             } else {
                 log!(
                     DEBUG,
-                    "[report_transaction_error]: Ignoring invalid event {event_source} since it was already reported",
+                    "[report_transaction_error]: Ignoring invalid event {source} with error {error} since it was already reported",
                 );
             }
         }
@@ -127,11 +118,27 @@ pub fn report_transaction_error(state: &mut State, error: ReceivedEthEventError)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReceivedEthEventError {
     PendingLogEntry,
-    InvalidLogEntry(String),
-    InvalidIcPrincipal {
-        event_source: EventSource,
-        invalid_principal: FixedSizeData,
+    InvalidEventSource {
+        source: EventSource,
+        error: EventSourceError,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EventSourceError {
+    InvalidPrincipal { invalid_principal: FixedSizeData },
+    InvalidEvent(String),
+}
+
+impl Display for EventSourceError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            EventSourceError::InvalidPrincipal { invalid_principal } => {
+                write!(f, "invalid principal: {}", invalid_principal)
+            }
+            EventSourceError::InvalidEvent(msg) => write!(f, "Invalid event: {}", msg),
+        }
+    }
 }
 
 impl TryFrom<LogEntry> for ReceivedEthEvent {
@@ -154,28 +161,46 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
             .log_index
             .map(LogIndex::new)
             .ok_or(ReceivedEthEventError::PendingLogEntry)?;
+        let event_source = EventSource(transaction_hash, log_index);
 
         if entry.topics.len() != 3 {
-            return Err(ReceivedEthEventError::InvalidLogEntry(format!(
-                "Expected exactly 3 topics, got {}",
-                entry.topics.len()
-            )));
+            return Err(ReceivedEthEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(format!(
+                    "Expected exactly 3 topics, got {}",
+                    entry.topics.len()
+                )),
+            });
         }
         let from_address = Address::try_from(&entry.topics[1].0).map_err(|err| {
-            ReceivedEthEventError::InvalidLogEntry(format!("Invalid address in log entry: {}", err))
-        })?;
-        let principal = parse_principal_from_slice(entry.topics[2].as_ref()).map_err(|_err| {
-            ReceivedEthEventError::InvalidIcPrincipal {
-                event_source: EventSource(transaction_hash, log_index),
-                invalid_principal: entry.topics[2].clone(),
+            ReceivedEthEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(format!(
+                    "Invalid address in log entry: {}",
+                    err
+                )),
             }
         })?;
-        let value_bytes: [u8; 32] = entry.data.0.try_into().map_err(|data| {
-            ReceivedEthEventError::InvalidLogEntry(format!(
-                "Invalid data length; expected 32-byte value, got {}",
-                hex::encode(data),
-            ))
+        let principal = parse_principal_from_slice(entry.topics[2].as_ref()).map_err(|_err| {
+            ReceivedEthEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidPrincipal {
+                    invalid_principal: entry.topics[2].clone(),
+                },
+            }
         })?;
+        let value_bytes: [u8; 32] =
+            entry
+                .data
+                .0
+                .try_into()
+                .map_err(|data| ReceivedEthEventError::InvalidEventSource {
+                    source: event_source,
+                    error: EventSourceError::InvalidEvent(format!(
+                        "Invalid data length; expected 32-byte value, got {}",
+                        hex::encode(data)
+                    )),
+                })?;
         let value = Wei::from(u256::from_be_bytes(value_bytes));
 
         Ok(ReceivedEthEvent {

@@ -1,6 +1,6 @@
 mod mint_transaction {
     use crate::endpoints::InitArg;
-    use crate::eth_logs::{LogIndex, ReceivedEthEvent};
+    use crate::eth_logs::{EventSourceError, LogIndex, ReceivedEthEvent};
     use crate::eth_rpc::BlockNumber;
     use crate::numeric::{LedgerMintIndex, Wei};
     use crate::state::{MintedEvent, State};
@@ -80,7 +80,25 @@ mod mint_transaction {
 
         assert!(state.events_to_mint.contains(&event));
 
-        state.record_invalid_deposit(event.source());
+        state.record_invalid_deposit(
+            event.source(),
+            EventSourceError::InvalidEvent("bad".to_string()),
+        );
+    }
+
+    #[test]
+    fn should_not_update_already_recorded_invalid_deposit() {
+        let mut state = dummy_state();
+        let event = received_eth_event();
+        let error = EventSourceError::InvalidEvent("first".to_string());
+        let other_error = EventSourceError::InvalidEvent("second".to_string());
+        assert_ne!(error, other_error);
+
+        assert!(state.record_invalid_deposit(event.source(), error.clone()));
+        assert_eq!(state.invalid_events[&event.source()], error);
+
+        assert!(!state.record_invalid_deposit(event.source(), other_error,));
+        assert_eq!(state.invalid_events[&event.source()], error);
     }
 
     fn dummy_state() -> State {
