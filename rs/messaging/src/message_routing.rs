@@ -498,7 +498,9 @@ impl BatchProcessorImpl {
     ///   * total memory used
     ///   * memory used by Wasm Custom Sections
     ///   * memory used by canister history
-    fn observe_canisters_memory_usage(&self, state: &ReplicatedState) {
+    ///
+    /// Returns the total memory usage of the canisters of this subnet.
+    fn observe_canisters_memory_usage(&self, state: &ReplicatedState) -> NumBytes {
         let mut total_memory_usage = NumBytes::from(0);
         let mut wasm_custom_sections_memory_usage = NumBytes::from(0);
         let mut canister_history_memory_usage = NumBytes::from(0);
@@ -528,6 +530,8 @@ impl BatchProcessorImpl {
         self.metrics
             .canister_history_memory_usage_bytes
             .set(canister_history_memory_usage.get() as i64);
+
+        total_memory_usage
     }
 
     /// Reads registry contents required by `BatchProcessorImpl::process_batch()`.
@@ -905,7 +909,11 @@ impl BatchProcessor for BatchProcessorImpl {
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
         }
-        self.observe_canisters_memory_usage(&state_after_round);
+        let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
+        state_after_round
+            .metadata
+            .subnet_metrics
+            .total_canister_state = total_memory_usage;
 
         #[cfg(feature = "malicious_code")]
         if let Some(delay) = self.malicious_flags.delay_execution(_process_batch_start) {

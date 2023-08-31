@@ -1305,7 +1305,7 @@ impl Scheduler for SchedulerImpl {
         // IMPORTANT!
         // When making changes to this method, please make sure each piece of code is covered by duration metrics.
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
-        let measurement_scope = MeasurementScope::root(&self.metrics.round);
+        let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
 
         let mut cycles_in_sum = Cycles::zero();
         let round_log;
@@ -1419,8 +1419,10 @@ impl Scheduler for SchedulerImpl {
         // Execute subnet messages.
         {
             // Drain the consensus queue.
-            let measurement_scope =
-                MeasurementScope::nested(&self.metrics.round_consensus_queue, &measurement_scope);
+            let measurement_scope = MeasurementScope::nested(
+                &self.metrics.round_consensus_queue,
+                &root_measurement_scope,
+            );
 
             // The consensus queue has to be emptied in each round, so we process
             // it fully without applying the per-round instruction limit.
@@ -1456,7 +1458,7 @@ impl Scheduler for SchedulerImpl {
         // Subnet queues.
         {
             let measurement_scope =
-                MeasurementScope::nested(&self.metrics.round_subnet_queue, &measurement_scope);
+                MeasurementScope::nested(&self.metrics.round_subnet_queue, &root_measurement_scope);
 
             let ongoing_long_install_code;
             (state, ongoing_long_install_code) = self.advance_long_running_install_code(
@@ -1530,7 +1532,7 @@ impl Scheduler for SchedulerImpl {
             state,
             &round_schedule,
             current_round,
-            &measurement_scope,
+            &root_measurement_scope,
             &mut round_limits,
             registry_settings.subnet_size,
         );
@@ -1645,6 +1647,10 @@ impl Scheduler for SchedulerImpl {
                 }
             }
             self.finish_round(&mut final_state, current_round_type);
+            final_state.metadata.subnet_metrics.num_update_transactions +=
+                root_measurement_scope.messages().get();
+            final_state.metadata.subnet_metrics.num_canisters =
+                final_state.canister_states.len() as u64;
             final_state
         }
     }

@@ -207,7 +207,8 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
         })
         .build();
 
-    for _ in 0..3 {
+    let num_canisters = 3;
+    for _ in 0..num_canisters {
         let canister_id = test.create_canister();
         test.send_ingress(canister_id, ingress(5));
     }
@@ -225,6 +226,15 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
         assert_eq!(canister_metrics.executed, 1);
         assert_eq!(canister_metrics.interruped_during_execution, 0);
     }
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        3
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_canisters,
+        num_canisters
+    );
 }
 
 #[test]
@@ -255,6 +265,12 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
             .get(),
         1
     );
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        2
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 #[test]
@@ -296,6 +312,12 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
             .get(),
         1
     );
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        3
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 #[test]
@@ -326,6 +348,12 @@ fn canister_gets_heap_delta_rate_limited() {
     // to run.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        1
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 /// This test ensures that inner_loop() breaks out of the loop when the loop did
@@ -364,6 +392,12 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             .get(),
         1
     );
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        1
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 /// This test ensures that inner_loop() breaks out of the loop when the loop
@@ -403,6 +437,12 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             .get(),
         1
     );
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        2
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 #[test]
@@ -443,6 +483,7 @@ fn inner_loop_stops_when_max_complexity_per_round_consumed() {
             .get(),
         1
     );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 #[test]
@@ -717,6 +758,11 @@ fn basic_induct_messages_on_same_subnet_works() {
         .get_sample_count();
     // Three ingress messages, six calls, six responses.
     assert_eq!(number_of_messages, 3 + 6 + 6);
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        3 + 6 + 6
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
 
 #[test]
@@ -745,6 +791,12 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     assert!(test.canister_state(caller).has_output());
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        1
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 /// Creates state with one canister. The canister has a message for itself.
@@ -789,6 +841,11 @@ fn induct_messages_to_self_works() {
         .get_sample_count();
     // Three ingress messages, six calls, six responses.
     assert_eq!(number_of_messages, 3 + 6 + 6);
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        3 + 6 + 6
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 /// Creates state with two canisters. Source canister has two requests for
@@ -934,6 +991,11 @@ fn test_message_limit_from_message_overhead() {
         .msg_execution_duration
         .get_sample_count();
     assert_eq!(number_of_messages, expected_number_of_messages);
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        expected_number_of_messages
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
 
 /// A test to ensure that there are multiple iterations of the loop in
@@ -976,6 +1038,12 @@ fn test_multiple_iterations_of_inner_loop() {
             .get(),
         3
     );
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        3
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
 
 /// A bug in the first implementation of heap delta rate limiting would prevent
@@ -1020,6 +1088,12 @@ fn canister_can_run_for_multiple_iterations() {
             .get(),
         6
     );
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        6
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 #[test]
@@ -1344,7 +1418,8 @@ fn can_execute_messages_with_just_enough_instructions() {
     // Bump the round number up to 1.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    for _ in 0..3 {
+    let num_canisters = 3;
+    for _ in 0..num_canisters {
         let canister = test.create_canister();
         test.send_ingress(canister, ingress(50));
     }
@@ -1367,6 +1442,15 @@ fn can_execute_messages_with_just_enough_instructions() {
         assert_eq!(system_state.canister_metrics.executed, 1);
         assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
     }
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        3
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_canisters,
+        num_canisters
+    );
 }
 
 #[test]
@@ -1421,6 +1505,12 @@ fn execute_only_canisters_with_messages() {
     );
     assert_eq!(active.system_state.canister_metrics.executed, 1);
     assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        1
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
 
 #[test]
@@ -1435,7 +1525,8 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
     // Bump the round number to 1.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    for _ in 0..3 {
+    let num_canisters = 3;
+    for _ in 0..num_canisters {
         let canister = test.create_canister();
         for _ in 0..5 {
             test.send_ingress(canister, ingress(50));
@@ -1460,6 +1551,15 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
         assert_eq!(system_state.canister_metrics.executed, 1);
         assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
     }
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        15
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_canisters,
+        num_canisters
+    );
 }
 
 #[test]
@@ -1522,7 +1622,8 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
     // Bump up the round number to 1.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    for _ in 0..5 {
+    let num_canisters = 5;
+    for _ in 0..num_canisters {
         let canister = test.create_canister();
         for _ in 0..10 {
             test.send_ingress(canister, ingress(5));
@@ -1548,6 +1649,15 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
         }
     }
     assert_eq!(executed_canisters, 2);
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        20
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_canisters,
+        num_canisters
+    );
 }
 
 #[test]
@@ -1573,6 +1683,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
     // Bump up the round number to 1.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    let num_canisters = 2;
     for _ in 0..2 {
         let canister = test.create_canister();
         for _ in 0..10 {
@@ -1596,6 +1707,15 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             ExecutionRound::from(1)
         );
     }
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        6
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_canisters,
+        num_canisters
+    );
 }
 
 #[test]
@@ -1641,6 +1761,12 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 3.0);
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 10.0);
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        13
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
 #[test]
@@ -2080,6 +2206,14 @@ fn execute_multiple_heartbeats() {
         metrics.round_inner.messages.get_sample_sum(),
         expected_messages as f64
     );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        expected_messages as u64
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_canisters,
+        number_of_canisters as u64
+    );
 }
 
 #[test]
@@ -2141,11 +2275,12 @@ fn can_record_metrics_for_a_round() {
         })
         .build();
 
+    let num_canisters = 3;
     // The first two canisters have an `Allocation` of 45% and the last 9%. We'll be
     // forced to execute the first two and then run out of instructions (based on
     // the limits) which will result in a violation of third canister's
     // `Allocation`.
-    for i in 0..3 {
+    for i in 0..num_canisters {
         let compute_allocation = if i < 2 { 45 } else { 9 };
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000),
@@ -2206,6 +2341,15 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(
         metrics.canister_messages_where_cycles_were_charged.get(),
         10
+    );
+
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        10
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_canisters,
+        num_canisters
     );
 }
 
@@ -2431,6 +2575,11 @@ fn execution_round_metrics_are_recorded() {
     assert_eq!(130, metrics.round.instructions.get_sample_sum() as u64);
     assert_eq!(1, metrics.round.messages.get_sample_count());
     assert_eq!(13, metrics.round.messages.get_sample_sum() as u64);
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
+        13
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 3);
     assert_eq!(1, metrics.round_subnet_queue.duration.get_sample_count());
     assert_eq!(
         1,
@@ -3382,13 +3531,17 @@ fn expired_ingress_messages_are_removed_from_ingress_queues() {
     assert_eq!(test.ingress_queue_size(canister_id), 0);
     assert_eq!(test.subnet_ingress_queue_size(), 0);
 
-    // Verify that half of the messages expired.
+    // Verify that half of the messages expired and the other half got executed.
     assert_eq!(
         fetch_counter(
             test.metrics_registry(),
             "scheduler_expired_ingress_messages_count",
         )
         .unwrap() as u64,
+        (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
+    );
+    assert_eq!(
+        test.state().metadata.subnet_metrics.num_update_transactions,
         (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
     );
 }

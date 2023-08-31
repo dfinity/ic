@@ -217,6 +217,9 @@ message SubnetMetrics {
   types.v1.NominalCycles consumed_cycles_ecdsa_outcalls = 3;
   optional uint64 ecdsa_signature_agreements = 4;
   repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case = 5;
+  optional uint64 num_canisters = 6;
+  optional uint64 total_canister_state = 7;
+  optional uint64 num_update_transactions = 8;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {

@@ -386,6 +386,14 @@ pub struct SubnetMetrics {
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
     pub ecdsa_signature_agreements: u64,
+    /// The number of canisters that exist on this subnet.
+    pub num_canisters: u64,
+    /// The total size of the state taken by canisters on this subnet in bytes.
+    pub total_canister_state: NumBytes,
+    /// The total number of transactions processed on this subnet.
+    ///
+    /// Transactions here refer to all messages processed in replicated mode.
+    pub num_update_transactions: u64,
 }
 
 impl SubnetMetrics {
@@ -402,6 +410,37 @@ impl SubnetMetrics {
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_case
+    }
+
+    pub fn consumed_cycles_total(&self) -> NominalCycles {
+        let mut total = NominalCycles::from(0);
+
+        total += self.consumed_cycles_by_deleted_canisters;
+        total += self.consumed_cycles_http_outcalls;
+        total += self.consumed_cycles_ecdsa_outcalls;
+
+        for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
+            match use_case {
+                // For ecdsa outcalls, http outcalls and deleted canisters, skip
+                // updating the total using the use case specific metric as the
+                // update above should be sufficient (the old metric is a superset).
+                CyclesUseCase::ECDSAOutcalls
+                | CyclesUseCase::HTTPOutcalls
+                | CyclesUseCase::DeletedCanisters => {}
+                // Non consumed cycles should not be counted towards the total consumed.
+                CyclesUseCase::NonConsumed => {}
+                // For the remaining use cases simply add the values to the total.
+                CyclesUseCase::Memory
+                | CyclesUseCase::ComputeAllocation
+                | CyclesUseCase::IngressInduction
+                | CyclesUseCase::Instructions
+                | CyclesUseCase::RequestAndResponseTransmission
+                | CyclesUseCase::Uninstall
+                | CyclesUseCase::CanisterCreation => total += *cycles,
+            }
+        }
+
+        total
     }
 }
 
@@ -423,6 +462,9 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&entry.1).into()),
                 })
                 .collect(),
+            num_canisters: Some(item.num_canisters),
+            total_canister_state: Some(item.total_canister_state.get()),
+            num_update_transactions: Some(item.num_update_transactions),
         }
     }
 }
@@ -456,6 +498,24 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                     )
                 })
                 .collect(),
+            // (EXC-1473):Default to 0 values in case the fields do not exist for
+            // backwards compatibility. We can change the code to require these
+            // fields exist after the first upgrade to this code is done.
+            num_canisters: try_from_option_field(
+                item.num_canisters,
+                "SubnetMetrics::num_canisters",
+            )
+            .unwrap_or(0),
+            total_canister_state: try_from_option_field(
+                item.total_canister_state,
+                "SubnetMetrics::total_canister_state",
+            )
+            .unwrap_or(NumBytes::from(0)),
+            num_update_transactions: try_from_option_field(
+                item.num_update_transactions,
+                "SubnetMetrics::num_update_transactions",
+            )
+            .unwrap_or(0),
         })
     }
 }

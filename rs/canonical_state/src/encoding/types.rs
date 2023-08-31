@@ -145,6 +145,19 @@ pub struct SystemMetadata {
     pub prev_state_hash: Option<Vec<u8>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubnetMetrics {
+    /// The number of canisters on this subnet.
+    pub num_canisters: u64,
+    /// The total size of the state taken by canisters on this subnet in bytes.
+    pub total_canister_state: u64,
+    /// The total number of cycles consumed by canisters on this subnet.
+    pub total_consumed_cycles: Cycles,
+    /// The total number of update transactions processed on this subnet.
+    /// Update transactions include all replicated message executions.
+    pub num_update_transactions: u64,
+}
+
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeader {
     fn from(
         (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
@@ -494,6 +507,31 @@ impl
                 .prev_state_hash
                 .as_ref()
                 .map(|h| h.get_ref().0.clone()),
+        }
+    }
+}
+
+impl
+    From<(
+        &ic_replicated_state::metadata_state::SubnetMetrics,
+        CertificationVersion,
+    )> for SubnetMetrics
+{
+    fn from(
+        (metrics, _certification_version): (
+            &ic_replicated_state::metadata_state::SubnetMetrics,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        let (high, low) = metrics.consumed_cycles_total().into_parts();
+        Self {
+            num_canisters: metrics.num_canisters,
+            total_canister_state: metrics.total_canister_state.get(),
+            total_consumed_cycles: Cycles {
+                low,
+                high: Some(high),
+            },
+            num_update_transactions: metrics.num_update_transactions,
         }
     }
 }
