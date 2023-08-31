@@ -3593,6 +3593,11 @@ container-autobuild:
       sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- *
       popd
 
+      # update github CI docker image
+      pushd .github/workflows
+      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- *
+      popd
+
       # commit and push the change upstream
       git config --global user.email "idx@dfinity.org"
       git config --global user.name "IDX GitLab Automation"
