@@ -17,12 +17,13 @@ use ic_replicated_state::{
         execution_state::{
             CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
         },
+        system_state::CyclesUseCase,
         testing::new_canister_queues_for_test,
     },
     metadata_state::subnet_call_context_manager::{
         BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
     },
-    metadata_state::Stream,
+    metadata_state::{Stream, SubnetMetrics},
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
@@ -33,6 +34,7 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
+    nominal_cycles::NominalCycles,
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
     SubnetId, Time,
@@ -848,6 +850,66 @@ prop_compose! {
             Some(max_receivers) => 1 + random % (max_receivers - 1),
             None => usize::MAX,
         }
+    }
+}
+
+prop_compose! {
+    pub(crate) fn arb_nominal_cycles()(cycles in any::<u64>()) -> NominalCycles {
+        NominalCycles::from(cycles as u128)
+    }
+}
+
+prop_compose! {
+    pub(crate) fn arb_num_bytes()(bytes in any::<u64>()) -> NumBytes {
+        NumBytes::from(bytes)
+    }
+}
+
+pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
+    prop_oneof![
+        Just(CyclesUseCase::Memory),
+        Just(CyclesUseCase::ComputeAllocation),
+        Just(CyclesUseCase::IngressInduction),
+        Just(CyclesUseCase::Instructions),
+        Just(CyclesUseCase::RequestAndResponseTransmission),
+        Just(CyclesUseCase::Uninstall),
+        Just(CyclesUseCase::CanisterCreation),
+        Just(CyclesUseCase::ECDSAOutcalls),
+        Just(CyclesUseCase::HTTPOutcalls),
+        Just(CyclesUseCase::DeletedCanisters),
+        Just(CyclesUseCase::NonConsumed),
+    ]
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`SubnetMetrics`] (with only the fields relevant to
+    /// its canonical representation filled).
+    pub fn arb_subnet_metrics()(
+        consumed_cycles_by_deleted_canisters in arb_nominal_cycles(),
+        consumed_cycles_http_outcalls in arb_nominal_cycles(),
+        consumed_cycles_ecdsa_outcalls in arb_nominal_cycles(),
+        num_canisters in any::<u64>(),
+        total_canister_state in arb_num_bytes(),
+        num_update_transactions in any::<u64>(),
+        consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
+    ) -> SubnetMetrics {
+        let mut metrics = SubnetMetrics::default();
+
+        metrics.consumed_cycles_by_deleted_canisters = consumed_cycles_by_deleted_canisters;
+        metrics.consumed_cycles_http_outcalls = consumed_cycles_http_outcalls;
+        metrics.consumed_cycles_ecdsa_outcalls = consumed_cycles_ecdsa_outcalls;
+        metrics.num_canisters = num_canisters;
+        metrics.total_canister_state = total_canister_state;
+        metrics.num_update_transactions = num_update_transactions;
+
+        for (use_case, cycles) in consumed_cycles_by_use_case {
+            metrics.observe_consumed_cycles_with_use_case(
+                use_case,
+                cycles,
+            );
+        }
+
+        metrics
     }
 }
 

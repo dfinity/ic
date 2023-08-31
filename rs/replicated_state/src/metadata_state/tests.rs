@@ -1376,3 +1376,28 @@ fn stream_discard_signals_before() {
     let expected_reject_signals: VecDeque<StreamIndex> = vec![145.into()].into();
     assert_eq!(stream.reject_signals, expected_reject_signals);
 }
+
+#[test]
+fn consumed_cycles_total_calculates_the_right_amount() {
+    let mut consumed_cycles_by_use_case = BTreeMap::new();
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::from(5));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::from(12));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::from(30));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::from(100));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::from(50));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::from(40));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::from(10));
+
+    let subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: NominalCycles::from(10),
+        consumed_cycles_http_outcalls: NominalCycles::from(20),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::from(30),
+        consumed_cycles_by_use_case,
+        ..Default::default()
+    };
+
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total(),
+        NominalCycles::from(250)
+    );
+}
