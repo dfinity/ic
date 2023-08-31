@@ -179,15 +179,17 @@ table = "http_access"
 
   [sinks.clickhouse_nginx_access.batch]
   max_bytes = 10485760 # 10 MB
-  timeout_secs = 5
+  max_events = 25000 # 25k
+  timeout_secs = 10
 
   [sinks.clickhouse_nginx_access.buffer]
-  max_events = 10000 # 10 K
+  max_events = 100000 # 100k
   type = "memory"
-  when_full = "drop_newest"
+  when_full = "block"
 
   [sinks.clickhouse_nginx_access.request]
-  retry_attempts = 3
+  retry_attempts = 5
+  retry_initial_backoff_secs = 2
 
   [sinks.clickhouse_nginx_access.auth]
   strategy = "basic"
