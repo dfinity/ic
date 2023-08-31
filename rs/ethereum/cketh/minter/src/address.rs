@@ -1,8 +1,11 @@
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::fmt::{Formatter, LowerHex, UpperHex};
+use std::fmt::{Display, Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
+
+#[cfg(test)]
+mod tests;
 
 /// An Ethereum account address.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -16,6 +19,8 @@ impl AsRef<[u8]> for Address {
 }
 
 impl Address {
+    pub const ZERO: Self = Self([0u8; 20]);
+
     pub fn new(bytes: [u8; 20]) -> Self {
         Self(bytes)
     }
@@ -102,4 +107,34 @@ impl fmt::Display for Address {
 
 fn keccak(bytes: &[u8]) -> [u8; 32] {
     ic_crypto_sha3::Keccak256::hash(bytes)
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum AddressValidationError {
+    ContractCreation,
+}
+
+impl Display for AddressValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            AddressValidationError::ContractCreation => {
+                write!(
+                    f,
+                    "contract creation address {} is not supported",
+                    Address::ZERO
+                )
+            }
+        }
+    }
+}
+
+/// Validate whether the given address can be used as the destination of an Ethereum transaction.
+// TODO FI-902: add blocklist check
+pub fn validate_address_as_destination(
+    address: Address,
+) -> Result<Address, AddressValidationError> {
+    if address == Address::ZERO {
+        return Err(AddressValidationError::ContractCreation);
+    }
+    Ok(address)
 }

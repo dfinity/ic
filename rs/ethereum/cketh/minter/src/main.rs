@@ -3,7 +3,7 @@ use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_cketh_minter::address::Address;
+use ic_cketh_minter::address::{validate_address_as_destination, Address};
 use ic_cketh_minter::endpoints::WithdrawalError;
 use ic_cketh_minter::endpoints::{
     Eip1559TransactionPrice, EthTransaction, MinterArg, RetrieveEthRequest, RetrieveEthStatus,
@@ -380,7 +380,8 @@ async fn withdraw(amount: Nat, recipient: String) -> Result<RetrieveEthRequest, 
     }
 
     let destination = Address::from_str(&recipient)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse recipient address: {:?}", e)));
+        .and_then(|a| validate_address_as_destination(a).map_err(|e| e.to_string()))
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
 
     let ledger_canister_id = read_state(|s| s.ledger_id);
     let client = ICRC1Client {
