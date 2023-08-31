@@ -62,6 +62,10 @@
         tbody tr:nth-child(odd) {
             background-color: #eeeeee;
         }
+
+        .numeric {
+            text-align: right;
+        }
     </style>
 </head>
 
@@ -110,25 +114,53 @@
                 </tbody>
             </table>
 
+            {% if !minted_events.is_empty() %}
             <h3>Minted events</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Txn Hash</th>
+                        <th>Log Index</th>
+                        <th>From</th>
+                        <th>Value (wei)</th>
+                        <th>Beneficiary</th>
+                        <th>Mint Block Index</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in minted_events %}
+                    <tr>
+                        <td>{% call etherscan_tx_link(event.deposit_event.transaction_hash.to_string()) %}</td>
+                        <td class="numeric">{{ event.deposit_event.log_index }}</td>
+                        <td>{% call etherscan_address_link(event.deposit_event.from_address.to_string()) %}</td>
+                        <td class="numeric">{{ event.deposit_event.value }}</td>
+                        <td><code>{{ event.deposit_event.principal }}</code></td>
+                        <td class="numeric">{{ event.mint_block_index }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if !rejected_deposits.is_empty() %}
+            <h3>Rejected deposits</h3>
             <table>
                 <thead>
                     <tr>
                         <th>Transaction</th>
                         <th>Log Index</th>
-                        <th>Mint block index</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for mint in mints %}
+                    {% for source in rejected_deposits %}
                     <tr>
-                        <td>{% call etherscan_tx_link(mint.txhash) %}</td>
-                        <td>{{ mint.log_index }}</td>
-                        <td>{{ mint.mint_block_index }}</td>
+                        <td>{% call etherscan_tx_link(source.txhash().to_string()) %}</td>
+                        <td class="numeric">{{ source.log_index() }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            {% endif %}
         </div>
     </div>
     <body>

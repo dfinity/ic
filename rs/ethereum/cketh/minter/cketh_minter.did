@@ -48,14 +48,4 @@ service : (MinterArg) -> {
     });
     withdraw : (nat, text) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
-    dump_state_for_debugging: () -> ( record {
-        ecdsa_key_name : text;
-        last_seen_block_number: nat;
-        minted_transactions : vec record {transaction_hash : text};
-        invalid_transactions : vec record {transaction_hash : text};
-        next_transaction_nonce : nat;
-        unapproved_retrieve_eth_requests : vec text;
-        signed_retrieve_eth_requests : vec text;
-        sent_retrieve_eth_requests : vec text;
-    }) query;
 }

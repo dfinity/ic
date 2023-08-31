@@ -3,7 +3,7 @@ mod mint_transaction {
     use crate::eth_logs::{LogIndex, ReceivedEthEvent};
     use crate::eth_rpc::BlockNumber;
     use crate::numeric::{LedgerMintIndex, Wei};
-    use crate::state::State;
+    use crate::state::{MintedEvent, State};
     use candid::{Nat, Principal};
     use ethnum::u256;
 
@@ -18,10 +18,18 @@ mod mint_transaction {
 
         let block_index = LedgerMintIndex::new(1u64);
 
-        state.record_successful_mint(&event, block_index);
+        let minted_event = MintedEvent {
+            deposit_event: event.clone(),
+            mint_block_index: block_index,
+        };
+
+        state.record_successful_mint(minted_event.clone());
 
         assert!(!state.events_to_mint.contains(&event));
-        assert_eq!(state.minted_events.get(&event.source()), Some(&block_index));
+        assert_eq!(
+            state.minted_events.get(&event.source()),
+            Some(&minted_event)
+        );
     }
 
     #[test]
@@ -56,7 +64,10 @@ mod mint_transaction {
         let event = received_eth_event();
 
         assert!(!state.events_to_mint.contains(&event));
-        state.record_successful_mint(&event, LedgerMintIndex::new(1));
+        state.record_successful_mint(MintedEvent {
+            deposit_event: event,
+            mint_block_index: LedgerMintIndex::new(1),
+        });
     }
 
     #[test]
