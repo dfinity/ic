@@ -1,5 +1,8 @@
+use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
+use ic_replicated_state::ReplicatedState;
+use ic_state_machine_tests::{IngressState, IngressStatus};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
@@ -590,7 +593,7 @@ fn install_code_with_start_with_err() {
 
     let wasm: &str = r#"
     (module
-    
+
         (func $start
             (drop (memory.grow (i32.const 1)))
             (memory.fill (i32.const 0) (i32.const 13) (i32.const 1000))
@@ -1098,8 +1101,6 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         .with_caller(own_subnet, caller_canister)
         .build();
 
-    let ingress_memory_capacity = test.ingress_memory_capacity();
-
     // Create two canisters.
     let canister_id_1 = test
         .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
@@ -1114,13 +1115,6 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         .unwrap();
     test.canister_update_controller(canister_id_2, controllers)
         .unwrap();
-
-    let canister_states = test
-        .state()
-        .canister_states
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
 
     let install_code_args = |canister_id: CanisterId| InstallCodeArgs {
         canister_id: canister_id.get(),
@@ -1159,11 +1153,12 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     );
     test.execute_subnet_message();
 
-    // SubnetCallContextManager contains a install code call after executing the message.
+    // The first task of canister 1 is a `ContinueInstallCode`.
     assert_eq!(
         test.canister_state(canister_id_1).next_execution(),
         NextExecution::ContinueInstallCode
     );
+    // And `SubnetCallContextManager` now contains one `InstallCodeCall`.
     assert_eq!(
         test.state()
             .metadata
@@ -1172,10 +1167,16 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         1
     );
 
-    // Will keep the entry from the SubnetCallContextManager and does not produce a response.
-    let is_local_canister = |canister_id: CanisterId| canister_states.contains(&canister_id);
-    test.state_mut()
-        .reject_in_progress_management_calls(is_local_canister, ingress_memory_capacity);
+    // Helper function for invoking `after_split()`.
+    fn after_split(state: &mut ReplicatedState) {
+        state.metadata.split_from = Some(state.metadata.own_subnet_id);
+        state.after_split();
+    }
+
+    // A no-op subnet split (no canisters migrated).
+    after_split(test.state_mut());
+
+    // Retains the `InstallCodeCall` and does not produce a response.
     assert_eq!(
         test.state()
             .metadata
@@ -1185,11 +1186,11 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     );
     assert!(!test.state().subnet_queues().has_output());
 
-    // Faking canister migration to another subnet.
-    // Will remove the entry from the SubnetCallContextManager and produce a response.
-    let is_not_local_canister = |canister_id: CanisterId| !canister_states.contains(&canister_id);
-    test.state_mut()
-        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    // Simulate a subnet split that migrates canister 1 to another subnet.
+    test.state_mut().take_canister_state(&canister_id_1);
+    after_split(test.state_mut());
+
+    // Should have removed the `InstallCodeCall` and produced a reject response.
     assert_eq!(
         test.state()
             .metadata
@@ -1213,6 +1214,24 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     // Send install code message and start execution.
     let message_id = test.dts_install_code(install_code_args(canister_id_2));
 
+    // The first task of canister 2 is a `ContinueInstallCode`.
+    assert_eq!(
+        test.canister_state(canister_id_2).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    // And `SubnetCallContextManager` now contains one `InstallCodeCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+
+    // A no-op subnet split (no canisters migrated).
+    after_split(test.state_mut());
+
+    // Retains the `InstallCodeCall` and does not change the ingress state.
     assert_eq!(
         test.canister_state(canister_id_2).next_execution(),
         NextExecution::ContinueInstallCode
@@ -1224,9 +1243,19 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             .install_code_calls_len(),
         1
     );
+    assert_matches!(
+        test.ingress_status(&message_id),
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    );
 
-    test.state_mut()
-        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    // Simulate a subnet split that migrates canister 2 to another subnet.
+    test.state_mut().take_canister_state(&canister_id_2);
+    after_split(test.state_mut());
+
+    // Should have removed the `InstallCodeCall` and set the ingress state to `Failed`.
     assert_eq!(
         test.state()
             .metadata

@@ -4,10 +4,12 @@ mod tests;
 
 use crate::canister_state::system_state::CyclesUseCase;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+use crate::CanisterQueues;
 use ic_base_types::CanisterId;
 use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -29,7 +31,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
-    messages::{is_subnet_id, MessageId, RequestOrResponse},
+    messages::{
+        is_subnet_id, CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+    },
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
@@ -920,7 +924,11 @@ impl SystemMetadata {
     /// other metadata were preserved on subnet A' and set to default on subnet B.
     ///
     /// In this second phase, `ingress_history` is pruned, retaining only messages
-    /// in terminal states and messages addressed to local canisters.
+    /// in terminal states and messages addressed to local canisters. Additionally,
+    /// on subnet A' we reject all management canister calls whose execution is in
+    /// progress on one of the canisters migrated to subnet B (hence the
+    /// `subnet_queues` argument); and silently discard the corresponding tasks and
+    /// roll back `Stopping` states on all subnet B canisters.
     ///
     /// Notes:
     ///  * `prev_state_hash` has just been set by `take_tip()` to the checkpoint
@@ -934,8 +942,11 @@ impl SystemMetadata {
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
     #[allow(dead_code)]
-    pub(crate) fn after_split<F>(&mut self, is_local_canister: F)
-    where
+    pub(crate) fn after_split<F>(
+        &mut self,
+        is_local_canister: F,
+        subnet_queues: &mut CanisterQueues,
+    ) where
         F: Fn(CanisterId) -> bool,
     {
         // Destructure `self` in order for the compiler to enforce an explicit decision
@@ -987,6 +998,109 @@ impl SystemMetadata {
 
         // Split complete, reset split marker.
         *split_from = None;
+
+        // Reject in-progress subnet messages executing on canisters migrated from this
+        // subnet
+        self.reject_in_progress_management_calls_after_split(&is_local_canister, subnet_queues);
+    }
+
+    /// Rejects all in-progress subnet messages whose target canisters are no longer
+    /// on this subnet, in the second phase of a subnet split. Enqueues reject
+    /// responses into the provided `subnet_queues` for calls originating from
+    /// canisters; and records a `Failed` state in `self.ingress_history` for calls
+    /// originating from ingress messages.
+    ///
+    /// On the other subnet (which must be *subnet B*), the execution of these same
+    /// messages, now without matching subnet call contexts, will be silently
+    /// aborted / rolled back (without producing a response). This is the only way
+    /// to ensure consistency for a message that would otherwise be executing on one
+    /// subnet, but for which a response may only be produced by another subnet.
+    fn reject_in_progress_management_calls_after_split<F>(
+        &mut self,
+        is_local_canister: F,
+        subnet_queues: &mut CanisterQueues,
+    ) where
+        F: Fn(CanisterId) -> bool,
+    {
+        for install_code_call in self
+            .subnet_call_context_manager
+            .remove_non_local_install_code_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                install_code_call.call,
+                install_code_call.effective_canister_id,
+                subnet_queues,
+            );
+        }
+
+        for stop_canister_call in self
+            .subnet_call_context_manager
+            .remove_non_local_stop_canister_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                stop_canister_call.call,
+                stop_canister_call.effective_canister_id,
+                subnet_queues,
+            );
+        }
+    }
+
+    /// Rejects the given subnet call targeting `canister_id`, which has migrated to
+    /// a new subnet following a subnet split.
+    ///
+    /// * If the call originated from a canister, enqueues an output reject response
+    ///   on behalf of the subnet into the provided `subnet_queues`.
+    /// * If the call originated from an ingress message, sets its ingress state in
+    ///   `self.ingress_history` to `Failed`.
+    fn reject_management_call_after_split(
+        &mut self,
+        call: CanisterCall,
+        canister_id: CanisterId,
+        subnet_queues: &mut CanisterQueues,
+    ) {
+        match call {
+            CanisterCall::Request(request) => {
+                // Rejecting a request from a canister.
+                let response = Response {
+                    originator: request.sender(),
+                    respondent: request.receiver,
+                    originator_reply_callback: request.sender_reply_callback,
+                    refund: request.payment,
+                    response_payload: Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+                subnet_queues.push_output_response(response.into());
+            }
+            CanisterCall::Ingress(ingress) => {
+                let status = IngressStatus::Known {
+                    receiver: ingress.receiver.get(),
+                    user_id: ingress.source,
+                    time: self.time(),
+                    state: IngressState::Failed(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+
+                if let Some(current_status) = self.ingress_history.get(&ingress.message_id) {
+                    assert!(
+                        current_status.is_valid_state_transition(&status),
+                        "message (id='{}', current_status='{:?}') cannot be transitioned to '{:?}'",
+                        ingress.message_id,
+                        current_status,
+                        status
+                    );
+                }
+                self.ingress_history.insert(
+                    ingress.message_id.clone(),
+                    status,
+                    self.time(),
+                    u64::MAX.into(), // No need to enforce ingress memory limits,
+                );
+            }
+        }
     }
 }
 

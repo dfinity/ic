@@ -496,6 +496,7 @@ fn system_metadata_split() {
             NumBytes::from(u64::MAX),
         );
     }
+    let mut subnet_queues = CanisterQueues::default();
 
     // `CANISTER_1` remains on `SUBNET_A`.
     let is_canister_on_subnet_a = |canister_id: CanisterId| canister_id == CANISTER_1;
@@ -535,7 +536,7 @@ fn system_metadata_split() {
     // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
     // `own_subnet_type`) would be replaced during loading. However, we only care
     // that `after_split()` does not touch them.
-    metadata_a.after_split(is_canister_on_subnet_a);
+    metadata_a.after_split(is_canister_on_subnet_a, &mut subnet_queues);
 
     // Expect same metadata, but with pruned ingress history and no split marker.
     expected
@@ -560,7 +561,7 @@ fn system_metadata_split() {
     // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
     // `own_subnet_type`) would be replaced during loading. However, we only care
     // that `after_split()` does not touch them.
-    metadata_b.after_split(is_canister_on_subnet_b);
+    metadata_b.after_split(is_canister_on_subnet_b, &mut subnet_queues);
 
     // Expect pruned ingress history and no split marker.
     expected.split_from = None;
