@@ -2,11 +2,12 @@ use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::EthereumNetwork;
-use ic_cketh_minter::eth_logs::{EventSource, SMART_CONTRACT_ADDRESS};
+use ic_cketh_minter::eth_logs::{EventSource, EventSourceError, SMART_CONTRACT_ADDRESS};
 use ic_cketh_minter::eth_rpc::BlockNumber;
 use ic_cketh_minter::numeric::TransactionNonce;
 use ic_cketh_minter::state::{MintedEvent, State};
 use std::cmp::Reverse;
+use std::collections::BTreeMap;
 
 #[derive(Template)]
 #[template(path = "dashboard.html")]
@@ -20,7 +21,7 @@ pub struct DashboardTemplate {
     pub last_finalized_block: Option<BlockNumber>,
     pub ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
-    pub rejected_deposits: Vec<EventSource>,
+    pub rejected_deposits: BTreeMap<EventSource, EventSourceError>,
 }
 
 impl DashboardTemplate {
@@ -41,7 +42,7 @@ impl DashboardTemplate {
             last_synced_block: state.last_scraped_block_number,
             last_finalized_block: state.last_finalized_block_number,
             minted_events,
-            rejected_deposits: state.invalid_events.iter().cloned().collect(),
+            rejected_deposits: state.invalid_events.clone(),
         }
     }
 }
