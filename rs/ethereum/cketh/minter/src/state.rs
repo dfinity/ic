@@ -19,6 +19,18 @@ thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct MintedEvent {
+    pub deposit_event: ReceivedEthEvent,
+    pub mint_block_index: LedgerMintIndex,
+}
+
+impl MintedEvent {
+    pub fn source(&self) -> EventSource {
+        self.deposit_event.source()
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
@@ -28,7 +40,7 @@ pub struct State {
     pub last_scraped_block_number: BlockNumber,
     pub last_finalized_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeSet<ReceivedEthEvent>,
-    pub minted_events: BTreeMap<EventSource, LedgerMintIndex>,
+    pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeSet<EventSource>,
     pub pending_retrieve_eth_requests: PendingEthTransactions,
     pub next_transaction_nonce: TransactionNonce,
@@ -126,24 +138,21 @@ impl State {
         self.invalid_events.insert(source)
     }
 
-    pub fn record_successful_mint(
-        &mut self,
-        event: &ReceivedEthEvent,
-        mint_block_index: LedgerMintIndex,
-    ) {
+    pub fn record_successful_mint(&mut self, minted_event: MintedEvent) {
         debug_assert!(
-            !self.invalid_events.contains(&event.source()),
-            "attempted to mint an event previously marked as invalid {event:?}"
+            !self.invalid_events.contains(&minted_event.source()),
+            "attempted to mint an event previously marked as invalid {minted_event:?}"
         );
 
         assert!(
-            self.events_to_mint.remove(event),
-            "attempted to mint ckETH for an unknown event {event:?}"
+            self.events_to_mint.remove(&minted_event.deposit_event),
+            "attempted to mint ckETH for an unknown event {minted_event:?}"
         );
         assert_eq!(
-            self.minted_events.insert(event.source(), mint_block_index),
+            self.minted_events
+                .insert(minted_event.source(), minted_event.clone()),
             None,
-            "attempted to mint ckETH twice for the same event {event:?}"
+            "attempted to mint ckETH twice for the same event {minted_event:?}"
         );
     }
 

@@ -34,6 +34,15 @@ impl Wei {
         Self(ethnum::u256::new(value))
     }
 
+    pub const fn from_milliether(value: u128) -> Self {
+        Self(ethnum::u256::new(
+            match 1_000_000_000_000_000u128.checked_mul(value) {
+                Some(n) => n,
+                None => panic!("milliether value does not fit into u128"),
+            },
+        ))
+    }
+
     pub fn checked_add(self, other: Self) -> Option<Self> {
         self.0.checked_add(other.0).map(Self)
     }
@@ -91,7 +100,8 @@ impl From<Wei> for candid::Nat {
 
 impl fmt::Display for Wei {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        use thousands::Separable;
+        write!(f, "{}", self.0.separate_with_commas())
     }
 }
 

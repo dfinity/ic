@@ -6,18 +6,17 @@ use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::WithdrawalError;
 use ic_cketh_minter::endpoints::{
-    DebugState, Eip1559TransactionPrice, EthTransaction, MinterArg, RetrieveEthRequest,
-    RetrieveEthStatus,
+    Eip1559TransactionPrice, EthTransaction, MinterArg, RetrieveEthRequest, RetrieveEthStatus,
 };
 use ic_cketh_minter::eth_logs::report_transaction_error;
-use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
+use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory};
 use ic_cketh_minter::eth_rpc::{BlockNumber, JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::{
-    lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
+    lazy_call_ecdsa_public_key, mutate_state, read_state, MintedEvent, State, TaskType, STATE,
 };
 use ic_cketh_minter::transactions::PendingEthTransaction;
 use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
@@ -35,7 +34,7 @@ const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs
 const MINT_RETRY_DELAY: Duration = Duration::from_secs(3 * 60);
 
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
-pub const MINIMUM_WITHDRAWAL_AMOUNT: Wei = Wei::new(10_000_000_000_000_000_128); // 0.01 ETH
+pub const MINIMUM_WITHDRAWAL_AMOUNT: Wei = Wei::from_milliether(10);
 
 #[init]
 #[candid_method(init)]
@@ -186,7 +185,12 @@ async fn mint_cketh() {
                 continue;
             }
         };
-        mutate_state(|s| s.record_successful_mint(&event, LedgerMintIndex::new(block_index)));
+        mutate_state(|s| {
+            s.record_successful_mint(MintedEvent {
+                deposit_event: event.clone(),
+                mint_block_index: LedgerMintIndex::new(block_index),
+            })
+        });
         log!(
             INFO,
             "Minted {} ckWei to {} in block {block_index}",
@@ -537,42 +541,6 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         }
     }
     setup_timers();
-}
-
-#[query]
-#[candid_method(query)]
-fn dump_state_for_debugging() -> DebugState {
-    fn to_tx(hash: &Hash) -> EthTransaction {
-        EthTransaction {
-            transaction_hash: hash.to_string(),
-        }
-    }
-    fn vec_debug<T: std::fmt::Debug>(v: &[T]) -> Vec<String> {
-        v.iter().map(|x| format!("{:?}", x)).collect()
-    }
-
-    read_state(|s| DebugState {
-        ecdsa_key_name: s.ecdsa_key_name.clone(),
-        last_seen_block_number: Nat::from(s.last_scraped_block_number),
-        minted_transactions: s
-            .minted_events
-            .keys()
-            .map(|source| to_tx(source.txhash()))
-            .collect(),
-        invalid_transactions: s
-            .invalid_events
-            .iter()
-            .map(|source| to_tx(source.txhash()))
-            .collect(),
-        next_transaction_nonce: Nat::from(s.next_transaction_nonce),
-        unapproved_retrieve_eth_requests: vec_debug(
-            &s.pending_retrieve_eth_requests.transactions_to_sign(),
-        ),
-        signed_retrieve_eth_requests: vec_debug(
-            &s.pending_retrieve_eth_requests.transactions_to_send(),
-        ),
-        sent_retrieve_eth_requests: vec_debug(&s.pending_retrieve_eth_requests.transactions_sent()),
-    })
 }
 
 #[candid_method(query)]

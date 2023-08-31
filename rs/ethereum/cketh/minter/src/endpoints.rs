@@ -42,18 +42,6 @@ pub struct Eip1559TransactionPrice {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
-pub struct DebugState {
-    pub ecdsa_key_name: String,
-    pub last_seen_block_number: Nat,
-    pub minted_transactions: Vec<EthTransaction>,
-    pub invalid_transactions: Vec<EthTransaction>,
-    pub next_transaction_nonce: Nat,
-    pub unapproved_retrieve_eth_requests: Vec<String>,
-    pub signed_retrieve_eth_requests: Vec<String>,
-    pub sent_retrieve_eth_requests: Vec<String>,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct EthTransaction {
     pub transaction_hash: String,
 }

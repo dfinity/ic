@@ -55,6 +55,7 @@ rust_library(
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
         "@crate_index//:strum",
+        "@crate_index//:thousands",
     ],
 )
 
