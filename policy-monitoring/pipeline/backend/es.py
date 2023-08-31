@@ -17,12 +17,10 @@ class EsException(Exception):
 
 
 def is_replica_log_index(index_name: str) -> bool:
-    return index_name.startswith("journalbeat-guestos-journal")
+    return index_name.startswith("ic-logs-")
 
 
 class Es:
-
-    JOURNALBEAT_VERSION = "7.14.0"
 
     # This array represents a lexicographical order.
     # To scroll through ES pages, we need two factors:
@@ -126,13 +124,12 @@ class Es:
     def _is_index_relevant(index: str, dates: List[datetime]) -> bool:
         """Check if this index is relevant, i.e., it contains logs produced starting [minutes_ago] until now."""
         for date in dates:
-            # Example: journalbeat-guestos-journal-7.14.0-2022.05.23
-            m = re.match(r"journalbeat-guestos-journal-(\d+\.\d+\.\d+)-(\d\d\d\d\.\d\d\.\d\d)", index)
+            # Example: ic-logs-2023.08.23
+            m = re.match(r"ic-logs-(\d\d\d\d\.\d\d\.\d\d)", index)
             if (
                 m
-                and len(m.groups()) == 2
-                and m.group(1) == Es.JOURNALBEAT_VERSION
-                and m.group(2) == date.strftime("%Y.%m.%d")
+                and len(m.groups()) == 1
+                and m.group(1) == date.strftime("%Y.%m.%d")
             ):
                 return True
 
@@ -140,7 +137,7 @@ class Es:
 
     def find_mainnet_inidices(self, window_minutes: int) -> List[str]:
         """
-        Find mainnet journalbeat indices for the past [num_days]
+        Find mainnet filebeat indices for the past [num_days]
         Exceptions:
             - [self.fail] ==> [EsException] if COUNT query fails for some index
         """

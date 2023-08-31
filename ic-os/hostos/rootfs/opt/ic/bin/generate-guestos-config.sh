@@ -98,7 +98,7 @@ function read_variables() {
 function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
-    cmd+=(--journalbeat_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
+    cmd+=(--elasticsearch_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
     cmd+=(--ipv6_address "$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=1)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     cmd+=(--name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_dns_name_servers --config=${DEPLOYMENT})")

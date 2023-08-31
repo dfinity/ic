@@ -60,9 +60,9 @@ filesystem tree contained in the root filesystem as "template".
 This makes it necessary for the fs creation utility to read all
 labels contained in this template directory.
 
-=== +journalbeat+
+=== +filebeat+
 
-Policy to confine the +journalbeat+ 3rd party software.
+Policy to confine the +filebeat+ 3rd party software.
 
 === +node_exporter+
 

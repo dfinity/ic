@@ -288,7 +288,7 @@ pub fn create_config_disk_image(
         .arg(local_store_path)
         .arg("--ic_crypto")
         .arg(node.crypto_path())
-        .arg("--journalbeat_tags")
+        .arg("--elasticsearch_tags")
         .arg(format!("system_test {}", group_name));
 
     // If we have a root subnet, specify the correct NNS url.
@@ -317,14 +317,14 @@ pub fn create_config_disk_image(
             .arg(ssh_authorized_pub_keys_dir);
     }
 
-    let journalbeat_hosts: Vec<String> = test_env.get_journalbeat_hosts()?;
+    let elasticsearch_hosts: Vec<String> = test_env.get_elasticsearch_hosts()?;
     info!(
         test_env.logger(),
-        "journal beat hosts are {:?}", journalbeat_hosts
+        "ElasticSearch hosts are {:?}", elasticsearch_hosts
     );
-    if !journalbeat_hosts.is_empty() {
-        cmd.arg("--journalbeat_hosts")
-            .arg(journalbeat_hosts.join(" "));
+    if !elasticsearch_hosts.is_empty() {
+        cmd.arg("--elasticsearch_hosts")
+            .arg(elasticsearch_hosts.join(" "));
     }
 
     let replica_log_debug_overrides: Vec<String> = test_env.get_replica_log_debug_overrides()?;

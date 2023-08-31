@@ -396,9 +396,9 @@ class Farm(object):
             extra_config = ictools.build_ssh_extra_config()
 
             if "TEST_ES_HOSTNAMES" in os.environ:
-                extra_config["journalbeat_hosts"] = os.environ["TEST_ES_HOSTNAMES"].replace(",", " ")
+                extra_config["elasticsearch_hosts"] = os.environ["TEST_ES_HOSTNAMES"].replace(",", " ")
 
-            extra_config["journalbeat_tags"] = f"scalability_suite {self.group_name}"
+            extra_config["elasticsearch_tags"] = f"scalability_suite {self.group_name}"
 
             config_image = ictools.build_ic_prep_inject_config(
                 self.ic_config,

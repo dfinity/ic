@@ -81,7 +81,7 @@ nodes:
     orchestrator_metrics_listen_port: 9091
     orchestrator_metrics_listen_addr: "[{{ orchestrator_metrics_listen_ip }}]:{{ orchestrator_metrics_listen_port }}"
 
-    journalbeat_hosts:
+    elasticsearch_hosts:
       - "elasticsearch.testnet.dfinity.network:443"
 
 api:

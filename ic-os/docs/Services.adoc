@@ -36,7 +36,7 @@ These lists may be out-of-date. For the source of truth, see each OSes `rootfs/D
 |generate-guestos-config        |service|Enabled|No      |Configure virtual machine XML configuration from template
 |generate-network-config        |service|Enabled|No      |Configure physical network interfaces, bonds and bridges
 |guestos                        |service|Enabled|No      |Start and stop virtual machine
-|journalbeat                    |service|Enabled|No      |Logging daemon
+|filebeat                       |service|Enabled|No      |Logging daemon
 |libvirtd                       |service|Enabled|Yes     |Virtualization daemon
 |monitor-guestos                |service|Enabled|No      |Monitor virtual machine service
 |monitor-guestos                |timer  |Enabled|No      |Monitor virtual machine interval
@@ -63,7 +63,7 @@ Below is a list of 3rd party software installed from their official sources. We 
 |====
 |Name           |Description | IC-OS |URL
 
-|Journalbeat    |Lightweight shipper for forwarding and centralizing log data from systemd journals. | HostOS, GuestOS |https://artifacts.elastic.co/downloads/beats/journalbeat/
+|Filebeat       |Lightweight shipper for forwarding and centralizing log data from systemd journals. | HostOS, GuestOS |https://www.elastic.co/downloads/past-releases#filebeat-oss
 
 |node_exporter  |Service that collects and publishes system metrics. | HostOS, GuestOS |https://github.com/prometheus/node_exporter/releases
 

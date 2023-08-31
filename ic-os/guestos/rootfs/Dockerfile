@@ -160,18 +160,18 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
 
 # The "filebeat" account. Used to run filebeat binary to send logs of the
 # GuestOS.
-RUN addgroup journalbeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
-    adduser journalbeat journalbeat && \
-    adduser journalbeat systemd-journal && \
-    chown root:root /etc/journalbeat/*.yml \
-                    /usr/local/bin/journalbeat && \
-    chown journalbeat:journalbeat /var/lib/journalbeat \
-                                  /var/log/journalbeat && \
-    chmod 0755 /etc/journalbeat && \
-    chmod 0750 /var/lib/journalbeat \
-               /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml
+RUN addgroup filebeat && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Filebeat" filebeat && \
+    adduser filebeat filebeat && \
+    adduser filebeat systemd-journal && \
+    chown root:root /etc/filebeat/*.yml \
+                    /usr/local/bin/filebeat && \
+    chown filebeat:filebeat /var/lib/filebeat \
+                                  /var/log/filebeat && \
+    chmod 0755 /etc/filebeat && \
+    chmod 0750 /var/lib/filebeat \
+               /var/log/filebeat && \
+    chmod 0644 /etc/filebeat/*.yml
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
