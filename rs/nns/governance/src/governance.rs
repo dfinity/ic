@@ -600,7 +600,7 @@ impl Proposal {
     pub fn managed_neuron(&self) -> Option<NeuronIdOrSubaccount> {
         if let Some(action) = &self.action {
             match action {
-                proposal::Action::ManageNeuron(n) => n
+                Action::ManageNeuron(n) => n
                     .get_neuron_id_or_subaccount()
                     .expect("Validation of managed neuron failed"),
                 _ => None,
@@ -616,11 +616,11 @@ impl Proposal {
     pub(crate) fn topic(&self) -> Topic {
         if let Some(action) = &self.action {
             match action {
-                proposal::Action::ManageNeuron(_) => Topic::NeuronManagement,
-                proposal::Action::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
-                proposal::Action::Motion(_) => Topic::Governance,
-                proposal::Action::ApproveGenesisKyc(_) => Topic::Kyc,
-                proposal::Action::ExecuteNnsFunction(m) => {
+                Action::ManageNeuron(_) => Topic::NeuronManagement,
+                Action::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
+                Action::Motion(_) => Topic::Governance,
+                Action::ApproveGenesisKyc(_) => Topic::Kyc,
+                Action::ExecuteNnsFunction(m) => {
                     if let Some(mt) = NnsFunction::from_i32(m.nns_function) {
                         match mt {
                             NnsFunction::Unspecified => {
@@ -674,14 +674,9 @@ impl Proposal {
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
                             NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
+                            // Retired NnsFunctions
                             NnsFunction::BlessReplicaVersion
-                            | NnsFunction::RetireReplicaVersion => {
-                                println!(
-                                    "{}ERROR: Obsolete proposal type used: {:?}",
-                                    LOG_PREFIX, action
-                                );
-                                Topic::ReplicaVersionManagement
-                            }
+                            | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
                         }
                     } else {
                         println!(
@@ -691,12 +686,14 @@ impl Proposal {
                         Topic::Unspecified
                     }
                 }
-                proposal::Action::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
-                proposal::Action::RewardNodeProvider(_)
-                | proposal::Action::RewardNodeProviders(_) => Topic::NodeProviderRewards,
-                proposal::Action::SetDefaultFollowees(_)
-                | proposal::Action::RegisterKnownNeuron(_) => Topic::Governance,
-                proposal::Action::SetSnsTokenSwapOpenTimeWindow(_) => {
+                Action::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
+                Action::RewardNodeProvider(_) | Action::RewardNodeProviders(_) => {
+                    Topic::NodeProviderRewards
+                }
+                Action::SetDefaultFollowees(_) | Action::RegisterKnownNeuron(_) => {
+                    Topic::Governance
+                }
+                Action::SetSnsTokenSwapOpenTimeWindow(_) => {
                     println!(
                         "{}ERROR: Obsolete proposal type used: {:?}",
                         LOG_PREFIX, action
@@ -705,8 +702,9 @@ impl Proposal {
                 }
                 // TODO: Move OpenSnsTokenSwap to the previous arm when we
                 // deprecate this.
-                proposal::Action::OpenSnsTokenSwap(_)
-                | proposal::Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+                Action::OpenSnsTokenSwap(_) | Action::CreateServiceNervousSystem(_) => {
+                    Topic::SnsAndCommunityFund
+                }
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -735,7 +733,7 @@ impl Action {
     /// be submitted when the heap growth potential is low.
     fn allowed_when_resources_are_low(&self) -> bool {
         match &self {
-            proposal::Action::ExecuteNnsFunction(update) => {
+            Action::ExecuteNnsFunction(update) => {
                 match NnsFunction::from_i32(update.nns_function) {
                     Some(f) => f.allowed_when_resources_are_low(),
                     None => false,
