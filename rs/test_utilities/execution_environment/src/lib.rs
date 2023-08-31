@@ -1519,7 +1519,6 @@ impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
         let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
-
         Self {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
@@ -1669,6 +1668,12 @@ impl ExecutionTestBuilder {
     pub fn with_subnet_memory_reservation(mut self, subnet_memory_reservation: i64) -> Self {
         self.execution_config.subnet_memory_reservation =
             NumBytes::from(subnet_memory_reservation as u64);
+        self
+    }
+
+    pub fn with_subnet_memory_threshold(mut self, subnet_memory_threshold: i64) -> Self {
+        self.execution_config.subnet_memory_threshold =
+            NumBytes::from(subnet_memory_threshold as u64);
         self
     }
 

@@ -120,6 +120,15 @@ impl ResourceSaturation {
             result.try_into().unwrap()
         }
     }
+
+    /// Returns a new `ResourceSaturation` with the additional usage.
+    pub fn add(&self, usage: u64) -> Self {
+        Self {
+            usage: (self.usage + usage).min(self.capacity),
+            threshold: self.threshold,
+            capacity: self.capacity,
+        }
+    }
 }
 
 /// Handles any operation related to cycles accounting, such as charging (due to
@@ -611,6 +620,22 @@ impl CyclesAccountManager {
                 / one_gib,
         );
         self.scale_cost(cycles, subnet_size)
+    }
+
+    /// Returns the amount of reserved cycles required for allocating the given
+    /// number of bytes at the given resource saturation level.
+    pub fn storage_reservation_cycles(
+        &self,
+        allocated_bytes: NumBytes,
+        storage_saturation: &ResourceSaturation,
+        subnet_size: usize,
+    ) -> Cycles {
+        let duration = Duration::from_secs(
+            storage_saturation
+                .add(allocated_bytes.get())
+                .reservation_factor(self.config.max_storage_reservation_period.as_secs()),
+        );
+        self.memory_cost(allocated_bytes, duration, subnet_size)
     }
 
     ////////////////////////////////////////////////////////////////////////////

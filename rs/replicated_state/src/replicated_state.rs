@@ -554,7 +554,7 @@ impl ReplicatedState {
                 (
                     match canister.memory_allocation() {
                         MemoryAllocation::Reserved(bytes) => bytes,
-                        MemoryAllocation::BestEffort => canister.raw_memory_usage(),
+                        MemoryAllocation::BestEffort => canister.execution_memory_usage(),
                     },
                     canister.system_state.message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),

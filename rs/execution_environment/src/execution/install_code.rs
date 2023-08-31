@@ -217,6 +217,36 @@ impl InstallCodeHelper {
             .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
 
         if self.allocated_bytes > self.deallocated_bytes {
+            let bytes = self.allocated_bytes - self.deallocated_bytes;
+
+            let reservation_cycles = round.cycles_account_manager.storage_reservation_cycles(
+                bytes,
+                &original.execution_parameters.subnet_memory_saturation,
+                original.subnet_size,
+            );
+
+            match self
+                .canister
+                .system_state
+                .reserve_cycles(reservation_cycles)
+            {
+                Ok(()) => {}
+                Err(err) => {
+                    let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                        bytes,
+                        available: err.available,
+                        threshold: err.requested,
+                    };
+                    return finish_err(
+                        clean_canister,
+                        self.instructions_left(),
+                        original,
+                        round,
+                        err,
+                    );
+                }
+            }
+
             let threshold = round.cycles_account_manager.freeze_threshold_cycles(
                 self.canister.system_state.freeze_threshold,
                 self.canister.memory_allocation(),
@@ -226,7 +256,6 @@ impl InstallCodeHelper {
                 self.canister.system_state.reserved_balance(),
             );
             if self.canister.system_state.balance() < threshold {
-                let bytes = self.allocated_bytes - self.deallocated_bytes;
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
                     available: self.canister.system_state.balance(),
