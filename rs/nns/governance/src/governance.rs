@@ -3940,17 +3940,22 @@ impl Governance {
             self.process_proposal(pid);
         }
 
-        self.closest_proposal_deadline_timestamp_seconds = self
-            .heap_data
+        self.closest_proposal_deadline_timestamp_seconds =
+            self.compute_closest_proposal_deadline_timestamp_seconds();
+    }
+
+    /// Computes the timestamp of the earliest open proposal's deadline
+    pub fn compute_closest_proposal_deadline_timestamp_seconds(&self) -> u64 {
+        self.heap_data
             .proposals
             .values()
             .filter(|data| data.status() == ProposalStatus::Open)
             .map(|data| {
-                data.proposal_timestamp_seconds
-                    .saturating_add(self.voting_period_seconds()(data.topic()))
+                let voting_period = self.voting_period_seconds()(data.topic());
+                data.get_deadline_timestamp_seconds(voting_period)
             })
             .min()
-            .unwrap_or(u64::MAX);
+            .unwrap_or(u64::MAX)
     }
 
     fn start_process_rejected_proposal(&mut self, pid: u64) {
