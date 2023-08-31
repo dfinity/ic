@@ -763,7 +763,7 @@ fn get_neuron_ids_() -> Vec<NeuronId> {
     governance()
         .get_managed_neuron_ids_for(votable)
         .into_iter()
-        .map(NeuronId)
+        .map(NeuronId::from)
         .collect()
 }
 

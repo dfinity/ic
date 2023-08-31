@@ -27,7 +27,6 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
-use ic_nervous_system_governance::index::neuron_principal::NeuronPrincipalIndex;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -6099,8 +6098,8 @@ fn test_add_and_remove_hot_key() {
     let new_controller = init_neurons[&42].controller.unwrap();
 
     assert!(!gov
-        .principal_to_neuron_ids_index
-        .get_neuron_ids(new_controller)
+        .neuron_store
+        .get_neuron_ids_readable_by_caller(new_controller)
         .contains(neuron.id.as_ref().unwrap()));
     // Add a hot key to the neuron and make sure that gets reflected in the
     // principal to neuron ids index.
@@ -6126,8 +6125,8 @@ fn test_add_and_remove_hot_key() {
 
     assert!(result.is_ok());
     assert!(gov
-        .principal_to_neuron_ids_index
-        .get_neuron_ids(new_controller)
+        .neuron_store
+        .get_neuron_ids_readable_by_caller(new_controller)
         .contains(neuron.id.as_ref().unwrap()));
 
     // Remove a hot key from that neuron and make sure that gets reflected in
@@ -6154,8 +6153,8 @@ fn test_add_and_remove_hot_key() {
 
     assert!(result.is_ok());
     assert!(!gov
-        .principal_to_neuron_ids_index
-        .get_neuron_ids(new_controller)
+        .neuron_store
+        .get_neuron_ids_readable_by_caller(new_controller)
         .contains(neuron.id.as_ref().unwrap()));
 }
 
@@ -10933,7 +10932,10 @@ async fn test_known_neurons() {
         .iter()
         .cloned()
         .collect();
-    assert_eq!(expected_known_neuron_name_set, gov.known_neuron_name_set);
+    assert_eq!(
+        expected_known_neuron_name_set,
+        gov.neuron_store.known_neuron_name_set
+    );
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

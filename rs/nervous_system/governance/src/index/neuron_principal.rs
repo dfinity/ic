@@ -62,12 +62,18 @@ pub fn remove_neuron_id_principal_ids<NeuronId>(
 }
 
 /// An in-memory implementation of the neuron principal index.
-#[derive(Default)]
-pub struct HeapNeuronPrincipalIndex<NeuronId> {
+#[derive(Default, Clone, Debug, PartialEq)]
+pub struct HeapNeuronPrincipalIndex<NeuronId>
+where
+    NeuronId: Hash + Eq,
+{
     principal_to_neuron_id_set: BTreeMap<PrincipalId, HashSet<NeuronId>>,
 }
 
-impl<NeuronId> HeapNeuronPrincipalIndex<NeuronId> {
+impl<NeuronId> HeapNeuronPrincipalIndex<NeuronId>
+where
+    NeuronId: Hash + Eq,
+{
     pub fn new() -> Self {
         Self {
             principal_to_neuron_id_set: BTreeMap::new(),
