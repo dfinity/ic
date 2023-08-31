@@ -390,6 +390,9 @@ pub struct CyclesAccountManagerConfig {
 
     /// Fee per byte for networking and consensus work done for an HTTP response per node.
     pub http_response_per_byte_fee: Cycles,
+
+    /// The upper bound on the storage reservation period.
+    pub max_storage_reservation_period: Duration,
 }
 
 impl CyclesAccountManagerConfig {
@@ -420,6 +423,9 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
+            /// This effectively disables the storage reservation mechanism on
+            /// verified application subnets.
+            max_storage_reservation_period: Duration::from_secs(0),
         }
     }
 
@@ -450,6 +456,8 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
             http_response_per_byte_fee: Cycles::new(0),
+            /// This effectively disables the storage reservation mechanism on system subnets.
+            max_storage_reservation_period: Duration::from_secs(0),
         }
     }
 }

@@ -385,13 +385,12 @@ impl CanisterState {
     /// This only includes execution memory (heap, stable, globals, Wasm)
     /// and canister history memory.
     pub fn memory_usage(&self) -> NumBytes {
-        self.raw_memory_usage() + self.canister_history_memory_usage()
+        self.execution_memory_usage() + self.canister_history_memory_usage()
     }
 
-    /// Returns the amount of raw memory currently used by the canister in bytes.
-    ///
-    /// This only includes execution memory (heap, stable, globals, Wasm).
-    pub(crate) fn raw_memory_usage(&self) -> NumBytes {
+    /// Returns the amount of execution memory (heap, stable, globals, Wasm)
+    /// currently used by the canister in bytes.
+    pub fn execution_memory_usage(&self) -> NumBytes {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())

@@ -313,8 +313,8 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         WasmMetadata::default(),
     ));
     assert!(canister_state.memory_usage().get() > 0);
-    let initial_memory_usage =
-        canister_state.raw_memory_usage() + canister_state.system_state.message_memory_usage();
+    let initial_memory_usage = canister_state.execution_memory_usage()
+        + canister_state.system_state.message_memory_usage();
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     let request = default_input_request();
@@ -330,7 +330,8 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
 
     assert_eq!(
         initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-        canister_state.raw_memory_usage() + canister_state.system_state.message_memory_usage(),
+        canister_state.execution_memory_usage()
+            + canister_state.system_state.message_memory_usage(),
     );
     assert_eq!(
         SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,

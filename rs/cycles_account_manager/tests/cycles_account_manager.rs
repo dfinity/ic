@@ -924,4 +924,11 @@ fn scaling_of_resource_saturation() {
 
     let rs = ResourceSaturation::new(201, 201, 200);
     assert_eq!(0, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::default();
+    assert_eq!(0, rs.add(1000).reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(100, 100, 200);
+    // The usage should be capped at the capacity.
+    assert_eq!(1000, rs.add(200).reservation_factor(1000));
 }
