@@ -29,9 +29,8 @@ use tracing::info;
 #[cfg(feature = "tls")]
 use {
     axum::{handler::Handler, Extension},
-    instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount},
+    instant_acme::LetsEncrypt,
     opentelemetry::metrics::Meter,
-    std::{fs::File, path::PathBuf},
     tokio::sync::RwLock,
 };
 
@@ -58,7 +57,10 @@ use crate::{
 #[cfg(feature = "tls")]
 use crate::{
     acme::Acme,
-    tls::{CustomAcceptor, Loader as TlsLoader, Provisioner, TokenSetter, WithLoad, WithStore},
+    tls::{
+        load_or_create_acme_account, CustomAcceptor, Loader as TlsLoader, Provisioner, TokenSetter,
+        WithLoad, WithStore,
+    },
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
@@ -558,149 +560,6 @@ impl<L: Load, C: Configure> Run for ConfigurationRunner<L, C> {
             .configure(&ServiceConfiguration::Tls(r.name))
             .await
             .context("failed to apply tls configuration")?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "tls")]
-async fn load_or_create_acme_account(
-    path: &PathBuf,
-    acme_provider_url: &str,
-    http_client: Box<dyn instant_acme::HttpClient>,
-) -> Result<Account, Error> {
-    let f = File::open(path).context("failed to open credentials file for reading");
-
-    // Credentials already exist
-    if let Ok(f) = f {
-        let creds: AccountCredentials =
-            serde_json::from_reader(f).context("failed to json parse existing acme credentials")?;
-
-        let account =
-            Account::from_credentials(creds).context("failed to load account from credentials")?;
-
-        return Ok(account);
-    }
-
-    // Create new account
-    let account = Account::create_with_http(
-        &NewAccount {
-            contact: &[],
-            terms_of_service_agreed: true,
-            only_return_existing: false,
-        },
-        acme_provider_url,
-        None,
-        http_client,
-    )
-    .await
-    .context("failed to create acme account")?;
-
-    // Store credentials
-    let f = File::create(path).context("failed to open credentials file for writing")?;
-
-    serde_json::to_writer_pretty(f, &account.credentials())
-        .context("failed to serialize acme credentials")?;
-
-    Ok(account)
-}
-
-#[cfg(feature = "tls")]
-#[cfg(test)]
-mod test {
-    use anyhow::Error;
-    use tempfile::NamedTempFile;
-    use wiremock::{
-        matchers::{method, path},
-        Mock, MockServer, ResponseTemplate,
-    };
-
-    use super::load_or_create_acme_account;
-
-    struct AcmeProviderGuard(MockServer);
-
-    async fn create_acme_provider() -> Result<(AcmeProviderGuard, String), Error> {
-        let mock_server = MockServer::start().await;
-
-        // Directory
-        let mock_server_url = mock_server.uri();
-
-        Mock::given(method("GET"))
-            .and(path("/directory"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(format!(
-                r#"{{
-                "newAccount": "{mock_server_url}/new-acct",
-                "newNonce": "{mock_server_url}/new-nonce",
-                "newOrder": "{mock_server_url}/new-order"
-            }}"#,
-            )))
-            .mount(&mock_server)
-            .await;
-
-        // Nonce
-        Mock::given(method("HEAD"))
-            .and(path("/new-nonce"))
-            .respond_with(ResponseTemplate::new(200).append_header(
-                "replay-nonce", // key
-                "nonce",        // value
-            ))
-            .mount(&mock_server)
-            .await;
-
-        // Account
-        Mock::given(method("POST"))
-            .and(path("/new-acct"))
-            .respond_with(ResponseTemplate::new(200).append_header(
-                "Location",   // key
-                "account-id", // value
-            ))
-            .mount(&mock_server)
-            .await;
-
-        let acme_provider_url = format!("{}/directory", mock_server_url);
-
-        Ok((
-            AcmeProviderGuard(mock_server), // guard
-            acme_provider_url,              // acme_provider_url
-        ))
-    }
-
-    #[tokio::test]
-    async fn load_or_create_acme_account_test() -> Result<(), Error> {
-        // Spin-up a mocked ACME provider
-        let (_guard, acme_provider_url) = create_acme_provider().await?;
-
-        // Get a temporary file path
-        let f = NamedTempFile::new()?;
-        let p = f.path().to_path_buf();
-        drop(f);
-
-        // Create an account
-        let account = load_or_create_acme_account(
-            &p,                             // path
-            &acme_provider_url,             // acme_provider_url
-            Box::new(hyper::Client::new()), // http_client
-        )
-        .await?;
-
-        // Serialize the credentials for later comparison
-        let creds = serde_json::to_string(&account.credentials())?;
-
-        // Reload the account
-        let account = load_or_create_acme_account(
-            &p,                             // path
-            &acme_provider_url,             // acme_provider_url
-            Box::new(hyper::Client::new()), // http_client
-        )
-        .await?;
-
-        assert_eq!(
-            creds,                                          // previous
-            serde_json::to_string(&account.credentials())?, // current
-        );
-
-        // Clean up
-        std::fs::remove_file(&p)?;
 
         Ok(())
     }

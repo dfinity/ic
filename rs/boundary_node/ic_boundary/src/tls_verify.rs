@@ -158,3 +158,6 @@ impl<T: ServerCertVerifier> ServerCertVerifier for WithMetrics<T> {
         out
     }
 }
+
+#[cfg(test)]
+pub mod test;
