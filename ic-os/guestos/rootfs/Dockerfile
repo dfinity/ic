@@ -164,14 +164,11 @@ RUN addgroup filebeat && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Filebeat" filebeat && \
     adduser filebeat filebeat && \
     adduser filebeat systemd-journal && \
-    chown root:root /etc/filebeat/*.yml \
-                    /usr/local/bin/filebeat && \
+    chown root:root /usr/local/bin/filebeat && \
     chown filebeat:filebeat /var/lib/filebeat \
-                                  /var/log/filebeat && \
-    chmod 0755 /etc/filebeat && \
+                            /var/log/filebeat && \
     chmod 0750 /var/lib/filebeat \
-               /var/log/filebeat && \
-    chmod 0644 /etc/filebeat/*.yml
+               /var/log/filebeat
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
