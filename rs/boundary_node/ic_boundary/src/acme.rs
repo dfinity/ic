@@ -7,7 +7,6 @@ use instant_acme::{
 };
 
 use crate::core::{WithRetry, WithThrottle};
-
 pub struct OrderHandle(instant_acme::Order);
 
 #[derive(Debug)]

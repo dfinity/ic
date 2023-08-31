@@ -92,3 +92,6 @@ impl<T: Resolve> Resolve for WithMetrics<T> {
             .boxed()
     }
 }
+
+#[cfg(test)]
+pub mod test;
