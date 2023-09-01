@@ -397,7 +397,10 @@ pub struct CyclesAccountManagerConfig {
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
-        Self::verified_application_subnet()
+        Self {
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
+            ..Self::verified_application_subnet()
+        }
     }
 
     pub fn verified_application_subnet() -> Self {

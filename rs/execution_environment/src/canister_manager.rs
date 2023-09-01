@@ -10,7 +10,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
@@ -388,6 +388,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         subnet_compute_allocation_usage: u64,
         subnet_available_memory: &SubnetAvailableMemory,
+        subnet_memory_saturation: &ResourceSaturation,
         canister_cycles_balance: Cycles,
         subnet_size: usize,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
@@ -396,6 +397,7 @@ impl CanisterManager {
             NumBytes::new(0),
             MemoryAllocation::BestEffort,
             subnet_available_memory,
+            subnet_memory_saturation,
             ComputeAllocation::zero(),
             subnet_compute_allocation_usage,
             self.config.compute_capacity,
@@ -410,6 +412,7 @@ impl CanisterManager {
 
     /// Applies the requested settings on the canister.
     /// Note: Called only after validating the settings.
+    /// Keep this function in sync with `validate_canister_settings()`.
     fn do_update_settings(
         &self,
         settings: ValidatedCanisterSettings,
@@ -431,25 +434,29 @@ impl CanisterManager {
             canister.scheduler_state.compute_allocation = compute_allocation;
         }
         if let Some(memory_allocation) = settings.memory_allocation() {
-            // This should not happen normally because:
-            //   1. `do_update_settings` is called during canister creation when the
-            //       canister is empty and it should hold that memory usage of the
-            //       canister is 0 and thus any number for memory allocation is bigger.
-            //   2. When updating settings we have validated this holds.
-            //
-            // However, log an error in case it happens for visibility.
-            if let MemoryAllocation::Reserved(bytes) = memory_allocation {
-                if bytes < canister.memory_usage() {
+            if let MemoryAllocation::Reserved(new_bytes) = memory_allocation {
+                let memory_usage = canister.memory_usage();
+                if new_bytes < memory_usage {
+                    // This case is unreachable because the canister settings should have been validated.
                     error!(
                         self.log,
-                        "Requested memory allocation of {} which is smaller than current canister memory usage {}",
-                        bytes,
-                        canister.memory_usage(),
+                        "[EXC-BUG]: Canister {}: unreachable code in update settings: \
+                        memory allocation {} is lower than memory usage {}.",
+                        canister.canister_id(),
+                        new_bytes,
+                        memory_usage,
                     );
                 }
             }
             canister.system_state.memory_allocation = memory_allocation;
         }
+        canister
+            .system_state
+            .reserve_cycles(settings.reservation_cycles())
+            .expect(
+                "Reserving cycles should succeed because \
+                    the canister settings have been validated.",
+            );
         if let Some(freezing_threshold) = settings.freezing_threshold() {
             canister.system_state.freeze_threshold = freezing_threshold;
         }
@@ -464,6 +471,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
@@ -475,6 +483,7 @@ impl CanisterManager {
             canister.memory_usage(),
             canister.memory_allocation(),
             &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
             canister.compute_allocation(),
             round_limits.compute_allocation_used,
             self.config.compute_capacity,
@@ -548,6 +557,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
         // Creating a canister is possible only in the following cases:
         // 1. sender is on NNS => it can create canister on any subnet
@@ -580,6 +590,7 @@ impl CanisterManager {
             settings,
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
             cycles - fee,
             subnet_size,
         ) {
@@ -993,6 +1004,7 @@ impl CanisterManager {
         new_controller: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
     ) -> Result<(), CanisterManagerError> {
         let canister = state
@@ -1008,6 +1020,7 @@ impl CanisterManager {
             settings,
             canister,
             round_limits,
+            subnet_memory_saturation,
             subnet_size,
         )
     }
@@ -1110,6 +1123,7 @@ impl CanisterManager {
         provisional_whitelist: &ProvisionalWhitelist,
         max_number_of_canisters: u64,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
@@ -1129,6 +1143,7 @@ impl CanisterManager {
             settings,
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
             cycles,
             subnet_size,
         ) {

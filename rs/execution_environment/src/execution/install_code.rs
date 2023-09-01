@@ -397,6 +397,7 @@ impl InstallCodeHelper {
             self.canister.memory_usage(),
             self.canister.memory_allocation(),
             &round_limits.subnet_available_memory,
+            &original.execution_parameters.subnet_memory_saturation,
             self.canister.compute_allocation(),
             round_limits.compute_allocation_used,
             original.config.compute_capacity,

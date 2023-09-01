@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterSettingsArgs;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
@@ -229,6 +229,7 @@ pub(crate) struct ValidatedCanisterSettings {
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
     freezing_threshold: Option<NumSeconds>,
+    reservation_cycles: Cycles,
 }
 
 impl ValidatedCanisterSettings {
@@ -251,23 +252,30 @@ impl ValidatedCanisterSettings {
     pub fn freezing_threshold(&self) -> Option<NumSeconds> {
         self.freezing_threshold
     }
+
+    pub fn reservation_cycles(&self) -> Cycles {
+        self.reservation_cycles
+    }
 }
 
 /// Validates the new canisters settings:
 /// - memory allocation:
 ///     - it cannot be lower than the current canister memory usage.
 ///     - there must be enough available subnet capacity for the change.
+///     - there must be enough cycles for storage reservation.
 ///     - there must be enough cycles to avoid freezing the canister.
 /// - compute allocation:
 ///     - there must be enough available compute capacity for the change.
 ///     - there must be enough cycles to avoid freezing the canister.
 /// - controllers:
 ///     - the number of controllers cannot exceed the given maximum.
+/// Keep this function in sync with `do_update_settings()`.
 pub(crate) fn validate_canister_settings(
     settings: CanisterSettings,
     canister_memory_usage: NumBytes,
     canister_memory_allocation: MemoryAllocation,
     subnet_available_memory: &SubnetAvailableMemory,
+    subnet_memory_saturation: &ResourceSaturation,
     canister_compute_allocation: ComputeAllocation,
     subnet_compute_allocation_usage: u64,
     subnet_compute_allocation_capacity: u64,
@@ -278,34 +286,35 @@ pub(crate) fn validate_canister_settings(
     subnet_size: usize,
     canister_reserved_balance: Cycles,
 ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
-    if let Some(new_memory_allocation) = settings.memory_allocation {
-        // The new memory allocation cannot be lower than the current canister
-        // memory usage.
-        if let MemoryAllocation::Reserved(reserved_bytes) = new_memory_allocation {
-            if reserved_bytes < canister_memory_usage {
-                return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                    memory_allocation_given: new_memory_allocation,
-                    memory_usage_needed: canister_memory_usage,
-                });
+    let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
+    let new_memory_bytes = match settings.memory_allocation {
+        None => canister_memory_usage,
+        Some(new_memory_allocation) => {
+            // The new memory allocation cannot be lower than the current canister
+            // memory usage.
+            if let MemoryAllocation::Reserved(reserved_bytes) = new_memory_allocation {
+                if reserved_bytes < canister_memory_usage {
+                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                        memory_allocation_given: new_memory_allocation,
+                        memory_usage_needed: canister_memory_usage,
+                    });
+                }
             }
+            new_memory_allocation.allocated_bytes(canister_memory_usage)
         }
+    };
 
-        let old_memory_allocation =
-            canister_memory_allocation.allocated_bytes(canister_memory_usage);
-
-        // If the available memory in the subnet is negative, then we must cap
-        // it at zero such that the new memory allocation can change between
-        // zero and the old memory allocation. Note that capping at zero also
-        // makes conversion from `i64` to `u64` valid.
-        let subnet_available_memory = subnet_available_memory.get_execution_memory().max(0) as u64;
-        let available_memory_allocation =
-            subnet_available_memory.saturating_add(old_memory_allocation.get());
-        if new_memory_allocation.bytes().get() > available_memory_allocation {
-            return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                requested: new_memory_allocation.bytes(),
-                available: NumBytes::from(available_memory_allocation),
-            });
-        }
+    // If the available memory in the subnet is negative, then we must cap
+    // it at zero such that the new memory allocation can change between
+    // zero and the old memory allocation. Note that capping at zero also
+    // makes conversion from `i64` to `u64` valid.
+    let subnet_available_memory = subnet_available_memory.get_execution_memory().max(0) as u64;
+    let subnet_available_memory = subnet_available_memory.saturating_add(old_memory_bytes.get());
+    if new_memory_bytes.get() > subnet_available_memory {
+        return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+            requested: new_memory_bytes,
+            available: NumBytes::from(subnet_available_memory),
+        });
     }
 
     if let Some(new_compute_allocation) = settings.compute_allocation {
@@ -394,11 +403,35 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
+    let reservation_cycles = if new_memory_bytes <= old_memory_bytes {
+        Cycles::zero()
+    } else {
+        let allocated_bytes = new_memory_bytes - old_memory_bytes;
+        let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
+            allocated_bytes,
+            subnet_memory_saturation,
+            subnet_size,
+        );
+        // Note that this check does not include the freezing threshold to be
+        // consistent with the `reserve_cycles()` function, which moves
+        // cycles between the main and reserved balances without checking
+        // the freezing threshold.
+        if canister_cycles_balance < reservation_cycles {
+            return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                memory_allocation: new_memory_allocation,
+                available: canister_cycles_balance,
+                threshold: reservation_cycles,
+            });
+        }
+        reservation_cycles
+    };
+
     Ok(ValidatedCanisterSettings {
         controller: settings.controller(),
         controllers: settings.controllers(),
         compute_allocation: settings.compute_allocation(),
         memory_allocation: settings.memory_allocation(),
         freezing_threshold: settings.freezing_threshold(),
+        reservation_cycles,
     })
 }
