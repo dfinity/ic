@@ -11278,6 +11278,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
+ "dfn_core",
  "hex",
  "ic-canister-client-sender",
  "ic-certification-test-utils",
