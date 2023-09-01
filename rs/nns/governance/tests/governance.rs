@@ -1855,7 +1855,10 @@ fn test_query_for_manage_neuron() {
     );
     // Test that the neuron info can be found by subaccount.
     let neuron_1_subaccount = Subaccount(
-        gov.get_neuron(&NeuronId { id: 1 }).unwrap().account[..]
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
+            .unwrap()
+            .account[..]
             .try_into()
             .unwrap(),
     );
@@ -2290,7 +2293,8 @@ async fn test_invalid_proposals_fail() {
 }
 
 fn get_current_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
-    gov.get_neuron(&NeuronId { id: neuron_id })
+    gov.neuron_store
+        .with_neuron(&NeuronId { id: neuron_id }, |n| n.clone())
         .unwrap()
         .voting_power(now)
 }
@@ -2625,15 +2629,15 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     );
 
     // Inspect neuron maturities.
-    let proposer_neuron_id = NeuronId { id: 1 };
     assert_eq!(
-        gov.get_neuron(&proposer_neuron_id)
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
             .unwrap()
             .maturity_e8s_equivalent,
         expected_distributed_e8s_equivalent,
     );
     for neuron in gov.neuron_store.heap_neurons().values() {
-        if neuron.id == Some(proposer_neuron_id) {
+        if neuron.id == Some(NeuronId { id: 1 }) {
             continue;
         }
 
@@ -2662,7 +2666,8 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // Neuron maturity should not have changed
     assert_eq!(
-        gov.get_neuron(&NeuronId { id: 1 })
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
             .unwrap()
             .maturity_e8s_equivalent,
         expected_distributed_e8s_equivalent,
@@ -2825,7 +2830,10 @@ fn test_reward_distribution_skips_deleted_neurons() {
     );
 
     // Make sure that the fixture function indeed did not create a neuron 999.
-    assert_matches!(gov.get_neuron(&NeuronId { id: 999 }), Err(e) if e.error_type == NotFound as i32);
+    assert_matches!(gov.neuron_store.with_neuron(&NeuronId { id: 999 }, |n| n.clone()).map_err(|e| {
+        let gov_error: GovernanceError = e.into();
+        gov_error
+    }), Err(e) if e.error_type == NotFound as i32);
 
     // The proposal at genesis time is not ready to be settled
     gov.run_periodic_tasks().now_or_never();
@@ -3227,7 +3235,8 @@ fn compute_maturities(
 
     (0_u64..stakes_e8s.len() as u64)
         .map(|id| {
-            gov.get_neuron(&NeuronId { id })
+            gov.neuron_store
+                .with_neuron(&NeuronId { id }, |n| n.clone())
                 .unwrap()
                 .maturity_e8s_equivalent
         })
@@ -4301,7 +4310,7 @@ fn test_claim_neuron_by_memo_only() {
 
     assert!(nid.is_some());
     let nid = nid.unwrap();
-    let neuron = gov.get_neuron(&nid).unwrap();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.controller.unwrap(), owner);
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 }
@@ -4372,7 +4381,7 @@ fn claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: PrincipalId) 
 
     assert!(nid.is_some());
     let nid = nid.unwrap();
-    let neuron = gov.get_neuron(&nid).unwrap();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.controller.unwrap(), owner);
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 }
@@ -4432,7 +4441,7 @@ fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
     let (mut driver, mut gov, nid, subaccount) =
         governance_with_staked_neuron(1, stake.get_e8s(), 0, owner, memo.0);
 
-    let neuron = gov.get_neuron(&nid).unwrap();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     driver.add_funds_to_account(
@@ -4441,7 +4450,7 @@ fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
     );
 
     // stake shouldn't have changed.
-    let neuron = gov.get_neuron(&nid).unwrap();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     let manage_neuron_response = gov
@@ -4469,7 +4478,7 @@ fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
 
     assert!(nid.is_some());
     let nid = nid.unwrap();
-    let neuron = gov.get_neuron(&nid).unwrap();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.controller.unwrap(), owner);
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s() * 2);
 }
@@ -4504,7 +4513,7 @@ fn refresh_neuron_by_id_or_subaccount(
     let (mut driver, mut gov, nid, subaccount) =
         governance_with_staked_neuron(1, stake.get_e8s(), 0, owner, memo.0);
 
-    let neuron = gov.get_neuron(&nid).unwrap();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     driver.add_funds_to_account(
@@ -4513,7 +4522,11 @@ fn refresh_neuron_by_id_or_subaccount(
     );
 
     // stake shouldn't have changed.
-    let neuron = gov.get_neuron(&nid).unwrap().clone();
+    let neuron = gov
+        .neuron_store
+        .with_neuron(&nid, |n| n.clone())
+        .unwrap()
+        .clone();
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     let neuron_id_or_subaccount = match refresh_by {
@@ -4543,7 +4556,7 @@ fn refresh_neuron_by_id_or_subaccount(
 
     assert!(nid.is_some());
     let nid = nid.unwrap();
-    let neuron = gov.get_neuron(&nid).unwrap();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.controller.unwrap(), owner);
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s() * 2);
 }
@@ -4975,7 +4988,10 @@ fn test_neuron_split_fails() {
            if code == InsufficientFunds as i32 && msg.to_lowercase().contains("at the minimum, one needs the minimum neuron stake"));
 
     // Parent neuron did not change
-    assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
+    assert_eq!(
+        gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap(),
+        neuron_before
+    );
     // There is still only one neuron
     assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
     //  There is still only one ledger account.
@@ -5035,9 +5051,13 @@ fn test_neuron_split() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .get_neuron(&child_nid)
+        .neuron_store
+        .with_neuron(&child_nid, |n| n.clone())
         .expect("The child neuron is missing");
-    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
+    let parent_neuron = gov
+        .neuron_store
+        .with_neuron(&id, |n| n.clone())
+        .expect("The parent neuron is missing");
     let child_subaccount = child_neuron.account.clone();
 
     assert_eq!(
@@ -5047,7 +5067,7 @@ fn test_neuron_split() {
 
     assert_eq!(
         child_neuron,
-        &Neuron {
+        Neuron {
             id: Some(child_nid),
             account: child_subaccount,
             controller: parent_neuron.controller,
@@ -5476,7 +5496,10 @@ fn assert_neuron_spawn_partial(
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
     let neuron_before = neuron;
-    assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
+    assert_eq!(
+        gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap(),
+        neuron_before
+    );
 
     // Artificially set the neuron's maturity to sufficient value
     let parent_maturity_e8s_equivalent: u64 = parent_maturity;
@@ -5516,10 +5539,12 @@ fn assert_neuron_spawn_partial(
     driver.assert_num_neuron_accounts_exist(1);
 
     let child_neuron = gov
-        .get_neuron(&child_nid)
+        .neuron_store
+        .with_neuron(&child_nid, |n| n.clone())
         .expect("The child neuron is missing");
     let parent_neuron = gov
-        .get_neuron(&id)
+        .neuron_store
+        .with_neuron(&id, |n| n.clone())
         .expect("The parent neuron is missing")
         .clone();
     let child_subaccount = child_neuron.account.clone();
@@ -5541,7 +5566,8 @@ fn assert_neuron_spawn_partial(
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .get_neuron(&child_nid)
+        .neuron_store
+        .with_neuron(&child_nid, |n| n.clone())
         .expect("The child neuron is missing")
         .clone();
 
@@ -5853,10 +5879,12 @@ fn test_disburse_to_neuron() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .get_neuron(&child_nid)
+        .neuron_store
+        .with_neuron(&child_nid, |n| n.clone())
         .expect("The child neuron is missing");
     let parent_neuron = gov
-        .with_neuron(&id, |neuron| neuron.clone())
+        .neuron_store
+        .with_neuron(&id, |n| n.clone())
         .expect("The parent neuron is missing");
     let child_subaccount = child_neuron.account.clone();
 
@@ -5867,7 +5895,7 @@ fn test_disburse_to_neuron() {
 
     assert_eq!(
         child_neuron,
-        &Neuron {
+        Neuron {
             id: Some(child_nid),
             account: child_subaccount,
             controller: Some(child_controller),
@@ -7055,11 +7083,15 @@ fn test_default_followees() {
         _ => panic!("Invalid response"),
     };
     assert_eq!(
-        gov.get_neuron(&follower_neuron_id).unwrap().followees,
+        gov.neuron_store
+            .with_neuron(&follower_neuron_id, |n| n.clone())
+            .unwrap()
+            .followees,
         default_followees,
     );
     let followed_proposal_ids = |gov: &mut Governance| {
-        gov.get_neuron(&follower_neuron_id)
+        gov.neuron_store
+            .with_neuron(&follower_neuron_id, |n| n.clone())
             .unwrap()
             .recent_ballots
             .iter()
@@ -7194,7 +7226,13 @@ fn test_default_followees() {
 
     // The second neuron should have the default followees we set with the proposal.
     assert!(follower_neuron_id != id2);
-    assert_eq!(gov.get_neuron(&id2).unwrap().followees, default_followees2);
+    assert_eq!(
+        gov.neuron_store
+            .with_neuron(&id2, |n| n.clone())
+            .unwrap()
+            .followees,
+        default_followees2
+    );
 }
 
 #[test]
@@ -8597,10 +8635,13 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
         let folowee = NeuronId { id: 1 };
 
         // Check that the neuron isn't following anyone beforehand
-        let neuron = gov.get_neuron(&nid).expect("Failed to get neuron");
+        let neuron = gov
+            .neuron_store
+            .with_neuron(&nid, |n| n.clone())
+            .expect("Failed to get neuron");
         let f = neuron.followees.get(&(Topic::Unspecified as i32));
         assert_eq!(f, None);
-        let neuron_id_or_subaccount = make_neuron_id(neuron);
+        let neuron_id_or_subaccount = make_neuron_id(&neuron);
 
         // Start following
         gov.manage_neuron(
@@ -8620,7 +8661,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
         .expect("Manage neuron failed");
 
         // Check that you're actually following
-        let neuron = gov.get_neuron(&nid).unwrap();
+        let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
 
         let f = neuron
             .followees
@@ -8722,7 +8763,7 @@ fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
     let id = NeuronId { id: 100 };
     let neuron = nns.get_neuron(&id);
     let neuron_stake_e8s: u64 = neuron.cached_neuron_stake_e8s;
-    let account_id = LedgerBuilder::neuron_account_id(neuron);
+    let account_id = LedgerBuilder::neuron_account_id(&neuron);
     let account_balance = nns.get_account_balance(account_id);
     assert_eq!(neuron_stake_e8s, account_balance);
 
@@ -8866,7 +8907,7 @@ fn assert_merge_maturity_executes_as_expected(
     expected_merged_maturity: u64,
     driver: &fake::FakeDriver,
 ) -> std::result::Result<(), TestCaseError> {
-    let neuron = gov.get_neuron(&id).unwrap().clone();
+    let neuron = gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap();
     let account = AccountIdentifier::new(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
         Some(Subaccount::try_from(neuron.account.as_slice()).unwrap()),
@@ -8885,7 +8926,7 @@ fn assert_merge_maturity_executes_as_expected(
         .unwrap()
         .unwrap()
         .get_e8s();
-    let merged_neuron = gov.get_neuron(&id).unwrap();
+    let merged_neuron = gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap();
     prop_assert_eq!(
         merged_neuron.maturity_e8s_equivalent,
         expected_resulting_maturity
@@ -9203,14 +9244,18 @@ fn test_start_dissolving() {
         fake_driver.get_fake_cmc(),
     );
     assert_eq!(
-        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
             MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         ),)
     );
     // Assert that in one second the age of the neuron will be one second.
     assert_eq!(
-        gov.get_neuron(&NeuronId { id })
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
             .unwrap()
             .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
         1
@@ -9233,14 +9278,18 @@ fn test_start_dissolving() {
     .unwrap()
     .expect("Manage neuron failed");
     assert_eq!(
-        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::WhenDissolvedTimestampSeconds(
             DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         ),)
     );
     // Assert that in one second the age of the neuron will be zero.
     assert_eq!(
-        gov.get_neuron(&NeuronId { id })
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
             .unwrap()
             .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
         0
@@ -9265,7 +9314,10 @@ fn test_start_dissolving_panics() {
         fake_driver.get_fake_cmc(),
     );
     assert_eq!(
-        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
             MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         ))
@@ -9309,7 +9361,10 @@ fn test_stop_dissolving() {
         fake_driver.get_fake_cmc(),
     );
     assert_eq!(
-        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::WhenDissolvedTimestampSeconds(
             DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         ),)
@@ -9332,14 +9387,18 @@ fn test_stop_dissolving() {
     .unwrap()
     .expect("Manage neuron failed");
     assert_eq!(
-        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
             MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         ),)
     );
     // Assert that in one second the age of the neuron will be one second.
     assert_eq!(
-        gov.get_neuron(&NeuronId { id })
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
             .unwrap()
             .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
         1
@@ -9364,7 +9423,10 @@ fn test_stop_dissolving_panics() {
         fake_driver.get_fake_cmc(),
     );
     assert_eq!(
-        gov.get_neuron(&NeuronId { id }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
             MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         ))
@@ -9392,7 +9454,11 @@ fn test_stop_dissolving_panics() {
 fn test_update_node_provider() {
     let (_, mut gov, neuron) = create_mature_neuron(false);
     let id = neuron.id.unwrap();
-    let neuron = gov.get_neuron(&id).unwrap().clone();
+    let neuron = gov
+        .neuron_store
+        .with_neuron(&id, |n| n.clone())
+        .unwrap()
+        .clone();
     let controller = neuron.controller.unwrap();
     let account = AccountIdentifier::new(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -9521,7 +9587,10 @@ fn test_increase_dissolve_delay() {
     // Tests for neuron 1. Non-dissolving.
     increase_dissolve_delay(&mut gov, principal_id, 1, 1);
     assert_eq!(
-        gov.get_neuron(&NeuronId { id: 1 }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
             MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1
         ),)
@@ -9534,7 +9603,10 @@ fn test_increase_dissolve_delay() {
             .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
     );
     assert_eq!(
-        gov.get_neuron(&NeuronId { id: 1 }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
             MAX_DISSOLVE_DELAY_SECONDS
         ),)
@@ -9542,7 +9614,10 @@ fn test_increase_dissolve_delay() {
     // Tests for neuron 2. Dissolving.
     increase_dissolve_delay(&mut gov, principal_id, 2, 1);
     assert_eq!(
-        gov.get_neuron(&NeuronId { id: 2 }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 2 }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::WhenDissolvedTimestampSeconds(
             DEFAULT_TEST_START_TIMESTAMP_SECONDS
                 + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
@@ -9557,7 +9632,10 @@ fn test_increase_dissolve_delay() {
             .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
     );
     assert_eq!(
-        gov.get_neuron(&NeuronId { id: 2 }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 2 }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::WhenDissolvedTimestampSeconds(
             DEFAULT_TEST_START_TIMESTAMP_SECONDS + MAX_DISSOLVE_DELAY_SECONDS,
         ))
@@ -9571,7 +9649,10 @@ fn test_increase_dissolve_delay() {
             .expect("MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS larger than u32"),
     );
     assert_eq!(
-        gov.get_neuron(&NeuronId { id: 3 }).unwrap().dissolve_state,
+        gov.neuron_store
+            .with_neuron(&NeuronId { id: 3 }, |n| n.clone())
+            .unwrap()
+            .dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
             MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         ),)
@@ -11908,7 +11989,8 @@ fn assert_neurons_fund_decremented(
             } = nf_neuron;
 
             let current_neuron_maturity = gov
-                .get_neuron(&NeuronId { id: nns_neuron_id })
+                .neuron_store
+                .with_neuron(&NeuronId { id: nns_neuron_id }, |n| n.clone())
                 .unwrap()
                 .maturity_e8s_equivalent;
             let original_neuron_maturity = original_state
@@ -11926,7 +12008,10 @@ fn assert_neurons_fund_decremented(
 
 fn assert_neurons_fund_unchanged(gov: &Governance, original_state: BTreeMap<u64, Neuron>) {
     for (id, original_neuron) in original_state {
-        let current_neuron = gov.get_neuron(&NeuronId { id }).unwrap();
+        let current_neuron = gov
+            .neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.clone())
+            .unwrap();
         assert_eq!(
             current_neuron.maturity_e8s_equivalent,
             original_neuron.maturity_e8s_equivalent
