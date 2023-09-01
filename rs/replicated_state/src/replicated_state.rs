@@ -915,6 +915,15 @@ impl ReplicatedState {
             canister_states.insert(*canister_id, canister_state);
         }
 
+        // Drop in-progress management calls being executed by canisters on subnet B
+        // (`own_subnet_id != split_from`). The corresponding calls will be rejected on
+        // subnet A', ensuring consistency across subnet and canister states.
+        if metadata.split_from != Some(metadata.own_subnet_id) {
+            for canister_state in canister_states.values_mut() {
+                canister_state.drop_in_progress_management_calls_after_split();
+            }
+        }
+
         // Prune the ingress history. And reject in-progress subnet messages being
         // executed by canisters no longer on this subnet.
         metadata.after_split(
