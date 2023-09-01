@@ -941,7 +941,6 @@ impl SystemMetadata {
     ///    `commit_and_certify()` at the end of the round; and not used before.
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
-    #[allow(dead_code)]
     pub(crate) fn after_split<F>(
         &mut self,
         is_local_canister: F,

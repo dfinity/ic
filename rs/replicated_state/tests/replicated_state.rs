@@ -607,7 +607,7 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
 
 #[test]
 fn split() {
-    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    // We will be splitting subnet A into A' and B.
     const SUBNET_A: SubnetId = SUBNET_ID;
     const SUBNET_B: SubnetId = SUBNET_1;
 

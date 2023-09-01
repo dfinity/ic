@@ -769,7 +769,7 @@ fn canister_history_operations() {
 }
 
 #[test]
-fn canister_state_after_split_has_no_abort_install_code() {
+fn drops_aborted_canister_install_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     canister_state
         .system_state
@@ -789,13 +789,13 @@ fn canister_state_after_split_has_no_abort_install_code() {
     let mut expected_state = canister_state.clone();
     expected_state.system_state.task_queue.pop_back();
 
-    canister_state.after_split();
+    canister_state.drop_in_progress_management_calls_after_split();
 
     assert_eq!(expected_state, canister_state);
 }
 
 #[test]
-fn canister_state_after_split_is_running() {
+fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
     call_context_manager.new_call_context(
@@ -818,7 +818,7 @@ fn canister_state_after_split_is_running() {
         call_context_manager,
     };
 
-    canister_state.after_split();
+    canister_state.drop_in_progress_management_calls_after_split();
 
     assert_eq!(expected_state, canister_state);
 }

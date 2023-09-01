@@ -491,8 +491,18 @@ impl CanisterState {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn after_split(&mut self) {
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    pub fn drop_in_progress_management_calls_after_split(&mut self) {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //

@@ -1,7 +1,8 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
-use ic_replicated_state::ReplicatedState;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::{ExecutionTask, ReplicatedState};
 use ic_state_machine_tests::{IngressState, IngressStatus};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
@@ -19,6 +20,7 @@ use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use ic_types_test_utils::ids::user_test_id;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
+use maplit::btreemap;
 use std::mem::size_of;
 
 const DTS_INSTALL_WAT: &str = r#"
@@ -1095,6 +1097,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        // Ensure that all `install_code()` executions will get paused.
         .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
@@ -1116,17 +1119,6 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     test.canister_update_controller(canister_id_2, controllers)
         .unwrap();
 
-    let install_code_args = |canister_id: CanisterId| InstallCodeArgs {
-        canister_id: canister_id.get(),
-        mode: CanisterInstallMode::Install,
-        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
-        query_allocation: None,
-        sender_canister_version: None,
-    };
-
     // SubnetCallContextManager does not contain any entries before executing the messages.
     assert_eq!(
         test.state()
@@ -1135,10 +1127,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             .install_code_calls_len(),
         0
     );
-
-    //
-    // Test install code call with canister request origin.
-    //
+    // Neither does canister 1's task queue.
     assert_eq!(
         test.canister_state(canister_id_1)
             .system_state
@@ -1146,6 +1135,13 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             .len(),
         0
     );
+
+    //
+    // Test install code call with canister request origin.
+    //
+
+    // `install_code()` will not complete execution in one slice and become paused,
+    // because we've set a very low `install_code_slice_instruction_limit` above.
     test.inject_call_to_ic00(
         Method::InstallCode,
         install_code_args(canister_id_1).encode(),
@@ -1270,4 +1266,164 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             format!("Canister {} migrated during a subnet split", canister_id_2),
         ))
     );
+}
+
+/// Ensures that in-progress install code calls are left in a consistent state
+/// after a subnet split: i.e. there is no install code call that is tracked by
+/// a canister, but not by the subnet call context manager; or the other way
+/// around.
+#[test]
+fn consistent_install_code_calls_after_split() {
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(subnet_a)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        // Ensure that all `install_code()` executions will get paused.
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(subnet_a, caller_canister)
+        .build();
+
+    // Create four canisters.
+    let mut create_canister = || {
+        test.create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+            .unwrap()
+    };
+    let canister_id_1 = create_canister();
+    let canister_id_2 = create_canister();
+    let canister_id_3 = create_canister();
+    let canister_id_4 = create_canister();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    let mut set_controllers = |canister_id, controllers| {
+        test.canister_update_controller(canister_id, controllers)
+            .unwrap();
+    };
+    set_controllers(canister_id_1, controllers.clone());
+    set_controllers(canister_id_2, controllers.clone());
+    set_controllers(canister_id_3, controllers.clone());
+    set_controllers(canister_id_4, controllers);
+
+    // No in-progress install code calls across the subnet.
+    assert_consistent_install_code_calls(test.state(), 0);
+
+    // Start executing one install code call as canister request on each of canisters 1 and 3.
+    //
+    // `install_code()` will not complete execution in one slice and become paused,
+    // because we've set a very low `install_code_slice_instruction_limit` above.
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        install_code_args(canister_id_1).encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        install_code_args(canister_id_3).encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Start executing one install code call as ingress message on each of canisters 2 and 4.
+    test.dts_install_code(install_code_args(canister_id_2));
+    test.dts_install_code(install_code_args(canister_id_4));
+
+    // Simulate a checkpoint, to abort all paused `install_call()` executions.
+    test.abort_all_paused_executions();
+
+    // 4 in-progress install code calls across the subnet.
+    assert_consistent_install_code_calls(test.state(), 4);
+
+    // Retain canisters 1 and 2 on subnet A, migrate canisters 3 and 4 to subnet B.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: canister_id_1, end: canister_id_2} => subnet_a,
+        CanisterIdRange {start: canister_id_3, end: canister_id_4} => subnet_b,
+    })
+    .unwrap();
+
+    // Split subnet A'.
+    let mut state_a = test
+        .state()
+        .clone()
+        .split(subnet_a, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between install code calls tracked by canisters and subnet.
+    state_a.after_split();
+
+    // 2 in-progress install code calls across subnet A'.
+    assert_consistent_install_code_calls(&state_a, 2);
+
+    // Split subnet B.
+    let mut state_b = test
+        .state()
+        .clone()
+        .split(subnet_b, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between install code calls tracked by canisters and subnet.
+    state_b.after_split();
+
+    // 0 in-progress install code calls across subnet B.
+    assert_consistent_install_code_calls(&state_b, 0);
+}
+
+/// Helper function asserting that there is an exact match between aborted
+/// install code calls tracked by the subnet call context manager on the one
+/// hand; and by the canisters, on the other.
+fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls: usize) {
+    // Collect the call IDs and calls of all aborted install code calls.
+    let canister_install_code_contexts: Vec<_> = state
+        .canister_states
+        .values()
+        .filter_map(|canister| {
+            if let Some(ExecutionTask::AbortedInstallCode {
+                message, call_id, ..
+            }) = canister.next_task()
+            {
+                Some((call_id.unwrap(), message))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(expected_calls, canister_install_code_contexts.len());
+
+    // Clone the `SubnetCallContextManager` and remove all calls collected above from it.
+    let mut subnet_call_context_manager = state.metadata.subnet_call_context_manager.clone();
+    for (call_id, call) in canister_install_code_contexts {
+        subnet_call_context_manager
+            .remove_install_code_call(call_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Canister AbortedInstallCode task without matching subnet InstallCodeCall: {} {:?}",
+                    call_id, call
+                )
+            });
+    }
+
+    // And ensure that no `InstallCodeCalls` are left over in the `SubnetCallContextManager`.
+    assert!(
+            subnet_call_context_manager.install_code_calls_len() == 0,
+            "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
+            subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
+        );
+}
+
+fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
+    InstallCodeArgs {
+        canister_id: canister_id.get(),
+        mode: CanisterInstallMode::Install,
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    }
 }
