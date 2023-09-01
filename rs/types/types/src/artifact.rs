@@ -26,8 +26,9 @@ use crate::{
 use derive_more::{AsMut, AsRef, From, TryInto};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::p2p::v1 as pb;
+use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
@@ -634,7 +635,7 @@ impl TryFrom<pb::StateSyncFilter> for StateSyncFilter {
     }
 }
 
-impl From<StateSyncArtifactId> for pb::StateSyncId {
+impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
     fn from(id: StateSyncArtifactId) -> Self {
         Self {
             height: id.height.get(),
@@ -643,8 +644,8 @@ impl From<StateSyncArtifactId> for pb::StateSyncId {
     }
 }
 
-impl From<pb::StateSyncId> for StateSyncArtifactId {
-    fn from(id: pb::StateSyncId) -> Self {
+impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
+    fn from(id: p2p_pb::StateSyncId) -> Self {
         Self {
             height: Height::from(id.height),
             hash: CryptoHashOfState::new(CryptoHash(id.hash)),

@@ -49,7 +49,6 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     build_state_proto(def, out);
     build_p2p_proto(def, out);
     build_bitcoin_proto(def, out);
-    build_canister_http_proto(def, out);
     build_determinism_test_proto(def, out);
     rustfmt(out).unwrap_or_else(|e| {
         panic!(
@@ -366,6 +365,8 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/consensus.proto"),
         def.join("types/v1/ecdsa.proto"),
         def.join("types/v1/signature.proto"),
+        def.join("types/v1/p2p.proto"),
+        def.join("types/v1/canister_http.proto"),
     ];
     compile_protos(config, def, &files);
 }
@@ -382,10 +383,7 @@ fn build_crypto_proto(def: &Path, out: &Path) {
 fn build_p2p_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "p2p");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    let files = [
-        def.join("p2p/v1/p2p.proto"),
-        def.join("p2p/v1/state_sync_manager.proto"),
-    ];
+    let files = [def.join("p2p/v1/state_sync_manager.proto")];
     compile_protos(config, def, &files);
 }
 
@@ -394,14 +392,6 @@ fn build_bitcoin_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "bitcoin");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = [def.join("bitcoin/v1/bitcoin.proto")];
-    compile_protos(config, def, &files);
-}
-
-/// Generates Rust structs from HTTP from canister adapter Protobuf messages.
-fn build_canister_http_proto(def: &Path, out: &Path) {
-    let mut config = base_config(out, "canister_http");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    let files = [def.join("canister_http/v1/canister_http.proto")];
     compile_protos(config, def, &files);
 }
 

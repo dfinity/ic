@@ -76,7 +76,7 @@ use crate::{
 };
 use ic_interfaces_transport::TransportPayload;
 use ic_logger::{info, trace, warn};
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
+use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_state_manager::state_sync::StateSyncArtifact;
 use ic_types::{
     artifact::{Advert, Artifact, ArtifactFilter, ArtifactId, ArtifactKind, ArtifactTag},

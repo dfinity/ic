@@ -1061,3 +1061,281 @@ pub struct IngressPayload {
     #[prost(bytes = "vec", tag = "2")]
     pub buffer: ::prost::alloc::vec::Vec<u8>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GossipMessage {
+    #[prost(oneof = "gossip_message::Body", tags = "1, 2, 3, 5")]
+    pub body: ::core::option::Option<gossip_message::Body>,
+}
+/// Nested message and enum types in `GossipMessage`.
+pub mod gossip_message {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Body {
+        #[prost(message, tag = "1")]
+        Advert(super::GossipAdvert),
+        #[prost(message, tag = "2")]
+        ChunkRequest(super::GossipChunkRequest),
+        #[prost(message, tag = "3")]
+        Chunk(super::GossipChunk),
+        #[prost(message, tag = "5")]
+        RetransmissionRequest(super::ArtifactFilter),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GossipAdvert {
+    #[prost(bytes = "vec", tag = "1")]
+    pub attribute: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub size: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub artifact_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GossipChunkRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub artifact_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint32, tag = "2")]
+    pub chunk_id: u32,
+    #[prost(bytes = "vec", tag = "3")]
+    pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GossipChunk {
+    #[prost(message, optional, tag = "6")]
+    pub request: ::core::option::Option<GossipChunkRequest>,
+    #[prost(oneof = "gossip_chunk::Response", tags = "3, 4")]
+    pub response: ::core::option::Option<gossip_chunk::Response>,
+}
+/// Nested message and enum types in `GossipChunk`.
+pub mod gossip_chunk {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Response {
+        #[prost(message, tag = "3")]
+        Chunk(super::ArtifactChunk),
+        #[prost(enumeration = "super::P2pError", tag = "4")]
+        Error(i32),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ArtifactFilter {
+    #[prost(message, optional, tag = "1")]
+    pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
+    #[prost(message, optional, tag = "3")]
+    pub certification_message_filter: ::core::option::Option<CertificationMessageFilter>,
+    #[prost(message, optional, tag = "4")]
+    pub state_sync_filter: ::core::option::Option<StateSyncFilter>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageFilter {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageFilter {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StateSyncFilter {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ArtifactChunk {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub witnesses: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(oneof = "artifact_chunk::Data", tags = "2, 3")]
+    pub data: ::core::option::Option<artifact_chunk::Data>,
+}
+/// Nested message and enum types in `ArtifactChunk`.
+pub mod artifact_chunk {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Data {
+        /// TODO(P2P-483): bincode-encoded Artifact to proto-encoding
+        #[prost(bytes, tag = "2")]
+        Artifact(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "3")]
+        Chunk(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum P2pError {
+    Unspecified = 0,
+    NotFound = 1,
+}
+impl P2pError {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            P2pError::Unspecified => "P2P_ERROR_UNSPECIFIED",
+            P2pError::NotFound => "P2P_ERROR_NOT_FOUND",
+        }
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HttpHeader {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpRequest {
+    #[prost(string, tag = "1")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub body: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub headers: ::prost::alloc::vec::Vec<HttpHeader>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponse {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+    #[prost(uint64, tag = "2")]
+    pub timeout: u64,
+    #[prost(message, optional, tag = "4")]
+    pub canister_id: ::core::option::Option<CanisterId>,
+    #[prost(message, optional, tag = "3")]
+    pub content: ::core::option::Option<CanisterHttpResponseContent>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseMetadata {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+    #[prost(uint64, tag = "2")]
+    pub timeout: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "4")]
+    pub registry_version: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseContent {
+    #[prost(oneof = "canister_http_response_content::Status", tags = "2, 3")]
+    pub status: ::core::option::Option<canister_http_response_content::Status>,
+}
+/// Nested message and enum types in `CanisterHttpResponseContent`.
+pub mod canister_http_response_content {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Status {
+        #[prost(message, tag = "2")]
+        Reject(super::CanisterHttpReject),
+        #[prost(bytes, tag = "3")]
+        Success(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpReject {
+    #[prost(uint32, tag = "1")]
+    pub reject_code: u32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseSignature {
+    #[prost(bytes = "vec", tag = "1")]
+    pub signer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseWithConsensus {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "3")]
+    pub registry_version: u64,
+    #[prost(message, repeated, tag = "7")]
+    pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpShare {
+    #[prost(message, optional, tag = "1")]
+    pub metadata: ::core::option::Option<CanisterHttpResponseMetadata>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<CanisterHttpResponseSignature>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseDivergence {
+    #[prost(message, repeated, tag = "1")]
+    pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseMessage {
+    #[prost(
+        oneof = "canister_http_response_message::MessageType",
+        tags = "1, 2, 3"
+    )]
+    pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
+}
+/// Nested message and enum types in `CanisterHttpResponseMessage`.
+pub mod canister_http_response_message {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum MessageType {
+        #[prost(message, tag = "1")]
+        Response(super::CanisterHttpResponseWithConsensus),
+        #[prost(uint64, tag = "2")]
+        Timeout(u64),
+        #[prost(message, tag = "3")]
+        DivergenceResponse(super::CanisterHttpResponseDivergence),
+    }
+}
