@@ -1079,8 +1079,8 @@ fn test_fee_collector() {
     assert_eq!(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
+            (new_fee_collector, vec![(6.into(), 7.into())]),
             (fee_collector, vec![(0.into(), 4.into())]),
-            (new_fee_collector, vec![(6.into(), 7.into())])
         ]
     );
 
@@ -1102,11 +1102,11 @@ fn test_fee_collector() {
     assert_eq!(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
+            (new_fee_collector, vec![(6.into(), 7.into())]),
             (
                 fee_collector,
                 vec![(0.into(), 4.into()), (7.into(), 9.into())]
             ),
-            (new_fee_collector, vec![(6.into(), 7.into())])
         ]
     );
 }

@@ -248,7 +248,7 @@ async fn new_random_delegations(
 }
 
 fn copy_pk(identity: &BasicIdentity) -> Vec<u8> {
-    identity.sign(&[]).unwrap().public_key.unwrap()
+    identity.public_key().unwrap()
 }
 
 async fn increment_counter_canister(

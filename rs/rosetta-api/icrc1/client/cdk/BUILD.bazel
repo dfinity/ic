@@ -9,6 +9,7 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/client",
+    "@crate_index//:candid",
     "@crate_index//:ic-cdk",
 ]
 

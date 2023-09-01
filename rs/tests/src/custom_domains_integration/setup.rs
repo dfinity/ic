@@ -471,9 +471,10 @@ async fn setup_certificate_orchestartor(
     agent.set_identity(identity);
 
     for p in allowed_principals {
+        let arg = Encode!(&p).context("failed to encode arg")?;
         agent
             .update(&cid, "addAllowedPrincipal")
-            .with_arg(Encode!(&p).context("failed to encode arg")?)
+            .with_arg(arg)
             .call_and_wait()
             .await
             .context("failed to add allowed principal")?;

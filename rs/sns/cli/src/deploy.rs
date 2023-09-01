@@ -10,7 +10,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use candid::{parser::value::IDLValue, Decode, Encode};
+use candid::{types::value::IDLValue, Decode, Encode};
 use serde_json::{json, Value as JsonValue};
 use tempfile::NamedTempFile;
 

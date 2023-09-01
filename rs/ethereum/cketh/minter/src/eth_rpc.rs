@@ -660,7 +660,10 @@ where
                 value: "application/json".to_string(),
             }],
             body: Some(payload.as_bytes().to_vec()),
-            transform: Some(TransformContext::new(cleanup_response, transform_op)),
+            transform: Some(TransformContext::from_name(
+                "cleanup_response".to_owned(),
+                transform_op,
+            )),
         };
 
         // Details of the values used in the following lines can be found here:

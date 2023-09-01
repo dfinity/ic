@@ -603,9 +603,10 @@ impl<'a> MessageCanister<'a> {
             cycles: cycles.get(),
             payload,
         };
+        let arg = Encode!(&params).unwrap();
         self.agent
             .update(&self.canister_id, "forward")
-            .with_arg(&Encode!(&params).unwrap())
+            .with_arg(arg)
             .call_and_wait()
             .await
             .map(|bytes| Decode!(&bytes, Vec<u8>).unwrap())
@@ -631,7 +632,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn try_store_msg<P: Into<String>>(&self, msg: P) -> Result<(), AgentError> {
         self.agent
             .update(&self.canister_id, "store")
-            .with_arg(&Encode!(&msg.into()).unwrap())
+            .with_arg(Encode!(&msg.into()).unwrap())
             .call_and_wait()
             .await
             .map(|_| ())
@@ -646,7 +647,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn try_read_msg(&self) -> Result<Option<String>, String> {
         self.agent
             .query(&self.canister_id, "read")
-            .with_arg(&Encode!(&()).unwrap())
+            .with_arg(Encode!(&()).unwrap())
             .call()
             .await
             .map_err(|e| e.to_string())
@@ -1187,7 +1188,7 @@ pub(crate) async fn assert_canister_counter_with_retries(
         );
         let res = agent
             .query(canister_id, "read")
-            .with_arg(&payload)
+            .with_arg(payload.clone())
             .call()
             .await
             .unwrap();

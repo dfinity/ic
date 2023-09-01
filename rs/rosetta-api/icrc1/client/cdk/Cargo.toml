@@ -9,3 +9,4 @@ edition = "2021"
 async-trait = "0.1.53"
 ic-cdk = { workspace = true }
 ic-icrc1-client = { path = ".." }
+candid = { workspace = true }

@@ -226,12 +226,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "candid": crate.spec(
-                version = "^0.8.1",
+                version = "^0.9.5",
+                features = ["parser"],
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
             ),
-            "candid_derive": crate.spec(version = "^0.5.0"),
             "cc": crate.spec(
                 version = "^1.0",
             ),
@@ -455,23 +455,25 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.0",
             ),
             "ic0": crate.spec(
-                version = "0.18.9",
+                version = "^0.18.11",
             ),
             "icrc1-test-env": crate.spec(
-                version = "0.1.0",
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = "bdcf39e32a12185fbcec33897001d93c901d6689",
             ),
             "icrc1-test-suite": crate.spec(
-                version = "0.1.0",
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = "bdcf39e32a12185fbcec33897001d93c901d6689",
             ),
             "ic-agent": crate.spec(
-                version = "^0.24.1",
+                version = "^0.27.0",
                 features = [
                     "hyper",
                 ],
             ),
             "ic-btc-interface": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7",
+                rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c",
             ),
             "ic-btc-validation": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
@@ -479,19 +481,19 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "ic-btc-test-utils": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7",
+                rev = "26552e8e7d1b2e23d7195499bd6aed650b263ae7",
             ),
             "ic-canister-log": crate.spec(
                 version = "0.2.0",
             ),
             "ic-cdk": crate.spec(
-                version = "0.7.0",
+                version = "^0.10.0",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "0.1.0",
+                version = "^0.4.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.6.8",
+                version = "^0.7.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -506,22 +508,21 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.1.0",
             ),
             "ic-test-state-machine-client": crate.spec(
-                version = "^2.2.0",
+                version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.24.1",
-                features = [
-                    "raw",
-                ],
+                version = "^0.27.0",
+                features = ["raw"],
             ),
             "ic-wasm": crate.spec(
-                version = "^0.1.3",
+                version = "^0.4.0",
                 features = [
                     "exe",
                 ],
+                default_features = False,
             ),
             "ic-xrc-types": crate.spec(
-                version = "^1.0.0",
+                version = "^1.1.0",
             ),
             "idna": crate.spec(
                 version = "^0.3.0",

@@ -1,9 +1,5 @@
 use crate::Payload;
-use candid::{
-    parser::types::FuncMode,
-    types::{Function, Serializer, Type},
-    CandidType, Deserialize,
-};
+use candid::{CandidType, Deserialize};
 use ic_base_types::PrincipalId;
 use serde::Serialize;
 
@@ -21,23 +17,8 @@ pub struct TransformArgs {
 
 impl Payload<'_> for TransformArgs {}
 
-/// Encapsulating the corresponding candid `func` type.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TransformFunc(pub candid::Func);
-
-impl CandidType for TransformFunc {
-    fn _ty() -> Type {
-        Type::Func(Function {
-            modes: vec![FuncMode::Query],
-            args: vec![TransformArgs::ty()],
-            rets: vec![CanisterHttpResponsePayload::ty()],
-        })
-    }
-
-    fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
-        serializer.serialize_function(self.0.principal.as_slice(), &self.0.method)
-    }
-}
+// Encapsulating the corresponding candid `func` type.
+candid::define_function!(pub TransformFunc : (TransformArgs) -> (CanisterHttpResponsePayload) query);
 
 /// Enum used for encoding/decoding:
 /// `record {

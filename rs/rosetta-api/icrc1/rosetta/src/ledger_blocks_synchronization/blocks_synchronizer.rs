@@ -341,16 +341,17 @@ async fn fetch_blocks_interval(
 
             // Fetch all blocks that could not be returned by the ledger directly, from the archive
             for archive_query in blocks_response.archived_blocks {
+                let arg = Encode!(&GetBlocksRequest {
+                    start: archive_query.start.clone(),
+                    length: archive_query.length,
+                })?;
                 let archive_response = agent
                     .agent
                     .query(
                         &archive_query.callback.canister_id,
                         &archive_query.callback.method,
                     )
-                    .with_arg(&Encode!(&GetBlocksRequest {
-                        start: archive_query.start.clone(),
-                        length: archive_query.length,
-                    })?)
+                    .with_arg(arg)
                     .call()
                     .await?;
 

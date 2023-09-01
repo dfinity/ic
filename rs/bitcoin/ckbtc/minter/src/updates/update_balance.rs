@@ -213,7 +213,7 @@ pub async fn update_balance(
         }
         let amount = utxo.value - kyt_fee;
         let memo = MintMemo::Convert {
-            txid: Some(&utxo.outpoint.txid),
+            txid: Some(utxo.outpoint.txid.as_ref()),
             vout: Some(utxo.outpoint.vout),
             kyt_fee: Some(kyt_fee),
         };

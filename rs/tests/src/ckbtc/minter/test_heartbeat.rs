@@ -166,12 +166,11 @@ pub fn test_heartbeat(env: TestEnv) {
 
         // Wait for tx to be signed
         let txid = wait_for_signed_tx(&minter_agent, &logger, retrieve_response.block_index).await;
-
+        let txid_bytes: [u8; 32] = txid.into();
         // We wait for the heartbeat to send the transaction to the mempool
         info!(&logger, "Waiting for tx to appear in mempool");
         let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
-
-        let btc_txid = Txid::from_hash(Hash::from_slice(&txid).unwrap());
+        let btc_txid = Txid::from_hash(Hash::from_slice(&txid_bytes).unwrap());
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),

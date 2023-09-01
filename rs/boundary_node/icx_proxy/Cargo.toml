@@ -21,7 +21,7 @@ anyhow = "1"
 async-trait = "0.1"
 axum = "0.6.1"
 base64 = "0.11"
-candid = { version = "0.8", features = ["mute_warnings"] }
+candid = { workspace = true, features = ["mute_warnings"] }
 clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
 form_urlencoded = "1"

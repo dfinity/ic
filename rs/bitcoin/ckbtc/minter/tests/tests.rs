@@ -4,7 +4,7 @@ use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
-use ic_btc_interface::Network;
+use ic_btc_interface::{Network, Txid};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
@@ -136,6 +136,15 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
         new_out_value + relay_cost <= prev_out_value,
         "the transaction fees should have increased by at least {relay_cost}. prev out value: {prev_out_value}, new out value: {new_out_value}"
     );
+}
+
+fn vec_to_txid(vec: Vec<u8>) -> Txid {
+    let bytes: [u8; 32] = vec.try_into().expect("Vector length must be exactly 32");
+    bytes.into()
+}
+
+fn range_to_txid(range: std::ops::RangeInclusive<u8>) -> Txid {
+    vec_to_txid(range.collect::<Vec<u8>>())
 }
 
 #[test]
@@ -669,7 +678,7 @@ impl CkBtcSetup {
                     )
                     .expect("failed to refresh fee percentiles")
             ),
-            ()
+            Option<Nat>
         )
         .unwrap();
     }
@@ -916,9 +925,10 @@ impl CkBtcSetup {
         }
     }
 
-    pub fn await_btc_transaction(&self, block_index: u64, max_ticks: usize) -> [u8; 32] {
+    pub fn await_btc_transaction(&self, block_index: u64, max_ticks: usize) -> Txid {
         let mut last_status = None;
         for _ in 0..max_ticks {
+            dbg!(self.get_logs());
             match self.retrieve_btc_status(block_index) {
                 RetrieveBtcStatus::Submitted { txid } => {
                     return txid;
@@ -967,7 +977,7 @@ impl CkBtcSetup {
         }
     }
 
-    pub fn await_finalization(&self, block_index: u64, max_ticks: usize) -> [u8; 32] {
+    pub fn await_finalization(&self, block_index: u64, max_ticks: usize) -> Txid {
         let mut last_status = None;
         for _ in 0..max_ticks {
             match self.retrieve_btc_status(block_index) {
@@ -996,21 +1006,21 @@ impl CkBtcSetup {
 
         self.env
             .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
-
+        let txid_bytes: [u8; 32] = tx.txid().to_vec().try_into().unwrap();
         self.push_utxo(
             change_address.to_string(),
             Utxo {
                 value: change_utxo.value,
                 height: 0,
                 outpoint: OutPoint {
-                    txid: tx.txid().to_vec(),
+                    txid: txid_bytes.into(),
                     vout: 1,
                 },
             },
         );
     }
 
-    pub fn mempool(&self) -> BTreeMap<[u8; 32], bitcoin::Transaction> {
+    pub fn mempool(&self) -> BTreeMap<Txid, bitcoin::Transaction> {
         Decode!(
             &assert_reply(
                 self.env
@@ -1022,10 +1032,10 @@ impl CkBtcSetup {
         .unwrap()
         .iter()
         .map(|tx_bytes| {
-            use bitcoin::hashes::Hash;
             let tx = bitcoin::Transaction::deserialize(tx_bytes)
                 .expect("failed to parse a bitcoin transaction");
-            (tx.txid().as_hash().into_inner(), tx)
+
+            (vec_to_txid(tx.txid().to_vec()), tx)
         })
         .collect()
     }
@@ -1054,7 +1064,7 @@ fn test_transaction_finalization() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1071,6 +1081,9 @@ fn test_transaction_finalization() {
     let withdrawal_amount = 50_000_000;
     let withdrawal_account = ckbtc.withdrawal_account(user.into());
     let fee_estimate = ckbtc.estimate_withdrawal_fee(Some(withdrawal_amount));
+    dbg!(fee_estimate);
+    let fee_estimate = ckbtc.estimate_withdrawal_fee(Some(withdrawal_amount));
+
     ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
 
     let RetrieveBtcOk { block_index } = ckbtc
@@ -1144,7 +1157,7 @@ fn test_transaction_resubmission_finalize_new() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1219,7 +1232,7 @@ fn test_transaction_resubmission_finalize_old() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1287,7 +1300,7 @@ fn test_transaction_resubmission_finalize_middle() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1383,7 +1396,7 @@ fn test_taproot_transaction_finalization() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1411,7 +1424,6 @@ fn test_taproot_transaction_finalization() {
     ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
 
     // Step 3: wait for the transaction to be submitted
-
     let txid = ckbtc.await_btc_transaction(block_index, 10);
     let mempool = ckbtc.mempool();
     assert_eq!(
@@ -1441,7 +1453,7 @@ fn test_ledger_memo() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1530,7 +1542,7 @@ fn test_filter_logs() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1598,7 +1610,7 @@ fn test_retrieve_btc_with_approval() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1675,7 +1687,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
@@ -1764,7 +1776,7 @@ fn test_retrieve_btc_with_approval_fail() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: (1..=32).collect::<Vec<u8>>(),
+            txid: range_to_txid(1..=32),
             vout: 1,
         },
         value: deposit_value,
