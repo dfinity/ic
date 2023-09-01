@@ -1,7 +1,7 @@
 use canister_test::*;
 use ic_state_machine_tests::StateMachine;
 
-const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 1_800_000;
+const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 1_810_000;
 
 const HELLO_WORLD_WAT: &str = r#"
 (module

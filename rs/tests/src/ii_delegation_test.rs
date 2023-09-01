@@ -60,7 +60,7 @@ pub fn test(env: TestEnv) {
         app_node.subnet_id().unwrap()
     );
     let user_identity = random_ed25519_identity();
-    let pubkey = user_identity.sign(&[]).unwrap().public_key.unwrap();
+    let pubkey = user_identity.public_key().unwrap();
     let non_nns_agent = block_on(agent_with_identity(
         non_nns_node.get_public_url().as_str(),
         user_identity,
@@ -74,7 +74,7 @@ pub fn test(env: TestEnv) {
     ));
     info!(log, "User registered");
     let delegation_identity = random_ed25519_identity();
-    let delegation_pubkey = delegation_identity.sign(&[]).unwrap().public_key.unwrap();
+    let delegation_pubkey = delegation_identity.public_key().unwrap();
     let frontend_hostname = format!("https://{}.ic0.app", counter_canister_id.to_text());
     let (signed_delegation, ii_derived_public_key) = block_on(create_delegation(
         &non_nns_agent,

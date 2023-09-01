@@ -1,6 +1,6 @@
 use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
 
-use candid::candid_method;
+use candid::{candid_method, Principal};
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
     DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
@@ -14,9 +14,7 @@ use certificate_orchestrator_interface::{
 };
 use ic_cdk::{
     api::{id, time},
-    caller,
-    export::Principal,
-    post_upgrade, pre_upgrade, trap,
+    caller, post_upgrade, pre_upgrade, trap,
 };
 use ic_cdk_macros::{init, query, update};
 use ic_cdk_timers::set_timer_interval;

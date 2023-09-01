@@ -72,11 +72,7 @@ impl<Input: CandidType, Output: CandidType> TryFrom<candid::types::reference::Fu
 
 impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input, Output> {
     fn _ty() -> candid::types::Type {
-        candid::types::Type::Func(candid::types::Function {
-            modes: vec![candid::parser::types::FuncMode::Query],
-            args: vec![Input::_ty()],
-            rets: vec![Output::_ty()],
-        })
+        candid::func!((Input) -> (Output) query)
     }
 
     fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>

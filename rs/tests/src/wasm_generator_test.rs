@@ -56,9 +56,10 @@ pub fn test(env: TestEnv) {
             info!(log, "Send query to canister");
             // Verify that the compute function exported by the installed canister can be
             // called.
+            let arg = Encode!().unwrap();
             app_agent
                 .query(&cid, "compute")
-                .with_arg(&Encode!().unwrap())
+                .with_arg(arg)
                 .call()
                 .await
                 .expect("compute returned error");

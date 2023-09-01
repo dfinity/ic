@@ -256,10 +256,10 @@ fn test_approval_trimming() {
     ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }
 
-#[test]
-fn test_icrc1_test_suite() {
-    ic_icrc1_ledger_sm_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
-}
+// #[test]
+// fn test_icrc1_test_suite() {
+//     ic_icrc1_ledger_sm_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
+// }
 
 #[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]

@@ -1,13 +1,12 @@
 use std::io::Write;
 
+use candid::{
+    types::{Serializer, Type},
+    CandidType, Func,
+};
 use flate2::{
     write::{DeflateEncoder, GzEncoder},
     Compression,
-};
-use ic_cdk::export::candid::{
-    parser::types::FuncMode,
-    types::{Function, Serializer, Type},
-    CandidType, Func,
 };
 use serde::Deserialize;
 
@@ -17,7 +16,6 @@ const STREAMING_CHUNK_SIZE: usize = 10;
 
 /// A key-value pair for a HTTP header.
 #[derive(Debug, CandidType, Clone, Deserialize)]
-#[candid_path("ic_cdk::export::candid")]
 struct HeaderField(String, String);
 
 impl HeaderField {
@@ -28,7 +26,6 @@ impl HeaderField {
 
 /// The important components of an HTTP request.
 #[derive(Debug, Clone, CandidType, Deserialize)]
-#[candid_path("ic_cdk::export::candid")]
 pub struct HttpRequest {
     /// The HTTP method string.
     method: String,
@@ -42,7 +39,6 @@ pub struct HttpRequest {
 
 /// A HTTP response.
 #[derive(Debug, Clone, CandidType)]
-#[candid_path("ic_cdk::export::candid")]
 pub struct HttpResponse {
     /// The HTTP status code.
     status_code: u16,
@@ -58,7 +54,6 @@ pub struct HttpResponse {
 
 /// A Streaming HTTP response.
 #[derive(Debug, Clone, CandidType)]
-#[candid_path("ic_cdk::export::candid")]
 pub struct StreamingCallbackHttpResponse {
     body: Vec<u8>,
     token: Option<Token>,
@@ -66,7 +61,6 @@ pub struct StreamingCallbackHttpResponse {
 
 /// Possible strategies for a streaming response.
 #[derive(Debug, Clone, CandidType)]
-#[candid_path("ic_cdk::export::candid")]
 enum StreamingStrategy {
     /// A callback-based streaming strategy, where a callback function is provided for continuing the stream.
     Callback(CallbackStrategy),
@@ -74,7 +68,6 @@ enum StreamingStrategy {
 
 /// A callback-token pair for a callback streaming strategy.
 #[derive(Debug, Clone, CandidType)]
-#[candid_path("ic_cdk::export::candid")]
 struct CallbackStrategy {
     /// The callback function to be called to continue the stream.
     callback: Callback,
@@ -96,11 +89,7 @@ impl From<&str> for Callback {
 
 impl CandidType for Callback {
     fn _ty() -> Type {
-        Type::Func(Function {
-            modes: vec![FuncMode::Query],
-            args: vec![Token::ty()],
-            rets: vec![HttpResponse::ty()],
-        })
+        candid::func!((Token) -> (HttpResponse) query)
     }
     fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
         self.0.idl_serialize(serializer)
@@ -108,14 +97,12 @@ impl CandidType for Callback {
 }
 
 #[derive(Default, Debug, Clone, CandidType, Deserialize)]
-#[candid_path("ic_cdk::export::candid")]
 pub struct Token {
     path: String,
     encoding: Option<Encoding>,
     next: usize,
 }
 #[derive(Debug, Clone, CandidType, Deserialize)]
-#[candid_path("ic_cdk::export::candid")]
 enum Encoding {
     Gzip,
     Deflate,

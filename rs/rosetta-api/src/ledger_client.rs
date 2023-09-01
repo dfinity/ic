@@ -330,12 +330,13 @@ impl LedgerAccess for LedgerClient {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
         let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
         let bytes = agent
             .query(
                 &self.governance_canister_id.get().0,
                 "get_pending_proposals",
             )
-            .with_arg(Encode!().unwrap())
+            .with_arg(arg)
             .call()
             .await
             .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;

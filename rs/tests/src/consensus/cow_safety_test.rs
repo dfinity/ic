@@ -108,9 +108,10 @@ async fn install_canister(agent: &Agent, effective_canister_id: PrincipalId) -> 
         .await
         .expect("Couldn't install?");
 
+    let arg = Encode!(&MAX_MEM_SIZE).unwrap();
     agent
         .update(&canister_id, "init_array")
-        .with_arg(&Encode!(&MAX_MEM_SIZE).unwrap())
+        .with_arg(arg)
         .call_and_wait()
         .await
         .expect("could not push message to stable");
@@ -121,9 +122,10 @@ async fn install_canister(agent: &Agent, effective_canister_id: PrincipalId) -> 
 async fn verify(canister_id: &Principal, agent: &Agent, should_match: u128) {
     let mut curr: u128 = 0;
     for _ in 0..3 {
+        let arg = Encode!().unwrap();
         let rs = agent
             .query(canister_id, "compute_sum")
-            .with_arg(&Encode!().unwrap())
+            .with_arg(arg)
             .call()
             .await;
         curr = Decode!(rs.unwrap().as_slice(), u128).unwrap();
@@ -148,9 +150,10 @@ async fn modify_mem_and_verify<R: Rng>(
     for i in 0..rounds {
         let new_val_to_write = i + val_to_write as u32;
         should_match = new_val_to_write as u128 * TEST_MEM_SIZE;
+        let arg = Encode!(&(val_to_write + i as u8), &TEST_MEM_SIZE).unwrap();
         let rs = agent
             .update(canister_id, "query_and_update")
-            .with_arg(&Encode!(&(val_to_write + i as u8), &TEST_MEM_SIZE).unwrap())
+            .with_arg(arg)
             .call_and_wait()
             .await
             .expect("could not push message to stable");

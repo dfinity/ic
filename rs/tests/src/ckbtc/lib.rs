@@ -13,13 +13,12 @@ use crate::{
     },
     util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
-use candid::Encode;
+use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_canister_client::Sender;
-use ic_cdk::export::Principal;
 use ic_ckbtc_kyt::{
     InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
 };

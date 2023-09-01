@@ -380,13 +380,14 @@ impl NodeRegistration {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
 
+        let arguments =
+            Encode!(&update_node_payload).expect("Could not encode payload for update_node-call.");
         agent
             .execute_update(
                 &REGISTRY_CANISTER_ID,
                 &REGISTRY_CANISTER_ID,
                 "update_node_directly",
-                Encode!(&update_node_payload)
-                    .expect("Could not encode payload for update_node-call."),
+                arguments,
                 generate_nonce(),
             )
             .await

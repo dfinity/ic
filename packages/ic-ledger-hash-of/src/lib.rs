@@ -1,4 +1,4 @@
-use candid::types::internal::Type;
+use candid::types::internal::{Type, TypeInner};
 use candid::CandidType;
 use serde::{
     de::{Deserializer, Visitor},
@@ -18,7 +18,7 @@ pub struct HashOf<T> {
 
 impl<T> CandidType for HashOf<T> {
     fn _ty() -> Type {
-        Type::Vec(Box::new(Type::Nat8))
+        TypeInner::Vec(TypeInner::Nat8.into()).into()
     }
 
     fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>

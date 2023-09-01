@@ -126,7 +126,7 @@ async fn install_canister(context: &ReplicaContext, init_arg: Vec<u8>, canister_
         .update(&Principal::management_canister(), "install_code")
         .with_effective_canister_id(canister_id.into())
         .with_arg(
-            &Encode!(&InstallCodeArgs {
+            Encode!(&InstallCodeArgs {
                 canister_id: canister_id.into(),
                 wasm_module: icrc_ledger_wasm(),
                 arg: init_arg,
@@ -151,7 +151,7 @@ async fn create_canister(context: &ReplicaContext) -> CanisterId {
             &Principal::management_canister(),
             "provisional_create_canister_with_cycles",
         )
-        .with_arg(&Encode!(&CreateCanisterArgs::default()).unwrap())
+        .with_arg(Encode!(&CreateCanisterArgs::default()).unwrap())
         .call_and_wait()
         .await
         .unwrap();

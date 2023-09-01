@@ -1,8 +1,9 @@
 use candid::candid_method;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, SendTransactionRequest, Utxo,
+    MillisatoshiPerByte, Network, Utxo,
 };
+use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
 use ic_cdk_macros::{init, update};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
@@ -136,7 +137,12 @@ fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
 #[update]
 fn bitcoin_send_transaction(transaction: SendTransactionRequest) {
     mutate_state(|s| {
-        assert_eq!(transaction.network, s.network.into());
+        let cdk_network = match transaction.network {
+            BitcoinNetwork::Mainnet => Network::Mainnet,
+            BitcoinNetwork::Testnet => Network::Testnet,
+            BitcoinNetwork::Regtest => Network::Regtest,
+        };
+        assert_eq!(cdk_network, s.network);
         if s.is_available {
             s.mempool.insert(ByteBuf::from(transaction.transaction));
         }

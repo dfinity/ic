@@ -8,7 +8,7 @@ use crate::state::ReimburseDepositTask;
 use crate::storage::record_event;
 use crate::ReimbursementReason;
 use candid::Principal;
-use ic_btc_interface::Utxo;
+use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 
 pub fn accept_retrieve_btc_request(state: &mut CkBtcMinterState, request: RetrieveBtcRequest) {
@@ -58,7 +58,7 @@ pub fn sent_transaction(state: &mut CkBtcMinterState, tx: SubmittedBtcTransactio
     state.push_submitted_transaction(tx);
 }
 
-pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &[u8; 32]) {
+pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &Txid) {
     record_event(&Event::ConfirmedBtcTransaction { txid: *txid });
     state.finalize_transaction(txid);
 }
@@ -86,7 +86,7 @@ pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
 
 pub fn replace_transaction(
     state: &mut CkBtcMinterState,
-    old_txid: [u8; 32],
+    old_txid: Txid,
     new_tx: SubmittedBtcTransaction,
 ) {
     record_event(&Event::ReplacedBtcTransaction {

@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::bail;
 use axum::extract::{ConnectInfo, FromRef, State};
+use candid::Principal;
 use hyper::{
     http::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     Body, Request, Response, StatusCode, Uri,
@@ -17,7 +18,6 @@ use hyper::{
 use ic_agent::{
     agent::{RejectCode, RejectResponse},
     agent_error::HttpErrorPayload,
-    export::Principal,
     Agent, AgentError,
 };
 use ic_response_verification::MAX_VERIFICATION_VERSION;

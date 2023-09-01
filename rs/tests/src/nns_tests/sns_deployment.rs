@@ -28,7 +28,7 @@ use crate::util::UniversalCanister;
 use candid::Decode;
 use candid::{Nat, Principal};
 use ic_agent::Agent;
-use ic_agent::{Identity, Signature};
+use ic_agent::{agent::EnvelopeContent, Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_ledger_core::Tokens;
@@ -912,14 +912,18 @@ impl Identity for SaleParticipant {
         let principal = Principal::try_from(self.principal_id).unwrap();
         Ok(principal)
     }
-
-    fn sign(&self, msg: &[u8]) -> Result<Signature, String> {
-        let signature = self.key_pair().sign(msg.as_ref());
+    fn public_key(&self) -> Option<Vec<u8>> {
         let pk = self.key_pair().get_pb_key();
-        let pk_der = ed25519_public_key_to_der(pk);
+        Some(ed25519_public_key_to_der(pk))
+    }
+    fn sign(&self, msg: &EnvelopeContent) -> Result<Signature, String> {
+        self.sign_arbitrary(&msg.to_request_id().signable())
+    }
+    fn sign_arbitrary(&self, msg: &[u8]) -> Result<Signature, String> {
+        let signature = self.key_pair().sign(msg.as_ref());
         Ok(Signature {
             signature: Some(signature.as_ref().to_vec()),
-            public_key: Some(pk_der),
+            public_key: self.public_key(),
         })
     }
 }

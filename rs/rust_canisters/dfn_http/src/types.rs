@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize, Func};
+use candid::{CandidType, Deserialize};
 use serde_bytes::ByteBuf;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -20,9 +20,18 @@ pub struct HttpResponse {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct Token {}
 
+// This is still not quite correct.
+// The spec treats Token as polymorphic type, but we have no way to specify polymorphic
+// types in Candid. This works only because the service worker has a special CandidType
+// implementation that takes any input type and ignores the subtype checking.
+candid::define_function!(pub CallbackFunc : (Token) -> (StreamingCallbackHttpResponse) query);
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum StreamingStrategy {
-    Callback { callback: Func, token: Token },
+    Callback {
+        callback: CallbackFunc,
+        token: Token,
+    },
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

@@ -223,10 +223,10 @@ impl Scraper {
 impl Scrape for Scraper {
     async fn scrape(&self, wallet: &Principal) -> Result<u64, Error> {
         let agent = Arc::clone(&self.0);
-
+        let arg = candid::Encode!()?;
         let result = agent
             .query(wallet, "wallet_balance")
-            .with_arg(candid::Encode!()?)
+            .with_arg(arg)
             .call()
             .await
             .context("failed to query canister")?;

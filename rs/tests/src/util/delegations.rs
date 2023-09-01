@@ -3,7 +3,7 @@ use crate::crypto::request_signature_test::{expiry_time, sign_query, sign_update
 use candid::{CandidType, Deserialize, Principal};
 use canister_test::PrincipalId;
 use ic_agent::identity::{BasicIdentity, Identity};
-use ic_agent::Agent;
+use ic_agent::{agent::EnvelopeContent, Agent};
 use ic_crypto_tree_hash::Path;
 use ic_types::messages::{
     Blob, Certificate, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse,
@@ -410,8 +410,26 @@ pub async fn install_universal_canister(
 }
 
 pub fn sign_read_state(content: &HttpReadStateContent, identity: &BasicIdentity) -> Blob {
-    let mut msg = b"\x0Aic-request".to_vec();
-    msg.extend(content.representation_independent_hash());
+    use ic_agent::hash_tree::Label;
+    use std::ops::Deref;
+    let HttpReadStateContent::ReadState {
+        read_state: content,
+    } = content;
+    let paths = content
+        .paths
+        .iter()
+        .map(|path| {
+            path.deref()
+                .iter()
+                .map(|label| Label::from_bytes(label.as_bytes()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let msg = EnvelopeContent::ReadState {
+        paths,
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
+    };
     let sig = identity.sign(&msg).unwrap();
     Blob(sig.signature.unwrap())
 }

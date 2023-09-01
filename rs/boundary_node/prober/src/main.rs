@@ -553,7 +553,7 @@ impl Install for Installer {
         canister_id: Principal,
     ) -> Result<(), Error> {
         let mut install_args = Argument::new();
-        install_args.push_idl_arg(CanisterInstall {
+        install_args.set_idl_arg(CanisterInstall {
             mode: InstallMode::Install,
             canister_id,
             wasm_module: self.wasm_module.clone(),
@@ -657,7 +657,7 @@ impl Stop for Stopper {
         }
 
         let mut stop_args = Argument::new();
-        stop_args.push_idl_arg(In { canister_id });
+        stop_args.set_idl_arg(In { canister_id });
 
         let principal = Principal::from_str(wallet_id).unwrap();
         let wallet = interfaces::WalletCanister::create(agent, principal)
@@ -707,7 +707,7 @@ impl Delete for Deleter {
         }
 
         let mut delete_args = Argument::new();
-        delete_args.push_idl_arg(In { canister_id });
+        delete_args.set_idl_arg(In { canister_id });
 
         let principal = Principal::from_str(wallet_id).unwrap();
         let wallet = interfaces::WalletCanister::create(agent, principal)

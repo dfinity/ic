@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use ic_cdk::export::{
-    candid::utils::{ArgumentDecoder, ArgumentEncoder},
+use candid::{
+    utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
 pub use ic_icrc1_client::{ICRC1Client, Runtime};

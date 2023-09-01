@@ -54,7 +54,7 @@ impl GovernanceClient {
         debug!(&self.logger, "[governance_client] Making Proposal");
         let neuron_id: NeuronId = neuron_details.neuron.id.unwrap().into();
         let manage_neuron = create_make_proposal_payload(proposal.clone(), &neuron_id);
-        let arg = &Encode!(&manage_neuron).expect("Error while encoding arg.");
+        let arg = Encode!(&manage_neuron).expect("Error while encoding arg.");
         let res = self
             .agent
             .update(&self.governance_principal, "manage_neuron")
@@ -82,7 +82,7 @@ impl GovernanceClient {
                 "[governance_client] Making Proposal was succesfull proposal ID is {}",
                 proposal_id.unwrap().id
             );
-            let arg = &Encode!(&proposal_id.unwrap().id).expect("Error while encoding arg.");
+            let arg = Encode!(&proposal_id.unwrap().id).expect("Error while encoding arg.");
             let res = self
                 .agent
                 .query(&self.governance_principal, "get_proposal_info")

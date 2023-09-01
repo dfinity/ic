@@ -127,8 +127,8 @@ mod tests {
         lifecycle::init::{init, BtcNetwork, InitArgs},
         state::read_state,
     };
+    use candid::Principal;
     use ic_base_types::CanisterId;
-    use ic_cdk::export::Principal;
 
     use super::{balance_update_guard, TimerLogicGuard};
 
