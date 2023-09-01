@@ -110,7 +110,7 @@ pub struct Ledger {
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
     type Approvals = AllowanceTable<ApprovalKey, Self::AccountId, Tokens>;
-    type BalancesStore = HashMap<AccountIdentifier, Tokens>;
+    type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {

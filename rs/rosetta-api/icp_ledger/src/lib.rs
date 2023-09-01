@@ -16,11 +16,11 @@ use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
+use std::{borrow::Cow, collections::BTreeMap};
 use strum_macros::IntoStaticStr;
 
 pub use ic_ledger_core::{
@@ -46,7 +46,7 @@ pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
 
-pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
+pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 
 #[derive(
     Serialize,
