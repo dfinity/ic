@@ -230,6 +230,7 @@ fn main() -> Result<()> {
 
     ic_config0
         .set_use_specified_ids_allocation_range(valid_args.use_specified_ids_allocation_range);
+    ic_config0.set_whitelisted_prefixes(valid_args.whitelisted_prefixes);
 
     let ic_config = match valid_args.dc_pk_dir {
         Some(dir) => ic_config0.load_registry_node_operator_records_from_dir(
