@@ -57,6 +57,7 @@ use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
 use std::{convert::TryFrom, time::Duration};
+
 const M: usize = 1_000_000;
 const B: usize = 1_000 * M;
 
@@ -87,23 +88,29 @@ fn complexity_env(
     let performance_counter_complexity = cpu::PERFORMANCE_COUNTER.get() as u64;
     let msg_reply_complexity = cpu::MSG_REPLY.get() as u64;
     let msg_arg_data_size_complexity = cpu::MSG_ARG_DATA_SIZE.get() as u64;
-    let complexity =
+
+    let slice_complexity = performance_counter_complexity;
+    let total_complexity =
         performance_counter_complexity + msg_reply_complexity + msg_arg_data_size_complexity;
+
+    let max_instructions_per_round = system_calls_per_round as u64 * total_complexity;
+    let max_instructions_per_message = system_calls_per_message as u64 * slice_complexity;
+    let max_instructions_per_message_without_dts = system_calls_per_slice as u64 * slice_complexity;
+    let max_instructions_per_slice = system_calls_per_slice as u64 * slice_complexity;
+
     StateMachineBuilder::new()
         .with_subnet_type(subnet_type)
         .with_config(Some(StateMachineConfig::new(
             SubnetConfig {
                 scheduler_config: SchedulerConfig {
                     scheduler_cores,
-                    max_instructions_per_round: (system_calls_per_round as u64 * complexity).into(),
-                    max_instructions_per_message: (system_calls_per_message as u64 * complexity)
-                        .into(),
-                    max_instructions_per_message_without_dts: (system_calls_per_slice as u64
-                        * complexity)
-                        .into(),
-                    max_instructions_per_slice: (system_calls_per_slice as u64 * complexity).into(),
-                    instruction_overhead_per_message: NumInstructions::from(0),
-                    instruction_overhead_per_canister: NumInstructions::from(0),
+                    max_instructions_per_round: max_instructions_per_round.into(),
+                    max_instructions_per_message: max_instructions_per_message.into(),
+                    max_instructions_per_message_without_dts:
+                        max_instructions_per_message_without_dts.into(),
+                    max_instructions_per_slice: max_instructions_per_slice.into(),
+                    instruction_overhead_per_message: 0.into(),
+                    instruction_overhead_per_canister: 0.into(),
                     ..subnet_config.scheduler_config
                 },
                 ..subnet_config
@@ -122,6 +129,12 @@ fn complexity_env(
 }
 
 fn complexity_canister(env: &StateMachine) -> CanisterId {
+    // The canister executes a `ic0.performance_counter` System API in a loop.
+    // This system API has a CPU overhead 200 Instructions, which is less than
+    // its execution CPU complexity of 50ns * 5 = 250 Instructions.
+    //
+    // So executing this system API in a loop we should hit the complexity limit
+    // before the instruction limit.
     let wat = r#"
         (module
             (import "ic0" "performance_counter"
@@ -136,8 +149,7 @@ fn complexity_canister(env: &StateMachine) -> CanisterId {
                 (local.set $i (call $ic0_msg_arg_data_size))
                 (loop $loop
                     (drop (call $ic0_performance_counter (i32.const 0)))
-                    (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
-                    (br_if $loop)
+                    (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 1))))
                 )
                 (call $ic0_msg_reply)
             )
@@ -515,7 +527,6 @@ fn each_too_complex_message_aborts_execution() {
 }
 
 #[test]
-#[ignore] // TODO: fix this test.
 fn each_too_complex_message_on_system_subnet_does_not_abort_execution() {
     let env = complexity_env(
         SubnetType::System,
@@ -544,7 +555,6 @@ fn each_too_complex_message_on_system_subnet_does_not_abort_execution() {
 }
 
 #[test]
-#[ignore] // TODO: fix this test.
 fn each_too_complex_message_aborts_dts_execution() {
     // The overhead of the performance counter is 200, while its complexity is 250, so:
     //     11 * 200 (executed instructions) < 10 * 250 (instructions limit)
