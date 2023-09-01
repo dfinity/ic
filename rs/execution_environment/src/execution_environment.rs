@@ -626,6 +626,7 @@ impl ExecutionEnvironment {
                             args.get_new_controller(),
                             &mut state,
                             round_limits,
+                            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
                             registry_settings.subnet_size,
                         )
                         .map(|()| EmptyBlob.encode())
@@ -891,6 +892,9 @@ impl ExecutionEnvironment {
                                     &registry_settings.provisional_whitelist,
                                     registry_settings.max_number_of_canisters,
                                     round_limits,
+                                    self.subnet_memory_saturation(
+                                        &round_limits.subnet_available_memory,
+                                    ),
                                     registry_settings.subnet_size,
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
@@ -1249,6 +1253,7 @@ impl ExecutionEnvironment {
                     state,
                     subnet_size,
                     round_limits,
+                    self.subnet_memory_saturation(&round_limits.subnet_available_memory),
                 );
                 (
                     res.map(|new_canister_id| CanisterIdRecord::from(new_canister_id).encode())
@@ -1278,6 +1283,7 @@ impl ExecutionEnvironment {
                 settings,
                 canister,
                 round_limits,
+                self.subnet_memory_saturation(&round_limits.subnet_available_memory),
                 subnet_size,
             )
             .map(|()| EmptyBlob.encode())

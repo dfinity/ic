@@ -381,6 +381,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -397,6 +398,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -413,6 +415,7 @@ fn install_canister_makes_subnet_oversubscribed() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -525,6 +528,7 @@ fn upgrade_canister_with_no_wasm_fails() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -579,6 +583,7 @@ fn can_update_compute_allocation_during_upgrade() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -653,6 +658,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -669,6 +675,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -685,6 +692,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -877,6 +885,7 @@ fn can_update_memory_allocation_during_upgrade() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1013,6 +1022,7 @@ fn can_create_canister() {
                     &mut state,
                     SMALL_APP_SUBNET_MAX_SIZE,
                     &mut round_limits,
+                    ResourceSaturation::default(),
                 )
                 .0
                 .unwrap(),
@@ -1029,6 +1039,7 @@ fn can_create_canister() {
                     &mut state,
                     SMALL_APP_SUBNET_MAX_SIZE,
                     &mut round_limits,
+                    ResourceSaturation::default(),
                 )
                 .0
                 .unwrap(),
@@ -1061,6 +1072,7 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             ),
             (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
@@ -1099,6 +1111,7 @@ fn can_create_canister_with_extra_cycles() {
                     &mut state,
                     SMALL_APP_SUBNET_MAX_SIZE,
                     &mut round_limits,
+                    ResourceSaturation::default(),
                 )
                 .0
                 .unwrap(),
@@ -1129,6 +1142,7 @@ fn cannot_install_non_empty_canister() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1194,6 +1208,7 @@ fn install_code_with_wrong_controller_fails() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1260,6 +1275,7 @@ fn create_canister_sets_correct_allocations() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1289,6 +1305,7 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1340,6 +1357,7 @@ fn provisional_create_canister_has_no_creation_fee() {
                 &ProvisionalWhitelist::All,
                 MAX_NUMBER_OF_CANISTERS,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
@@ -1385,6 +1403,7 @@ fn reinstall_on_empty_canister_succeeds() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1493,6 +1512,7 @@ fn install_puts_canister_back_after_invalid_wasm() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1552,6 +1572,7 @@ fn reinstall_clears_stable_memory() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1646,6 +1667,7 @@ fn stop_a_running_canister() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1782,6 +1804,7 @@ fn stop_a_canister_with_incorrect_controller() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1858,6 +1881,7 @@ fn start_a_canister_with_incorrect_controller() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -1897,6 +1921,7 @@ fn starting_an_already_running_canister_keeps_it_running() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -2006,6 +2031,7 @@ fn get_canister_status_with_incorrect_controller() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -2045,6 +2071,7 @@ fn get_canister_status_of_running_canister() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -2079,6 +2106,7 @@ fn get_canister_status_of_self() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -2153,6 +2181,7 @@ fn set_controller_with_incorrect_controller() {
                 new_controller,
                 &mut state,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             ),
             Err(CanisterManagerError::CanisterInvalidController {
@@ -2199,6 +2228,7 @@ fn set_controller_with_correct_controller() {
                 new_controller,
                 &mut state,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             )
             .is_ok());
@@ -2409,6 +2439,7 @@ fn install_canister_with_query_allocation() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -2481,6 +2512,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
             MAX_NUMBER_OF_CANISTERS,
             &mut round_limits,
+            ResourceSaturation::default(),
             SMALL_APP_SUBNET_MAX_SIZE,
         )
         .unwrap();
@@ -2518,6 +2550,7 @@ fn create_canister_with_specified_id(
         &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
         MAX_NUMBER_OF_CANISTERS,
         &mut round_limits,
+        ResourceSaturation::default(),
         SMALL_APP_SUBNET_MAX_SIZE,
     );
 
@@ -2651,6 +2684,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -2754,6 +2788,7 @@ fn upgrading_canister_with_not_enough_memory_allocation_fails() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -2890,6 +2925,7 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -3000,6 +3036,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -3144,6 +3181,7 @@ fn failed_install_hooks_consume_instructions() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -3229,6 +3267,7 @@ fn install_code_respects_instruction_limit() {
             &mut state,
             SMALL_APP_SUBNET_MAX_SIZE,
             &mut round_limits,
+            ResourceSaturation::default(),
         )
         .0
         .unwrap();
@@ -3587,6 +3626,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -3622,6 +3662,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 settings,
                 canister,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             ),
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
@@ -3654,6 +3695,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -3697,6 +3739,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 canister,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
@@ -3756,6 +3799,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -3829,6 +3873,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 canister,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
@@ -3916,6 +3961,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -3934,6 +3980,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 settings,
                 canister,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
@@ -3985,6 +4032,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -4021,6 +4069,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 settings,
                 canister,
                 &mut round_limits,
+                ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
@@ -4068,6 +4117,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -4081,6 +4131,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -4094,6 +4145,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -4110,6 +4162,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
             &mut state,
             SMALL_APP_SUBNET_MAX_SIZE,
             &mut round_limits,
+            ResourceSaturation::default(),
         );
         assert_matches!(
             res,
@@ -4128,6 +4181,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
+                ResourceSaturation::default(),
             )
             .0
             .unwrap();
@@ -5935,4 +5989,118 @@ fn install_does_not_reserve_cycles_on_verified_application_subnet() {
         .system_state
         .reserved_balance();
     assert_eq!(reserved_cycles, Cycles::zero());
+}
+
+#[test]
+fn create_canister_reserves_cycles_for_memory_allocation() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+    const USAGE: u64 = CAPACITY - THRESHOLD;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .build();
+
+    test.create_canister_with_allocation(CYCLES, None, Some(USAGE))
+        .unwrap();
+
+    let subnet_memory_usage =
+        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+
+    let balance_before = CYCLES;
+    let canister_id = test
+        .create_canister_with_allocation(balance_before, None, Some(USAGE))
+        .unwrap();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .bytes()
+            .get(),
+        USAGE,
+    );
+
+    let reserved_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+
+    assert_eq!(
+        reserved_cycles,
+        test.cycles_account_manager().storage_reservation_cycles(
+            NumBytes::new(USAGE),
+            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+            test.subnet_size(),
+        )
+    );
+
+    assert!(
+        balance_before - balance_after >= reserved_cycles,
+        "Unexpected balance change: {} >= {}",
+        balance_before - balance_after,
+        reserved_cycles,
+    );
+}
+
+#[test]
+fn update_settings_reserves_cycles_for_memory_allocation() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+    const USAGE: u64 = CAPACITY - THRESHOLD;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .build();
+
+    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+        .unwrap();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let subnet_memory_usage =
+        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+
+    // TODO(RUN-745): This should be `execution_memory_usage()`.
+    let memory_usage_before = test.canister_state(canister_id).memory_usage();
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    test.canister_update_allocations_settings(canister_id, None, Some(USAGE))
+        .unwrap();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let memory_usage_after = NumBytes::new(USAGE);
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .bytes()
+            .get(),
+        USAGE
+    );
+
+    let reserved_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+
+    assert_eq!(
+        reserved_cycles,
+        test.cycles_account_manager().storage_reservation_cycles(
+            memory_usage_after - memory_usage_before,
+            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+            test.subnet_size(),
+        )
+    );
+
+    assert!(
+        balance_before - balance_after >= reserved_cycles,
+        "Unexpected balance change: {} >= {}",
+        balance_before - balance_after,
+        reserved_cycles,
+    );
 }
