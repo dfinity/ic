@@ -18,7 +18,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(bound = "")]
@@ -472,4 +472,4 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
     }
 }
 
-pub type LedgerBalances<Tokens> = Balances<HashMap<Account, Tokens>>;
+pub type LedgerBalances<Tokens> = Balances<BTreeMap<Account, Tokens>>;
