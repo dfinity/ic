@@ -15,6 +15,7 @@ use ic_nervous_system_governance::index::{
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
+use icp_ledger::Subaccount;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 #[derive(Debug)]
@@ -145,6 +146,22 @@ impl NeuronStore {
     /// Remove a Neuron by id
     pub fn remove(&mut self, neuron_id: &NeuronId) {
         self.heap_neurons.remove(&neuron_id.id);
+    }
+
+    /// Get NeuronId for a particular subaccount.
+    pub fn get_neuron_id_for_subaccount(&self, subaccount: Subaccount) -> Option<NeuronId> {
+        self.heap_neurons
+            .values()
+            .find(|n| {
+                n.subaccount()
+                    .map(|neuron_subaccount| neuron_subaccount == subaccount)
+                    .unwrap_or_default()
+            })
+            .and_then(|n| n.id)
+    }
+
+    pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
+        self.get_neuron_id_for_subaccount(subaccount).is_some()
     }
 
     /// Get a reference to heap neurons.  Temporary method to allow

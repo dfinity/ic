@@ -1548,7 +1548,7 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         for followees in proposed.values() {
             for followee in &followees.followees {
-                if !self.contains_neuron(*followee) {
+                if !self.neuron_store.contains(*followee) {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::NotFound,
                         "One or more of the neurons proposed to become \
@@ -1587,22 +1587,17 @@ impl Governance {
     fn find_neuron_id(&self, find_by: &NeuronIdOrSubaccount) -> Result<NeuronId, GovernanceError> {
         match find_by {
             NeuronIdOrSubaccount::NeuronId(neuron_id) => {
-                if self.contains_neuron(*neuron_id) {
+                if self.neuron_store.contains(*neuron_id) {
                     Ok(*neuron_id)
                 } else {
                     Err(Self::neuron_not_found_error(neuron_id))
                 }
             }
             NeuronIdOrSubaccount::Subaccount(subaccount) => self
-                .get_neuron_id_by_subaccount(&Self::bytes_to_subaccount(subaccount)?)
+                .neuron_store
+                .get_neuron_id_for_subaccount(Self::bytes_to_subaccount(subaccount)?)
                 .ok_or_else(|| Self::no_neuron_for_subaccount_error(subaccount)),
         }
-    }
-
-    // The following methods should be aware of both heap storage and stable storage
-    // during the migration (https://docs.google.com/document/d/10r-hZ5yMJbAgle5jsuH9VrRtQ2H8csd4nfry9LOe7cc/edit)
-    pub fn contains_neuron(&self, neuron_id: NeuronId) -> bool {
-        self.neuron_store.contains(neuron_id)
     }
 
     pub fn with_neuron<R>(
@@ -1632,14 +1627,6 @@ impl Governance {
 
     pub fn list_heap_neurons(&self) -> impl Iterator<Item = &Neuron> {
         self.neuron_store.heap_neurons().values()
-    }
-
-    // The following functions should be deprecated before migrating any neuron to stable storage
-    pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
-        self.neuron_store
-            .heap_neurons()
-            .values()
-            .any(|neuron| neuron.account == subaccount.0)
     }
 
     #[allow(dead_code)] // TODO NNS1-2351 remove allow(dead_code)
@@ -1845,7 +1832,7 @@ impl Governance {
                 "Cannot add neuron. Max number of neurons reached.",
             ));
         }
-        if self.contains_neuron(NeuronId { id: neuron_id }) {
+        if self.neuron_store.contains(NeuronId { id: neuron_id }) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
@@ -1884,7 +1871,7 @@ impl Governance {
     /// Caller should make sure neuron.id = Some(NeuronId {id: neuron_id}).
     fn remove_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = neuron.id.expect("Neuron must have an id");
-        if !self.contains_neuron(neuron_id) {
+        if !self.neuron_store.contains(neuron_id) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 format!(
@@ -1967,26 +1954,6 @@ impl Governance {
                 .filter_map(|neuron_id| self.get_full_neuron(neuron_id, caller).ok())
                 .collect(),
         }
-    }
-
-    /// Returns a neuron id, given a subaccount.
-    ///
-    /// Currently we just do linear search on the neurons. We tried an index at
-    /// some point, but the index was too big, took too long to build and
-    /// ultimately lowered our max possible number of neurons, so we
-    /// "downgraded" to linear search.
-    ///
-    /// Consider changing this if getting a neuron by subaccount ever gets in a
-    /// hot path.
-    pub fn get_neuron_id_by_subaccount(&self, subaccount: &Subaccount) -> Option<NeuronId> {
-        self.list_heap_neurons()
-            .find(|neuron| {
-                neuron
-                    .subaccount()
-                    .map(|neuron_subaccount| neuron_subaccount == *subaccount)
-                    .unwrap_or_default()
-            })
-            .and_then(|neuron| neuron.id)
     }
 
     /// Returns a list of known neurons, neurons that have been given a name.
@@ -2401,7 +2368,7 @@ impl Governance {
         let to_subaccount = Subaccount(self.env.random_byte_array());
 
         // Make sure there isn't already a neuron with the same sub-account.
-        if self.has_neuron_with_subaccount(to_subaccount) {
+        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "There is already a neuron with the same subaccount.",
@@ -2689,7 +2656,7 @@ impl Governance {
         };
 
         // Make sure there isn't already a neuron with the same sub-account.
-        if self.has_neuron_with_subaccount(to_subaccount) {
+        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "There is already a neuron with the same subaccount.",
@@ -2995,7 +2962,7 @@ impl Governance {
         });
 
         // Make sure there isn't already a neuron with the same sub-account.
-        if self.has_neuron_with_subaccount(to_subaccount) {
+        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "There is already a neuron with the same subaccount.",
@@ -5886,7 +5853,7 @@ impl Governance {
         let controller = memo_and_controller.controller.unwrap_or(*caller);
         let memo = memo_and_controller.memo;
         let subaccount = ledger::compute_neuron_staking_subaccount(controller, memo);
-        match self.get_neuron_id_by_subaccount(&subaccount) {
+        match self.neuron_store.get_neuron_id_for_subaccount(subaccount) {
             Some(neuron_id) => {
                 self.refresh_neuron(neuron_id, subaccount, claim_or_refresh)
                     .await
@@ -5914,7 +5881,8 @@ impl Governance {
             NeuronIdOrSubaccount::Subaccount(subaccount_bytes) => {
                 let subaccount = Self::bytes_to_subaccount(&subaccount_bytes)?;
                 let neuron_id = self
-                    .get_neuron_id_by_subaccount(&subaccount)
+                    .neuron_store
+                    .get_neuron_id_for_subaccount(subaccount)
                     .ok_or_else(|| Self::no_neuron_for_subaccount_error(&subaccount.0))?;
                 (neuron_id, subaccount)
             }
@@ -6279,7 +6247,7 @@ impl Governance {
             Some(NeuronIdOrSubaccount::NeuronId(id)) => Ok(id),
             Some(NeuronIdOrSubaccount::Subaccount(sid)) => {
                 let subaccount = Self::bytes_to_subaccount(&sid)?;
-                match self.get_neuron_id_by_subaccount(&subaccount) {
+                match self.neuron_store.get_neuron_id_for_subaccount(subaccount) {
                     Some(neuron_id) => Ok(neuron_id),
                     None => Err(GovernanceError::new_with_message(
                         ErrorType::NotFound,
