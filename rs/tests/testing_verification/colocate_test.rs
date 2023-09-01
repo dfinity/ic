@@ -1,3 +1,4 @@
+use ic_tests::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -5,7 +6,6 @@ use std::process::Command;
 use std::str;
 use std::time::Duration;
 use std::{env, fs};
-
 #[rustfmt::skip]
 
 use anyhow::Result;
@@ -138,6 +138,20 @@ fn setup(env: TestEnv) {
         }
         env_vars
     };
+
+    let required_host_features = {
+        if let Some(host_features) = env.read_host_features("colocated") {
+            let features = host_features
+                .iter()
+                .map(|hf| serde_json::to_string(hf).unwrap())
+                .collect::<Vec<String>>()
+                .join(",");
+            format!("--set-required-host-features={}", features)
+        } else {
+            "".to_owned()
+        }
+    };
+
     debug!(log, "Docker env vars: {docker_env_vars}");
 
     info!(log, "Creating final docker image ...");
@@ -165,7 +179,7 @@ docker run --name {COLOCATE_CONTAINER_NAME} --network host \
   {docker_env_vars}
   final \
   /home/root/root_env/dependencies/{colocated_test_bin} \
-  --working-dir /home/root --no-delete-farm-group --no-farm-keepalive --group-base-name {colocated_test} run
+  --working-dir /home/root --no-delete-farm-group --no-farm-keepalive {required_host_features} --group-base-name {colocated_test} run
 EOF
 chmod +x /home/admin/run
 "#,
