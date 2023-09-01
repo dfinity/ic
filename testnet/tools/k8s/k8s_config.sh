@@ -99,6 +99,10 @@ function build_config() {
     for ip in "${nns_ips[@]}"; do
         nns_urls+=("http://[${ip}]:8080")
     done
+    nns_url=$(
+        IFS=,
+        echo "${nns_urls[*]}"
+    )
 
     local ssh="${REPO_ROOT}/testnet/tools/k8s/ssh_authorized_keys"
 
@@ -109,7 +113,7 @@ function build_config() {
             "--ic_registry_local_store" "${IC_PREP_DIR}/ic_registry_local_store" \
             "--ic_crypto" "${IC_PREP_DIR}/node-${node_index}/crypto" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
-            "--nns_url" "${nns_urls[*]}" \
+            "--nns_url" "${nns_url}" \
             "--hostname" "testnet-$((node_index++))" \
             "--elasticsearch_hosts" "elasticsearch.testnet.dfinity.network:443" \
             "--accounts_ssh_authorized_keys" "${ssh}"
