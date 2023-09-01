@@ -69,6 +69,10 @@ pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES: NumBytes =
 pub const MAX_XNET_PAYLOAD_IN_BYTES: NumBytes =
     NumBytes::new(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 * 21 / 20); // 2.1 MiB
 
+/// Error margin (in percentage points) of the deterministic payload size
+/// estimate, relative to the actual byte size of the encoded slice.
+pub const MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT: u64 = 5;
+
 /// Maximum byte size of a valid inter-canister `Response`.
 pub const MAX_RESPONSE_COUNT_BYTES: usize =
     size_of::<RequestOrResponse>() + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;

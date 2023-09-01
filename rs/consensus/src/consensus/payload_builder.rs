@@ -1,7 +1,9 @@
 //! Payload creation/validation subcomponent
 
 use crate::consensus::{
-    metrics::{PayloadBuilderMetrics, CRITICAL_ERROR_SUBNET_RECORD_ISSUE},
+    metrics::{
+        PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE,
+    },
     payload::BatchPayloadSectionBuilder,
 };
 use ic_consensus_utils::get_subnet_record;
@@ -14,7 +16,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
@@ -136,15 +138,28 @@ impl PayloadBuilder for PayloadBuilderImpl {
         for builder in &self.section_builder {
             accumulated_size +=
                 builder.validate_payload(height, batch_payload, context, past_payloads)?;
-            if accumulated_size > max_block_payload_size {
-                return Err(ValidationError::Permanent(
-                    PayloadPermanentError::PayloadTooBig {
-                        expected: max_block_payload_size,
-                        received: accumulated_size,
-                    },
-                ));
-            }
         }
+
+        // Check the combined size of the payloads using a 2x safety margin.
+        // We allow payloads that are bigger than the maximum size but log an error.
+        // And reject outright payloads that are more than twice the maximum size.
+        if accumulated_size > max_block_payload_size {
+            error!(
+                self.logger,
+                "The overall block size is too large, even though the individual payloads are valid: {}",
+                CRITICAL_ERROR_PAYLOAD_TOO_LARGE
+            );
+            self.metrics.critical_error_payload_too_large.inc();
+        }
+        if accumulated_size > max_block_payload_size * 2 {
+            return Err(ValidationError::Permanent(
+                PayloadPermanentError::PayloadTooBig {
+                    expected: max_block_payload_size,
+                    received: accumulated_size,
+                },
+            ));
+        }
+
         Ok(())
     }
 }
