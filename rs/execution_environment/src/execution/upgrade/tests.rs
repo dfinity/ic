@@ -361,8 +361,19 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
 
         let result = test.upgrade_canister_v2(canister_id, new_empty_binary(), skip_pre_upgrade);
 
-        assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
-        assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+        if skip_pre_upgrade == Some(SkipPreUpgrade(Some(true))) {
+            assert_eq!(result, Ok(()));
+            assert_canister_state_after_ok(
+                &canister_state_before,
+                test.canister_state(canister_id),
+            );
+        } else {
+            assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+            assert_canister_state_after_err(
+                &canister_state_before,
+                test.canister_state(canister_id),
+            );
+        }
     }
 }
 
@@ -968,4 +979,38 @@ fn dts_uninstall_with_aborted_upgrade() {
             canister_id,
         )
     );
+}
+
+#[test]
+fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
+    let mut test = execution_test_with_max_rounds(1);
+    // Create canister with no binary and hence no execution state
+    let canister_id = test.create_canister(1_000_000_000_u64.into());
+    let canister_state_before = test.canister_state(canister_id).clone();
+
+    let result = test.upgrade_canister_v2(
+        canister_id,
+        new_empty_binary(),
+        Some(SkipPreUpgrade(Some(true))),
+    );
+    assert_eq!(
+        result.unwrap_err().code(),
+        ErrorCode::CanisterWasmModuleNotFound
+    );
+    assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
+    let mut test = execution_test_with_max_rounds(1);
+    let canister_id = test.canister_from_binary(old_empty_binary()).unwrap();
+    let canister_state_before = test.canister_state(canister_id).clone();
+
+    let result = test.upgrade_canister_v2(
+        canister_id,
+        new_empty_binary(),
+        Some(SkipPreUpgrade(Some(true))),
+    );
+    assert_eq!(result, Ok(()));
+    assert_canister_state_after_ok(&canister_state_before, test.canister_state(canister_id));
 }

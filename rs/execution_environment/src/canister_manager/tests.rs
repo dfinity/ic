@@ -22,7 +22,8 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder, CanisterStatusType,
-    CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload, UpdateSettingsArgs,
+    CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload, SkipPreUpgrade,
+    UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -6103,4 +6104,61 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
         balance_before - balance_after,
         reserved_cycles,
     );
+}
+
+#[test]
+fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().set_pre_upgrade(wasm().trap()).reply().build(),
+    )
+    .unwrap();
+
+    let data = [1, 2, 3, 5, 8, 13];
+    let update = wasm()
+        .stable_grow(1)
+        .stable_write(42, &data)
+        .reply()
+        .build();
+    let result = test.ingress(canister_id, "update", update);
+    let reply = get_reply(result);
+    assert_eq!(reply, vec![] as Vec<u8>);
+
+    // Check that the upgrade of the canister succeeds if the pre_upgrade is skipped.
+    test.upgrade_canister_v2(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        Some(SkipPreUpgrade(Some(true))),
+    )
+    .unwrap();
+
+    // Set pre_upgrade again after the previous upgrade.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().set_pre_upgrade(wasm().trap()).reply().build(),
+    )
+    .unwrap();
+
+    // Check that the canister traps if pre_upgrade is executed.
+    let err = test
+        .upgrade_canister_v2(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            Some(SkipPreUpgrade(None)),
+        )
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+
+    let query = wasm()
+        .stable_read(42, data.len() as u32)
+        .append_and_reply()
+        .build();
+    let result = test.ingress(canister_id, "query", query);
+    let reply = get_reply(result);
+    assert_eq!(reply, data);
 }
