@@ -884,8 +884,11 @@ impl NNS {
             .unwrap()
     }
 
-    pub fn get_neuron(&self, ident: &NeuronId) -> &Neuron {
-        self.governance.get_neuron(ident).unwrap()
+    pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
+        self.governance
+            .neuron_store
+            .with_neuron(ident, |n| n.clone())
+            .unwrap()
     }
 
     pub fn get_account_balance(&self, account: AccountIdentifier) -> u64 {
@@ -897,7 +900,7 @@ impl NNS {
     }
 
     pub fn get_neuron_account_id(&self, id: u64) -> AccountIdentifier {
-        LedgerBuilder::neuron_account_id(self.get_neuron(&NeuronId { id }))
+        LedgerBuilder::neuron_account_id(&self.get_neuron(&NeuronId { id }))
     }
 
     pub fn get_neuron_stake(&self, neuron: &Neuron) -> u64 {

@@ -737,29 +737,30 @@ fn do_test_merge_neurons(
             let source_neuron_info = source_neuron_info.unwrap();
             let target_neuron_info = target_neuron_info.unwrap();
 
+            let source_neuron_id = source_neuron.id.unwrap();
+            let target_neuron_id = target_neuron.id.unwrap();
+
             pretty_assertions::assert_eq!(
-                &source_neuron,
+                source_neuron,
                 nns.governance
-                    .get_neuron(source_neuron.id.as_ref().unwrap())
+                    .neuron_store
+                    .with_neuron(&source_neuron_id, |n| n.clone())
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
-                &target_neuron,
+                target_neuron,
                 nns.governance
-                    .get_neuron(target_neuron.id.as_ref().unwrap())
+                    .neuron_store
+                    .with_neuron(&target_neuron_id, |n| n.clone())
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 source_neuron_info,
-                nns.governance
-                    .get_neuron_info(source_neuron.id.as_ref().unwrap())
-                    .unwrap()
+                nns.governance.get_neuron_info(&source_neuron_id).unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron_info,
-                nns.governance
-                    .get_neuron_info(target_neuron.id.as_ref().unwrap())
-                    .unwrap()
+                nns.governance.get_neuron_info(&target_neuron_id).unwrap()
             );
         }
         CommandResponse::Error(e) => panic!("Received Error: {}", e),

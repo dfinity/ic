@@ -1584,13 +1584,6 @@ impl Governance {
         })
     }
 
-    pub fn get_neuron(&self, nid: &NeuronId) -> Result<&Neuron, GovernanceError> {
-        self.neuron_store
-            .heap_neurons()
-            .get(&nid.id)
-            .ok_or_else(|| Self::neuron_not_found_error(nid))
-    }
-
     fn find_neuron_id(&self, find_by: &NeuronIdOrSubaccount) -> Result<NeuronId, GovernanceError> {
         match find_by {
             NeuronIdOrSubaccount::NeuronId(neuron_id) => {
@@ -1617,12 +1610,7 @@ impl Governance {
         nid: &NeuronId,
         map: impl FnOnce(&Neuron) -> R,
     ) -> Result<R, GovernanceError> {
-        let neuron = self
-            .neuron_store
-            .heap_neurons()
-            .get(&nid.id)
-            .ok_or_else(|| Self::neuron_not_found_error(nid))?;
-        Ok(map(neuron))
+        Ok(self.neuron_store.with_neuron(nid, map)?)
     }
 
     pub fn with_neuron_by_neuron_id_or_subaccount<R>(

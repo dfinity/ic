@@ -34,8 +34,8 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
         &self,
         gov: &GovernanceMutationProxy,
     ) -> Result<BTreeMap<NeuronId, NeuronDeltas>, GovernanceError> {
-        let source_neuron = gov.get_neuron(&self.source_neuron_id)?;
-        let target_neuron = gov.get_neuron(&self.target_neuron_id)?;
+        let source_neuron = gov.with_neuron(&self.source_neuron_id, |n| n.clone())?;
+        let target_neuron = gov.with_neuron(&self.target_neuron_id, |n| n.clone())?;
 
         let transaction_fees_e8s = gov.transaction_fee();
 
@@ -163,8 +163,9 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
 
         if source_stake_less_transaction_fee_e8s > 0 {
             let transaction_fee_e8s = gov.transaction_fee();
-            let target_neuron = gov.get_neuron(&self.target_neuron_id)?;
-            let to_subaccount = target_neuron.subaccount()?;
+            let to_subaccount = gov.with_neuron(&self.target_neuron_id, |target_neuron| {
+                target_neuron.subaccount()
+            })??;
 
             let from_subaccount = gov.with_neuron(&self.source_neuron_id, |source_neuron| {
                 source_neuron.subaccount()
