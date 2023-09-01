@@ -217,6 +217,7 @@ function generate_prep_material() {
         if [[ "${subnet_type}" == "root_subnet" ]]; then
             NODES_NNS+=("--node")
             NODES_NNS+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            OLD_NODES_NNS+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         elif [[ "${subnet_type}" == "app_subnet" ]]; then
             if [[ "${subnet_idx}" == "x" ]]; then
                 # Unassigned nodes (nodes not assigned to any subnet) have an empty subnet_idx
@@ -225,6 +226,7 @@ function generate_prep_material() {
             fi
             NODES_APP+=("--node")
             NODES_APP+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            OLD_NODES_APP+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         fi
     done
 
@@ -241,6 +243,16 @@ function generate_prep_material() {
         P2P_FLOWS=""--p2p-flows" "1234-1""
     fi
 
+    # Fix backward compatibility of removed nodes argument
+    if ${IC_PREP_DIR}/bin/ic-prep --help | grep -q -- '--nodes'; then
+        NODE_FLAG=("--nodes")
+        NODE_FLAG+=(${OLD_NODES_NNS[*]})
+        NODE_FLAG+=(${OLD_NODES_APP[*]})
+    else
+        NODE_FLAG=(${NODES_NNS[*]})
+        NODE_FLAG+=(${NODES_APP[*]})
+    fi
+
     # Generate key material for assigned nodes
     # See subnet_crypto_install, line 5
     "${IC_PREP_DIR}/bin/ic-prep" \
@@ -250,7 +262,7 @@ function generate_prep_material() {
         "--dkg-interval-length" "${DKG_INTERVAL_LENGTH}" \
         "--max-ingress-bytes-per-message" "${MAX_INGRESS_BYTES_PER_MESSAGE}" \
         ${P2P_FLOWS:-} \
-        ${NODES_NNS[*]} ${NODES_APP[*]} \
+        ${NODE_FLAG[*]} \
         "--provisional-whitelist" "${WHITELIST}" \
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
         "--initial-node-provider" "${NODE_OPERATOR_ID}" \
