@@ -2,7 +2,7 @@
 use crate::{common::validation_error_to_http_error, HttpError};
 use futures::FutureExt;
 use http::StatusCode;
-use ic_interfaces::crypto::IngressSigVerifier;
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;

@@ -5947,6 +5947,7 @@ dependencies = [
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-for-verification-only",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
@@ -6071,6 +6072,7 @@ dependencies = [
 name = "ic-crypto-for-verification-only"
 version = "0.1.0"
 dependencies = [
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
@@ -6094,6 +6096,13 @@ name = "ic-crypto-iccsa"
 version = "0.1.0"
 dependencies = [
  "ic-crypto-internal-basic-sig-iccsa",
+]
+
+[[package]]
+name = "ic-crypto-interfaces-sig-verification"
+version = "0.8.0"
+dependencies = [
+ "ic-types",
 ]
 
 [[package]]
@@ -6740,6 +6749,7 @@ dependencies = [
  "ic-base-types",
  "ic-config",
  "ic-crypto",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-logmon",
  "ic-crypto-node-key-generation",
@@ -7404,6 +7414,7 @@ dependencies = [
  "ic-backtrace",
  "ic-certification 0.8.0",
  "ic-config",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-tree-hash",
@@ -8054,6 +8065,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-constants",
+ "ic-crypto-interfaces-sig-verification",
  "ic-cycles-account-manager",
  "ic-ic00-types",
  "ic-interfaces",
@@ -8087,6 +8099,7 @@ dependencies = [
  "async-trait",
  "derive_more 0.99.8-alpha.0",
  "ic-base-types",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-csp-proptest-utils",
  "ic-crypto-tree-hash",
  "ic-error-types",
@@ -9812,6 +9825,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-utils",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
  "ic-execution-environment",
@@ -10860,6 +10874,7 @@ dependencies = [
  "ic-certification-version",
  "ic-config",
  "ic-consensus",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-temp-crypto",
@@ -11235,12 +11250,12 @@ dependencies = [
  "chrono",
  "hex",
  "ic-constants",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-sha2",
  "ic-crypto-standalone-sig-verifier",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-root-of-trust",
  "ic-crypto-tree-hash",
- "ic-interfaces",
  "ic-test-utilities",
  "ic-types",
  "mockall 0.11.4",
@@ -11283,6 +11298,7 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-certification-test-utils",
  "ic-constants",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-standalone-sig-verifier",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",

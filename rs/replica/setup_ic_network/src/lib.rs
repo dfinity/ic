@@ -23,6 +23,7 @@ use ic_consensus::{
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::{TlsConfig, TlsHandshake};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_https_outcalls_consensus::{
@@ -35,7 +36,6 @@ use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard},
     artifact_pool::UnvalidatedArtifact,
     batch_payload::BatchPayloadBuilder,
-    crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
     self_validating_payload::SelfValidatingPayloadBuilder,

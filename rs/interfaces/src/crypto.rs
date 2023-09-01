@@ -11,10 +11,7 @@ pub use sign::threshold_sig::ni_dkg::{LoadTranscriptResult, NiDkgAlgorithm};
 mod sign;
 
 pub use sign::BasicSigVerifier;
-pub use sign::BasicSigVerifierByPublicKey;
 pub use sign::BasicSigner;
-pub use sign::CanisterSigVerifier;
-pub use sign::IngressSigVerifier;
 pub use sign::MultiSigVerifier;
 pub use sign::MultiSigner;
 pub use sign::ThresholdSigVerifier;
@@ -23,6 +20,7 @@ pub use sign::ThresholdSigner;
 
 pub use sign::canister_threshold_sig::*;
 
+use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     certification::CertificationContent,
     dkg as consensus_dkg,

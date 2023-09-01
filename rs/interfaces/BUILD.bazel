@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/state_manager",
     "//rs/protobuf",

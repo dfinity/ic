@@ -49,13 +49,13 @@ use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_async_utils::{receive_body, start_tcp_listener};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::ConsensusPoolCache,
-    crypto::IngressSigVerifier,
     execution_environment::{IngressFilterService, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
     time_source::TimeSource,

@@ -120,9 +120,9 @@ mod root_of_trust {
 mod standalone_ingress_sig_verifier {
     use crate::internal::StandaloneIngressSigVerifier;
     use assert_matches::assert_matches;
+    use ic_crypto_interfaces_sig_verification::CanisterSigVerifier;
     use ic_crypto_test_utils_canister_sigs::new_valid_sig_and_crypto_component;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_interfaces::crypto::CanisterSigVerifier;
     use ic_types::crypto::{AlgorithmId, CryptoError};
 
     #[test]

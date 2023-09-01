@@ -11,6 +11,7 @@ ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
+ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "internal/logmon" }

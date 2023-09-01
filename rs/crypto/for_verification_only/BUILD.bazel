@@ -12,6 +12,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/registry/fake",
