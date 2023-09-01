@@ -24,6 +24,7 @@ pub mod internal {
     use ic_base_types::PrincipalId;
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
+    use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
     use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
     use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
@@ -44,8 +45,7 @@ pub mod internal {
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_crypto_utils_time::CurrentSystemTimeSource;
     use ic_interfaces::crypto::{
-        BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-        CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+        BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
         IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
         LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,

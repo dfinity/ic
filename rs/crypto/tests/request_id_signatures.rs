@@ -1,12 +1,12 @@
 #![allow(clippy::unwrap_used)]
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
+use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
     ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, user_public_key_from_bytes,
     KeyBytesContentType,
 };
-use ic_interfaces::crypto::BasicSigVerifierByPublicKey;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;

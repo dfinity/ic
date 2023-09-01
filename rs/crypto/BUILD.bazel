@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/config",
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
     "//rs/crypto/internal/crypto_lib/seed",

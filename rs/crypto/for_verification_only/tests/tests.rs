@@ -1,7 +1,7 @@
 use ic_crypto_for_verification_only::new;
+use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_crypto_test_utils::ed25519_utils::ed25519_signature_and_public_key;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_interfaces::crypto::BasicSigVerifierByPublicKey;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::messages::MessageId;

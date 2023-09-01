@@ -14,6 +14,7 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
+ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }

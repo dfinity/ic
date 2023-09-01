@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/types/types",
+]
+
+rust_library(
+    name = "sig_verification",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_crypto_interfaces_sig_verification",
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc(
+    name = "sig_verification_doc",
+    crate = ":sig_verification",
+)

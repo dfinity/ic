@@ -8,10 +8,10 @@ mod ingress_selector;
 #[cfg(test)]
 mod proptests;
 
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
 };
