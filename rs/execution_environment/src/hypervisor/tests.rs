@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload};
+use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload, SkipPreUpgrade};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -5976,4 +5976,49 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_afer_pre_u
         .unwrap();
 
     test.upgrade_canister(canister_id, wasm).unwrap();
+}
+
+#[test]
+fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"(module
+            {}
+            (func (export "canister_init")
+                (drop (call $stable_grow (i32.const 1)))
+            )
+            (func (export "canister_pre_upgrade")
+                unreachable
+            )
+            (memory 1)
+            (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
+        )"#,
+        STABLE_MEMORY_WAT
+    );
+    let canister_id = test.canister_from_wat(wat.clone()).unwrap();
+    let result = test.ingress(canister_id, "write", vec![]);
+    assert_empty_reply(result);
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
+
+    // Check that the upgrade of the canister succeeds if pre_upgrade is skipped.
+    test.upgrade_canister_v2(
+        canister_id,
+        wat::parse_str(wat.clone()).unwrap(),
+        Some(SkipPreUpgrade(Some(true))),
+    )
+    .unwrap();
+
+    // Check that the canister traps if the pre_upgrade is executed.
+    let err = test
+        .upgrade_canister_v2(
+            canister_id,
+            wat::parse_str(wat).unwrap(),
+            Some(SkipPreUpgrade(Some(false))),
+        )
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterTrapped, err.code());
+
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
 }

@@ -789,7 +789,6 @@ impl CanisterManager {
             CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
                 execute_install(context, canister, original, round.clone(), round_limits)
             }
-            // SkipPreUpgrade field will be used in the follow up.
             CanisterInstallModeV2::Upgrade(..) => {
                 execute_upgrade(context, canister, original, round.clone(), round_limits)
             }
