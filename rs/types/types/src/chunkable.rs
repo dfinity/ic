@@ -13,8 +13,9 @@
 //!
 use crate::{artifact::Artifact, crypto::CryptoHash};
 use bincode::{deserialize, serialize};
-use ic_protobuf::p2p::v1 as pb;
+use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::types::v1 as pb;
 use phantom_newtype::Id;
 use std::convert::TryFrom;
 
@@ -119,7 +120,7 @@ impl TryFrom<pb::ArtifactChunk> for ArtifactChunk {
     }
 }
 
-impl From<ArtifactChunk> for pb::StateSyncChunkResponse {
+impl From<ArtifactChunk> for p2p_pb::StateSyncChunkResponse {
     fn from(chunk: ArtifactChunk) -> Self {
         match chunk.artifact_chunk_data {
             ArtifactChunkData::UnitChunkData(artifact) => Self {

@@ -2,9 +2,9 @@
 use crate::artifact::{ArtifactAttribute, ArtifactId};
 use crate::crypto::CryptoHash;
 use bincode::{deserialize, serialize};
-use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::time::Duration;

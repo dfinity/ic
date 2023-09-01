@@ -1,5 +1,4 @@
 pub mod bitcoin;
-pub mod canister_http;
 pub mod crypto;
 pub mod log;
 mod macros;

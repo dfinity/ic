@@ -1,9 +1,9 @@
 use ic_interfaces::batch_payload::{iterator_to_bytes, slice_to_messages, PastPayload};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
-    canister_http::v1 as canister_http_pb,
-    canister_http::v1::{canister_http_response_message::MessageType, CanisterHttpResponseMessage},
     proxy::ProxyDecodeError,
+    types::v1 as pb,
+    types::v1::{canister_http_response_message::MessageType, CanisterHttpResponseMessage},
 };
 use ic_types::{batch::CanisterHttpPayload, messages::CallbackId, NumBytes};
 use std::collections::HashSet;
@@ -38,7 +38,7 @@ pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload, max_size: NumBytes
             .chain(payload.divergence_responses.iter().map(|response| {
                 CanisterHttpResponseMessage {
                     message_type: Some(MessageType::DivergenceResponse(
-                        canister_http_pb::CanisterHttpResponseDivergence::from(response),
+                        pb::CanisterHttpResponseDivergence::from(response),
                     )),
                 }
             }))
@@ -48,7 +48,7 @@ pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload, max_size: NumBytes
                     .iter()
                     .map(|response| CanisterHttpResponseMessage {
                         message_type: Some(MessageType::Response(
-                            canister_http_pb::CanisterHttpResponseWithConsensus::from(response),
+                            pb::CanisterHttpResponseWithConsensus::from(response),
                         )),
                     }),
             );

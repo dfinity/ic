@@ -1,5 +1,6 @@
 syntax = "proto3";
-package canister_http.v1;
+
+package types.v1;
 
 import "types/v1/types.proto";
 

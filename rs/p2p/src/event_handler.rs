@@ -75,7 +75,7 @@ use crate::{
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
 use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
+use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_types::{artifact::ArtifactFilter, p2p::GossipAdvert, NodeId};
 use parking_lot::Mutex;
 use std::{
