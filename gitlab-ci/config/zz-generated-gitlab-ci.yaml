@@ -158,15 +158,6 @@
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
-".bazel-rules-pipeline-no-merge-train-allow-to-fail":
-  rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
 ".bazel-rules-post-master":
   rules:
     - allow_failure: true
@@ -1716,6 +1707,7 @@ bazel-test-all-allow-to-fail:
 
         # Finish and collapse the after_script section
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
+  allow_failure: true
   artifacts:
     expire_in: 3 days
     paths:
@@ -1727,18 +1719,14 @@ bazel-test-all-allow-to-fail:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".bazel-rules-pipeline-no-merge-train-allow-to-fail"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs: []
   rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
