@@ -273,7 +273,6 @@ pub struct PageMap {
     page_allocator: PageAllocator,
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageMap {
     /// Creates a new page map that always returns zeroed pages.
     /// The allocator of this page map is backed by the file descriptor
