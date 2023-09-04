@@ -42,7 +42,32 @@
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     SHELL_WRAPPER: "/usr/bin/time"
-".bazel-build-fuzzers":
+".bazel-build-k8s":
+  artifacts:
+    expire_in: 3 days
+    paths:
+      - junit_data/*
+      - coredumps/*.txt
+      - coredumps/*.gz
+    when: always
+  extends:
+    - ".build-k8s"
+  image:
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
+  tags:
+    - dfinity-ic
+    - zh
+  variables:
+    BAZEL_CI_CONFIG: "--config=ci"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
+    BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
+    GET_SOURCES_ATTEMPTS: 5
+    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
+    GIT_DEPTH: 0
+    GIT_STRATEGY: fetch
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
+    SHELL_WRAPPER: "/usr/bin/time"
+".bazel-build-legacy-image":
   after_script:
     - |
       set +e # Do not fail in the after_script, try to do as much as possible instead.
@@ -84,7 +109,6 @@
     when: always
   extends:
     - ".bazel-test-all"
-    - ".ic-build-legacy-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs: []
@@ -101,39 +125,14 @@
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
-    - zh
     - dfinity-ic
+    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-    SHELL_WRAPPER: "/usr/bin/time"
-".bazel-build-k8s":
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".build-k8s"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
-  tags:
-    - dfinity-ic
-    - zh
-  variables:
-    BAZEL_CI_CONFIG: "--config=ci"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
-    BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -918,7 +917,7 @@ bazel-build-fuzzers:
         - bazel-testlogs-gitlab/**/test.xml
     when: always
   extends:
-    - ".bazel-build-fuzzers"
+    - ".bazel-build-legacy-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs: []
@@ -935,8 +934,8 @@ bazel-build-fuzzers:
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
-    - zh
     - dfinity-ic
+    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: build
@@ -991,7 +990,7 @@ bazel-build-fuzzers-afl:
         - bazel-testlogs-gitlab/**/test.xml
     when: always
   extends:
-    - ".bazel-build-fuzzers"
+    - ".bazel-build-legacy-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs: []
@@ -1008,8 +1007,8 @@ bazel-build-fuzzers-afl:
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
-    - zh
     - dfinity-ic
+    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: build
@@ -1064,7 +1063,7 @@ bazel-build-fuzzers-archives:
         - bazel-testlogs-gitlab/**/test.xml
     when: always
   extends:
-    - ".bazel-build-fuzzers"
+    - ".bazel-build-legacy-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs: []
@@ -1080,8 +1079,8 @@ bazel-build-fuzzers-archives:
       cd "${CI_PROJECT_DIR}"/bin
       ./build-all-fuzzers.sh --zip
   tags:
-    - zh
     - dfinity-ic
+    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -1136,7 +1135,7 @@ bazel-build-fuzzers-weekly:
         - bazel-testlogs-gitlab/**/test.xml
     when: always
   extends:
-    - ".bazel-build-fuzzers"
+    - ".bazel-build-legacy-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs: []
@@ -1152,8 +1151,8 @@ bazel-build-fuzzers-weekly:
       gsutil -m cp libfuzzer_asan_linux_*.zip gs://ic_fuzzer_builds
       gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
   tags:
-    - zh
     - dfinity-ic
+    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
