@@ -40,7 +40,7 @@ use axum::{
 };
 use bytes::{Buf, BufMut, Bytes};
 use http::{Request, Response};
-use ic_quic_transport::{Transport, TransportError};
+use ic_quic_transport::{SendError, Transport};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -279,10 +279,10 @@ impl Transport for PeerTransport {
         &self,
         peer_id: &NodeId,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, TransportError> {
+    ) -> Result<Response<Bytes>, SendError> {
         if peer_id == &self.node_id {
-            return Err(TransportError::Disconnected {
-                connection_error: "Can't connect to self".to_string(),
+            return Err(SendError::ConnectionNotFound {
+                reason: "Can't connect to self".to_string(),
             });
         }
 
@@ -294,7 +294,7 @@ impl Transport for PeerTransport {
         Ok(oneshot_rx.await.unwrap())
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
         let _ = self.rpc(peer_id, request).await?;
         Ok(())
     }

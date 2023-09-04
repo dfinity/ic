@@ -96,17 +96,14 @@ impl QuicTransport {
         QuicTransport(peer_map)
     }
 
-    pub(crate) fn get_conn_handle(
-        &self,
-        peer_id: &NodeId,
-    ) -> Result<ConnectionHandle, TransportError> {
+    pub(crate) fn get_conn_handle(&self, peer_id: &NodeId) -> Result<ConnectionHandle, SendError> {
         let conn = self
             .0
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(TransportError::Disconnected {
-                connection_error: String::from("Currently not connected to this peer"),
+            .ok_or(SendError::ConnectionNotFound {
+                reason: "Currently not connected to this peer".to_string(),
             })?
             .clone();
         Ok(conn)
@@ -119,12 +116,12 @@ impl Transport for QuicTransport {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, TransportError> {
+    ) -> Result<Response<Bytes>, SendError> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.rpc(request).await
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.push(request).await
     }
@@ -135,26 +132,25 @@ impl Transport for QuicTransport {
 }
 
 #[derive(Debug)]
-pub enum TransportError {
-    Disconnected {
-        // Potential reason for not being connected
-        connection_error: String,
-    },
-    Io {
-        error: std::io::Error,
-    },
+pub enum SendError {
+    ConnectionNotFound { reason: String },
+    // Error for the outbound QUIC message.
+    SendRequestFailed { reason: String },
+    // Error for the inbound QUIC message.
+    RecvResponseFailed { reason: String },
 }
 
-impl std::fmt::Display for TransportError {
+impl std::fmt::Display for SendError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Disconnected {
-                connection_error: e,
-            } => {
-                write!(f, "Disconnected/No connection to peer: {}", e)
+            Self::ConnectionNotFound { reason: e } => {
+                write!(f, "No connection to peer: {}", e)
             }
-            Self::Io { error } => {
-                write!(f, "Io error: {}", error)
+            Self::SendRequestFailed { reason } => {
+                write!(f, "Sending a request failed: {}", reason)
+            }
+            Self::RecvResponseFailed { reason } => {
+                write!(f, "Receiving a response failed: {}", reason)
             }
         }
     }
@@ -166,9 +162,9 @@ pub trait Transport: Send + Sync {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, TransportError>;
+    ) -> Result<Response<Bytes>, SendError>;
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError>;
 
     fn peers(&self) -> Vec<NodeId>;
 }
