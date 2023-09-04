@@ -644,6 +644,8 @@ fn create_and_upload_config_disk_image(
 }
 
 pub trait BoundaryNodeVm {
+    fn get_deployed_boundary_nodes(&self) -> Vec<DeployedBoundaryNode>;
+
     fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode>;
 
     fn write_boundary_node_vm(
@@ -655,6 +657,22 @@ pub trait BoundaryNodeVm {
 }
 
 impl BoundaryNodeVm for TestEnv {
+    fn get_deployed_boundary_nodes(&self) -> Vec<DeployedBoundaryNode> {
+        let path = self.get_path(BOUNDARY_NODE_VMS_DIR);
+        if !path.exists() {
+            return vec![];
+        }
+        fs::read_dir(path)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().is_dir())
+            .map(|e| {
+                let dir = String::from(e.file_name().to_string_lossy());
+                self.get_deployed_boundary_node(&dir).unwrap()
+            })
+            .collect()
+    }
+
     fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode> {
         let rel_boundary_node_dir: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
         let abs_boundary_node_dir = self.get_path(rel_boundary_node_dir.clone());
@@ -705,7 +723,7 @@ impl HasVmName for DeployedBoundaryNode {
 }
 
 impl DeployedBoundaryNode {
-    fn get_vm(&self) -> Result<VMCreateResponse> {
+    pub fn get_vm(&self) -> Result<VMCreateResponse> {
         let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, &self.name].iter().collect();
         self.env
             .read_json_object(vm_path.join(BOUNDARY_NODE_VM_PATH))

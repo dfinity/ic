@@ -441,7 +441,7 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
         .expect("failed to setup IC under test");
 
     if !fast_test_setup {
-        env.sync_prometheus_config_with_topology();
+        env.sync_with_prometheus();
     }
 }
 

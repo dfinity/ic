@@ -86,7 +86,7 @@ pub fn setup(env: TestEnv) {
         .unwrap()
         .get_snapshot()
         .unwrap();
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
     // Await for API boundary node to report healthy.
     api_boundary_node
         .await_status_is_healthy()
