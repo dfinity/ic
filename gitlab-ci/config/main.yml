@@ -104,17 +104,14 @@ after-script-test-ic-build-image:
   extends:
     - .after-script-test
 
-.bazel-build-fuzzers:
+.bazel-build-legacy-image:
   extends:
     - .bazel-test-all
-    - .ic-build-legacy-image
-  tags:
-    - zh
-    - dfinity-ic
+  image: !reference [.ic-build-legacy-image, image]
 
 bazel-build-fuzzers:
   extends:
-    - .bazel-build-fuzzers
+    - .bazel-build-legacy-image
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing --build_tag_filters=libfuzzer"
     BAZEL_COMMAND: "build"
@@ -122,7 +119,7 @@ bazel-build-fuzzers:
 
 bazel-build-fuzzers-afl:
   extends:
-    - .bazel-build-fuzzers
+    - .bazel-build-legacy-image
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=afl"
     BAZEL_COMMAND: "build"
@@ -130,7 +127,7 @@ bazel-build-fuzzers-afl:
 
 bazel-build-fuzzers-weekly:
   extends:
-    - .bazel-build-fuzzers
+    - .bazel-build-legacy-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-fuzzers-to-clusterfuzz"'
   needs: []  # don't wait on other jobs
@@ -146,7 +143,7 @@ bazel-build-fuzzers-weekly:
 
 bazel-build-fuzzers-archives:
   extends:
-    - .bazel-build-fuzzers
+    - .bazel-build-legacy-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
@@ -242,7 +239,6 @@ bazel-test-all:
     - .bazel-test-all
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going $BAZEL_EXTRA_ARGS_RULES"
-    BAZEL_TARGETS: "//..."
   timeout: 80 minutes
 
 linux-openssl-static-binaries:
@@ -261,7 +257,6 @@ bazel-test-all-allow-to-fail:
     - .bazel-rules-pipeline-no-merge-train-allow-to-fail
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
-    BAZEL_TARGETS: "//..."
 
 bazel-system-test-hourly:
   extends:
@@ -269,7 +264,6 @@ bazel-system-test-hourly:
     - .bazel-rules-post-master
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly"
-    BAZEL_TARGETS: "//..."
   timeout: 120 minutes
 
 bazel-system-test-hotfix:
@@ -278,7 +272,6 @@ bazel-system-test-hotfix:
     - .rules-prod-hotfix-pipeline
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hotfix"
-    BAZEL_TARGETS: "//..."
 
 bazel-system-test-staging:
   extends:
@@ -286,7 +279,6 @@ bazel-system-test-staging:
     - .rules-rollout-pipeline-auto
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging"
-    BAZEL_TARGETS: "//..."
   allow_failure: true
 
 bazel-system-test-nightly:
@@ -295,7 +287,6 @@ bazel-system-test-nightly:
     - .rules-rollout-pipeline-auto
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly"
-    BAZEL_TARGETS: "//..."
   timeout: 7h 30m
 
 bazel-config-check-all-rebuild:
