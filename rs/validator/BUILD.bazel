@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/tree_hash",
     "//rs/types/types",
-    "@crate_index//:chrono",
     "@crate_index//:hex",
     "@crate_index//:thiserror",
 ]

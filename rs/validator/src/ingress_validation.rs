@@ -461,15 +461,11 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
         })?;
     if !(min_allowed_expiry <= provided_expiry && provided_expiry <= max_allowed_expiry) {
         let msg = format!(
-            "Specified ingress_expiry not within expected range:\n\
-             Minimum allowed expiry: {}\n\
-             Maximum allowed expiry: {}\n\
-             Provided expiry:        {}\n\
-             Local replica time:     {}",
-            min_allowed_expiry,
-            max_allowed_expiry,
-            provided_expiry,
-            chrono::Utc::now(),
+            "Specified ingress_expiry not within expected range: \
+             Minimum allowed expiry: {}, \
+             Maximum allowed expiry: {}, \
+             Provided expiry:        {}",
+            min_allowed_expiry, max_allowed_expiry, provided_expiry
         );
         return Err(InvalidIngressExpiry(msg));
     }

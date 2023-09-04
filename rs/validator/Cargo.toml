@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4"
 hex = "0.4.2"
 ic-constants = { path = "../constants" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
