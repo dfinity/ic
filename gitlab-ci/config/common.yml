@@ -225,12 +225,3 @@ after_script:
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
-
-# Rule for triggering SNS tests
-.rules-simple-prober:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME == "precious-automation/run-simple-prober-v4"'
-
-.rules-scheduled-reproducibility:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
