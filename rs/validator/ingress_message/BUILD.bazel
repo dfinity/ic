@@ -6,7 +6,6 @@ DEPENDENCIES = [
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/utils/threshold_sig_der",
-    "//rs/interfaces",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/types",
     "//rs/validator",

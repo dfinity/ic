@@ -11,7 +11,6 @@ hex = "0.4.2"
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-standalone-sig-verifier = { path = "../../crypto/standalone-sig-verifier" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
-ic-interfaces = { path = "../../interfaces" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
 
