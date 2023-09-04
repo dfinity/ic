@@ -313,7 +313,7 @@ git fetch --quiet origin "$git_hash"
 git checkout --quiet "$git_hash"
 
 log "Build IC-OS"
-./gitlab-ci/container/build-ic.sh --icos >/dev/null
+./gitlab-ci/container/build-ic.sh --icos
 log_success "Built IC-OS successfully"
 
 mv artifacts/icos/guestos/update-img.tar.gz "$dev_out"
