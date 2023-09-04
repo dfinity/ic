@@ -1,5 +1,5 @@
 {
-  "checksum": "c3983ab56b5e9e10fc15aa51e1ed46fb4bd70b2e99d7bd2b31477b04d165eaef",
+  "checksum": "e6b89f2f3724ae78c66ab72d763df20457b4a2f10c84cb42ebee44b050a49dfa",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -26871,12 +26871,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -26910,12 +26925,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2021",
         "version": "0.4.3"
