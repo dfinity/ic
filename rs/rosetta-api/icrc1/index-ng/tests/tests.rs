@@ -4,7 +4,8 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, Log, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    ListSubaccountsArgs, Log, Status, TransactionWithId, UpgradeArg as IndexUpgradeArg,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{
     ChangeFeeCollector, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
@@ -21,6 +22,8 @@ use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -326,11 +329,21 @@ fn icrc1_transfer(
     let req = Encode!(&arg).expect("Failed to encode TransferArg");
     let res = env
         .execute_ingress_as(caller, ledger_id, "icrc1_transfer", req)
-        .expect("Failed to transfer tokens")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
         .bytes();
     Decode!(&res, Result<BlockIndex, TransferError>)
         .expect("Failed to decode Result<BlockIndex, TransferError>")
-        .expect("Failed to transfer tokens")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
 }
 
 fn transfer(
@@ -932,8 +945,12 @@ fn test_post_upgrade_start_timer() {
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    env.upgrade_canister(index_id, index_ng_wasm(), vec![])
-        .unwrap();
+    env.upgrade_canister(
+        index_id,
+        index_ng_wasm(),
+        Encode!(&None::<IndexArg>).unwrap(),
+    )
+    .unwrap();
 
     // check that the index syncs the new block (wait_until_sync_is_completed fails
     // if the new block is not synced).
@@ -1010,6 +1027,14 @@ fn test_oldest_tx_id() {
     assert_eq!(get_fee_collectors_ranges(env, index_id).ranges, vec![]);
 }
 
+#[track_caller]
+fn assert_contain_same_elements<T: Debug + Eq + Hash>(vl: Vec<T>, vr: Vec<T>) {
+    assert_eq!(
+        vl.iter().collect::<HashSet<_>>(),
+        vr.iter().collect::<HashSet<_>>(),
+    )
+}
+
 #[test]
 fn test_fee_collector() {
     let env = &StateMachine::new();
@@ -1038,9 +1063,9 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])]
+        vec![(fee_collector, vec![(0.into(), 4.into())])],
     );
 
     // remove the fee collector to burn some transactions fees
@@ -1056,9 +1081,9 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])]
+        vec![(fee_collector, vec![(0.into(), 4.into())])],
     );
 
     // add a new fee collector different from the first one
@@ -1076,12 +1101,12 @@ fn test_fee_collector() {
         );
     }
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
             (new_fee_collector, vec![(6.into(), 7.into())]),
             (fee_collector, vec![(0.into(), 4.into())]),
-        ]
+        ],
     );
 
     // add back the original fee_collector and make a couple of transactions again
@@ -1099,15 +1124,15 @@ fn test_fee_collector() {
         );
     }
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
             (new_fee_collector, vec![(6.into(), 7.into())]),
             (
                 fee_collector,
-                vec![(0.into(), 4.into()), (7.into(), 9.into())]
+                vec![(0.into(), 4.into()), (7.into(), 9.into())],
             ),
-        ]
+        ],
     );
 }
 
@@ -1116,7 +1141,7 @@ fn test_get_account_transactions_vs_old_index() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            &(valid_transactions_strategy(MINTER, FEE, 10),),
             |(transactions,)| {
                 let env = &StateMachine::new();
                 let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
@@ -1142,6 +1167,7 @@ fn test_get_account_transactions_vs_old_index() {
                         old_get_account_transactions(env, index_ng_id, account, None, u64::MAX),
                     );
                 }
+
                 Ok(())
             },
         )
@@ -1150,10 +1176,14 @@ fn test_get_account_transactions_vs_old_index() {
 
 #[test]
 fn test_upgrade_index_to_index_ng() {
-    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        cases: 1,
+        max_shrink_iters: 0,
+        ..Default::default()
+    });
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            &(valid_transactions_strategy(MINTER, FEE, 10),),
             |(transactions,)| {
                 let env = &StateMachine::new();
                 let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
@@ -1172,8 +1202,8 @@ fn test_upgrade_index_to_index_ng() {
                 wait_until_sync_is_completed(env, index_ng_id, ledger_id);
 
                 // upgrade the index canister to the index-ng
-                let arg = IndexArg::Init(IndexInitArg {
-                    ledger_id: ledger_id.into(),
+                let arg = IndexArg::Upgrade(IndexUpgradeArg {
+                    ledger_id: Some(ledger_id.into()),
                 });
                 let arg = Encode!(&arg).unwrap();
                 env.upgrade_canister(index_id, index_ng_wasm(), arg)

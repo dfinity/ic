@@ -10,11 +10,17 @@ pub const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 #[derive(CandidType, Debug, Deserialize)]
 pub enum IndexArg {
     Init(InitArg),
+    Upgrade(UpgradeArg),
 }
 
 #[derive(CandidType, Debug, Deserialize)]
 pub struct InitArg {
     pub ledger_id: Principal,
+}
+
+#[derive(CandidType, Debug, Deserialize)]
+pub struct UpgradeArg {
+    pub ledger_id: Option<Principal>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]

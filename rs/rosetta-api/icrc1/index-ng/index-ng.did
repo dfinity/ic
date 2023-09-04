@@ -4,8 +4,13 @@ type InitArg = record {
     ledger_id: principal;
 };
 
+type UpgradeArg = record {
+    ledger_id: opt principal;
+};
+
 type IndexArg = variant {
     Init: InitArg;
+    Upgrade: UpgradeArg;
 };
 
 type GetBlocksRequest = record {
