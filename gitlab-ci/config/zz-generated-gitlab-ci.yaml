@@ -696,12 +696,6 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "trigger"
       when: manual
-".rules-scheduled-reproducibility":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-".rules-simple-prober":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME == "precious-automation/run-simple-prober-v4"
 ".sns-tests":
   artifacts:
     expire_in: 3 days
@@ -2534,7 +2528,6 @@ build-determinism-release:
     when: always
   extends:
     - ".ubuntu-k8s"
-    - ".rules-scheduled-reproducibility"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs:
@@ -3024,7 +3017,6 @@ build-ic-release:
         - nns.release.env
   extends:
     - ".build-ic"
-    - ".rules-scheduled-reproducibility"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
   needs: []

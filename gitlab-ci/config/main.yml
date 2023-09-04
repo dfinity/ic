@@ -432,7 +432,8 @@ build-ic:
 build-ic-release:
   extends:
     - .build-ic
-    - .rules-scheduled-reproducibility
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
 cargo-lock-generate:
   extends:
@@ -749,7 +750,8 @@ build-determinism:
 build-determinism-release:
   extends:
     - .ubuntu-k8s
-    - .rules-scheduled-reproducibility
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
   needs:
     - job: build-ic-release
   script:
