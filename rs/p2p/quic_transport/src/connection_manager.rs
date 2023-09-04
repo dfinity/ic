@@ -616,7 +616,7 @@ impl ConnectionManager {
                 })
             })?;
             let peer_id = node_id_from_cert_subject_common_name(&tls_pub_key)
-                .map_err(|e| ConnectionEstablishError::MalformedPeerIdentity(e))?;
+                .map_err(ConnectionEstablishError::MalformedPeerIdentity)?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
