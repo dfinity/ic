@@ -6,7 +6,7 @@ use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, Address};
 use ic_cketh_minter::endpoints::WithdrawalError;
 use ic_cketh_minter::endpoints::{
-    Eip1559TransactionPrice, EthTransaction, MinterArg, RetrieveEthRequest, RetrieveEthStatus,
+    Eip1559TransactionPrice, MinterArg, RetrieveEthRequest, RetrieveEthStatus,
 };
 use ic_cketh_minter::eth_logs::report_transaction_error;
 use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory};
@@ -18,8 +18,10 @@ use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonc
 use ic_cketh_minter::state::{
     lazy_call_ecdsa_public_key, mutate_state, read_state, MintedEvent, State, TaskType, STATE,
 };
-use ic_cketh_minter::transactions::PendingEthTransaction;
-use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
+use ic_cketh_minter::transactions::EthWithdrawalRequest;
+use ic_cketh_minter::tx::{
+    estimate_transaction_price, AccessList, ConfirmedEip1559Transaction, Eip1559TransactionRequest,
+};
 use ic_cketh_minter::{eth_logs, eth_rpc};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
@@ -219,71 +221,154 @@ async fn process_retrieve_eth_requests() {
             return;
         }
     };
-    sign_pending_eth_transactions().await;
-    send_signed_eth_transactions().await;
-}
 
-async fn sign_pending_eth_transactions() {
-    let tx_to_sign = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_sign());
-    log!(DEBUG, "{} transactions to sign", tx_to_sign.len());
-    for tx in tx_to_sign {
-        match tx.sign().await {
-            Ok(signed_tx) => {
-                mutate_state(|s| {
-                    log!(DEBUG, "Queueing signed transaction: {signed_tx:?}");
-                    s.pending_retrieve_eth_requests
-                        .replace_with_signed_transaction(signed_tx)
-                        .unwrap_or_else(|e| {
-                            log!(
-                                INFO,
-                                "BUG: failed to replace transaction with signed one: {e}",
-                            );
-                        })
-                });
-            }
-            Err(e) => {
-                log!(INFO, "Failed to sign transaction: {e}");
-            }
-        }
+    let result: Result<(), String> = async {
+        create_transaction().await?;
+        sign_transaction().await?;
+        send_transaction().await?;
+        confirm_transaction().await
+    }
+    .await;
+
+    if let Err(e) = result {
+        log!(
+            DEBUG,
+            "Failed to process ETH retrieval request: {e:?}. Will retry later."
+        );
     }
 }
 
-async fn send_signed_eth_transactions() {
-    let tx_to_send = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_send());
-    log!(DEBUG, "{} transactions to send", tx_to_send.len());
+async fn create_transaction() -> Result<(), String> {
+    let withdrawal_request =
+        match read_state(|s| s.eth_transactions.maybe_process_new_transaction()) {
+            Some(withdrawal_request) => withdrawal_request,
+            None => return Ok(()),
+        };
+    log!(
+        DEBUG,
+        "[process_retrieve_eth_requests]: processing withdrawal request: {withdrawal_request:?}",
+    );
+    let transaction_price = estimate_transaction_price(&eth_fee_history().await);
+    let max_transaction_fee = transaction_price.max_transaction_fee();
+    log!(
+        INFO,
+        "[withdraw]: Estimated max transaction fee: {:?}",
+        max_transaction_fee,
+    );
 
-    for tx in tx_to_send {
-        let result = read_state(EthRpcClient::from_state)
-            .eth_send_raw_transaction(tx.raw_transaction_hex())
-            .await
-            .expect("HTTP call failed");
-        log!(DEBUG, "Sent transaction {tx:?}: {result:?}");
-        match result {
-            JsonRpcResult::Result(tx_result) if tx_result == SendRawTransactionResult::Ok => {
+    let tx_amount = match withdrawal_request
+        .withdrawal_amount
+        .checked_sub(max_transaction_fee)
+    {
+        Some(tx_amount) => tx_amount,
+        None => {
+            mutate_state(|s| {
+                s.eth_transactions
+                    .reschedule_withdrawal_request(withdrawal_request.clone())
+            });
+            return Err(format!(
+                "Insufficient amount in {withdrawal_request:?} to cover transaction fees: {max_transaction_fee:?}. Request moved back to end of queue."
+            ));
+        }
+    };
+
+    let (nonce, chain_id) =
+        mutate_state(|s| (s.get_and_increment_nonce(), s.ethereum_network.chain_id()));
+    let transaction = Eip1559TransactionRequest {
+        chain_id,
+        nonce,
+        max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
+        max_fee_per_gas: transaction_price.max_fee_per_gas,
+        gas_limit: transaction_price.gas_limit,
+        destination: withdrawal_request.destination,
+        amount: tx_amount,
+        data: Vec::new(),
+        access_list: AccessList::new(),
+    };
+    mutate_state(|s| {
+        s.eth_transactions
+            .record_created_transaction(withdrawal_request, transaction.clone())
+    });
+    Ok(())
+}
+
+async fn sign_transaction() -> Result<(), String> {
+    let transaction = match read_state(|s| s.eth_transactions.next_to_sign()) {
+        Some(transaction) => transaction,
+        None => return Ok(()),
+    };
+    log!(DEBUG, "Signing transaction {transaction:?}");
+    match transaction.sign().await {
+        Ok(signed_tx) => {
+            mutate_state(|s| {
+                log!(DEBUG, "Queueing signed transaction: {signed_tx:?}");
+                s.eth_transactions
+                    .record_signed_transaction(signed_tx.clone());
+            });
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+async fn send_transaction() -> Result<(), String> {
+    let signed_tx = match read_state(|s| s.eth_transactions.next_to_send()) {
+        Some(signed_tx) => signed_tx,
+        None => return Ok(()),
+    };
+    let result = read_state(EthRpcClient::from_state)
+        .eth_send_raw_transaction(signed_tx.raw_transaction_hex())
+        .await
+        .expect("HTTP call failed");
+    log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
+    match result {
+        JsonRpcResult::Result(tx_result) if tx_result == SendRawTransactionResult::Ok => {
+            mutate_state(|s| {
+                s.eth_transactions
+                    .record_sent_transaction(signed_tx.clone())
+            });
+            Ok(())
+        }
+        JsonRpcResult::Result(tx_result) => Err(format!(
+            "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
+        )),
+        JsonRpcResult::Error { code, message } => Err(format!(
+            "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
+        )),
+    }
+}
+
+async fn confirm_transaction() -> Result<(), String> {
+    let sent_tx = match read_state(|s| s.eth_transactions.next_to_confirm()) {
+        Some(sent_tx) => sent_tx,
+        None => return Ok(()),
+    };
+    let result = read_state(EthRpcClient::from_state)
+        .eth_get_transaction_by_hash(sent_tx.hash())
+        .await;
+    match result {
+        Ok(Some(tx)) => {
+            if let Some((block_hash, block_number, _transaction_index)) = tx.mined_in_block() {
+                let confirmed_tx =
+                    ConfirmedEip1559Transaction::new(sent_tx, block_hash, block_number);
+                log!(INFO, "Confirmed transaction: {confirmed_tx:?}");
                 mutate_state(|s| {
-                    s.pending_retrieve_eth_requests
-                        .replace_with_sent_transaction(tx)
-                        .unwrap_or_else(|e| {
-                            log!(
-                                INFO,
-                                "BUG: failed to replace transaction with sent one: {e:?}",
-                            );
-                        })
-                })
-            }
-            JsonRpcResult::Result(tx_result) => {
-                log!(
-                    INFO,
-                    "Failed to send transaction {tx:?}: {tx_result:?}. Will retry later.",
-                );
-            }
-            JsonRpcResult::Error { code, message } => {
-                log!(
-                    INFO,
-                    "Failed to send transaction {tx:?}: {message} (error code = {code}). Will retry later.",
-                );
+                    s.eth_transactions
+                        .record_confirmed_transaction(confirmed_tx.clone())
+                });
+                Ok(())
+            } else {
+                Err(format!(
+                    "Transaction {sent_tx:?} found but not confirmed yet. Will retry later.",
+                ))
             }
         }
+        Ok(None) => Err(format!(
+            "Transaction {sent_tx:?} not found. Will retry later.",
+        )),
+        Err(e) => Err(format!(
+            "Failed to get transaction by hash {sent_tx:?}: {e:?}. Will retry later.",
+        )),
     }
 }
 
@@ -404,56 +489,23 @@ async fn withdraw(amount: Nat, recipient: String) -> Result<RetrieveEthRequest, 
     {
         Ok(Ok(block_index)) => {
             let ledger_burn_index = LedgerBurnIndex::new(block_index);
-
-            log!(
-                INFO,
-                "[withdraw]: {} withdrawing {:?} wei to {:?}",
-                caller,
-                amount,
-                destination
-            );
-
-            let transaction_price = estimate_transaction_price(&eth_fee_history().await);
-            let max_transaction_fee = transaction_price.max_transaction_fee();
-            log!(
-                INFO,
-                "[withdraw]: Estimated max transaction fee: {:?}",
-                max_transaction_fee,
-            );
-
-            if max_transaction_fee >= amount {
-                ic_cdk::trap(&format!(
-                    "WARN: skipping transaction since fee {:?} is at least the amount {:?} to be withdrawn",
-                    max_transaction_fee, amount
-                ));
-            }
-            let tx_amount = amount.checked_sub(max_transaction_fee).expect(
-                "BUG: should not happen due to previous check that amount > max_transaction_fee",
-            );
-
-            let (nonce, chain_id) =
-                mutate_state(|s| (s.get_and_increment_nonce(), s.ethereum_network.chain_id()));
-            let transaction = Eip1559TransactionRequest {
-                chain_id,
-                nonce,
-                max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-                max_fee_per_gas: transaction_price.max_fee_per_gas,
-                gas_limit: transaction_price.gas_limit,
+            let withdrawal_request = EthWithdrawalRequest {
+                withdrawal_amount: amount,
                 destination,
-                amount: tx_amount,
-                data: Vec::new(),
-                access_list: AccessList::new(),
+                ledger_burn_index,
             };
+
             log!(
                 INFO,
-                "[withdraw]: queuing transaction: {:?} for signing",
-                transaction,
+                "[withdraw]: queuing withdrawal request {:?}",
+                withdrawal_request,
             );
-            mutate_state(|s| s.record_retrieve_eth_request(ledger_burn_index, transaction));
 
-            Ok(RetrieveEthRequest {
-                block_index: candid::Nat::from(block_index),
-            })
+            mutate_state(|s| {
+                s.eth_transactions
+                    .record_withdrawal_request(withdrawal_request.clone())
+            });
+            Ok(RetrieveEthRequest::from(withdrawal_request))
         }
         Ok(Err(error)) => {
             log!(
@@ -488,7 +540,7 @@ async fn eth_fee_history() -> FeeHistory {
     read_state(EthRpcClient::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
-            highest_block: BlockSpec::Tag(BlockTag::Finalized),
+            highest_block: BlockSpec::Tag(BlockTag::Latest),
             reward_percentiles: vec![20],
         })
         .await
@@ -500,20 +552,7 @@ async fn eth_fee_history() -> FeeHistory {
 #[candid_method(update)]
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     let ledger_burn_index = LedgerBurnIndex::new(block_index);
-    let transaction = read_state(|s| {
-        s.pending_retrieve_eth_requests
-            .find_by_burn_index(ledger_burn_index)
-    });
-    match transaction {
-        Some(PendingEthTransaction::NotSigned(_)) => RetrieveEthStatus::PendingSigning,
-        Some(PendingEthTransaction::Signed(tx)) => RetrieveEthStatus::Signed(EthTransaction {
-            transaction_hash: tx.hash().to_string(),
-        }),
-        Some(PendingEthTransaction::Sent(tx)) => RetrieveEthStatus::Sent(EthTransaction {
-            transaction_hash: tx.hash().to_string(),
-        }),
-        None => RetrieveEthStatus::NotFound,
-    }
+    read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
 }
 
 #[post_upgrade]

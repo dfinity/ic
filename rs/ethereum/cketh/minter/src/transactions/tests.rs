@@ -1,235 +1,146 @@
 use crate::address::Address;
-use crate::eth_rpc::Quantity;
-use crate::numeric::{TransactionNonce, Wei};
-use crate::tx::{AccessList, Eip1559Signature, Eip1559TransactionRequest};
+use crate::eth_rpc::{BlockNumber, Hash, Quantity};
+use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
+use crate::transactions::EthWithdrawalRequest;
+use crate::tx::{
+    AccessList, ConfirmedEip1559Transaction, Eip1559Signature, Eip1559TransactionRequest,
+    SignedEip1559TransactionRequest,
+};
 
-mod pending_eth_transactions_insert {
+mod eth_transactions {
+    use crate::endpoints::{EthTransaction, RetrieveEthStatus};
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-    use crate::transactions::tests::eip_1559_transaction_request_with_nonce;
-    use crate::transactions::PendingEthTransactions;
-    use assert_matches::assert_matches;
-
-    #[test]
-    fn should_insert_transaction_with_incrementing_nonce() {
-        let nonce_tx_1 = TransactionNonce::from(10);
-        let mut transactions = PendingEthTransactions::new(nonce_tx_1);
-
-        assert_eq!(
-            transactions.insert(
-                LedgerBurnIndex::new(0),
-                eip_1559_transaction_request_with_nonce(nonce_tx_1)
-            ),
-            Ok(())
-        );
-        assert_eq!(
-            transactions.next_nonce,
-            nonce_tx_1.checked_increment().unwrap()
-        );
-
-        let nonce_tx_2 = TransactionNonce::from(11);
-        assert_eq!(
-            transactions.insert(
-                LedgerBurnIndex::new(1),
-                eip_1559_transaction_request_with_nonce(nonce_tx_2)
-            ),
-            Ok(())
-        );
-        assert_eq!(
-            transactions.next_nonce,
-            nonce_tx_2.checked_increment().unwrap()
-        );
-    }
-
-    #[test]
-    fn should_fail_when_duplicate_ledger_burn_index() {
-        let mut transactions = PendingEthTransactions::new(TransactionNonce::from(1));
-        let duplicate_index = LedgerBurnIndex::new(10);
-        assert_eq!(
-            transactions.insert(
-                duplicate_index,
-                eip_1559_transaction_request_with_nonce(TransactionNonce::from(1))
-            ),
-            Ok(())
-        );
-        assert_eq!(
-            transactions.insert(
-                LedgerBurnIndex::new(20),
-                eip_1559_transaction_request_with_nonce(TransactionNonce::from(2))
-            ),
-            Ok(())
-        );
-
-        let result = transactions.insert(
-            duplicate_index,
-            eip_1559_transaction_request_with_nonce(TransactionNonce::from(3)),
-        );
-
-        assert_matches!(result, Err(msg) if msg.contains("burn index"));
-    }
-
-    #[test]
-    fn should_fail_when_nonce_out_of_order() {
-        let mut transactions = PendingEthTransactions::new(TransactionNonce::from(0));
-
-        for nonce in 0..=3 {
-            assert_eq!(
-                transactions.insert(
-                    LedgerBurnIndex::new(10 + nonce),
-                    eip_1559_transaction_request_with_nonce(TransactionNonce::from(nonce))
-                ),
-                Ok(())
-            );
-        }
-
-        let result_with_skipped_nonce = transactions.insert(
-            LedgerBurnIndex::new(20),
-            eip_1559_transaction_request_with_nonce(TransactionNonce::from(5)),
-        );
-        assert_matches!(result_with_skipped_nonce, Err(msg) if msg.contains("nonce"));
-
-        let result_with_duplicate_nonce = transactions.insert(
-            LedgerBurnIndex::new(20),
-            eip_1559_transaction_request_with_nonce(TransactionNonce::from(3)),
-        );
-        assert_matches!(result_with_duplicate_nonce, Err(msg) if msg.contains("nonce"));
-    }
-
-    #[test]
-    fn should_keep_next_nonce_value_when_transaction_removed() {
-        let mut transactions = PendingEthTransactions::new(TransactionNonce::from(0));
-
-        for nonce in 0..=3 {
-            assert_eq!(
-                transactions.insert(
-                    LedgerBurnIndex::new(10 + nonce),
-                    eip_1559_transaction_request_with_nonce(TransactionNonce::from(nonce))
-                ),
-                Ok(())
-            );
-        }
-
-        assert_eq!(transactions.next_nonce, TransactionNonce::from(4));
-        //TODO: FI-867 use public method to remove finalized transactions
-        transactions.by_burn_index.remove(&LedgerBurnIndex::new(13));
-        assert_eq!(transactions.next_nonce, TransactionNonce::from(4));
-    }
-}
-
-mod transactions_to_sign {
-    use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-    use crate::transactions::tests::eip_1559_transaction_request_with_nonce;
-    use crate::transactions::PendingEthTransactions;
-    use crate::tx::Eip1559TransactionRequest;
-
-    #[test]
-    fn should_be_empty_when_no_transactions() {
-        let transactions = PendingEthTransactions::new(TransactionNonce::from(0));
-        assert_eq!(
-            transactions.transactions_to_sign(),
-            Vec::<Eip1559TransactionRequest>::new()
-        );
-    }
-
-    #[test]
-    fn should_sort_transactions_by_nonce_value() {
-        let mut transactions = PendingEthTransactions::new(TransactionNonce::from(10));
-        let tx_1 = eip_1559_transaction_request_with_nonce(TransactionNonce::from(10));
-        let tx_2 = eip_1559_transaction_request_with_nonce(TransactionNonce::from(11));
-        let tx_3 = eip_1559_transaction_request_with_nonce(TransactionNonce::from(12));
-        assert_eq!(
-            transactions.insert(LedgerBurnIndex::new(100), tx_1.clone()),
-            Ok(())
-        );
-        assert_eq!(
-            transactions.insert(LedgerBurnIndex::new(10), tx_2.clone()),
-            Ok(())
-        );
-        assert_eq!(
-            transactions.insert(LedgerBurnIndex::new(1000), tx_3.clone()),
-            Ok(())
-        );
-
-        let to_sign = transactions.transactions_to_sign();
-
-        assert_eq!(to_sign, vec![tx_1, tx_2, tx_3]);
-    }
-}
-
-mod find_by_burn_index {
-    use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-    use crate::transactions::tests::{dummy_signature, eip_1559_transaction_request_with_nonce};
-    use crate::transactions::{PendingEthTransaction, PendingEthTransactions};
+    use crate::transactions::tests::{
+        confirmed_transaction, dummy_signature, eip_1559_transaction_request_with_nonce,
+        expect_panic_with_message, withdrawal_request_with_index,
+    };
+    use crate::transactions::EthTransactions;
     use crate::tx::SignedEip1559TransactionRequest;
 
     #[test]
-    fn should_return_none_when_empty() {
-        let transactions = PendingEthTransactions::new(TransactionNonce::from(0));
-        assert_eq!(
-            transactions.find_by_burn_index(LedgerBurnIndex::new(0)),
-            None
-        );
-    }
-
-    #[test]
-    fn should_find_transaction() {
-        let mut transactions = PendingEthTransactions::new(TransactionNonce::from(1));
-        let (index_1, tx_1) = (
-            LedgerBurnIndex::new(10),
-            eip_1559_transaction_request_with_nonce(TransactionNonce::from(1)),
-        );
-        let (index_2, tx_2) = (
-            LedgerBurnIndex::new(20),
-            eip_1559_transaction_request_with_nonce(TransactionNonce::from(2)),
-        );
-        assert_eq!(transactions.insert(index_1, tx_1.clone()), Ok(()));
-        assert_eq!(transactions.insert(index_2, tx_2.clone()), Ok(()));
-
-        let found_tx = transactions.find_by_burn_index(index_1);
-
-        assert_eq!(found_tx, Some(PendingEthTransaction::NotSigned(tx_1)));
-    }
-
-    #[test]
-    fn should_not_find_transaction_with_wrong_index() {
-        let mut transactions = PendingEthTransactions::new(TransactionNonce::from(0));
-        let index = 10;
-        assert_eq!(
-            transactions.insert(
-                LedgerBurnIndex::new(index),
-                eip_1559_transaction_request_with_nonce(TransactionNonce::from(0))
-            ),
-            Ok(())
-        );
+    fn should_withdrawal_flow_succeed_with_correct_status() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        let index = LedgerBurnIndex::new(15);
 
         assert_eq!(
-            transactions.find_by_burn_index(LedgerBurnIndex::new(index + 1)),
-            None
+            transactions.transaction_status(&index),
+            RetrieveEthStatus::NotFound
         );
-    }
-
-    #[test]
-    fn should_find_transaction_with_same_burn_index_after_being_replaced_with_signed_transaction() {
-        let nonce = TransactionNonce::from(1);
-        let mut transactions = PendingEthTransactions::new(nonce);
-        let index = LedgerBurnIndex::new(10);
-        let tx = eip_1559_transaction_request_with_nonce(nonce);
-        assert_eq!(transactions.insert(index, tx.clone()), Ok(()));
-
+        let withdrawal_request = withdrawal_request_with_index(index);
+        transactions.record_withdrawal_request(withdrawal_request.clone());
         assert_eq!(
-            transactions.find_by_burn_index(index),
-            Some(PendingEthTransaction::NotSigned(tx.clone()))
+            transactions.transaction_status(&index),
+            RetrieveEthStatus::Pending
+        );
+
+        let tx = eip_1559_transaction_request_with_nonce(TransactionNonce::ZERO);
+        transactions.record_created_transaction(withdrawal_request, tx.clone());
+        assert_eq!(
+            transactions.transaction_status(&index),
+            RetrieveEthStatus::TxCreated
         );
 
         let signed_tx = SignedEip1559TransactionRequest::from((tx, dummy_signature()));
+        let expected_hash = EthTransaction {
+            transaction_hash: "0xbe3a7b0639afd4b7883f0303abcf6133140c7c1d9f574028e17d9efc8c27e0c4"
+                .to_string(),
+        };
+        transactions.record_signed_transaction(signed_tx.clone());
         assert_eq!(
-            transactions.replace_with_signed_transaction(signed_tx.clone()),
-            Ok(())
+            transactions.transaction_status(&index),
+            RetrieveEthStatus::TxSigned(expected_hash.clone())
         );
 
+        transactions.record_sent_transaction(signed_tx.clone());
         assert_eq!(
-            transactions.find_by_burn_index(index),
-            Some(PendingEthTransaction::Signed(signed_tx))
+            transactions.transaction_status(&index),
+            RetrieveEthStatus::TxSent(expected_hash.clone())
         );
+
+        let confirmed_tx = confirmed_transaction(signed_tx);
+        transactions.record_confirmed_transaction(confirmed_tx);
+        assert_eq!(
+            transactions.transaction_status(&index),
+            RetrieveEthStatus::TxConfirmed(expected_hash)
+        );
+    }
+
+    #[test]
+    fn should_panic_when_trying_to_record_transaction_if_one_already_pending() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        let index = LedgerBurnIndex::new(15);
+        let first_request = withdrawal_request_with_index(index);
+        transactions.record_withdrawal_request(first_request.clone());
+        let second_request = withdrawal_request_with_index(LedgerBurnIndex::new(16));
+        transactions.record_withdrawal_request(second_request.clone());
+        let first_tx = eip_1559_transaction_request_with_nonce(TransactionNonce::ZERO);
+        transactions.record_created_transaction(first_request, first_tx.clone());
+
+        let second_tx = eip_1559_transaction_request_with_nonce(
+            TransactionNonce::ZERO.checked_increment().unwrap(),
+        );
+        expect_panic_with_message(
+            || transactions.record_created_transaction(second_request, second_tx),
+            "pending transaction already exists",
+        );
+    }
+
+    #[test]
+    fn should_reschedule_withdrawal_request() {
+        let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+        let first_request = withdrawal_request_with_index(LedgerBurnIndex::new(15));
+        let second_request = withdrawal_request_with_index(LedgerBurnIndex::new(16));
+        let third_request = withdrawal_request_with_index(LedgerBurnIndex::new(17));
+        transactions.record_withdrawal_request(first_request.clone());
+        transactions.record_withdrawal_request(second_request.clone());
+        transactions.record_withdrawal_request(third_request.clone());
+
+        // 3 -> 2 -> 1
+        assert_eq!(
+            transactions.maybe_process_new_transaction(),
+            Some(first_request.clone())
+        );
+
+        transactions.reschedule_withdrawal_request(first_request.clone());
+        // 1 -> 3 -> 2
+        assert_eq!(
+            transactions.maybe_process_new_transaction(),
+            Some(second_request.clone())
+        );
+
+        transactions.reschedule_withdrawal_request(second_request);
+        // 2 -> 1 -> 3
+        assert_eq!(
+            transactions.maybe_process_new_transaction(),
+            Some(third_request.clone())
+        );
+
+        transactions.reschedule_withdrawal_request(third_request);
+        // 3 -> 2 -> 1
+        assert_eq!(
+            transactions.maybe_process_new_transaction(),
+            Some(first_request)
+        );
+    }
+}
+
+fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expected_message: &str) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    let panic_message = *result.unwrap_err().downcast_ref::<&str>().unwrap();
+    assert!(
+        panic_message.contains(expected_message),
+        "Expected panic message to contain: {}, but got: {}",
+        expected_message,
+        panic_message
+    );
+}
+
+fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
+    use std::str::FromStr;
+    EthWithdrawalRequest {
+        ledger_burn_index,
+        destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
+        withdrawal_amount: Wei::new(1_100_000_000_000_000),
     }
 }
 
@@ -250,6 +161,18 @@ fn eip_1559_transaction_request_with_nonce(nonce: TransactionNonce) -> Eip1559Tr
         .unwrap(),
         access_list: AccessList::new(),
     }
+}
+
+fn confirmed_transaction(
+    signed_tx: SignedEip1559TransactionRequest,
+) -> ConfirmedEip1559Transaction {
+    use std::str::FromStr;
+    ConfirmedEip1559Transaction::new(
+        signed_tx,
+        Hash::from_str("0xce67a85c9fb8bc50213815c32814c159fd75160acf7cb8631e8e7b7cf7f1d472")
+            .unwrap(),
+        BlockNumber::new(4190269),
+    )
 }
 
 fn dummy_signature() -> Eip1559Signature {

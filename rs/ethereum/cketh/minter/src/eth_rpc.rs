@@ -206,8 +206,15 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn is_confirmed(&self) -> bool {
-        self.block_hash.is_some() && self.block_number.is_some() && self.transaction_index.is_some()
+    /// If the transaction was mined in a block returns the corresponding block hash,
+    /// block number and transaction index.
+    pub fn mined_in_block(&self) -> Option<(Hash, BlockNumber, Quantity)> {
+        match (self.block_hash, self.block_number, self.transaction_index) {
+            (Some(block_hash), Some(block_number), Some(transaction_index)) => {
+                Some((block_hash, block_number, transaction_index))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -408,7 +415,7 @@ impl HttpResponsePayload for FeeHistory {
 
 impl HttpResponsePayload for Wei {}
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct BlockNumber(pub Quantity);
 

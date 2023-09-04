@@ -1,6 +1,8 @@
+use crate::transactions::EthWithdrawalRequest;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use serde::Serialize;
+use std::fmt::{Display, Formatter};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct InitArg {
@@ -40,8 +42,7 @@ pub struct Eip1559TransactionPrice {
     pub max_fee_per_gas: Nat,
     pub gas_limit: Nat,
 }
-
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {
     pub transaction_hash: String,
 }
@@ -51,12 +52,35 @@ pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Deserialize)]
+impl From<EthWithdrawalRequest> for RetrieveEthRequest {
+    fn from(value: EthWithdrawalRequest) -> Self {
+        Self {
+            block_index: candid::Nat::from(value.ledger_burn_index.get()),
+        }
+    }
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum RetrieveEthStatus {
     NotFound,
-    PendingSigning,
-    Signed(EthTransaction),
-    Sent(EthTransaction),
+    Pending,
+    TxCreated,
+    TxSigned(EthTransaction),
+    TxSent(EthTransaction),
+    TxConfirmed(EthTransaction),
+}
+
+impl Display for RetrieveEthStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RetrieveEthStatus::NotFound => write!(f, "Not Found"),
+            RetrieveEthStatus::Pending => write!(f, "Pending"),
+            RetrieveEthStatus::TxCreated => write!(f, "Created"),
+            RetrieveEthStatus::TxSigned(tx) => write!(f, "Signed({})", tx.transaction_hash),
+            RetrieveEthStatus::TxSent(tx) => write!(f, "Sent({})", tx.transaction_hash),
+            RetrieveEthStatus::TxConfirmed(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+        }
+    }
 }
 
 #[derive(CandidType)]
