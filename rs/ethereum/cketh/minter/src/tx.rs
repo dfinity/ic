@@ -1,5 +1,5 @@
 use crate::address::Address;
-use crate::eth_rpc::{FeeHistory, Hash, Quantity};
+use crate::eth_rpc::{BlockNumber, FeeHistory, Hash, Quantity};
 use crate::numeric::{TransactionNonce, Wei};
 use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
@@ -95,6 +95,39 @@ pub struct SignedEip1559TransactionRequest {
     signature: Eip1559Signature,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+pub struct ConfirmedEip1559Transaction {
+    transaction: SignedEip1559TransactionRequest,
+    block_hash: Hash,
+    block_number: BlockNumber,
+}
+
+impl ConfirmedEip1559Transaction {
+    pub fn new(
+        transaction: SignedEip1559TransactionRequest,
+        block_hash: Hash,
+        block_number: BlockNumber,
+    ) -> Self {
+        Self {
+            transaction,
+            block_hash,
+            block_number,
+        }
+    }
+
+    pub fn signed_transaction(&self) -> &SignedEip1559TransactionRequest {
+        &self.transaction
+    }
+
+    pub fn transaction(&self) -> &Eip1559TransactionRequest {
+        &self.transaction.transaction
+    }
+
+    pub fn block_number(&self) -> BlockNumber {
+        self.block_number
+    }
+}
+
 impl From<(Eip1559TransactionRequest, Eip1559Signature)> for SignedEip1559TransactionRequest {
     fn from((transaction, signature): (Eip1559TransactionRequest, Eip1559Signature)) -> Self {
         Self {
@@ -131,6 +164,10 @@ impl SignedEip1559TransactionRequest {
     /// If included in a block, this hash value is used as reference to this transaction.
     pub fn hash(&self) -> Hash {
         Hash(ic_crypto_sha3::Keccak256::hash(self.raw_bytes()))
+    }
+
+    pub fn transaction(&self) -> &Eip1559TransactionRequest {
+        &self.transaction
     }
 
     pub fn nonce(&self) -> TransactionNonce {

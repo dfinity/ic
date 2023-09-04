@@ -163,7 +163,73 @@
                 </tbody>
             </table>
             {% endif %}
+
+            <h3>Withdrawal Requests ckETH → ETH</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Ledger Burn Index</th>
+                    <th>Destination</th>
+                    <th>Amount (Wei)</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for withdrawal in withdrawal_requests %}
+                <tr>
+                    <td class="numeric">{{ withdrawal.ledger_burn_index }}</td>
+                    <td>{% call etherscan_address_link(withdrawal.destination) %}</td>
+                    <td class="numeric">{{ withdrawal.withdrawal_amount }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <h3>Pending Transaction ckETH → ETH</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Ledger Burn Index</th>
+                    <th>To</th>
+                    <th>Value (Wei)</th>
+                    <th>Status</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% if let Some(tx) = pending_transaction %}
+                <tr>
+                    <td class="numeric">{{ tx.ledger_burn_index }}</td>
+                    <td>{% call etherscan_address_link(tx.destination) %}</td>
+                    <td class="numeric">{{ tx.transaction_amount }}</td>
+                    <td>{{ tx.status }}</td>
+                </tr>
+                {% endif %}
+                </tbody>
+            </table>
+
+            <h3>Confirmed Transactions ckETH → ETH</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Ledger Burn Index</th>
+                    <th>To</th>
+                    <th>Value (Wei)</th>
+                    <th>Block</th>
+                    <th>Txn Hash</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for tx in confirmed_transactions %}
+                <tr>
+                    <td class="numeric">{{ tx.ledger_burn_index }}</td>
+                    <td>{% call etherscan_address_link(tx.destination) %}</td>
+                    <td class="numeric">{{ tx.transaction_amount }}</td>
+                    <td class="numeric">{% call etherscan_block_link(tx.block_number) %}</td>
+                    <td>{% call etherscan_tx_link(tx.transaction_hash) %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
-    <body>
+    </body>
 </html>

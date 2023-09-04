@@ -19,9 +19,11 @@ type JsonRpcResult = variant {
 type MinterArg = variant { UpgradeArg; InitArg : InitArg };
 type RetrieveEthStatus = variant {
     NotFound;
-    PendingSigning;
-    Signed: record {transaction_hash : text};
-    Sent: record {transaction_hash : text};
+    Pending;
+    TxCreated;
+    TxSigned: record {transaction_hash : text};
+    TxSent: record {transaction_hash : text};
+    TxConfirmed: record {transaction_hash : text};
 };
 type RetrieveEthRequest = record { block_index : nat };
 type WithdrawalError = variant {

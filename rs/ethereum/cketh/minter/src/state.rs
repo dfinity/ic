@@ -3,9 +3,8 @@ use crate::endpoints::{EthereumNetwork, InitArg};
 use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
 use crate::eth_rpc::BlockNumber;
 use crate::logs::DEBUG;
-use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce};
-use crate::transactions::PendingEthTransactions;
-use crate::tx::Eip1559TransactionRequest;
+use crate::numeric::{LedgerMintIndex, TransactionNonce};
+use crate::transactions::EthTransactions;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -42,7 +41,7 @@ pub struct State {
     pub events_to_mint: BTreeSet<ReceivedEthEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, EventSourceError>,
-    pub pending_retrieve_eth_requests: PendingEthTransactions,
+    pub eth_transactions: EthTransactions,
     pub next_transaction_nonce: TransactionNonce,
 
     /// Per-principal lock for pending_retrieve_eth_requests
@@ -74,7 +73,7 @@ impl Default for State {
             invalid_events: Default::default(),
             next_transaction_nonce,
             retrieve_eth_principals: BTreeSet::new(),
-            pending_retrieve_eth_requests: PendingEthTransactions::new(next_transaction_nonce),
+            eth_transactions: EthTransactions::new(next_transaction_nonce),
             active_tasks: Default::default(),
         }
     }
@@ -95,7 +94,7 @@ impl From<InitArg> for State {
             ethereum_network,
             ecdsa_key_name,
             next_transaction_nonce: initial_nonce,
-            pending_retrieve_eth_requests: PendingEthTransactions::new(initial_nonce),
+            eth_transactions: EthTransactions::new(initial_nonce),
             ledger_id,
             ..Self::default()
         }
@@ -169,16 +168,6 @@ impl State {
             .checked_increment()
             .expect("transaction nonce overflow only possible after U256::MAX transactions");
         current_nonce
-    }
-
-    pub fn record_retrieve_eth_request(
-        &mut self,
-        leder_burn_index: LedgerBurnIndex,
-        transaction: Eip1559TransactionRequest,
-    ) {
-        self.pending_retrieve_eth_requests
-            .insert(leder_burn_index, transaction)
-            .expect("failed to insert retrieve eth request");
     }
 
     pub const fn ethereum_network(&self) -> EthereumNetwork {
