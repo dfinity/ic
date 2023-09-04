@@ -1,29 +1,43 @@
 //! Conversion, filtering and encoding of Replicated State as Canonical State.
 //!
-//! The Canonical State is an actually identical representation of the public
-//! parts of a subnet's Replicated State (streams, ingress history, etc.). It is
-//! a way for a subnet’s replicas to express agreement on the externally visible
-//! parts of the deterministic state machine’s Replicated State, by having them
-//! certified by a majority of the subnet’s replicas using threshold signatures.
+//! The Canonical State is a unique, consistent representation of the public
+//! parts of a subnet's  Replicated State (streams, ingress history, etc.)
+//! across all of the subnet's replicas. It is the means by which the replicas
+//! can express agreement on the externally visible parts of the deterministic
+//! state machine’s Replicated State, by having these encoded as Canonical State
+//! and certified by a majority of the subnet’s replicas using threshold
+//! signatures.
 //!
 //! ## Structure
 //!
 //! The Canonical State is conceptually a rose tree with labeled edges,
 //! well-defined structure and well-defined, deterministic (CBOR) encoding of
 //! leaf nodes. It is actually represented as a binary Merkle Tree, constructed
-//! by converting each internal node of the conceptual representation having
+//! by expanding each internal node of the conceptual representation having
 //! more than one child into a binary tree whose left children are all complete
 //! binary trees of maximum size.
+//!
+//! In addition to defining the canonical state tree, the Canonical State also
+//! defines a unique binary encoding for the state tree.
 //!
 //! ## Canonical Versions
 //!
 //! The encoding of the Canonical State must reliably produce identical outputs
-//! across all honest replicas in order for state certification to work.
+//! across all honest replicas in order for state certification to work. But
+//! some changes to the protocol (e.g. adding explicit reject signals to streams
+//! to support response rerouting) necessarily imply changes to the canonical
+//! encoding.
 //!
-//! But some changes to the protocol (e.g. response rerouting via explicit
-//! reject signals in streams) necessarily imply changes to the canonical
-//! encoding. This requires the use of versioning (via numbered certification
-//! versions) and staged rollouts.
+//! In addition to state certification, there are two more situations where
+//! consistent/compatible encoding is required:
+//!
+//!  * Consensus requires a unique root hash (and thus canonical representation)
+//!    for the Canonical State produced in a given round. During replica
+//!    upgrades / downgrades this means that both replica binary versions must
+//!    produce identical canonical encodings of the checkpointed state
+//!
+//! This requires the use of versioning (via numbered
+//! certification versions) and staged rollouts.
 //!
 //! Canonical State versioning involves two related but subtly different
 //! concepts:
