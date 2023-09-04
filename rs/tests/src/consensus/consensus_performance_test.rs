@@ -68,7 +68,7 @@ pub fn setup(env: TestEnv) {
         NnsCustomizations::default(),
     );
     set_authorized_subnets(&env);
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 }
 
 pub fn test_small_messages(env: TestEnv) {

@@ -274,7 +274,7 @@ pub fn setup(env: TestEnv) {
     });
 
     prometheus_thread.join().unwrap();
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 
     nns_state_thread
         .join()

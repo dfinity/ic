@@ -109,7 +109,7 @@ fn setup(env: TestEnv, config: Config) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
 
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv, config: Config) {
