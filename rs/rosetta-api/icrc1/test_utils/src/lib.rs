@@ -10,6 +10,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const E8: u64 = 100_000_000;
@@ -238,10 +239,15 @@ impl TransactionsAndBalances {
         }
         let from = tx.from();
         if from != minter {
-            let amount =
-                tx.transfer_arg.amount + tx.transfer_arg.fee.unwrap_or_else(|| default_fee.into());
-            self.debit(from, amount.0.to_u64().unwrap());
+            let amount = tx.transfer_arg.amount.0.to_u64().unwrap();
+            let fee = tx
+                .transfer_arg
+                .fee
+                .as_ref()
+                .map_or(default_fee, |fee| fee.0.to_u64().unwrap());
+            self.debit(from, amount + fee);
         }
+        self.transactions.push(tx);
     }
 
     fn credit(&mut self, account: Account, amount: u64) {
@@ -271,6 +277,10 @@ impl TransactionsAndBalances {
     }
 }
 
+fn amount_strategy() -> impl Strategy<Value = u64> {
+    0..100_000_000_000u64 // max is 1M ICP
+}
+
 /// Generates a list of valid transaction args with the caller, i.e.
 /// transaction args that the Ledger will accept and that have the
 /// Principal that should send them.
@@ -285,53 +295,75 @@ pub fn valid_transactions_strategy(
     length: usize,
 ) -> impl Strategy<Value = Vec<CallerTransferArg>> {
     fn mint_strategy(minter: Account) -> impl Strategy<Value = CallerTransferArg> {
-        (account_strategy(), any::<u64>()).prop_map(move |(to, amount)| CallerTransferArg {
-            caller: minter.owner,
-            transfer_arg: TransferArg {
-                from_subaccount: minter.subaccount,
-                to,
-                amount: amount.into(),
-                created_at_time: None,
-                fee: None,
-                memo: None,
+        (account_strategy(), amount_strategy()).prop_filter_map(
+            "The minting account is not a valid target for a mint operation",
+            move |(to, amount)| {
+                if to == minter {
+                    None
+                } else {
+                    Some(CallerTransferArg {
+                        caller: minter.owner,
+                        transfer_arg: TransferArg {
+                            from_subaccount: minter.subaccount,
+                            to,
+                            amount: amount.into(),
+                            created_at_time: None,
+                            fee: None,
+                            memo: None,
+                        },
+                    })
+                }
             },
-        })
+        )
     }
 
-    fn burn_or_transfer_strategy(
-        balances: Vec<(Account, u64)>,
+    fn burn_strategy(
+        account_balance: impl Strategy<Value = (Account, u64)>,
         minter: Account,
         default_fee: u64,
     ) -> impl Strategy<Value = CallerTransferArg> {
-        select(balances).prop_flat_map(move |(from, balance)| {
-            (0..=(balance - default_fee + 1)).prop_flat_map(move |amount| {
-                let arb_burn = Just(CallerTransferArg {
-                    caller: from.owner,
-                    transfer_arg: TransferArg {
-                        from_subaccount: from.subaccount,
-                        to: minter,
-                        amount: amount.into(),
-                        created_at_time: None,
-                        fee: Some(default_fee.into()),
-                        memo: None,
-                    },
-                });
-                let arb_transfer = account_strategy().prop_map(move |to| CallerTransferArg {
-                    caller: from.owner,
-                    transfer_arg: TransferArg {
-                        from_subaccount: from.subaccount,
-                        to,
-                        amount: amount.into(),
-                        created_at_time: None,
-                        fee: Some(default_fee.into()),
-                        memo: None,
-                    },
-                });
-                proptest::strategy::Union::new_weighted(vec![
-                    (1, arb_burn.boxed()),
-                    (1000, arb_transfer.boxed()),
-                ])
+        account_balance.prop_flat_map(move |(from, balance)| {
+            // user can burn between the fee, i.e. the minimum, and the total balance
+            (default_fee..=balance).prop_map(move |amount| CallerTransferArg {
+                caller: from.owner,
+                transfer_arg: TransferArg {
+                    from_subaccount: from.subaccount,
+                    to: minter,
+                    amount: amount.into(),
+                    created_at_time: None,
+                    fee: None,
+                    memo: None,
+                },
             })
+        })
+    }
+
+    fn transfer_strategy(
+        account_balance: impl Strategy<Value = (Account, u64)>,
+        minter: Account,
+        default_fee: u64,
+    ) -> impl Strategy<Value = CallerTransferArg> {
+        account_balance.prop_flat_map(move |(from, balance)| {
+            (account_strategy(), 0..=(balance - default_fee)).prop_filter_map(
+                "Self transfers are disabled",
+                move |(to, amount)| {
+                    if to == from || to == minter || from == minter {
+                        None
+                    } else {
+                        Some(CallerTransferArg {
+                            caller: from.owner,
+                            transfer_arg: TransferArg {
+                                from_subaccount: from.subaccount,
+                                to,
+                                amount: amount.into(),
+                                created_at_time: None,
+                                fee: Some(default_fee.into()),
+                                memo: None,
+                            },
+                        })
+                    }
+                },
+            )
         })
     }
 
@@ -342,7 +374,7 @@ pub fn valid_transactions_strategy(
         additional_length: usize,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
-            return Just(TransactionsAndBalances::default()).boxed();
+            return Just(state).boxed();
         }
 
         // The next transaction is based on the non-dust balances in the state.
@@ -350,17 +382,18 @@ pub fn valid_transactions_strategy(
         // transaction possible is minting, otherwise we can also burn or transfer.
 
         let balances = state.non_dust_balances(default_fee);
+        let mint_strategy = mint_strategy(minter).boxed();
 
         let arb_tx = if balances.is_empty() {
-            mint_strategy(minter).boxed()
+            mint_strategy
         } else {
-            // there are many more transfers than burns and mints
+            let account_balance = Rc::new(select(balances));
+            let burn_strategy = burn_strategy(account_balance.clone(), minter, default_fee).boxed();
+            let transfer_strategy = transfer_strategy(account_balance, minter, default_fee).boxed();
             proptest::strategy::Union::new_weighted(vec![
-                (1, mint_strategy(minter).boxed()),
-                (
-                    1000,
-                    burn_or_transfer_strategy(balances, minter, default_fee).boxed(),
-                ),
+                (1, mint_strategy),
+                (1, burn_strategy),
+                (1000, transfer_strategy),
             ])
             .boxed()
         };
@@ -380,4 +413,30 @@ pub fn valid_transactions_strategy(
         length,
     )
     .prop_map(|res| res.transactions)
+}
+
+#[cfg(test)]
+mod tests {
+    use candid::Principal;
+    use icrc_ledger_types::icrc1::account::Account;
+    use proptest::{
+        strategy::{Strategy, ValueTree},
+        test_runner::TestRunner,
+    };
+
+    use crate::valid_transactions_strategy;
+
+    #[test]
+    fn test_valid_transactions_strategy_generates_transaction() {
+        let size = 10;
+        let strategy = valid_transactions_strategy(
+            Account::from(Principal::management_canister()),
+            10_000,
+            size,
+        );
+        let tree = strategy
+            .new_tree(&mut TestRunner::default())
+            .expect("Unable to run valid_transactions_strategy");
+        assert_eq!(tree.current().len(), size)
+    }
 }

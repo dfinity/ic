@@ -242,7 +242,7 @@ fn get_balance(account: Account) -> Tokens {
     with_account_data(|account_data| {
         account_data
             .get(&balance_key(account))
-            .unwrap_or_else(|| Tokens::zero())
+            .unwrap_or_else(Tokens::zero)
     })
 }
 
@@ -284,7 +284,19 @@ fn init(index_arg: Option<IndexArg>) {
 }
 
 #[post_upgrade]
-fn post_upgrade() {
+fn post_upgrade(index_arg: Option<IndexArg>) {
+    match index_arg {
+        Some(IndexArg::Upgrade(arg)) => {
+            if let Some(ledger_id) = arg.ledger_id {
+                mutate_state(|state| {
+                    state.ledger_id = ledger_id;
+                });
+            }
+        }
+        Some(IndexArg::Init(..)) => trap("Index upgrade argument cannot be of variant Init"),
+        _ => (),
+    };
+
     // set the first build_index to be called after init
     set_build_index_timer(Duration::from_secs(0));
 }
