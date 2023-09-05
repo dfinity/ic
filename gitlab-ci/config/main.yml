@@ -157,18 +157,6 @@ bazel-build-fuzzers-archives:
       cd "${CI_PROJECT_DIR}"/bin
       ./build-all-fuzzers.sh --zip
 
-.bazel-rules-pipeline:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate --flaky_test_attempts=3"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-
 .bazel-rules-pipeline-no-merge-train:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
@@ -187,9 +175,18 @@ bazel-build-fuzzers-archives:
 
 .bazel-test-all:
   extends:
-    - .bazel-rules-pipeline
     - .bazel-build-k8s
   needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate --flaky_test_attempts=3"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
   artifacts:
     when: always
     paths:
@@ -460,7 +457,7 @@ pre-commit:
     PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
   extends:
     - .bazel-build-k8s
-    - .bazel-rules-pipeline
+    - .rules-master-pipeline-and-merge-request
   needs: []  # don't wait on other jobs
   tags:
     - dfinity-ic # overwritting so we do not inherit the zh tag
@@ -565,7 +562,7 @@ cargo-clippy-linux:
   needs: []  # don't wait on other jobs
   extends:
     - .bazel-build-k8s
-    - .bazel-rules-pipeline
+    - .rules-master-pipeline-and-merge-request
   tags:
     - dfinity-ic # overwritting so we do not inherit the zh tag
   variables:
@@ -582,7 +579,7 @@ legacy-cargo-check:
   needs: []  # don't wait on other jobs
   extends:
     - .bazel-build-k8s
-    - .bazel-rules-pipeline
+    - .rules-master-pipeline-and-merge-request
   tags:
     - dfinity-ic # overwritting so we do not inherit the zh tag
   script:
@@ -594,7 +591,7 @@ cargo-build-release-linux:
   needs: []  # don't wait on other jobs
   extends:
     - .bazel-build-k8s
-    - .bazel-rules-pipeline
+    - .rules-master-pipeline-and-merge-request
   tags:
     - dfinity-ic # overwritting so we do not inherit the zh tag
   script:
