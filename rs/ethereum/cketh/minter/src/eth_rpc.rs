@@ -179,7 +179,9 @@ pub struct Transaction {
     pub gas: Quantity,
 
     /// Gas price provided by the sender in Wei.
-    pub gas_price: Wei,
+    /// According to the spec this field is deprecated but required.
+    /// However, some providers do not include it.
+    pub gas_price: Option<Wei>,
 
     /// The sender address.
     pub from: Address,

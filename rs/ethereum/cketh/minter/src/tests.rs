@@ -876,7 +876,7 @@ mod eth_get_transaction_by_hash {
                 ),
                 block_number: Some(BlockNumber::new(0x3ca487)),
                 gas: Quantity::new(0xdafd),
-                gas_price: Wei::new(0x59682f0e),
+                gas_price: Some(Wei::new(0x59682f0e)),
                 from: Address::from_str("0xdd2851cdd40ae6536831558dd46db62fac7a844d").unwrap(),
                 hash: Hash::from_str(
                     "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
