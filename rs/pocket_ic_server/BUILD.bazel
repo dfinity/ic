@@ -22,7 +22,6 @@ BIN_DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:hex",
     "@crate_index//:rand_0_8_4",
-    "@crate_index//:atomic-counter",
 ]
 
 # TEST_DEPENDENCIES = [
