@@ -15,10 +15,10 @@ hex = "0.4.2"
 serde_bytes = "0.11"
 serde = "1"
 sha2 = "0.10"
-num-traits = { version = "0.2.12", optional = true }
+num-traits = "0.2.12"
 
 [dev-dependencies]
 hex = "0.4"
 
 [features]
-experimental-api = ["dep:num-traits"]
+experimental-api = []
