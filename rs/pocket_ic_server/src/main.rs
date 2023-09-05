@@ -1,4 +1,3 @@
-use atomic_counter::{AtomicCounter, ConsistentCounter};
 use axum::{
     extract::{Path, State},
     http,
@@ -24,7 +23,10 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use std::time::Instant;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
@@ -47,7 +49,7 @@ pub struct AppState {
     pub instance_map: InstanceMap,
     pub last_request: Arc<RwLock<Instant>>,
     pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
-    pub instances_sequence_counter: Arc<ConsistentCounter>,
+    pub instances_sequence_counter: Arc<AtomicU64>,
     pub runtime: Arc<Runtime>,
 }
 
@@ -109,7 +111,7 @@ async fn start(runtime: Arc<Runtime>) {
         instance_map,
         last_request,
         checkpoints: Arc::new(RwLock::new(HashMap::new())),
-        instances_sequence_counter: ConsistentCounter::new(0).into(),
+        instances_sequence_counter: AtomicU64::new(0).into(),
         runtime,
     };
 
@@ -268,7 +270,7 @@ async fn create_instance(
         .await
         .expect("Failed to launch a state machine");
     let mut guard = instance_map.write().await;
-    let instance_id = counter.inc().to_string();
+    let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
     guard.insert(instance_id.clone(), RwLock::new(sm));
     instance_id
 }
@@ -366,7 +368,7 @@ async fn load_checkpoint(
         .await
         .expect("Failed to launch a state machine");
     let mut instance_map = instance_map.write().await;
-    let instance_id = counter.inc().to_string();
+    let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
     instance_map.insert(instance_id.clone(), RwLock::new(sm));
     (StatusCode::OK, instance_id)
 }
