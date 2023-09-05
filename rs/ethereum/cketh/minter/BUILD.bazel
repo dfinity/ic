@@ -87,6 +87,7 @@ rust_canister(
     ],
     compile_data = [
         "templates/dashboard.html",
+        "templates/principal_to_bytes.js",
     ],
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
