@@ -21,6 +21,7 @@ pub struct HeapGovernanceData {
     pub node_providers: Vec<NodeProvider>,
     pub default_followees: HashMap<i32, Followees>,
     pub short_voting_period_seconds: u64,
+    pub neuron_management_voting_period_seconds: u64,
     pub metrics: Option<GovernanceCachedMetrics>,
     pub most_recent_monthly_node_provider_rewards: Option<MostRecentMonthlyNodeProviderRewards>,
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
@@ -32,6 +33,8 @@ pub struct HeapGovernanceData {
 
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because
 /// we have a dedicated struct NeuronStore owning the heap neurons.
+/// Does not guarantee round-trip equivalence between this and
+/// reassemble_governance_proto if the proto has fields that are None, as they might be filled in by default values.
 pub fn split_governance_proto(
     governance_proto: GovernanceProto,
 ) -> (BTreeMap<u64, Neuron>, HeapGovernanceData) {
@@ -52,6 +55,7 @@ pub fn split_governance_proto(
         node_providers,
         default_followees,
         short_voting_period_seconds,
+        neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
@@ -60,6 +64,10 @@ pub fn split_governance_proto(
         making_sns_proposal,
         migrations,
     } = governance_proto;
+
+    let neuron_management_voting_period_seconds =
+        neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
+
     (
         neurons,
         HeapGovernanceData {
@@ -73,6 +81,7 @@ pub fn split_governance_proto(
             node_providers,
             default_followees,
             short_voting_period_seconds,
+            neuron_management_voting_period_seconds,
             metrics,
             most_recent_monthly_node_provider_rewards,
             cached_daily_maturity_modulation_basis_points,
@@ -84,7 +93,7 @@ pub fn split_governance_proto(
     )
 }
 
-/// Reassemblees the GovernanceProto from the HeapGovernanceData and the neurons, so that
+/// Reassembles the GovernanceProto from the HeapGovernanceData and the neurons, so that
 /// it can be serialized into UPGRADES_MEMORY.
 pub fn reassemble_governance_proto(
     neurons: BTreeMap<u64, Neuron>,
@@ -106,6 +115,7 @@ pub fn reassemble_governance_proto(
         node_providers,
         default_followees,
         short_voting_period_seconds,
+        neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
@@ -114,6 +124,8 @@ pub fn reassemble_governance_proto(
         making_sns_proposal,
         migrations,
     } = heap_governance_proto;
+
+    let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
 
     GovernanceProto {
         neurons,
@@ -127,6 +139,7 @@ pub fn reassemble_governance_proto(
         node_providers,
         default_followees,
         short_voting_period_seconds,
+        neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
@@ -135,4 +148,14 @@ pub fn reassemble_governance_proto(
         making_sns_proposal,
         migrations,
     }
+}
+
+#[test]
+fn private_voting_period_assumed_to_be_48h() {
+    // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
+    let (_, heap_governance_proto) = split_governance_proto(GovernanceProto::default());
+    assert_eq!(
+        heap_governance_proto.neuron_management_voting_period_seconds,
+        48 * 60 * 60
+    );
 }

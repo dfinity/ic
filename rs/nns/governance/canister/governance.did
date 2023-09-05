@@ -144,6 +144,7 @@ type Governance = record {
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
   metrics : opt GovernanceCachedMetrics;
+  neuron_management_voting_period_seconds : opt nat64;
   node_providers : vec NodeProvider;
   cached_daily_maturity_modulation_basis_points : opt int32;
   economics : opt NetworkEconomics;

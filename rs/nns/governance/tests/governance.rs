@@ -1794,6 +1794,7 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
         short_voting_period_seconds: 1,
+        neuron_management_voting_period_seconds: Some(1),
         neurons: btreemap! {
             1 => Neuron {
                 created_timestamp_seconds: 1066,
@@ -2689,6 +2690,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     let wait_for_quiet_threshold_seconds = proposal_expiration_seconds;
     fixture.wait_for_quiet_threshold_seconds = wait_for_quiet_threshold_seconds;
     fixture.short_voting_period_seconds = wait_for_quiet_threshold_seconds;
+    fixture.neuron_management_voting_period_seconds = Some(wait_for_quiet_threshold_seconds);
     let mut gov = Governance::new(
         fixture,
         fake_driver.get_fake_env(),
@@ -2734,7 +2736,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
 
     {
         let info = gov.get_proposal_data(ProposalId { id: 1 }).unwrap();
-        assert_eq!(info.status(), ProposalStatus::Open);
+        assert_eq!(info.status(), ProposalStatus::Open, "{:#?}", info);
         assert_eq!(
             info.reward_status(fake_driver.now(), proposal_expiration_seconds),
             ProposalRewardStatus::Ineligible
@@ -2895,6 +2897,7 @@ async fn test_genesis_in_the_future_in_supported() {
     let mut fixture = fixture_two_neurons_second_is_bigger();
     fixture.wait_for_quiet_threshold_seconds = 2 * REWARD_DISTRIBUTION_PERIOD_SECONDS;
     fixture.short_voting_period_seconds = 13;
+    fixture.neuron_management_voting_period_seconds = Some(13);
     // Let's set genesis
     let genesis_timestamp_seconds = fake_driver.now() + 3 * REWARD_DISTRIBUTION_PERIOD_SECONDS / 2;
     fixture.genesis_timestamp_seconds = genesis_timestamp_seconds;
@@ -3166,6 +3169,7 @@ fn compute_maturities(
             .collect(),
         wait_for_quiet_threshold_seconds: 10,
         short_voting_period_seconds: 10,
+        neuron_management_voting_period_seconds: Some(10),
         economics: Some(NetworkEconomics::default()),
         ..Default::default()
     };
@@ -12616,6 +12620,7 @@ async fn distribute_rewards_load_test() {
         genesis_timestamp_seconds,
         wait_for_quiet_threshold_seconds,
         short_voting_period_seconds: wait_for_quiet_threshold_seconds,
+        neuron_management_voting_period_seconds: Some(wait_for_quiet_threshold_seconds),
 
         proposals: proposal_data_list
             .iter()
@@ -12865,6 +12870,7 @@ async fn make_open_sns_token_swap_proposals_concurrently(proposals: Vec<Proposal
     let fake_driver = fake::FakeDriver::default();
     let fixture = GovernanceProto {
         short_voting_period_seconds: SECONDS_PER_DAY,
+        neuron_management_voting_period_seconds: Some(SECONDS_PER_DAY),
         wait_for_quiet_threshold_seconds: SECONDS_PER_DAY,
         ..fixture_two_neurons_second_is_bigger()
     };
@@ -13368,6 +13374,7 @@ fn compute_closest_proposal_deadline_timestamp_seconds_no_wfq_fallback() {
         GovernanceProto {
             proposals: btreemap! {1 => proposal_1},
             short_voting_period_seconds: 1,
+            neuron_management_voting_period_seconds: Some(1),
             wait_for_quiet_threshold_seconds: proposal_voting_period,
             ..Default::default()
         },
@@ -13417,6 +13424,7 @@ fn compute_closest_proposal_deadline_timestamp_seconds_incorporates_wfq() {
         GovernanceProto {
             proposals: btreemap! {1 => proposal_1},
             short_voting_period_seconds: 1,
+            neuron_management_voting_period_seconds: Some(1),
             wait_for_quiet_threshold_seconds: proposal_voting_period,
             ..Default::default()
         },
@@ -13435,4 +13443,32 @@ fn compute_closest_proposal_deadline_timestamp_seconds_incorporates_wfq() {
         closest_proposal_deadline_timestamp_seconds,
         expected_closest_proposal_deadline_timestamp_seconds,
     );
+}
+
+#[test]
+fn voting_period_seconds_topic_dependency() {
+    let governance_proto = GovernanceProto {
+        short_voting_period_seconds: 1,
+        neuron_management_voting_period_seconds: Some(2),
+        wait_for_quiet_threshold_seconds: 3,
+        ..Default::default()
+    };
+
+    let driver = fake::FakeDriver::default(); // Initialize the minting account
+    let gov = Governance::new(
+        governance_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    let voting_period_fun = gov.voting_period_seconds();
+
+    assert_eq!(voting_period_fun(Topic::ExchangeRate), 1);
+
+    assert_eq!(voting_period_fun(Topic::NeuronManagement), 2);
+
+    assert_eq!(voting_period_fun(Topic::Governance), 3); // any other topic should be 3
+    assert_eq!(voting_period_fun(Topic::NetworkCanisterManagement), 3);
+    assert_eq!(voting_period_fun(Topic::SnsDecentralizationSale), 3);
 }
