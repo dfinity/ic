@@ -265,3 +265,6 @@ RUN \
     rm -rf /etc/nginx/conf.d/default.conf && \
     rm -rf /etc/nginx/sites-enabled/default && \
     rm -rf /etc/nginx/conf.d/default
+
+# Increase the default limit on the number of open files for all systemd services
+RUN sed -i '/^#DefaultLimitNOFILE=/c\DefaultLimitNOFILE=1048576:1048576' /etc/systemd/system.conf
