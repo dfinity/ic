@@ -3,6 +3,7 @@ type FiatCurrency = variant {
     CNY;
     JPY;
     GBP;
+    USD;
 };
 type HttpRequest = record {
   url : text;

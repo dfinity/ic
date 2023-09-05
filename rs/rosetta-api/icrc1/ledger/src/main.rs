@@ -75,6 +75,7 @@ impl LedgerAccess for Access {
     }
 }
 
+#[candid_method(init)]
 #[init]
 fn init(args: LedgerArgument) {
     match args {
@@ -191,7 +192,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -624,13 +624,12 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
-    use std::path::PathBuf;
+    use candid::utils::{service_equal, CandidSource};
 
     let new_interface = __export_service();
-    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let old_interface = manifest_dir.join("ledger.did");
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

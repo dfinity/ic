@@ -588,7 +588,6 @@ fn txid_to_bytes(txid: String) -> Vec<u8> {
 }
 
 #[query]
-#[candid_method(query)]
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response.headers.clear();
     if args.response.status >= 300u64 {
@@ -602,7 +601,6 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -863,7 +861,7 @@ fn test_key_rotation() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_equal, CandidSource};
 
     candid::export_service!();
 
@@ -873,7 +871,7 @@ fn check_candid_interface_compatibility() {
     let old_interface =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("kyt.did");
 
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )
