@@ -145,6 +145,8 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
 
+        // Test certification version V0.
+        state.metadata.certification_version = CertificationVersion::V0;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -176,8 +178,8 @@ mod tests {
             traverse(&state, visitor).0
         );
 
-        // Test new certification version.
-        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
+        // Test certification version V12.
+        state.metadata.certification_version = CertificationVersion::V12;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -188,6 +190,41 @@ mod tests {
                 E::StartSubtree,
                 edge("controller"),
                 E::VisitBlob(controller.get().to_vec()),
+                edge("controllers"),
+                E::VisitBlob(controllers_cbor.clone()),
+                E::EndSubtree, // canister
+                E::EndSubtree, // canisters
+                edge("metadata"),
+                E::VisitBlob(encode_metadata(SystemMetadata {
+                    id_counter: None,
+                    prev_state_hash: None
+                })),
+                edge("request_status"),
+                E::StartSubtree,
+                E::EndSubtree, // request_status
+                edge("streams"),
+                E::StartSubtree,
+                E::EndSubtree, // streams
+                edge("subnet"),
+                E::StartSubtree,
+                E::EndSubtree, // subnets
+                edge("time"),
+                leb_num(0),
+                E::EndSubtree, // global
+            ],
+            traverse(&state, visitor).0
+        );
+
+        // Test current certification version.
+        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
+        let visitor = TracingVisitor::new(NoopVisitor);
+        assert_eq!(
+            vec![
+                E::StartSubtree, // global
+                edge("canister"),
+                E::StartSubtree,
+                E::EnterEdge(canister_id.get().into_vec()),
+                E::StartSubtree,
                 edge("controllers"),
                 E::VisitBlob(controllers_cbor),
                 E::EndSubtree, // canister
@@ -257,6 +294,8 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
 
+        // Test certification version V0.
+        state.metadata.certification_version = CertificationVersion::V0;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -290,7 +329,7 @@ mod tests {
             traverse(&state, visitor).0
         );
 
-        // Test new certification version.
+        // Test certification version V2.
         state.metadata.certification_version = CertificationVersion::V2;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
@@ -331,7 +370,7 @@ mod tests {
             traverse(&state, visitor).0
         );
 
-        // Test new certification version.
+        // Test current certification version.
         state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
@@ -343,8 +382,6 @@ mod tests {
                 E::StartSubtree,
                 edge("certified_data"),
                 E::VisitBlob(vec![]),
-                edge("controller"),
-                E::VisitBlob(controller.get().to_vec()),
                 edge("controllers"),
                 E::VisitBlob(controllers_cbor),
                 edge("metadata"),
