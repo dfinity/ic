@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::timeout;
-use tokio::{sync::RwLock, task::spawn_blocking};
+use tokio::{sync::RwLock, task::spawn_blocking, time};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_millis(150);
@@ -193,7 +192,20 @@ where
     where
         S: Operation<TargetType = T> + Send + 'static,
     {
-        let sync_wait_time = self.inner.sync_wait_time;
+        self.issue_with_timeout(computation, self.inner.sync_wait_time)
+            .await
+    }
+
+    /// Same as [Self::issue] except that the timeout can be specified manually. This is useful in
+    /// cases when clients want to enforce a long-running blocking call.
+    pub async fn issue_with_timeout<S>(
+        &self,
+        computation: Computation<S>,
+        sync_wait_time: Duration,
+    ) -> IssueResult
+    where
+        S: Operation<TargetType = T> + Send + 'static,
+    {
         let st = self.inner.clone();
         let mut instances = st.instances.write().await;
         let (bg_task, busy_outcome) = if let Some(instance_state) =
@@ -210,15 +222,6 @@ where
                 }
                 InstanceState::Available(mocket_ic) => {
                     let state_label = mocket_ic.get_state_label();
-                    // cache lookup
-                    if let Some(cached_computations) =
-                        self.inner.graph.read().await.get(&state_label)
-                    {
-                        if let Some(cached_result) = cached_computations.get(&computation.op.id()) {
-                            return Ok(IssueOutcome::Output(cached_result.1.clone()));
-                        }
-                    }
-                    // cache miss: replace pocket_ic instance in the vector with Busy
                     let op_id = computation.op.id();
                     let busy = InstanceState::Busy {
                         state_label: state_label.clone(),
@@ -264,6 +267,16 @@ where
                             result
                         }
                     });
+
+                    // cache lookup
+                    if let Some(cached_computations) =
+                        self.inner.graph.read().await.get(&state_label)
+                    {
+                        if let Some(cached_result) = cached_computations.get(&op_id) {
+                            return Ok(IssueOutcome::Output(cached_result.1.clone()));
+                        }
+                    }
+                    // cache miss: replace pocket_ic instance in the vector with Busy
                     (bg_task, IssueOutcome::Busy { state_label, op_id })
                 }
             }
@@ -279,7 +292,7 @@ where
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(o) = timeout(sync_wait_time, bg_task).await {
+        if let Ok(o) = time::timeout(sync_wait_time, bg_task).await {
             return Ok(IssueOutcome::Output(o.expect("join failed!")));
         }
         Ok(busy_outcome)

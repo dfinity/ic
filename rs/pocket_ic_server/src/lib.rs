@@ -34,10 +34,9 @@
 //! The start state is a dedicated state that always exists independent of which computations have
 //! been carried out. A state which has no outcoming computations is called a leaf.
 
-pub mod new_api;
-pub mod state;
+pub mod state_api;
 
-use crate::state::OpOut;
+use crate::state_api::state::OpOut;
 use ic_types::time::Time;
 
 /// Represents an identifiable operation on a TargetType.
@@ -91,7 +90,7 @@ struct GetTime {}
 /// A mock implementation of PocketIC, primarily for testing purposes.
 pub mod mocket_ic {
     use super::*;
-    use crate::state::{HasStateLabel, StateLabel};
+    use crate::state_api::state::{HasStateLabel, StateLabel};
     use std::time::Duration;
 
     #[derive(Clone)]
@@ -120,6 +119,25 @@ pub mod mocket_ic {
 
         fn get_time(&self) -> Time {
             self.time
+        }
+    }
+
+    // A no-op that simply blocks the thread for the given duration.
+    #[derive(Clone)]
+    pub struct Delay {
+        pub duration: Duration,
+    }
+
+    impl Operation for Delay {
+        type TargetType = MocketIc;
+
+        fn compute(&self, _mocket_ic: &mut MocketIc) -> OpOut {
+            std::thread::sleep(self.duration);
+            OpOut::NoOutput
+        }
+
+        fn id(&self) -> OpId {
+            OpId(format!("delay: {:?}", self.duration))
         }
     }
 
@@ -184,22 +202,12 @@ pub mod mocket_ic {
 mod tests {
     use super::mocket_ic::*;
     use super::*;
+    use crate::state_api::state::*;
     use tokio::runtime::Runtime;
 
     #[test]
     fn test_api_state() {
-        use crate::state::*;
-
-        let rt = build_runtime();
-
-        let mocket_ic = MocketIc {
-            state: 0,
-            time: Time::from_nanos_since_unix_epoch(0),
-        };
-        let api_state = PocketIcApiStateBuilder::new()
-            .add_initial_instance(mocket_ic)
-            .build();
-
+        let (rt, api_state) = api_with_single_instance();
         let instance_id = 0;
 
         let get_time = GetTime {};
@@ -221,18 +229,7 @@ mod tests {
 
     #[test]
     fn test_polling() {
-        use crate::state::*;
-
-        let rt = build_runtime();
-
-        let mocket_ic = MocketIc {
-            state: 0,
-            time: Time::from_nanos_since_unix_epoch(0),
-        };
-        let api_state = PocketIcApiStateBuilder::new()
-            .add_initial_instance(mocket_ic)
-            .build();
-
+        let (rt, api_state) = api_with_single_instance();
         let instance_id = 0;
 
         let query = QueryOp { payload: 13 };
@@ -253,6 +250,32 @@ mod tests {
                 std::thread::sleep(std::time::Duration::from_millis(300));
             }
         }
+    }
+
+    #[test]
+    fn test_long_request() {
+        let (rt, api_state) = api_with_single_instance();
+        let instance_id = 0;
+
+        let sync_wait_timeout = std::time::Duration::from_secs(2);
+        let delay = Delay {
+            duration: std::time::Duration::from_secs(1),
+        };
+        let IssueOutcome::Output(OpOut::NoOutput) = rt
+            .block_on(api_state.issue_with_timeout(delay.on_instance(instance_id), sync_wait_timeout))
+            .unwrap() else {panic!("result did not match!")};
+    }
+
+    fn api_with_single_instance() -> (Runtime, PocketIcApiState<MocketIc>) {
+        let rt = build_runtime();
+        let mocket_ic = MocketIc {
+            state: 0,
+            time: Time::from_nanos_since_unix_epoch(0),
+        };
+        let api_state = PocketIcApiStateBuilder::new()
+            .add_initial_instance(mocket_ic)
+            .build();
+        (rt, api_state)
     }
 
     fn build_runtime() -> Runtime {
