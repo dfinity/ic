@@ -272,7 +272,10 @@ type Migration = record {
   failure_reason : opt text;
   progress : opt Progress;
 };
-type Migrations = record { neuron_indexes_migration : opt Migration };
+type Migrations = record {
+  neuron_indexes_migration : opt Migration;
+  copy_inactive_neurons_to_stable_memory_migration : opt Migration;
+};
 type MostRecentMonthlyNodeProviderRewards = record {
   timestamp : nat64;
   rewards : vec RewardNodeProvider;

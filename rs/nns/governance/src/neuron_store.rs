@@ -170,6 +170,24 @@ impl NeuronStore {
         &self.heap_neurons
     }
 
+    /// Returns Neurons in heap starting with the first one whose ID is >= begin.
+    ///
+    /// The len of the result is at most limit. It is also maximal; that is, if the return value has
+    /// len < limit, then the caller can assume that there are no more Neurons.
+    pub fn heap_neurons_range_with_begin_and_limit(
+        &self,
+        begin: NeuronId,
+        limit: usize,
+    ) -> Vec<Neuron> {
+        let begin = begin.id;
+
+        self.heap_neurons
+            .range(begin..)
+            .map(|(_id, neuron)| neuron.clone())
+            .take(limit)
+            .collect()
+    }
+
     /// Private method - not intended to be used externally, as we want to over-time hide from
     /// application logic the storage location of the neurons, and only expose operations that
     /// can be done in a performant manner from here.
@@ -267,10 +285,16 @@ impl NeuronStore {
     /// Neuron itself (available here) in order to determine whether it is active or not. Rather,
     /// there are a couple other pieces of data that are needed: locks and open proposals. These are
     /// not available in NeuronStore; Governance has them. This is why the method
-    /// neuron_can_be_archived is in Governance. As a result, batch is constructed by the caller
-    /// (Governance), since it has the aforementioned needed supporting auxiliary data. Of course,
-    /// to do this, Governance still needs some help from self to scan a range of heap neurons based
-    /// on begin, and limit (i.e. batch size).
+    /// neuron_can_be_archived is in Governance.
+    ///
+    /// As a result, batch is constructed by the caller (Governance), since it has the
+    /// aforementioned needed supporting auxiliary data. Of course, to do this, Governance still
+    /// needs some help from self to scan a range of heap neurons based on begin, and limit
+    /// (i.e. batch size). That functionality is provided by heap_neurons_range_with_begin_and_limit
+    ///
+    // Alternatively, we could have caller (Governance) pass the auxilliary data, and make
+    // neuron_can_be_archived independent of Governance, by having it take the data it needs, rather
+    // than have all of Governance at its disposal. need-to-know for the win!
     #[allow(dead_code)]
     pub(crate) fn batch_add_inactive_neurons_to_stable_memory(
         &mut self,
@@ -293,8 +317,8 @@ impl NeuronStore {
                     // TODO(NNS1-2493): We could try to delete neuron from stable_neuron_store, but
                     // it should already not be there. A neuron might already be in
                     // stable_neuron_store if it was previously active, but is now
-                    // inactive. However, in that case, the mutation that cause it to go from active
-                    // to inactive is responsible for deleting the neuron from
+                    // inactive. However, in that case, the mutation that caused it to go from
+                    // active to inactive is responsible for deleting the neuron from
                     // stable_neuron_store. This is where we can double check that such
                     // responsibilities were actually fulfilled.
                     continue;

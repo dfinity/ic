@@ -9,8 +9,9 @@ use crate::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::LedgerParameters,
         governance::{
+            migration::{self, MigrationStatus},
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
+            GovernanceCachedMetrics, MakingSnsProposal, Migration, NeuronInFlightCommand,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -197,6 +198,18 @@ pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
+
+// TODO(NNS1-2551): Measure how much resources this consumes, and adjust BATCH_SIZE accordingly.
+const COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN: usize = if cfg!(test) {
+    // 1 would be degenerately small. A larger value, like 10 would make it very tedious to craft
+    // test data, because test data needs to have cardinality greater than this in order to
+    // distinguish between a finite batch len and "infinity" batch len. 2 would also fit the bill,
+    // but is also suspiciously small. 4 is reaching unbearablility. 5 is really starting to get
+    // into self-flagilation territory.
+    3
+} else {
+    500
+};
 
 // Wrapping MakeProposalLock in Option seems to cause #[must_use] to not have
 // the desired effect. Therefore, #[must_use] is kind of useless here, except to
@@ -1743,7 +1756,7 @@ impl Governance {
                     id
                 );
             }
-            // This is the expected case...
+            // This is the expected case.
             Some(_) => (),
         }
     }
@@ -4602,7 +4615,7 @@ impl Governance {
 
         // subnet_id and canisters fields in deploy_new_sns_response are not
         // used. Would probably make sense to stick them on the
-        // ProposalData...
+        // ProposalData.
         println!("deploy_new_sns succeeded: {:#?}", deploy_new_sns_response);
 
         Ok(())
@@ -6382,6 +6395,107 @@ impl Governance {
 
         self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
+    }
+
+    #[allow(dead_code)] // TODO(NNS1-2551): Enable this feature.
+    fn should_copy_next_batch_of_inactive_neurons_to_stable_memory(&self) -> bool {
+        // Get the status of the migration.
+        let status = self
+            .heap_data
+            .migrations
+            .clone()
+            .unwrap_or_default()
+            .copy_inactive_neurons_to_stable_memory_migration
+            .unwrap_or_default()
+            .status
+            .unwrap_or_default();
+        let status = MigrationStatus::from_i32(status)
+            // If there is no status yet, default to InProgress.
+            .unwrap_or(MigrationStatus::InProgress);
+
+        match status {
+            MigrationStatus::Unspecified | MigrationStatus::InProgress => true,
+            MigrationStatus::Succeeded | MigrationStatus::Failed => false,
+        }
+    }
+
+    #[allow(dead_code)] // TODO(NNS1-2551): Enable this feature.
+    fn copy_next_batch_of_inactive_neurons_to_stable_memory(&mut self) {
+        // Pick up from where we left off last time.
+        let mut migrations = self.heap_data.migrations.clone().unwrap_or_default();
+        let progress = migrations
+            .copy_inactive_neurons_to_stable_memory_migration
+            .unwrap_or_default()
+            .progress;
+        let next_neuron_id = match progress {
+            Some(migration::Progress::LastNeuronId(NeuronId { id })) => NeuronId { id: id + 1 },
+            None => NeuronId { id: 1 },
+        };
+
+        // Generate a batch of neurons to work on.
+        const BATCH_LEN: usize = COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN;
+        let batch = self
+            .neuron_store
+            .heap_neurons_range_with_begin_and_limit(next_neuron_id, BATCH_LEN)
+            .into_iter()
+            // Append auxiliary data; to wit, whether the neuron is inactive.
+            .map(|neuron| {
+                let is_inactive = self.neuron_can_be_archived(&neuron);
+                (neuron, is_inactive)
+            })
+            .collect::<Vec<_>>();
+        let batch_len = batch.len(); // Because batch gets consumed, but we want len later.
+
+        // Execute the batch.
+        let add_result = self
+            .neuron_store
+            .batch_add_inactive_neurons_to_stable_memory(batch);
+
+        // Update status (so that next time, we can pick up from where we just left off).
+        migrations.copy_inactive_neurons_to_stable_memory_migration = Some(match add_result {
+            Err(message) => Migration {
+                status: Some(MigrationStatus::Failed as i32),
+                failure_reason: Some(message),
+                progress: None,
+            },
+
+            Ok(processed_last_neuron_id) => {
+                // Distinguish between full batch, or partial in order to decide
+                // whether we need to keep going, or we are done.
+                if batch_len < BATCH_LEN {
+                    // This is usually what happens at the end (once).
+                    Migration {
+                        status: Some(MigrationStatus::Succeeded as i32),
+                        failure_reason: None,
+                        progress: None,
+                    }
+                } else {
+                    match processed_last_neuron_id {
+                        None => {
+                            // This code is unreachable.
+                            // pf: processed_last_neuron_id.is_none() means that batch_len == 0.
+                            // That means, we should have gotten into the earlier case, yet here
+                            // we are.
+                            Migration {
+                                status: Some(MigrationStatus::Failed as i32),
+                                failure_reason: Some(
+                                    "Code that should not be reachable was reached.".to_string(),
+                                ),
+                                progress: None,
+                            }
+                        }
+
+                        // This is usually what happens.
+                        Some(last_neuron_id) => Migration {
+                            status: Some(MigrationStatus::InProgress as i32),
+                            failure_reason: None,
+                            progress: Some(migration::Progress::LastNeuronId(last_neuron_id)),
+                        },
+                    }
+                }
+            }
+        });
+        self.heap_data.migrations = Some(migrations);
     }
 
     fn should_update_maturity_modulation(&self) -> bool {

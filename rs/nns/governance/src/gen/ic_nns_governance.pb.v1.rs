@@ -2710,7 +2710,11 @@ pub mod governance {
             LastNeuronId(::ic_nns_common::pb::v1::NeuronId),
         }
     }
-    /// All migrations. Each migration uses one tag.
+    /// The status of all on-going (and recently completed) migrations (that take
+    /// place over the course of multiple heartbeat calls).
+    ///
+    /// Each Migration field corresponds to one (ongoing or recently completed) migration.
+    ///
     /// After a migration is finished, it should be OK to reserve the tag and lose the data.
     #[derive(
         candid::CandidType,
@@ -2725,6 +2729,8 @@ pub mod governance {
         /// Migrates neuron indexes to stable storage.
         #[prost(message, optional, tag = "1")]
         pub neuron_indexes_migration: ::core::option::Option<Migration>,
+        #[prost(message, optional, tag = "2")]
+        pub copy_inactive_neurons_to_stable_memory_migration: ::core::option::Option<Migration>,
     }
 }
 /// Proposals with restricted voting are not included unless the caller
