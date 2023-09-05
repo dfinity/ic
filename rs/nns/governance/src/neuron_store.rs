@@ -1,7 +1,7 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, Topic},
-    storage::NEURON_INDEXES,
+    storage::{NEURON_INDEXES, STABLE_NEURON_STORE},
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
@@ -226,12 +226,13 @@ impl NeuronStore {
         Ok(f(neuron))
     }
 
-    /// For heap neurons starting from `last_neuron_id + 1` where `last_neuron_id` is the last neuron id that has been
-    /// migrated, and it adds at most `batch_size` of them into stable storage indexes. It is an undefined behavior if
-    /// `last_neuron_id` passed in was not returned by the one returned by the same function.
+    /// For heap neurons starting from `last_neuron_id + 1` where `last_neuron_id` is the last
+    /// neuron id that has been migrated, and it adds at most `batch_size` of them into stable
+    /// storage indexes. It is an undefined behavior if `last_neuron_id` passed in was not returned
+    /// by the one returned by the same function.
     ///
-    /// Returns `Err(failure_reason)` if it failed; returns Ok(None) if the cursor reaches the end; returns
-    /// `Ok(last_neuron_id)` if the cursor has not reached the end.
+    /// Returns `Err(failure_reason)` if it failed; returns Ok(None) if the cursor reaches the end;
+    /// returns `Ok(last_neuron_id)` if the cursor has not reached the end.
     ///
     /// Note that a Neuron with id 0 will never be scan, and it's OK because it is not a valid id.
     ///
@@ -258,6 +259,69 @@ impl NeuronStore {
             new_last_neuron_id = None
         }
         Ok(new_last_neuron_id)
+    }
+
+    /// Does what the name says: copies inactive Neurons from heap to stable memory.
+    ///
+    /// Why not pass (begin, size) instead of batch: Unfortunately, it is not enough to have the
+    /// Neuron itself (available here) in order to determine whether it is active or not. Rather,
+    /// there are a couple other pieces of data that are needed: locks and open proposals. These are
+    /// not available in NeuronStore; Governance has them. This is why the method
+    /// neuron_can_be_archived is in Governance. As a result, batch is constructed by the caller
+    /// (Governance), since it has the aforementioned needed supporting auxiliary data. Of course,
+    /// to do this, Governance still needs some help from self to scan a range of heap neurons based
+    /// on begin, and limit (i.e. batch size).
+    #[allow(dead_code)]
+    pub(crate) fn batch_add_inactive_neurons_to_stable_memory(
+        &mut self,
+        batch: Vec<(Neuron, /* is_inactive */ bool)>,
+    ) -> Result<Option<NeuronId>, String> {
+        // TODO: Make this owned by self, and stop accessing accessing data via global. There is
+        // no known way to do this right now, because StableBTreeMap is used, and it is not
+        // Send.
+        STABLE_NEURON_STORE.with(|stable_neuron_store| {
+            let mut stable_neuron_store = stable_neuron_store.borrow_mut();
+
+            let mut new_last_neuron_id = None; // result/work tracker
+
+            // The actual/main work itself.
+            for (neuron, neuron_can_be_archived) in batch {
+                // Track the work that is about to be performed.
+                new_last_neuron_id = neuron.id;
+
+                if !neuron_can_be_archived {
+                    // TODO(NNS1-2493): We could try to delete neuron from stable_neuron_store, but
+                    // it should already not be there. A neuron might already be in
+                    // stable_neuron_store if it was previously active, but is now
+                    // inactive. However, in that case, the mutation that cause it to go from active
+                    // to inactive is responsible for deleting the neuron from
+                    // stable_neuron_store. This is where we can double check that such
+                    // responsibilities were actually fulfilled.
+                    continue;
+                }
+
+                // TODO(NNS1-2493): If neuron is already in stable_neuron_store, then it should be
+                // equivalent to the one we have here. If it isn't, that's a bug, because any
+                // mutation of the neuron that later took place is responsible for writing it
+                // through to stable_neuron_store, like above.
+
+                stable_neuron_store
+                    // Here, upsert is used instead of create, because it is possible that online
+                    // copying already copied neuron to stable_neuron_store, and in that case, we do
+                    // not want to trigger the Err behavior of create.
+                    .upsert(neuron) // The real work takes place here.
+                    .map_err(|governance_err| {
+                        // TODO(NNS1-2493): Increment an error counter metric, since this should
+                        // never happen. Also, alert on it, and have it notify NNS team via Slack,
+                        // not page FITS team, since this does not indicate that operators need to
+                        // quickly intervene. Rather, it is a bug that developers (i.e. NNS team)
+                        // should be made aware of, investigate, and fix.
+                        governance_err.to_string()
+                    })?;
+            }
+
+            Ok(new_last_neuron_id)
+        })
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
