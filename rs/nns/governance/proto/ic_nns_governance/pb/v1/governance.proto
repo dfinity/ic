@@ -1897,11 +1897,18 @@ message Governance {
     }
   }
 
-  // All migrations. Each migration uses one tag.
+  // The status of all on-going (and recently completed) migrations (that take
+  // place over the course of multiple heartbeat calls).
+  //
+  // Each Migration field corresponds to one (ongoing or recently completed) migration.
+  //
   // After a migration is finished, it should be OK to reserve the tag and lose the data.
   message Migrations {
     // Migrates neuron indexes to stable storage.
     Migration neuron_indexes_migration = 1;
+    Migration copy_inactive_neurons_to_stable_memory_migration = 2;
+
+    // TODO(NNS1-2533): Migration delete_inactive_neurons_from_heap = 3;
   }
 
   // Migration related data.

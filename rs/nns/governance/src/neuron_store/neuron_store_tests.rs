@@ -165,3 +165,18 @@ fn test_batch_add_inactive_neurons_to_stable_memory() {
         }
     }
 }
+
+#[test]
+fn test_heap_range_with_begin_and_limit() {
+    let neuron_store = NeuronStore::new(btreemap! {
+        1 => simple_neuron(1),
+        3 => simple_neuron(3),
+        7 => simple_neuron(7),
+        12 => simple_neuron(12),
+    });
+
+    let observed_neurons =
+        neuron_store.heap_neurons_range_with_begin_and_limit(NeuronId { id: 3 }, 2);
+
+    assert_eq!(observed_neurons, vec![simple_neuron(3), simple_neuron(7)],);
+}
