@@ -11,3 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `icrc1` and `icrc2` types.
 - The `Value` type and the algorithm to compute its hash.
+
+### Changed
+
+- Updated candid library to the latest version.
