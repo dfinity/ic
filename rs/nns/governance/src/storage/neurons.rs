@@ -374,7 +374,7 @@ where
     /// Inserts or updates, depending on whether an entry (with the same ID) is
     /// already present.
     ///
-    /// Like insert, but if there is already an entry, it gets clobbered.
+    /// Like create, but if there is already an entry, it gets clobbered.
     ///
     /// This is useful when "writing through"/mirroring mutations on a heap
     /// Neuron.

@@ -61,10 +61,11 @@ thread_local! {
             )
         });
 
-    pub(crate) static NEURONS: neurons::StableNeuronStore<VM> =
+    pub(crate) static STABLE_NEURON_STORE: RefCell<neurons::StableNeuronStore<VM>> =
         MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
-            neurons::StableNeuronStoreBuilder {
+
+            let stable_neuron_store = neurons::StableNeuronStoreBuilder {
                 main: memory_manager.get(MAIN_NEURONS_MEMORY_ID),
 
                 // Collections
@@ -76,7 +77,9 @@ thread_local! {
                 known_neuron_data: memory_manager.get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),
                 transfer: memory_manager.get(TRANSFER_NEURONS_MEMORY_ID),
             }
-            .build()
+            .build();
+
+            RefCell::new(stable_neuron_store)
         });
 
     pub(crate) static NEURON_INDEXES: RefCell<neuron_indexes::StableNeuronIndexes<VM>> = MEMORY_MANAGER
