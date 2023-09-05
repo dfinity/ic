@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +18,7 @@ import (
 )
 
 // This defines timeout on the Bazel level.
-var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 1200
+var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 1800
 
 var FARM_BASE_URL = "https://farm.dfinity.systems"
 var FARM_API = FARM_BASE_URL + "/swagger-ui"
@@ -267,12 +268,19 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 			if err != nil {
 				return "", fmt.Errorf("testnet deployment failed: %v", err)
 			}
-			prettyJson, err := json.MarshalIndent(summary, "", "  ")
+			var buffer bytes.Buffer
+			encoder := json.NewEncoder(&buffer)
+			// Here we change the default encoding behavior, as urls can contain special symbols like &. We don't want to escape those.
+			encoder.SetEscapeHTML(false)
+			encoder.SetIndent("", "  ")
+			err = encoder.Encode(summary)
 			if err != nil {
 				return "", fmt.Errorf("marshalling summary failed with err: %v", err)
+			} else {
+				prettyJson := buffer.String()
+				// Only this line goes to stdout, so that the command output can be piped to jq.
+				cmd.Println(string(prettyJson))
 			}
-			// Only this line goes to stdout, so that the command output can be piped to jq.
-			cmd.Println(string(prettyJson))
 			group, err = ExtractFarmGroup(&summary)
 			if err != nil {
 				return "", err
