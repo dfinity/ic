@@ -6940,13 +6940,12 @@ impl Governance {
     /// `self` parameter.
     pub fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 {
         let short = self.heap_data.short_voting_period_seconds;
+        let private = self.heap_data.neuron_management_voting_period_seconds;
         let normal = self.heap_data.wait_for_quiet_threshold_seconds;
-        move |topic| {
-            if topic == Topic::NeuronManagement || topic == Topic::ExchangeRate {
-                short
-            } else {
-                normal
-            }
+        move |topic| match topic {
+            Topic::NeuronManagement => private,
+            Topic::ExchangeRate => short,
+            _ => normal,
         }
     }
 

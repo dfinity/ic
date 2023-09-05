@@ -2450,8 +2450,23 @@ pub struct Governance {
     /// is open for voting. If a proposal on a topic with short voting
     /// period has not been decided (adopted or rejected) within this
     /// time since the proposal was made, the proposal is rejected.
+    /// The short voting period is used for proposals that don't make sense to vote
+    /// on if the proposal is "old". For example, proposals to set the exchange
+    /// rate should not be voted on if they're days old because exchange rates
+    /// fluctuate regularly. Currently, only proposals to set the exchange rate
+    /// use the short voting period, and such proposals are deprecated.
     #[prost(uint64, tag = "14")]
     pub short_voting_period_seconds: u64,
+    /// The maximum time a proposal of a topic with *private voting period*
+    /// is open for voting. If a proposal on a topic with short voting
+    /// period has not been decided (adopted or rejected) within this
+    /// time since the proposal was made, the proposal is rejected.
+    /// This is useful for proposals that are for "private matters" like
+    /// NeuronManagement proposals. These proposals are not meant to be voted on
+    /// by the general public and have limited impact, so a different voting period
+    /// is appropriate.
+    #[prost(uint64, optional, tag = "25")]
+    pub neuron_management_voting_period_seconds: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "15")]
     pub metrics: ::core::option::Option<governance::GovernanceCachedMetrics>,
     #[prost(message, optional, tag = "16")]

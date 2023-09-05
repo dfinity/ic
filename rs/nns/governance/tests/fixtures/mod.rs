@@ -1009,6 +1009,7 @@ impl Default for NNSBuilder {
             governance: GovernanceProto {
                 wait_for_quiet_threshold_seconds: 1,
                 short_voting_period_seconds: 30,
+                neuron_management_voting_period_seconds: Some(30),
                 ..Default::default()
             },
             ledger_transforms: Vec::default(),
