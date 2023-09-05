@@ -12,6 +12,7 @@ use std::time::Duration;
 fn main() {}
 
 #[init]
+#[candid_method(init)]
 fn init(args: InitArgs) {
     ic_icrc1_index::init(args);
     ic_cdk_timers::set_timer(Duration::from_secs(1), || {
@@ -39,7 +40,6 @@ fn ledger_id() -> CanisterId {
     ic_icrc1_index::ledger_id()
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -83,7 +83,7 @@ fn __get_candid_interface_tmp_hack() -> &'static str {
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     candid::export_service!();
@@ -94,7 +94,7 @@ fn check_candid_interface() {
     let old_interface =
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("index.did");
 
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

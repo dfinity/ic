@@ -26,6 +26,7 @@ use ic_ckbtc_minter::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 
+#[candid_method(init)]
 #[init]
 fn init(args: MinterArg) {
     match args {
@@ -201,7 +202,6 @@ fn get_deposit_fee() -> u64 {
     read_state(|s| s.kyt_fee)
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -309,7 +309,7 @@ fn check_candid_interface_compatibility() {
         }
     }
 
-    fn check_service_compatible(
+    fn check_service_equal(
         new_name: &str,
         new: candid::utils::CandidSource,
         old_name: &str,
@@ -317,7 +317,7 @@ fn check_candid_interface_compatibility() {
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_compatible(new, old) {
+        match candid::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -341,7 +341,7 @@ fn check_candid_interface_compatibility() {
     let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("ckbtc_minter.did");
 
-    check_service_compatible(
+    check_service_equal(
         "actual ledger candid interface",
         candid::utils::CandidSource::Text(&new_interface),
         "declared candid interface in ckbtc_minter.did file",
