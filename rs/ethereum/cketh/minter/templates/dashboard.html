@@ -66,6 +66,21 @@
         .numeric {
             text-align: right;
         }
+
+        #output-bytes32-principal-error {
+            color: red;
+            font-style: italic;
+        }
+
+        #output-bytes32-principal-ok {
+            margin-top: 10px;
+            font-family: monospace;
+        }
+
+        #input-principal {
+            width: 63ch;
+            font-family: monospace;
+        }
     </style>
 </head>
 
@@ -97,6 +112,13 @@
                     </tr>
                 </tbody>
             </table>
+
+            <h3>Principal → Bytes32 conversion</h3>
+            <form id="form-principal-conversion">
+                Principal: <input id="input-principal" type="text">
+                <span id="output-bytes32-principal-error"></span>
+                <div id="output-bytes32-principal-ok"></div>
+            </form>
 
             <h3>Block sync</h3>
             <table>
@@ -231,5 +253,37 @@
             </table>
         </div>
     </div>
-    </body>
+
+    <script>
+        {% include "principal_to_bytes.js" %}
+
+        window.addEventListener("load", function () {
+            document.getElementById("form-principal-conversion").addEventListener("keypress", function (event) {
+                if (event.keyCode == 13) {
+                    event.preventDefault();
+                    return false;
+                }
+            });
+
+            function recomputePrincipal(event) {
+                let input = event.target.value.trim();
+                let ok_output = document.getElementById("output-bytes32-principal-ok");
+                let err_output = document.getElementById("output-bytes32-principal-error");
+                try {
+                    let hex = principalToBytes32(input);
+                    ok_output.innerHTML = hex;
+                    err_output.innerHTML = "";
+                } catch (e) {
+                    ok_output.innerHTML = "";
+                    err_output.innerHTML = e.message;
+                }
+            }
+            let inputPrincipal = document.getElementById("input-principal");
+
+            inputPrincipal.addEventListener("change", recomputePrincipal);
+            inputPrincipal.addEventListener("keypress", recomputePrincipal);
+            inputPrincipal.addEventListener("input", recomputePrincipal);
+        });
+    </script>
+    <body>
 </html>
