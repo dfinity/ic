@@ -225,3 +225,9 @@ after_script:
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
+
+.rules-master-pipeline-and-merge-request:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
