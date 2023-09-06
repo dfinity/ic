@@ -5127,6 +5127,7 @@ dependencies = [
  "ic-types",
  "mockall 0.11.4",
  "prometheus 0.12.0",
+ "proptest",
  "prost",
  "slog",
  "thiserror",

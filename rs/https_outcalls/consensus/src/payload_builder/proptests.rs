@@ -80,14 +80,11 @@ fn run_proptest(
                 &context,
             );
 
-            dbg!(payload_builder.metrics.unique_responses.get());
             assert!(payload_builder.metrics.unique_responses.get() != 0);
-
             assert!(payload.len() <= MAX_PAYLOAD_SIZE_BYTES);
 
             let validation_result =
                 payload_builder.validate_payload(Height::new(height), &payload, &pp, &context);
-            dbg!(&validation_result);
             assert!(validation_result.is_ok());
 
             past_payloads.push(payload);

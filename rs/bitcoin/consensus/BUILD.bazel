@@ -30,6 +30,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "@crate_index//:mockall",
+    "@crate_index//:proptest",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
