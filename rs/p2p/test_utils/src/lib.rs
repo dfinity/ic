@@ -5,7 +5,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::{start_peer_manager, SubnetTopology};
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
@@ -60,32 +60,26 @@ impl RegistryConsensusHandle {
         &mut self,
         version: RegistryVersion,
         node_id: NodeId,
-        endpoints: Vec<Option<(&str, u16)>>,
+        endpoint: Option<(&str, u16)>,
     ) {
         let mut subnet_record = SubnetRecord::default();
 
         let mut membership = self.membership.lock().unwrap();
         membership.push(node_id.get().to_vec());
         subnet_record.membership = membership.clone();
+
+        let endpoint = endpoint.map(|endpoint| ConnectionEndpoint {
+            ip_addr: endpoint.0.to_string(),
+            port: endpoint.1.into(),
+        });
         add_subnet_record(
             &self.data_provider,
             version.get(),
             subnet_test_id(0),
             subnet_record,
         );
-
-        let flow_end_points = endpoints
-            .into_iter()
-            .map(|endpoint| FlowEndpoint {
-                endpoint: endpoint.map(|(ip, port)| ConnectionEndpoint {
-                    ip_addr: ip.to_string(),
-                    port: port as u32,
-                }),
-            })
-            .collect();
-
         let node_record = NodeRecord {
-            p2p_flow_endpoints: flow_end_points,
+            http: endpoint,
             ..Default::default()
         };
         self.data_provider

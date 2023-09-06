@@ -1,14 +1,21 @@
-use std::{sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::common::{ConnectivityChecker, PeerRestrictedSevHandshake, PeerRestrictedTlsConfig};
 use bytes::Bytes;
+use either::Either;
 use futures::FutureExt;
 use http::Request;
+use ic_icos_sev::Sev;
 use ic_logger::info;
-use ic_p2p_test_utils::turmoil::{
-    add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout, PeerManagerAction,
+use ic_metrics::MetricsRegistry;
+use ic_p2p_test_utils::{
+    create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
+    turmoil::{
+        add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout,
+        PeerManagerAction,
+    },
 };
-use ic_quic_transport::Transport;
+use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
@@ -29,9 +36,6 @@ fn ping_pong() {
 
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 8888;
-        let node_2_port = 9999;
-
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
 
@@ -41,7 +45,6 @@ fn ping_pong() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -55,7 +58,6 @@ fn ping_pong() {
             &mut sim,
             log,
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -66,18 +68,10 @@ fn ping_pong() {
         );
 
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -87,6 +81,79 @@ fn ping_pong() {
 
         exit_notify.notify_waiters();
         sim.run().unwrap();
+    })
+}
+
+#[test]
+fn test_real_socket() {
+    with_test_replica_logger(|log| {
+        info!(log, "Starting test");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let (_jh, topology_watcher, mut registry_handler) =
+            create_peer_manager_and_registry_handle(rt.handle(), log.clone());
+
+        let node_crypto_1 = temp_crypto_component_with_tls_keys(&registry_handler, NODE_1);
+        let sev_handshake_1 = Arc::new(Sev::new(NODE_1, registry_handler.registry_client.clone()));
+        let node_crypto_2 = temp_crypto_component_with_tls_keys(&registry_handler, NODE_2);
+        let sev_handshake_2 = Arc::new(Sev::new(NODE_2, registry_handler.registry_client.clone()));
+        registry_handler.registry_client.update_to_latest_version();
+
+        let socket_1: SocketAddr = "127.0.1.1:4100".parse().unwrap();
+        let socket_2: SocketAddr = "127.0.2.1:4100".parse().unwrap();
+
+        let transport_1 = Arc::new(QuicTransport::build(
+            &log,
+            &MetricsRegistry::default(),
+            rt.handle().clone(),
+            node_crypto_1,
+            registry_handler.registry_client.clone(),
+            sev_handshake_1,
+            NODE_1,
+            topology_watcher.clone(),
+            Either::Left::<_, DummyUdpSocket>(socket_1),
+            Some(ConnectivityChecker::router()),
+        ));
+
+        let transport_2 = Arc::new(QuicTransport::build(
+            &log,
+            &MetricsRegistry::default(),
+            rt.handle().clone(),
+            node_crypto_2,
+            registry_handler.registry_client.clone(),
+            sev_handshake_2,
+            NODE_2,
+            topology_watcher,
+            Either::Left::<_, DummyUdpSocket>(socket_2),
+            Some(ConnectivityChecker::router()),
+        ));
+
+        registry_handler.add_node(
+            RegistryVersion::from(2),
+            NODE_1,
+            Some((&socket_1.ip().to_string(), socket_1.port())),
+        );
+        registry_handler.add_node(
+            RegistryVersion::from(3),
+            NODE_2,
+            Some((&socket_2.ip().to_string(), socket_2.port())),
+        );
+        registry_handler.registry_client.reload();
+        registry_handler.registry_client.update_to_latest_version();
+
+        rt.block_on(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+
+                let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
+                let node_1_reachable_from_node_2 = transport_2.push(&NODE_1, request).await.is_ok();
+                let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
+                let node_2_reachable_from_node_1 = transport_1.push(&NODE_2, request).await.is_ok();
+                if node_2_reachable_from_node_1 && node_1_reachable_from_node_2 {
+                    break;
+                }
+            }
+        });
     })
 }
 
@@ -102,9 +169,6 @@ fn test_sending_large_message() {
             .build();
 
         let exit_notify = Arc::new(Notify::new());
-
-        let node_1_port = 8888;
-        let node_2_port = 9999;
 
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
@@ -129,7 +193,6 @@ fn test_sending_large_message() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -143,7 +206,6 @@ fn test_sending_large_message() {
             &mut sim,
             log,
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -154,18 +216,10 @@ fn test_sending_large_message() {
         );
 
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -191,9 +245,6 @@ fn test_peer_restart() {
 
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 8888;
-        let node_2_port = 9999;
-
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
 
@@ -203,7 +254,6 @@ fn test_peer_restart() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -217,7 +267,6 @@ fn test_peer_restart() {
             &mut sim,
             log.clone(),
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -228,18 +277,10 @@ fn test_peer_restart() {
         );
 
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
 
         registry_handle.registry_client.reload();
@@ -293,12 +334,6 @@ fn test_changing_subnet_membership() {
 
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 5555;
-        let node_2_port = 6666;
-        let node_3_port = 7777;
-        let node_4_port = 8888;
-        let node_5_port = 9999;
-
         let (peer_manager_cmd_sender, topology_watcher, mut registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
 
@@ -308,7 +343,6 @@ fn test_changing_subnet_membership() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -322,7 +356,6 @@ fn test_changing_subnet_membership() {
             &mut sim,
             log.clone(),
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -336,7 +369,6 @@ fn test_changing_subnet_membership() {
             &mut sim,
             log.clone(),
             NODE_3,
-            node_3_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -350,7 +382,6 @@ fn test_changing_subnet_membership() {
             &mut sim,
             log.clone(),
             NODE_4,
-            node_4_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -364,7 +395,6 @@ fn test_changing_subnet_membership() {
             &mut sim,
             log.clone(),
             NODE_5,
-            node_5_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -377,18 +407,10 @@ fn test_changing_subnet_membership() {
         // Add two starting nodes 1 and 2.
         info!(log, "Adding node 1 and 2");
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
 
         registry_handle.registry_client.reload();
@@ -403,11 +425,7 @@ fn test_changing_subnet_membership() {
         // Add Node 3
         info!(log, "Adding node 3");
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_3,
-                node_3_port,
-                RegistryVersion::from(4),
-            )))
+            .send(PeerManagerAction::Add((NODE_3, RegistryVersion::from(4))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -441,18 +459,10 @@ fn test_changing_subnet_membership() {
         // Add node 4 and 5
         info!(log, "Adding node 4 and 5");
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_4,
-                node_4_port,
-                RegistryVersion::from(7),
-            )))
+            .send(PeerManagerAction::Add((NODE_4, RegistryVersion::from(7))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_5,
-                node_5_port,
-                RegistryVersion::from(8),
-            )))
+            .send(PeerManagerAction::Add((NODE_5, RegistryVersion::from(8))))
             .unwrap();
         registry_handle.registry_client.reload();
         wait_for(&mut sim, || {
@@ -485,11 +495,7 @@ fn test_changing_subnet_membership() {
         wait_for(&mut sim, || conn_checker.unreachable(&NODE_3)).unwrap();
         info!(log, "Rejoining node 3");
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_3,
-                node_3_port,
-                RegistryVersion::from(10),
-            )))
+            .send(PeerManagerAction::Add((NODE_3, RegistryVersion::from(10))))
             .unwrap();
         wait_for(&mut sim, || {
             conn_checker.fully_connected_except(vec![NODE_1])
@@ -541,9 +547,6 @@ fn test_transient_failing_sev() {
 
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 5555;
-        let node_2_port = 6666;
-
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
 
@@ -556,7 +559,6 @@ fn test_transient_failing_sev() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -570,7 +572,6 @@ fn test_transient_failing_sev() {
             &mut sim,
             log.clone(),
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -583,18 +584,10 @@ fn test_transient_failing_sev() {
         // Add two starting nodes 1 and 2.
         info!(log, "Adding node 1 and 2");
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -658,9 +651,6 @@ fn test_transient_failing_tls() {
 
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 5555;
-        let node_2_port = 6666;
-
         let (peer_manager_cmd_sender, topology_watcher, mut registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
 
@@ -674,7 +664,6 @@ fn test_transient_failing_tls() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -689,7 +678,6 @@ fn test_transient_failing_tls() {
             &mut sim,
             log.clone(),
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -702,18 +690,10 @@ fn test_transient_failing_tls() {
         // Add two starting nodes 1 and 2.
         info!(log, "Adding node 1 and 2");
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -752,12 +732,6 @@ fn test_bad_network() {
 
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 5555;
-        let node_2_port = 6666;
-        let node_3_port = 7777;
-        let node_4_port = 8888;
-        let node_5_port = 9999;
-
         let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
 
@@ -767,7 +741,6 @@ fn test_bad_network() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -781,7 +754,6 @@ fn test_bad_network() {
             &mut sim,
             log.clone(),
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -795,7 +767,6 @@ fn test_bad_network() {
             &mut sim,
             log.clone(),
             NODE_3,
-            node_3_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -809,7 +780,6 @@ fn test_bad_network() {
             &mut sim,
             log.clone(),
             NODE_4,
-            node_4_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -823,7 +793,6 @@ fn test_bad_network() {
             &mut sim,
             log.clone(),
             NODE_5,
-            node_5_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -835,39 +804,19 @@ fn test_bad_network() {
 
         // Add all nodes
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_3,
-                node_3_port,
-                RegistryVersion::from(4),
-            )))
+            .send(PeerManagerAction::Add((NODE_3, RegistryVersion::from(4))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_4,
-                node_4_port,
-                RegistryVersion::from(5),
-            )))
+            .send(PeerManagerAction::Add((NODE_4, RegistryVersion::from(5))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_5,
-                node_5_port,
-                RegistryVersion::from(6),
-            )))
+            .send(PeerManagerAction::Add((NODE_5, RegistryVersion::from(6))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -929,12 +878,6 @@ fn test_bad_network_and_membership_change() {
 
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 5555;
-        let node_2_port = 6666;
-        let node_3_port = 7777;
-        let node_4_port = 8888;
-        let node_5_port = 9999;
-
         let (peer_manager_cmd_sender, topology_watcher, mut registry_handle) =
             add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
 
@@ -944,7 +887,6 @@ fn test_bad_network_and_membership_change() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -958,7 +900,6 @@ fn test_bad_network_and_membership_change() {
             &mut sim,
             log.clone(),
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -972,7 +913,6 @@ fn test_bad_network_and_membership_change() {
             &mut sim,
             log.clone(),
             NODE_3,
-            node_3_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -986,7 +926,6 @@ fn test_bad_network_and_membership_change() {
             &mut sim,
             log.clone(),
             NODE_4,
-            node_4_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
@@ -1000,7 +939,6 @@ fn test_bad_network_and_membership_change() {
             &mut sim,
             log.clone(),
             NODE_5,
-            node_5_port,
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
@@ -1012,39 +950,19 @@ fn test_bad_network_and_membership_change() {
 
         // Add all 5 nodes.
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_3,
-                node_3_port,
-                RegistryVersion::from(4),
-            )))
+            .send(PeerManagerAction::Add((NODE_3, RegistryVersion::from(4))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_4,
-                node_4_port,
-                RegistryVersion::from(5),
-            )))
+            .send(PeerManagerAction::Add((NODE_4, RegistryVersion::from(5))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_5,
-                node_5_port,
-                RegistryVersion::from(6),
-            )))
+            .send(PeerManagerAction::Add((NODE_5, RegistryVersion::from(6))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();

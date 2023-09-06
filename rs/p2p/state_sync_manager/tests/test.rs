@@ -314,9 +314,6 @@ fn test_single_advert_between_two_nodes() {
             .build();
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 8888;
-        let node_2_port = 9999;
-
         // Node 1 advertises height 1
         // Node 2 advertises height 2
         // n1_a1 = node1 advert1
@@ -375,7 +372,6 @@ fn test_single_advert_between_two_nodes() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             None,
@@ -389,7 +385,6 @@ fn test_single_advert_between_two_nodes() {
             &mut sim,
             log,
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             None,
@@ -400,18 +395,10 @@ fn test_single_advert_between_two_nodes() {
         );
 
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -438,9 +425,6 @@ fn test_multiple_advert_between_two_nodes() {
             .simulation_duration(Duration::from_secs(20))
             .build();
         let exit_notify = Arc::new(Notify::new());
-
-        let node_1_port = 8888;
-        let node_2_port = 9999;
 
         // Both nodes advertise height 1 and 2.
         // n1_a1 = node1 advert1
@@ -513,7 +497,6 @@ fn test_multiple_advert_between_two_nodes() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             None,
@@ -527,7 +510,6 @@ fn test_multiple_advert_between_two_nodes() {
             &mut sim,
             log,
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             None,
@@ -538,18 +520,10 @@ fn test_multiple_advert_between_two_nodes() {
         );
 
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
