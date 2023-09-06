@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use opentelemetry::KeyValue;
 use std::time::Instant;
 use tracing::info;
 
@@ -57,10 +56,8 @@ impl<T: Configure> Configure for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let labels = &[KeyValue::new("status", status.clone())];
-
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 

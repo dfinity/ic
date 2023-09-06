@@ -19,8 +19,6 @@ use futures::TryFutureExt;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
-use opentelemetry_prometheus::exporter;
 use prometheus::{labels, Registry};
 use tower::ServiceBuilder;
 use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -30,7 +28,6 @@ use tracing::info;
 use {
     axum::{handler::Handler, Extension},
     instant_acme::LetsEncrypt,
-    opentelemetry::metrics::Meter,
     tokio::sync::RwLock,
 };
 
@@ -43,10 +40,7 @@ use crate::{
     },
     dns::DnsResolver,
     http::ReqwestClient,
-    metrics::{
-        self, apply_histogram_definitions, HistogramDefinition, HttpMetricParams, MetricParams,
-        WithMetrics,
-    },
+    metrics::{self, HttpMetricParams, MetricParams, WithMetrics, HTTP_DURATION_BUCKETS},
     nns::{Load, Loader},
     persist,
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
@@ -74,12 +68,6 @@ const DAY: Duration = Duration::from_secs(24 * 3600);
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
-const HISTOGRAM_DEFINITIONS: &[HistogramDefinition] = &[
-    HistogramDefinition("dns_resolve", &[1.0, 2.0, 3.0]),
-    HistogramDefinition("verify_tls", &[0.01, 0.1, 1.0]),
-    HistogramDefinition("http_request", &[0.01, 0.1, 1.0]),
-];
-
 pub async fn main(cli: Cli) -> Result<(), Error> {
     tracing::subscriber::set_global_default(
         tracing_subscriber::fmt()
@@ -96,20 +84,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }),
     )?;
 
-    let meter = {
-        let exp = exporter().with_registry(registry.clone()).build()?;
-
-        let mut b = MeterProvider::builder().with_reader(exp);
-
-        // Apply histogram buckets
-        b = apply_histogram_definitions(b, HISTOGRAM_DEFINITIONS)?;
-
-        b.build().meter(SERVICE_NAME)
-    };
-
     let metrics_router = Router::new()
         .route("/metrics", get(metrics::metrics_handler))
-        .with_state(metrics::MetricsHandlerArgs { registry });
+        .with_state(metrics::MetricsHandlerArgs {
+            registry: registry.clone(),
+        });
 
     info!(
         msg = format!("Starting {SERVICE_NAME}"),
@@ -121,11 +100,27 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // DNS
     let dns_resolver = DnsResolver::new(Arc::clone(&routing_table));
-    let dns_resolver = WithMetrics(dns_resolver, MetricParams::new(&meter, "dns_resolve"));
+    let dns_resolver = WithMetrics(
+        dns_resolver,
+        MetricParams::new_with_opts(
+            &registry,
+            "dns_resolve",
+            &["status", "server_name"],
+            Some(&[0.0001, 0.0005, 0.001]),
+        ),
+    );
 
     // TLS Verification
     let tls_verifier = TlsVerifier::new(Arc::clone(&routing_table));
-    let tls_verifier = WithMetrics(tls_verifier, MetricParams::new(&meter, "verify_tls"));
+    let tls_verifier = WithMetrics(
+        tls_verifier,
+        MetricParams::new_with_opts(
+            &registry,
+            "verify_tls",
+            &["status", "server_name"],
+            Some(&[0.0001, 0.0005, 0.001]),
+        ),
+    );
 
     // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
@@ -146,7 +141,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .context("unable to build HTTP client")?;
 
     let http_client = ReqwestClient(http_client);
-    let http_client = WithMetrics(http_client, MetricParams::new(&meter, "http_request"));
+    let http_client = WithMetrics(
+        http_client,
+        MetricParams::new_with_opts(
+            &registry,
+            "http_request_out",
+            &["status", "method", "scheme", "host", "status_code"],
+            Some(HTTP_DURATION_BUCKETS),
+        ),
+    );
     let http_client = Arc::new(http_client);
 
     // Registry Client
@@ -182,7 +185,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     #[cfg(feature = "tls")]
-    let (tls_configurator, tls_acceptor, token) = prepare_tls(&cli, &meter)
+    let (tls_configurator, tls_acceptor, token) = prepare_tls(&cli, &registry)
         .await
         .context("unable to prepare TLS")?;
 
@@ -196,7 +199,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let fw_configurator = WithDeduplication::wrap(fw_configurator);
     let fw_configurator = WithMetrics(
         fw_configurator,
-        MetricParams::new(&meter, "configure_firewall"),
+        MetricParams::new(&registry, "configure_firewall"),
     );
 
     // Service Configurator
@@ -212,7 +215,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
     let configuration_runner = WithMetrics(
         configuration_runner,
-        MetricParams::new(&meter, "run_configuration"),
+        MetricParams::new(&registry, "run_configuration"),
     );
     let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
 
@@ -261,7 +264,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
                 .layer(middleware::from_fn_with_state(
-                    HttpMetricParams::new(&meter, "http_request"),
+                    HttpMetricParams::new(&registry, "http_request_in"),
                     metrics::with_metrics_middleware,
                 )),
         )
@@ -300,17 +303,28 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // Snapshots
     let snapshot_runner = SnapshotRunner::new(Arc::clone(&routing_table), registry_client);
-    let snapshot_runner = WithMetrics(snapshot_runner, MetricParams::new(&meter, "run_snapshot"));
+    let snapshot_runner = WithMetrics(
+        snapshot_runner,
+        MetricParams::new(&registry, "run_snapshot"),
+    );
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
 
     // Checks
     let persister = WithMetrics(
         persist::Persister::new(Arc::clone(&lookup_table)),
-        MetricParams::new(&meter, "persist"),
+        MetricParams::new(&registry, "persist"),
     );
 
     let checker = Checker::new(http_client);
-    let checker = WithMetrics(checker, MetricParams::new(&meter, "check"));
+    let checker = WithMetrics(
+        checker,
+        MetricParams::new_with_opts(
+            &registry,
+            "check",
+            &["status", "node_id", "subnet_id", "addr"],
+            Some(HTTP_DURATION_BUCKETS),
+        ),
+    );
     let checker = WithRetryLimited(
         checker,
         cli.health.check_retries,
@@ -324,7 +338,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         persister,
         checker,
     );
-    let check_runner = WithMetrics(check_runner, MetricParams::new(&meter, "run_check"));
+    let check_runner = WithMetrics(check_runner, MetricParams::new(&registry, "run_check"));
     let check_runner = WithThrottle(
         check_runner,
         ThrottleParams::new(Duration::from_secs(cli.health.check_interval)),
@@ -381,7 +395,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 #[cfg(feature = "tls")]
 async fn prepare_tls(
     cli: &Cli,
-    meter: &Meter,
+    registry: &Registry,
 ) -> Result<(impl Configure, CustomAcceptor, Arc<RwLock<Option<String>>>), Error> {
     // TLS Certificates (Ingress)
     let tls_loader = TlsLoader {
@@ -451,7 +465,10 @@ async fn prepare_tls(
 
     let tls_configurator = TlsConfigurator::new(tls_acceptor.clone(), tls_provisioner);
     let tls_configurator = WithDeduplication::wrap(tls_configurator);
-    let tls_configurator = WithMetrics(tls_configurator, MetricParams::new(meter, "configure_tls"));
+    let tls_configurator = WithMetrics(
+        tls_configurator,
+        MetricParams::new(registry, "configure_tls"),
+    );
 
     let tls_acceptor = CustomAcceptor::new(tls_acceptor);
 
@@ -467,11 +484,9 @@ pub trait Run: Send + Sync {
 impl<T: Run> Run for WithMetrics<T> {
     async fn run(&mut self) -> Result<(), Error> {
         let start_time = Instant::now();
-
         let out = self.0.run().await;
-
-        let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
+        let status = if out.is_ok() { "ok" } else { "fail" };
 
         let MetricParams {
             action,
@@ -479,10 +494,8 @@ impl<T: Run> Run for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let labels = &[KeyValue::new("status", status.clone())];
-
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 

@@ -694,12 +694,20 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "openssl-sys": crate.spec(
                 version = "0.9",
             ),
+            "opentelemetry_0_18_0": crate.spec(
+                package = "opentelemetry",
+                version = "^0.18.0",
+            ),
             "opentelemetry_0_20_0_metrics": crate.spec(
                 package = "opentelemetry",
                 version = "^0.20.0",
                 features = [
                     "metrics",
                 ],
+            ),
+            "opentelemetry_prometheus_0_11_0": crate.spec(
+                package = "opentelemetry-prometheus",
+                version = "^0.11.0",
             ),
             "opentelemetry_prometheus_0_13_0": crate.spec(
                 package = "opentelemetry-prometheus",

@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
-use opentelemetry::KeyValue;
 use reqwest::{Error as ReqwestError, Request, Response};
 use tracing::info;
 
@@ -24,8 +23,6 @@ impl HttpClient for ReqwestClient {
 #[async_trait]
 impl<T: HttpClient> HttpClient for WithMetrics<T> {
     async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
-        let start_time = Instant::now();
-
         // Attribute (Method)
         let method = req.method().to_string();
 
@@ -33,32 +30,23 @@ impl<T: HttpClient> HttpClient for WithMetrics<T> {
         let scheme = req.url().scheme().to_string();
 
         // Attribute (Host)
-        let host = match req.url().host_str() {
-            Some(h) => h.to_string(),
-            None => "".to_string(),
-        };
+        let host = req.url().host_str().unwrap_or("").to_string();
 
         // Attribute (Path)
         let path = req.url().path().to_string();
 
         // Attribute (Query)
-        let query = match req.url().query() {
-            Some(q) => q.to_string(),
-            None => "".to_string(),
-        };
+        let query = req.url().query().unwrap_or("").to_string();
 
+        let start_time = Instant::now();
         let out = self.0.execute(req).await;
-
-        let status = match out {
-            Ok(_) => "ok",
-            Err(_) => "fail",
-        };
-
         let duration = start_time.elapsed().as_secs_f64();
+
+        let status = if out.is_ok() { "ok" } else { "fail" };
 
         // Attribute (Status Code)
         let status_code = match &out {
-            Ok(out) => format!("{}", out.status().as_u16()),
+            Ok(out) => out.status().as_u16().to_string(),
             Err(_) => "".to_string(),
         };
 
@@ -69,19 +57,19 @@ impl<T: HttpClient> HttpClient for WithMetrics<T> {
         } = &self.1;
 
         let labels = &[
-            KeyValue::new("status", status),
-            KeyValue::new("method", method.clone()),
-            KeyValue::new("scheme", scheme.clone()),
-            KeyValue::new("host", host.clone()),
-            KeyValue::new("status_code", status_code.clone()),
+            status,
+            method.as_str(),
+            scheme.as_str(),
+            host.as_str(),
+            status_code.as_str(),
         ];
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(labels).inc();
+        recorder.with_label_values(labels).observe(duration);
 
         info!(
             action = action.as_str(),
-            method,
+            method = method.as_str(),
             scheme,
             host,
             path,

@@ -4,12 +4,10 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
-use opentelemetry::KeyValue;
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     Certificate, CertificateError, Error as RustlsError, ServerName,
 };
-use tracing::info;
 use x509_parser::{
     prelude::{FromDer, X509Certificate},
     time::ASN1Time,
@@ -126,34 +124,21 @@ impl<T: ServerCertVerifier> ServerCertVerifier for WithMetrics<T> {
             now,
         );
 
-        let status = match out {
-            Ok(_) => "ok",
-            Err(_) => "fail",
-        };
-
+        let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
         let MetricParams {
-            action,
-            counter,
-            recorder,
+            counter, recorder, ..
         } = &self.1;
 
-        let labels = &[
-            KeyValue::new("status", status.clone()),
-            KeyValue::new("server_name", format!("{server_name:?}")),
-        ];
+        let server_name = match server_name {
+            ServerName::DnsName(v) => v.as_ref(),
+            _ => "",
+        };
+        let labels = &[status, server_name];
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
-
-        info!(
-            action,
-            server_name = ?server_name,
-            status,
-            duration,
-            error = ?out.as_ref().err(),
-        );
+        counter.with_label_values(labels).inc();
+        recorder.with_label_values(labels).observe(duration);
 
         out
     }

@@ -16,7 +16,6 @@ use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use opentelemetry::{baggage::BaggageExt, trace::FutureExt, Context as TlmContext, KeyValue};
 use simple_moving_average::{SingleSumSMA, SMA};
 use tracing::info;
 use url::Url;
@@ -136,14 +135,8 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
     // Perform a health check on a given node
     async fn check_node(&self, node: Node) -> Result<NodeCheckResult, CheckError> {
-        let ctx = TlmContext::current_with_baggage(vec![
-            KeyValue::new("subnet_id", node.subnet_id.to_string()),
-            KeyValue::new("node_id", node.id.to_string()),
-            KeyValue::new("addr", format!("[{}]:{}", node.addr, node.port)),
-        ]);
-
         // Perform Health Check
-        let check_result = self.checker.check(&node).with_context(ctx.clone()).await;
+        let check_result = self.checker.check(&node).await;
 
         // Look up the node state and get a mutable reference if there's any
         // Locking behavior on DashMap is relevant to multiple locks from a single thread
@@ -398,7 +391,7 @@ impl<T: Check> Check for WithRetryLimited<T> {
         loop {
             let start_time = Instant::now();
 
-            let out = self.0.check(node).with_context(TlmContext::current()).await;
+            let out = self.0.check(node).await;
             // Retry only on network errors
             match &out {
                 Ok(_) => return out,
@@ -443,29 +436,30 @@ impl<T: Check> Check for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = TlmContext::current();
-        let bgg = cx.baggage();
+        let subnet_id = node.subnet_id.to_string();
+        let node_id = node.id.to_string();
+        let node_addr = node.addr.to_string();
 
         let labels = &[
-            KeyValue::new("status", status.clone()),
-            KeyValue::new("subnet_id", bgg.get("subnet_id").unwrap().to_string()),
-            KeyValue::new("node_id", bgg.get("node_id").unwrap().to_string()),
-            KeyValue::new("addr", bgg.get("addr").unwrap().to_string()),
+            status.as_str(),
+            subnet_id.as_str(),
+            node_id.as_str(),
+            node_addr.as_str(),
         ];
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(labels).inc();
+        recorder.with_label_values(labels).observe(duration);
 
         info!(
             action,
             status,
-            error = ?out.as_ref().err(),
             duration,
             block_height,
             replica_version,
-            subnet_id = %bgg.get("subnet_id").unwrap(),
-            node_id = %bgg.get("node_id").unwrap(),
-            addr = %bgg.get("addr").unwrap(),
+            subnet_id,
+            node_id,
+            node_addr,
+            error = ?out.as_ref().err(),
         );
 
         out

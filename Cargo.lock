@@ -1245,8 +1245,8 @@ dependencies = [
  "lazy_static",
  "mockall 0.11.4",
  "nix 0.24.3",
- "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
+ "opentelemetry 0.18.0",
+ "opentelemetry-prometheus 0.11.0",
  "prometheus 0.13.3",
  "regex",
  "reqwest",
@@ -1276,7 +1276,7 @@ dependencies = [
  "indoc",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.13.0",
  "prometheus 0.13.3",
  "serde",
  "serde_json",
@@ -1692,7 +1692,7 @@ dependencies = [
  "leb128",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.13.0",
  "pem 1.1.1",
  "prometheus 0.13.3",
  "rcgen",
@@ -1724,7 +1724,7 @@ dependencies = [
  "mockall 0.11.4",
  "nix 0.26.2",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.13.0",
  "prometheus 0.13.3",
  "serde",
  "serde_json",
@@ -2834,7 +2834,7 @@ dependencies = [
  "mockall 0.11.4",
  "nix 0.24.3",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.13.0",
  "prometheus 0.13.3",
  "reqwest",
  "rsa",
@@ -4894,7 +4894,7 @@ dependencies = [
  "indoc",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.13.0",
  "prometheus 0.13.3",
  "serde",
  "serde_json",
@@ -5001,8 +5001,6 @@ dependencies = [
  "ic-types",
  "instant-acme",
  "mockall 0.11.4",
- "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
  "prometheus 0.13.3",
  "rand 0.8.5",
  "rcgen",
@@ -11542,7 +11540,7 @@ dependencies = [
  "ic-utils 0.27.0",
  "itertools 0.10.5",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.13.0",
  "prometheus 0.13.3",
  "rustls 0.21.7",
  "rustls-native-certs",
@@ -13354,12 +13352,33 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
+dependencies = [
+ "opentelemetry_api 0.18.0",
+ "opentelemetry_sdk 0.18.0",
+]
+
+[[package]]
+name = "opentelemetry"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
 dependencies = [
- "opentelemetry_api",
- "opentelemetry_sdk",
+ "opentelemetry_api 0.20.0",
+ "opentelemetry_sdk 0.20.0",
+]
+
+[[package]]
+name = "opentelemetry-prometheus"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06c3d833835a53cf91331d2cfb27e9121f5a95261f31f08a1f79ab31688b8da8"
+dependencies = [
+ "opentelemetry 0.18.0",
+ "prometheus 0.13.3",
+ "protobuf",
 ]
 
 [[package]]
@@ -13369,10 +13388,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7d81bc254e2d572120363a2b16cdb0d715d301b5789be0cfc26ad87e4e10e53"
 dependencies = [
  "once_cell",
- "opentelemetry_api",
- "opentelemetry_sdk",
+ "opentelemetry_api 0.20.0",
+ "opentelemetry_sdk 0.20.0",
  "prometheus 0.13.3",
  "protobuf",
+]
+
+[[package]]
+name = "opentelemetry_api"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
+dependencies = [
+ "fnv",
+ "futures-channel",
+ "futures-util",
+ "indexmap 1.9.2",
+ "js-sys",
+ "once_cell",
+ "pin-project-lite",
+ "thiserror",
 ]
 
 [[package]]
@@ -13393,6 +13428,26 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry_sdk"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
+dependencies = [
+ "async-trait",
+ "crossbeam-channel",
+ "dashmap",
+ "fnv",
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "once_cell",
+ "opentelemetry_api 0.18.0",
+ "percent-encoding 2.3.0",
+ "rand 0.8.5",
+ "thiserror",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
@@ -13403,7 +13458,7 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "once_cell",
- "opentelemetry_api",
+ "opentelemetry_api 0.20.0",
  "ordered-float 3.7.0",
  "percent-encoding 2.3.0",
  "rand 0.8.5",

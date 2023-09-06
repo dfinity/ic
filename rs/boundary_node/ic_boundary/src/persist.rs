@@ -5,7 +5,6 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
-use opentelemetry::KeyValue;
 use tracing::{error, info};
 
 use crate::{
@@ -206,10 +205,10 @@ impl<T: Persist> Persist for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let labels = &[KeyValue::new("status", status.clone())];
-
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        counter.with_label_values(&[status.as_str()]).inc();
+        recorder
+            .with_label_values(&[status.as_str()])
+            .observe(duration);
 
         info!(
             action,

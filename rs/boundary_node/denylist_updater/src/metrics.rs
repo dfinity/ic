@@ -21,7 +21,7 @@ impl MetricParams {
         Self {
             action: action.to_string(),
             counter: meter
-                .u64_counter(format!("{namespace}.{action}.total"))
+                .u64_counter(format!("{namespace}.{action}"))
                 .with_description(format!("Counts occurences of {action} calls"))
                 .init(),
             recorder: meter
