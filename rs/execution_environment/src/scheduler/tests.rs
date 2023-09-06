@@ -240,7 +240,10 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
     }
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         3
     );
     assert_eq!(
@@ -279,7 +282,10 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
     );
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         2
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -326,7 +332,10 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
     );
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         3
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -362,7 +371,10 @@ fn canister_gets_heap_delta_rate_limited() {
     assert_eq!(test.ingress_queue_size(canister_id), 0);
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         1
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -406,7 +418,10 @@ fn inner_loop_stops_when_no_instructions_consumed() {
     );
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         1
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -451,7 +466,10 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
     );
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         2
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -769,7 +787,10 @@ fn basic_induct_messages_on_same_subnet_works() {
     // Three ingress messages, six calls, six responses.
     assert_eq!(number_of_messages, 3 + 6 + 6);
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         3 + 6 + 6
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
@@ -803,7 +824,10 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
     assert!(test.canister_state(caller).has_output());
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         1
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -852,7 +876,10 @@ fn induct_messages_to_self_works() {
     // Three ingress messages, six calls, six responses.
     assert_eq!(number_of_messages, 3 + 6 + 6);
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         3 + 6 + 6
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -1002,7 +1029,10 @@ fn test_message_limit_from_message_overhead() {
         .get_sample_count();
     assert_eq!(number_of_messages, expected_number_of_messages);
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         expected_number_of_messages
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
@@ -1050,7 +1080,10 @@ fn test_multiple_iterations_of_inner_loop() {
     );
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         3
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
@@ -1100,7 +1133,10 @@ fn canister_can_run_for_multiple_iterations() {
     );
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         6
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -1454,7 +1490,10 @@ fn can_execute_messages_with_just_enough_instructions() {
     }
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         3
     );
     assert_eq!(
@@ -1517,7 +1556,10 @@ fn execute_only_canisters_with_messages() {
     assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         1
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
@@ -1563,7 +1605,10 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
     }
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         15
     );
     assert_eq!(
@@ -1661,7 +1706,10 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
     assert_eq!(executed_canisters, 2);
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         20
     );
     assert_eq!(
@@ -1719,7 +1767,10 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
     }
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         6
     );
     assert_eq!(
@@ -1773,7 +1824,10 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 10.0);
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         13
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
@@ -2217,7 +2271,10 @@ fn execute_multiple_heartbeats() {
         expected_messages as f64
     );
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         expected_messages as u64
     );
     assert_eq!(
@@ -2354,7 +2411,10 @@ fn can_record_metrics_for_a_round() {
     );
 
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         10
     );
     assert_eq!(
@@ -2586,7 +2646,10 @@ fn execution_round_metrics_are_recorded() {
     assert_eq!(1, metrics.round.messages.get_sample_count());
     assert_eq!(13, metrics.round.messages.get_sample_sum() as u64);
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         13
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 3);
@@ -3551,7 +3614,10 @@ fn expired_ingress_messages_are_removed_from_ingress_queues() {
         (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
     );
     assert_eq!(
-        test.state().metadata.subnet_metrics.num_update_transactions,
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
         (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
     );
 }

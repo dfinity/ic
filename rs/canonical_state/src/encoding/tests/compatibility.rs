@@ -137,29 +137,29 @@ fn canonical_encoding_stream_header_v8_plus() {
 ///     },
 ///     ecdsa_signature_agreements: 2,
 ///     num_canisters: 5,
-///     total_canister_state: (5 * 1024 * 1024).into(),
-///     num_update_transactions: 4200,
+///     canister_state_bytes: (5 * 1024 * 1024).into(),
+///     update_transactions_total: 4200,
 /// }
 /// ```
 ///
 /// Expected:
 ///
-/// For the `total_consumed_cycles`, the expected value (250B) is the sum of all
+/// For the `consumed_cycles_total`, the expected value (250B) is the sum of all
 /// the invividual values above.
 ///
 /// ```text
 /// A4                        # map(4)
 ///    00                     # field_index(SubnetMetrics::num_canisters)
 ///    05                     # unsigned(5)
-///    01                     # field_index(SubnetMetrics::total_canister_state)
+///    01                     # field_index(SubnetMetrics::canister_state_bytes)
 ///    1A 00500000            # unsigned(5242880)
-///    02                     # field_index(SubnetMetrics::total_consumed_cycles)
+///    02                     # field_index(SubnetMetrics::consumed_cycles_total)
 ///    A2                     # map(2)
 ///       00                  # field_index(Cycles::low)
 ///       1B 0000003A35294400 # unsigned(250000000000)
 ///       01                  # field_index(Cycles:high)
 ///       00                  # unsigned(0)
-///    03                     # field_index(SubnetMetrics::num_update_transactions)
+///    03                     # field_index(SubnetMetrics::update_transactions_total)
 ///    19 1068                # unsigned(4200)
 
 /// ```
@@ -176,8 +176,8 @@ fn canonical_encoding_subnet_metrics_v15_plus() {
         metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
         metrics.ecdsa_signature_agreements = 2;
         metrics.num_canisters = 5;
-        metrics.total_canister_state = NumBytes::from(5 * 1024 * 1024);
-        metrics.num_update_transactions = 4200;
+        metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
+        metrics.update_transactions_total = 4200;
         metrics.observe_consumed_cycles_with_use_case(
             CyclesUseCase::Instructions,
             NominalCycles::from(80_000_000_000),

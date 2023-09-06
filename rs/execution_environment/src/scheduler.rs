@@ -1647,8 +1647,10 @@ impl Scheduler for SchedulerImpl {
                 }
             }
             self.finish_round(&mut final_state, current_round_type);
-            final_state.metadata.subnet_metrics.num_update_transactions +=
-                root_measurement_scope.messages().get();
+            final_state
+                .metadata
+                .subnet_metrics
+                .update_transactions_total += root_measurement_scope.messages().get();
             final_state.metadata.subnet_metrics.num_canisters =
                 final_state.canister_states.len() as u64;
             final_state

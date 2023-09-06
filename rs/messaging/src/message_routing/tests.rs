@@ -1381,7 +1381,7 @@ fn process_batch_updates_subnet_metrics() {
             .map(|canister| canister.memory_usage())
             .sum();
         assert_eq!(
-            latest_state.metadata.subnet_metrics.total_canister_state,
+            latest_state.metadata.subnet_metrics.canister_state_bytes,
             canister_state
         );
     });

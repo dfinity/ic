@@ -913,7 +913,7 @@ impl BatchProcessor for BatchProcessorImpl {
         state_after_round
             .metadata
             .subnet_metrics
-            .total_canister_state = total_memory_usage;
+            .canister_state_bytes = total_memory_usage;
 
         #[cfg(feature = "malicious_code")]
         if let Some(delay) = self.malicious_flags.delay_execution(_process_batch_start) {

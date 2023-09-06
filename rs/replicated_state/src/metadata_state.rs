@@ -393,11 +393,11 @@ pub struct SubnetMetrics {
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
     /// The total size of the state taken by canisters on this subnet in bytes.
-    pub total_canister_state: NumBytes,
+    pub canister_state_bytes: NumBytes,
     /// The total number of transactions processed on this subnet.
     ///
     /// Transactions here refer to all messages processed in replicated mode.
-    pub num_update_transactions: u64,
+    pub update_transactions_total: u64,
 }
 
 impl SubnetMetrics {
@@ -467,8 +467,8 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                 })
                 .collect(),
             num_canisters: Some(item.num_canisters),
-            total_canister_state: Some(item.total_canister_state.get()),
-            num_update_transactions: Some(item.num_update_transactions),
+            canister_state_bytes: Some(item.canister_state_bytes.get()),
+            update_transactions_total: Some(item.update_transactions_total),
         }
     }
 }
@@ -510,14 +510,14 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 "SubnetMetrics::num_canisters",
             )
             .unwrap_or(0),
-            total_canister_state: try_from_option_field(
-                item.total_canister_state,
-                "SubnetMetrics::total_canister_state",
+            canister_state_bytes: try_from_option_field(
+                item.canister_state_bytes,
+                "SubnetMetrics::canister_state_bytes",
             )
             .unwrap_or(NumBytes::from(0)),
-            num_update_transactions: try_from_option_field(
-                item.num_update_transactions,
-                "SubnetMetrics::num_update_transactions",
+            update_transactions_total: try_from_option_field(
+                item.update_transactions_total,
+                "SubnetMetrics::update_transactions_total",
             )
             .unwrap_or(0),
         })

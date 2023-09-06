@@ -340,10 +340,10 @@ pub struct SubnetMetrics {
         ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
     #[prost(uint64, optional, tag = "6")]
     pub num_canisters: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "7")]
-    pub total_canister_state: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "8")]
-    pub num_update_transactions: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "9")]
+    pub canister_state_bytes: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "10")]
+    pub update_transactions_total: ::core::option::Option<u64>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

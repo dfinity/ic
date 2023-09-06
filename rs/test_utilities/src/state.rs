@@ -889,8 +889,8 @@ prop_compose! {
         consumed_cycles_http_outcalls in arb_nominal_cycles(),
         consumed_cycles_ecdsa_outcalls in arb_nominal_cycles(),
         num_canisters in any::<u64>(),
-        total_canister_state in arb_num_bytes(),
-        num_update_transactions in any::<u64>(),
+        canister_state_bytes in arb_num_bytes(),
+        update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
@@ -899,8 +899,8 @@ prop_compose! {
         metrics.consumed_cycles_http_outcalls = consumed_cycles_http_outcalls;
         metrics.consumed_cycles_ecdsa_outcalls = consumed_cycles_ecdsa_outcalls;
         metrics.num_canisters = num_canisters;
-        metrics.total_canister_state = total_canister_state;
-        metrics.num_update_transactions = num_update_transactions;
+        metrics.canister_state_bytes = canister_state_bytes;
+        metrics.update_transactions_total = update_transactions_total;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(
