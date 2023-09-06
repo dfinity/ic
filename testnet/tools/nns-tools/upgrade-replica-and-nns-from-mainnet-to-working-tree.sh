@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -Eeuo pipefail
 
 if (($# < 2)); then
     echo >&2 "This script deploys a testnet with mainnet NNS state and upgrades the replica and all NNS canisters via proposals."

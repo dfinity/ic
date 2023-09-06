@@ -26,7 +26,8 @@ _download_canister_gz() {
     OUTPUT_FILE="$MY_DOWNLOAD_DIR/$DOWNLOAD_NAME-$GIT_HASH.wasm.gz"
 
     curl --silent "https://download.dfinity.systems/ic/$GIT_HASH/canisters/$DOWNLOAD_NAME.wasm.gz" \
-        --output "$OUTPUT_FILE"
+        --output "$OUTPUT_FILE" \
+        --fail
 
     echo "$OUTPUT_FILE"
 }
