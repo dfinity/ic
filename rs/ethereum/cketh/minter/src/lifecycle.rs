@@ -3,6 +3,7 @@ use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
+use std::fmt::{Display, Formatter};
 
 #[cfg(test)]
 mod tests;
@@ -29,6 +30,15 @@ impl EthereumNetwork {
         match self {
             EthereumNetwork::Mainnet => 1,
             EthereumNetwork::Sepolia => 11155111,
+        }
+    }
+}
+
+impl Display for EthereumNetwork {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EthereumNetwork::Mainnet => write!(f, "Ethereum Mainnet"),
+            EthereumNetwork::Sepolia => write!(f, "Ethereum Testnet Sepolia"),
         }
     }
 }

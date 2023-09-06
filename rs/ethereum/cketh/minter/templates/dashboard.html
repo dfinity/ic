@@ -91,6 +91,10 @@
             <table>
                 <tbody>
                     <tr>
+                        <th>Ethereum Chain</th>
+                        <td><a href="https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-{{ethereum_network.chain_id()}}.json">{{ ethereum_network }}</a></td>
+                    </tr>
+                    <tr>
                         <th>Minter address</th>
                         <td>{% call etherscan_address_link(minter_address) %}</td>
                     </tr>

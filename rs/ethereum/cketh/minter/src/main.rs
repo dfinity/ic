@@ -7,13 +7,13 @@ use ic_cketh_minter::address::{validate_address_as_destination, Address};
 use ic_cketh_minter::endpoints::WithdrawalError;
 use ic_cketh_minter::endpoints::{Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus};
 use ic_cketh_minter::eth_logs::report_transaction_error;
-use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory};
+use ic_cketh_minter::eth_rpc::FeeHistory;
 use ic_cketh_minter::eth_rpc::{BlockNumber, JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
-use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
+use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, Wei};
 use ic_cketh_minter::state::{
     lazy_call_ecdsa_public_key, mutate_state, read_state, MintedEvent, State, TaskType, STATE,
 };
@@ -408,32 +408,12 @@ async fn minter_address() -> String {
     Address::from_pubkey(&pubkey).to_string()
 }
 
-type TransferResult = ic_cketh_minter::eth_rpc::JsonRpcResult<String>;
-#[update]
-#[candid_method(update)]
-async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferResult {
-    let signed_transaction = Eip1559TransactionRequest {
-        chain_id: SEPOLIA_TEST_CHAIN_ID,
-        destination: Address::from_str(&to_string).unwrap(),
-        nonce: TransactionNonce::from(nonce),
-        gas_limit: 100000_u32.into(),
-        max_fee_per_gas: Wei::new(1946965145_u128),
-        amount: value.into(),
-        data: vec![],
-        access_list: AccessList::new(),
-        max_priority_fee_per_gas: Wei::new(1946965145_u128),
-    }
-    .sign()
-    .await
-    .expect("signing failed");
-    match read_state(EthRpcClient::from_state)
-        .eth_send_raw_transaction(signed_transaction.raw_transaction_hex())
-        .await
-        .expect("HTTP call failed")
-    {
-        JsonRpcResult::Result(_) => JsonRpcResult::Result(signed_transaction.hash().to_string()),
-        JsonRpcResult::Error { code, message } => JsonRpcResult::Error { code, message },
-    }
+#[query]
+#[candid_method(query)]
+async fn smart_contract_address() -> String {
+    read_state(|s| s.ethereum_contract_address)
+        .map(|a| a.to_string())
+        .unwrap_or("N/A".to_string())
 }
 
 /// Estimate price of EIP-1559 transaction based on the
@@ -442,30 +422,8 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
 #[update]
 #[candid_method(update)]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
-    use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
-
-    let fee_history = read_state(EthRpcClient::from_state)
-        .eth_fee_history(FeeHistoryParams {
-            block_count: Quantity::from(5_u8),
-            highest_block: BlockSpec::Tag(BlockTag::Finalized),
-            reward_percentiles: vec![20],
-        })
-        .await
-        .expect("HTTP call failed")
-        .unwrap();
-
-    debug_assert_eq!(fee_history.base_fee_per_gas.len(), 6);
-    let base_fee_from_last_finalized_block = Nat::from(fee_history.base_fee_per_gas[4]);
-    let base_fee_of_next_finalized_block = Nat::from(fee_history.base_fee_per_gas[5]);
-    let price = estimate_transaction_price(&fee_history);
-
-    Eip1559TransactionPrice {
-        base_fee_from_last_finalized_block,
-        base_fee_of_next_finalized_block,
-        max_priority_fee_per_gas: price.max_priority_fee_per_gas.into(),
-        max_fee_per_gas: price.max_fee_per_gas.into(),
-        gas_limit: into_nat(price.gas_limit),
-    }
+    let transaction_price = estimate_transaction_price(&eth_fee_history().await);
+    Eip1559TransactionPrice::from(transaction_price)
 }
 
 #[update]

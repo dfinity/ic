@@ -1,4 +1,6 @@
+use crate::eth_rpc::into_nat;
 use crate::transactions::EthWithdrawalRequest;
+use crate::tx::TransactionPrice;
 use candid::{CandidType, Deserialize, Nat};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use serde::Serialize;
@@ -6,11 +8,21 @@ use std::fmt::{Display, Formatter};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Eip1559TransactionPrice {
-    pub base_fee_from_last_finalized_block: Nat,
-    pub base_fee_of_next_finalized_block: Nat,
-    pub max_priority_fee_per_gas: Nat,
-    pub max_fee_per_gas: Nat,
     pub gas_limit: Nat,
+    pub max_fee_per_gas: Nat,
+    pub max_priority_fee_per_gas: Nat,
+    pub max_transaction_fee: Nat,
+}
+
+impl From<TransactionPrice> for Eip1559TransactionPrice {
+    fn from(value: TransactionPrice) -> Self {
+        Self {
+            gas_limit: into_nat(value.gas_limit),
+            max_fee_per_gas: value.max_fee_per_gas.into(),
+            max_priority_fee_per_gas: value.max_priority_fee_per_gas.into(),
+            max_transaction_fee: value.max_transaction_fee().into(),
+        }
+    }
 }
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {

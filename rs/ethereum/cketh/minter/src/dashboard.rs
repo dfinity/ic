@@ -49,6 +49,27 @@ impl DashboardTemplate {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| Reverse(event.mint_block_index));
 
+        let mut withdrawal_requests: Vec<_> = state
+            .eth_transactions
+            .withdrawal_requests_iter()
+            .cloned()
+            .collect();
+        withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.ledger_burn_index));
+
+        let mut confirmed_transactions: Vec<_> = state
+            .eth_transactions
+            .confirmed_transactions_by_burn_index()
+            .into_iter()
+            .map(|(index, tx)| DashboardConfirmedTransaction {
+                ledger_burn_index: index,
+                destination: tx.transaction().destination,
+                transaction_amount: tx.transaction().amount,
+                block_number: tx.block_number(),
+                transaction_hash: tx.signed_transaction().hash(),
+            })
+            .collect();
+        confirmed_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
+
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
             ecdsa_key_name: state.ecdsa_key_name.clone(),
@@ -65,11 +86,7 @@ impl DashboardTemplate {
             last_finalized_block: state.last_finalized_block_number,
             minted_events,
             rejected_deposits: state.invalid_events.clone(),
-            withdrawal_requests: state
-                .eth_transactions
-                .withdrawal_requests_iter()
-                .cloned()
-                .collect(),
+            withdrawal_requests,
             pending_transaction: state.eth_transactions.pending_tx_info().map(
                 |(req, tx, status)| DashboardPendingTransaction {
                     ledger_burn_index: req.ledger_burn_index,
@@ -78,18 +95,7 @@ impl DashboardTemplate {
                     status: status.clone(),
                 },
             ),
-            confirmed_transactions: state
-                .eth_transactions
-                .confirmed_transactions_by_burn_index()
-                .into_iter()
-                .map(|(index, tx)| DashboardConfirmedTransaction {
-                    ledger_burn_index: index,
-                    destination: tx.transaction().destination,
-                    transaction_amount: tx.transaction().amount,
-                    block_number: tx.block_number(),
-                    transaction_hash: tx.signed_transaction().hash(),
-                })
-                .collect(),
+            confirmed_transactions,
         }
     }
 }
