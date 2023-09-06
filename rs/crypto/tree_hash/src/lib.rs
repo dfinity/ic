@@ -991,7 +991,7 @@ pub enum WitnessGenerationError<W: WitnessBuilder> {
 /// `HashTreeBuilder` enables an iterative construction of a [`LabeledTree`],
 /// which can also be accessed in form of a [`HashTree`].
 /// The constructed [`LabeledTree`] is a part of the state of the Builder,
-/// and is build successively by adding leaves and subtrees.
+/// and is built successively by adding leaves and subtrees.
 /// During the construction, the builder maintains an auxiliary state
 /// that describes the current position in the [`LabeledTree`] under
 /// construction. The auxiliary state is a list of nodes that corresponds to the

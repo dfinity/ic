@@ -346,7 +346,7 @@ impl GovernanceProto {
     /// Builds an index that maps principalIDs to a set of neurons for which the
     /// principals have some permissions.
     ///
-    /// This index is build from the `neurons` in the `Governance` struct, which specify
+    /// This index is built from the `neurons` in the `Governance` struct, which specify
     /// the principals that can modify the neuron.
     pub fn build_principal_to_neuron_ids_index(
         &self,

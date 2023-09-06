@@ -2,7 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 # Limit the visilibility of the package only to few tools/tests.
 # Users should ideally directly use the //rs/registry/nns_data_provider
-# package and this one should not exists since it is just a thin wrapper.
+# package and this one should not exist since it is just a thin wrapper.
 package(default_visibility = [
     "//rs/ic_p8s_service_discovery:__pkg__",
     "//rs/registry/admin:__pkg__",

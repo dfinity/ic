@@ -273,7 +273,7 @@ impl SystemStateChanges {
             let own_canister_id = system_state.canister_id;
             let call_context_manager = system_state
                 .call_context_manager_mut()
-                .ok_or_else(|| Self::error("Call context manager does not exists"))?;
+                .ok_or_else(|| Self::error("Call context manager does not exist"))?;
             for (context_id, amount_taken) in &self.call_context_balance_taken {
                 let call_context = call_context_manager
                     .call_context_mut(*context_id)
@@ -382,7 +382,7 @@ impl SystemStateChanges {
         for update in self.callback_updates {
             let call_context_manager = system_state
                 .call_context_manager_mut()
-                .ok_or_else(|| Self::error("Call context manager does not exists"))?;
+                .ok_or_else(|| Self::error("Call context manager does not exist"))?;
             match update {
                 CallbackUpdate::Register(expected_id, mut callback) => {
                     if let Some(receiver) = callback_changes.get(&expected_id) {

@@ -112,7 +112,7 @@ impl Firewall {
             .get_subnet_id_from_node_id(self.node_id, registry_version)
             .unwrap_or(None);
 
-        // This is the eventual list of rules fetched from the registry. It is build in the order of the priority:
+        // This is the eventual list of rules fetched from the registry. It is built in the order of the priority:
         // Node > Subnet > Replica Nodes > Global
         let mut tcp_rules = Vec::<FirewallRule>::new();
         let mut udp_rules = Vec::<FirewallRule>::new();
