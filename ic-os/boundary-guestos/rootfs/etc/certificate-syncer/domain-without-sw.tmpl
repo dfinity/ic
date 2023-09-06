@@ -1,0 +1,37 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+
+    server_name {name};
+
+    ssl_certificate     {ssl_certificate_path};
+    ssl_certificate_key {ssl_certificate_key_path};
+
+    location / {
+        # Observability
+        include "includes/request_id.conf";
+
+        # Prereqs
+        include "includes/method_get.conf";
+        include "includes/empty_routes_503.conf";
+        include "includes/denylist_451.conf";
+
+        # CORS
+        set $cors_allow_methods "HEAD, GET, OPTIONS";
+        include "includes/cors_remove_proxy.conf";
+        include "includes/cors.conf";
+        include "includes/options.conf";
+
+        # Update the Host header so that icx-proxy is able to process the request
+        proxy_set_header Host "$inferred_canister_id.$primary_domain";
+
+        proxy_pass http://$icx_proxy;
+        include "includes/proxy_headers.conf";
+
+        # Required for clients that have a service worker, which hasn't been uninstalled yet
+        add_header "X-Ic-Gateway" "$primary_api_domain" always;
+        add_header "X-Ic-Canister-Id" "$inferred_canister_id" always;
+
+        add_header "X-Cache-Status" $upstream_cache_status;
+    }
+}

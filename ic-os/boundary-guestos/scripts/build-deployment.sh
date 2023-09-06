@@ -49,6 +49,7 @@ Arguments:
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
+       --cert-syncer-raw-domains-file   specify a path to a file containing a list of custom domains that should bypass the service worker
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
        --ip-hash-salt                   specify a salt for hashing ip values
        --logging-url                    specify an endpoint for our logging backend
@@ -118,6 +119,9 @@ for argument in "${@}"; do
             ;;
         --cert-issuer-enc-key=*)
             CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
+            ;;
+        --cert-syncer-raw-domains-file=*)
+            CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${argument#*=}"
             ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
@@ -523,6 +527,12 @@ EOF
     done
 }
 
+function generate_certificate_syncer_config() {
+    if [ ! -z "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" ]; then
+        cp "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" "${CONFIG_DIR}/${NODE_PREFIX}/raw_domains.txt"
+    fi
+}
+
 function copy_pre_isolation_canisters() {
     if [[ -z "${PRE_ISOLATION_CANISTERS:-}" ]]; then
         err "pre-domain-isolation canisters have not been provided, proceeding without copying them"
@@ -641,6 +651,7 @@ function main() {
     copy_deny_list
     copy_geolite2_dbs
     generate_certificate_issuer_config
+    generate_certificate_syncer_config
     copy_pre_isolation_canisters
     copy_ip_hash_salt
     copy_logging_credentials
