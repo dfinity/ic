@@ -308,11 +308,11 @@ pub fn get_replica_transport_config(
         .as_ref()
         .expect("p2p flow endpoint not present in node record.")
         .port;
-    let port = u16::try_from(port).expect("Could not convert u32 to u16");
+    let _ = u16::try_from(port).expect("Could not convert u32 to u16");
 
     TransportConfig {
         node_ip: "127.0.0.1".to_string(),
-        listening_port: port,
+        listening_port: 0,
         send_queue_size: 8,
         ..Default::default()
     }

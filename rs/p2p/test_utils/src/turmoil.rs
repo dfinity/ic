@@ -181,7 +181,7 @@ where
 }
 
 pub enum PeerManagerAction {
-    Add((NodeId, u16, RegistryVersion)),
+    Add((NodeId, RegistryVersion)),
     Remove((NodeId, RegistryVersion)),
 }
 
@@ -211,11 +211,11 @@ pub fn add_peer_manager_to_sim(
                 }
                 Some(action) = peer_manager_cmd_receiver.recv() => {
                     match action {
-                        PeerManagerAction::Add((peer, port, rv)) => {
+                        PeerManagerAction::Add((peer, rv)) => {
                             registry_handler.add_node(
                                 rv,
                                 peer,
-                                vec![Some((&turmoil::lookup(peer.to_string()).to_string(),port))]
+                                Some((&turmoil::lookup(peer.to_string()).to_string(), 4100))
                             );
                         }
                         PeerManagerAction::Remove((peer, rv)) => {
@@ -244,7 +244,6 @@ pub fn add_transport_to_sim<F>(
     sim: &mut Sim,
     log: ReplicaLogger,
     peer: NodeId,
-    port: u16,
     registry_handler: RegistryConsensusHandle,
     topology_watcher: watch::Receiver<SubnetTopology>,
     conn_checker: Option<Router>,
@@ -255,7 +254,7 @@ pub fn add_transport_to_sim<F>(
 ) where
     F: Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static,
 {
-    let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, port).into();
+    let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 4100).into();
 
     let node_crypto =
         crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
