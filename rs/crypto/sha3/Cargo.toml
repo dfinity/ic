@@ -5,7 +5,7 @@ edition = "2021"
 description = "Library for SHA-3 and Keccak hashing"
 
 [dependencies]
-sha3 = "0.10.8"
+sha3 = "0.9.1"
 
 [dev-dependencies]
 hex = "0.4.3"

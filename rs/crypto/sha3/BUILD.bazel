@@ -38,6 +38,10 @@ rust_test_suite(
     srcs = glob(
         ["tests/*.rs"],
     ),
+    data = [
+        "test_resources/SHAKE256ShortMsg_subset.rsp",
+        "test_resources/SHAKE256VariableOut_subset.rsp",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = [":sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
