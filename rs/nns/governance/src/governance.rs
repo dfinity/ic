@@ -1533,7 +1533,8 @@ impl Governance {
         // Make sure that subaccounts are not repeated across neurons.
         let mut subaccounts = HashSet::new();
         // TODO(NNS1-2411): This should be migrated to using subaccount index before migrating any neuron to stable storage.
-        for n in self.list_heap_neurons() {
+
+        for n in self.neuron_store.heap_neurons().values() {
             // For now expect that neurons have pre-assigned ids, since
             // we add them only at genesis.
             let _ =
@@ -1636,10 +1637,6 @@ impl Governance {
         modifier: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         Ok(self.neuron_store.with_neuron_mut(nid, modifier)?)
-    }
-
-    pub fn list_heap_neurons(&self) -> impl Iterator<Item = &Neuron> {
-        self.neuron_store.heap_neurons().values()
     }
 
     #[allow(dead_code)] // TODO NNS1-2351 remove allow(dead_code)
@@ -1973,13 +1970,27 @@ impl Governance {
     pub fn list_known_neurons(&self) -> ListKnownNeuronsResponse {
         // This should be migrated to known neuron index before migrating any neuron to stable storage.
         let known_neurons: Vec<KnownNeuron> = self
-            .list_heap_neurons()
-            .filter(|neuron| neuron.known_neuron_data.is_some())
-            .map(|neuron| KnownNeuron {
-                id: neuron.id,
-                known_neuron_data: neuron.known_neuron_data.clone(),
+            .neuron_store
+            .list_known_neuron_ids()
+            .into_iter()
+            // Flat map to discard neuron_not_found errors here, which we cannot handle here
+            // and indicates a problem with NeuronStore
+            .flat_map(|neuron_id| {
+                self.neuron_store
+                    .with_neuron(&neuron_id, |n| KnownNeuron {
+                        id: n.id,
+                        known_neuron_data: n.known_neuron_data.clone(),
+                    })
+                    .map_err(|e| {
+                        println!(
+                            "Error while listing known neurons.  Neuron disappeared: {:?}",
+                            e
+                        );
+                        e
+                    })
             })
             .collect();
+
         ListKnownNeuronsResponse { known_neurons }
     }
 
@@ -5374,26 +5385,22 @@ impl Governance {
         let mut electoral_roll = HashMap::<u64, Ballot>::new();
         let mut total_power: u128 = 0;
         // No neuron in the stable storage should have maturity.
-        for neuron in self.list_heap_neurons() {
-            // If this neuron is eligible to vote, record its
-            // voting power at the time of making the
-            // proposal.
-            if neuron.dissolve_delay_seconds(now_seconds)
-                < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-            {
-                // Not eligible due to dissolve delay.
-                continue;
-            }
-            let power = neuron.voting_power(now_seconds);
-            total_power += power as u128;
-            electoral_roll.insert(
-                neuron.id.expect("Neuron must have an id").id,
-                Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power: power,
-                },
-            );
-        }
+
+        self.neuron_store
+            .map_voting_eligible_neurons(now_seconds, |neuron| {
+                let voting_power = neuron.voting_power(now_seconds);
+
+                total_power += voting_power as u128;
+
+                electoral_roll.insert(
+                    neuron.id.expect("Neuron must have an id").id,
+                    Ballot {
+                        vote: Vote::Unspecified as i32,
+                        voting_power,
+                    },
+                );
+            });
+
         if total_power >= (u64::MAX as u128) {
             // The way the neurons are configured, the total voting
             // power on this proposal would overflow a u64!
@@ -6590,105 +6597,101 @@ impl Governance {
         // Filter all the neurons that are currently in "spawning" state.
         // Do this here to avoid having to borrow *self while we perform changes below.
         // Spawning neurons must have maturity, and no neurons in stable storage should have maturity.
-        let spawning_neurons = self
-            .list_heap_neurons()
-            .filter(|n| n.state(now_seconds) == NeuronState::Spawning)
-            .cloned()
-            .collect::<Vec<Neuron>>();
+        let ready_to_spawn_ids = self
+            .neuron_store
+            .list_ready_to_spawn_neuron_ids(now_seconds);
 
-        for neuron in spawning_neurons {
-            let spawn_timestamp_seconds = neuron
-                .spawn_at_timestamp_seconds
-                .expect("Neuron is spawning but has no spawn timestamp");
+        for neuron_id in ready_to_spawn_ids {
+            // Actually mint the neuron's ICP.
+            let in_flight_command = NeuronInFlightCommand {
+                timestamp: now_seconds,
+                command: Some(InFlightCommand::Spawn(neuron_id)),
+            };
 
-            if now_seconds >= spawn_timestamp_seconds {
-                let id = neuron.id.unwrap();
-                let subaccount = neuron.account.clone();
-                // Actually mint the neuron's ICP.
-                let in_flight_command = NeuronInFlightCommand {
-                    timestamp: now_seconds,
-                    command: Some(InFlightCommand::Spawn(neuron.id.unwrap())),
-                };
+            // Add the neuron to the set of neurons undergoing ledger updates.
+            match self.lock_neuron_for_command(neuron_id.id, in_flight_command.clone()) {
+                Ok(mut lock) => {
+                    // Since we're multiplying a potentially pretty big number by up to 10500, do
+                    // the calculations as u128 before converting back.
+                    let neuron = self
+                        .with_neuron(&neuron_id, |neuron| neuron.clone())
+                        .expect("Neuron should exist, just found in list");
 
-                // Add the neuron to the set of neurons undergoing ledger updates.
-                match self.lock_neuron_for_command(id.id, in_flight_command.clone()) {
-                    Ok(mut lock) => {
-                        // Since we're multiplying a potentially pretty big number by up to 10500, do
-                        // the calculations as u128 before converting back.
-                        let maturity = neuron.maturity_e8s_equivalent as u128;
-                        let neuron_stake: u64 = maturity
-                            .checked_mul((10000 + maturity_modulation).try_into().unwrap())
-                            .unwrap()
-                            .checked_div(10000)
-                            .unwrap()
-                            .try_into()
-                            .expect("Couldn't convert stake to u64");
+                    let maturity = neuron.maturity_e8s_equivalent;
+                    let subaccount = neuron.account.clone();
 
-                        println!(
-                            "{}Spawning neuron: {:?}. Performing ledger update.",
-                            LOG_PREFIX, neuron
-                        );
+                    let neuron_stake: u64 = (maturity as u128)
+                        .checked_mul((10000 + maturity_modulation).try_into().unwrap())
+                        .unwrap()
+                        .checked_div(10000)
+                        .unwrap()
+                        .try_into()
+                        .expect("Couldn't convert stake to u64");
 
-                        let neuron_clone = self
-                            .with_neuron_mut(&id, |neuron| {
-                                // Reset the neuron's maturity and set that it's spawning before we actually mint
-                                // the stake. This is conservative to prevent a neuron having _both_ the stake and
-                                // the maturity at any point in time.
-                                neuron.maturity_e8s_equivalent = 0;
-                                neuron.spawn_at_timestamp_seconds = None;
-                                neuron.cached_neuron_stake_e8s = neuron_stake;
+                    println!(
+                        "{}Spawning neuron: {:?}. Performing ledger update.",
+                        LOG_PREFIX, neuron
+                    );
 
-                                neuron.clone()
-                            })
-                            .unwrap();
+                    let staked_neuron_clone = self
+                        .with_neuron_mut(&neuron_id, |neuron| {
+                            // Reset the neuron's maturity and set that it's spawning before we actually mint
+                            // the stake. This is conservative to prevent a neuron having _both_ the stake and
+                            // the maturity at any point in time.
+                            neuron.maturity_e8s_equivalent = 0;
+                            neuron.spawn_at_timestamp_seconds = None;
+                            neuron.cached_neuron_stake_e8s = neuron_stake;
 
-                        // Do the transfer, this is a minting transfer, from the governance canister's
-                        // (which is also the minting canister) main account into the neuron's
-                        // subaccount.
-                        match self
-                            .ledger
-                            .transfer_funds(
-                                neuron_stake,
-                                0, // Minting transfer don't pay a fee.
-                                None,
-                                neuron_subaccount(
-                                    Subaccount::try_from(&subaccount[..])
-                                        .expect("Couldn't convert neuron.account"),
-                                ),
-                                now_seconds,
-                            )
-                            .await
-                        {
-                            Ok(_) => {
-                                println!(
-                                    "{}Spawned neuron: {:?}. Ledger update performed.",
-                                    LOG_PREFIX, neuron_clone,
+                            neuron.clone()
+                        })
+                        .unwrap();
+
+                    // Do the transfer, this is a minting transfer, from the governance canister's
+                    // (which is also the minting canister) main account into the neuron's
+                    // subaccount.
+                    match self
+                        .ledger
+                        .transfer_funds(
+                            neuron_stake,
+                            0, // Minting transfer don't pay a fee.
+                            None,
+                            neuron_subaccount(
+                                Subaccount::try_from(&subaccount[..])
+                                    .expect("Couldn't convert neuron.account"),
+                            ),
+                            now_seconds,
+                        )
+                        .await
+                    {
+                        Ok(_) => {
+                            println!(
+                                "{}Spawned neuron: {:?}. Ledger update performed.",
+                                LOG_PREFIX, staked_neuron_clone,
+                            );
+                        }
+                        Err(error) => {
+                            // Retain the neuron lock, the neuron won't be able to undergo stake changing
+                            // operations until this is fixed.
+                            // This is different from what we do in most places because we usually rely
+                            // on trapping to retain the lock, but we can't do that here since we're not
+                            // working on a single neuron.
+                            lock.retain();
+                            println!(
+                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}.",
+                                LOG_PREFIX,
+                                neuron_id,
+                                error,
                                 );
-                            }
-                            Err(error) => {
-                                // Retain the neuron lock, the neuron won't be able to undergo stake changing
-                                // operations until this is fixed.
-                                // This is different from what we do in most places because we usually rely
-                                // on trapping to retain the lock, but we can't do that here since we're not
-                                // working on a single neuron.
-                                lock.retain();
-                                println!(
-                                    "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}.",
-                                    LOG_PREFIX,
-                                    id,
-                                    error,
-                                );
-                            }
-                        };
-                    }
-                    Err(error) => {
-                        // If the lock was already acquired, just continue.
-                        println!(
-                            "{}Tried to spawn neuron but was already locked: {:?}. Error: {:?}",
-                            LOG_PREFIX, id, error,
-                        );
-                        continue;
-                    }
+                        }
+                    };
+                }
+                Err(error) => {
+                    // If the lock was already acquired, just continue.
+                    println!(
+                        "{}Tried to spawn neuron but was already locked: {:?}. Error: {:?}",
+                        LOG_PREFIX, neuron_id, error,
+                    );
+                    continue;
                 }
             }
         }
@@ -7222,7 +7225,7 @@ impl Governance {
             0
         };
 
-        for neuron in self.list_heap_neurons() {
+        for neuron in self.neuron_store.heap_neurons().values() {
             metrics.total_staked_e8s += neuron.minted_stake_e8s();
             metrics.total_staked_maturity_e8s_equivalent +=
                 neuron.staked_maturity_e8s_equivalent.unwrap_or(0);

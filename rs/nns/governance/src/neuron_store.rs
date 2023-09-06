@@ -1,8 +1,10 @@
 use crate::{
-    governance::{Environment, LOG_PREFIX},
-    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, Topic},
+    governance::{Environment, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
     storage::{NEURON_INDEXES, STABLE_NEURON_STORE},
 };
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{
@@ -188,32 +190,80 @@ impl NeuronStore {
             .collect()
     }
 
-    /// Private method - not intended to be used externally, as we want to over-time hide from
-    /// application logic the storage location of the neurons, and only expose operations that
-    /// can be done in a performant manner from here.
-    fn heap_neurons_filtered(&self, filter: impl Fn(&Neuron) -> bool) -> Vec<&Neuron> {
-        self.heap_neurons.values().filter(|n| filter(n)).collect()
-    }
-
-    fn heap_neuron_ids_filtered(&self, filter: impl Fn(&Neuron) -> bool) -> Vec<NeuronId> {
-        self.heap_neurons_filtered(filter)
-            .into_iter()
-            .flat_map(|n| n.id)
+    /// Internal - map over neurons after filtering
+    fn map_heap_neurons_filtered<R>(
+        &self,
+        filter: impl Fn(&Neuron) -> bool,
+        mut f: impl FnMut(&Neuron) -> R,
+    ) -> Vec<R> {
+        self.heap_neurons
+            .values()
+            .filter(|n| filter(n))
+            .map(|n| f(n))
             .collect()
     }
 
     /// List all neuron ids that are in the community fund.
     pub fn list_community_fund_neuron_ids(&self) -> Vec<NeuronId> {
-        self.heap_neuron_ids_filtered(|n| {
+        let filter = |n: &Neuron| {
             n.joined_community_fund_timestamp_seconds
                 .unwrap_or_default()
                 > 0
-        })
+        };
+        self.map_heap_neurons_filtered(filter, |n| n.id)
+            .into_iter()
+            .flatten()
+            .collect()
     }
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
     pub fn list_staked_maturity_neuron_ids(&self) -> Vec<NeuronId> {
-        self.heap_neuron_ids_filtered(|n| n.staked_maturity_e8s_equivalent.unwrap_or_default() > 0)
+        let filter = |n: &Neuron| n.staked_maturity_e8s_equivalent.unwrap_or_default() > 0;
+        self.map_heap_neurons_filtered(filter, |n| n.id)
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    /// List all neuron ids of known neurons
+    pub fn list_known_neuron_ids(&self) -> Vec<NeuronId> {
+        let filter = |n: &Neuron| n.known_neuron_data.is_some();
+        self.map_heap_neurons_filtered(filter, |n| n.id)
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    /// List all neurons that are spawning
+    pub fn list_ready_to_spawn_neuron_ids(&self, now_seconds: u64) -> Vec<NeuronId> {
+        let filter = |n: &Neuron| {
+            let spawning_state = n.state(now_seconds) == NeuronState::Spawning;
+            if !spawning_state {
+                return false;
+            }
+            // spawning_state is calculated based on presence of spawn_at_atimestamp_seconds
+            // so it would be quite surprising if it is missing here (impossible in fact)
+            now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
+        };
+        self.map_heap_neurons_filtered(filter, |n| n.id)
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    /// Execute a function against each voting eligible neuron
+    pub fn map_voting_eligible_neurons<R>(
+        &self,
+        now_seconds: u64,
+        mut f: impl FnMut(&Neuron) -> R,
+    ) -> Vec<R> {
+        let filter = |n: &Neuron| {
+            n.dissolve_delay_seconds(now_seconds) >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        };
+
+        // This should be safe to do without with_neuron because
+        // all voting_eligible neurons should be in the heap
+        self.map_heap_neurons_filtered(filter, |neuron| f(neuron))
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,
