@@ -1,7 +1,7 @@
 mod eth_rpc_client {
-    use crate::endpoints::EthereumNetwork;
     use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider, SepoliaProvider};
     use crate::eth_rpc_client::EthRpcClient;
+    use crate::lifecycle::EthereumNetwork;
 
     #[test]
     fn should_retrieve_sepolia_providers_in_stable_order() {

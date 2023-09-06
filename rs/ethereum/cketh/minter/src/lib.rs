@@ -5,6 +5,7 @@ pub mod eth_rpc;
 pub mod eth_rpc_client;
 pub mod eth_rpc_error;
 pub mod guard;
+pub mod lifecycle;
 pub mod logs;
 pub mod management;
 pub mod numeric;

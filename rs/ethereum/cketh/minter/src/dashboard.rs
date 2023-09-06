@@ -1,9 +1,10 @@
 use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::address::Address;
-use ic_cketh_minter::endpoints::{EthereumNetwork, RetrieveEthStatus};
-use ic_cketh_minter::eth_logs::{EventSource, EventSourceError, SMART_CONTRACT_ADDRESS};
+use ic_cketh_minter::endpoints::RetrieveEthStatus;
+use ic_cketh_minter::eth_logs::{EventSource, EventSourceError};
 use ic_cketh_minter::eth_rpc::{BlockNumber, Hash};
+use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::transactions::EthWithdrawalRequest;
@@ -55,7 +56,9 @@ impl DashboardTemplate {
                 .minter_address()
                 .map(|addr| addr.to_string())
                 .unwrap_or_default(),
-            contract_address: Address::new(SMART_CONTRACT_ADDRESS).to_string(),
+            contract_address: state
+                .ethereum_contract_address
+                .map_or("N/A".to_string(), |address| address.to_string()),
             ledger_id: state.ledger_id,
             next_transaction_nonce: state.next_transaction_nonce,
             last_synced_block: state.last_scraped_block_number,

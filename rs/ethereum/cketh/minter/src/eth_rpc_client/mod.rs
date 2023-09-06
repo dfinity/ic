@@ -1,4 +1,3 @@
-use crate::endpoints::EthereumNetwork;
 use crate::eth_rpc;
 use crate::eth_rpc::{
     Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult,
@@ -6,6 +5,7 @@ use crate::eth_rpc::{
     Transaction,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
+use crate::lifecycle::EthereumNetwork;
 use crate::logs::{DEBUG, INFO};
 use crate::state::State;
 use ic_canister_log::log;

@@ -1,9 +1,10 @@
 use crate::address::Address;
-use crate::endpoints::{EthereumNetwork, InitArg};
 use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
 use crate::eth_rpc::BlockNumber;
+use crate::lifecycle::upgrade::UpgradeArg;
+use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
-use crate::numeric::{LedgerMintIndex, TransactionNonce};
+use crate::numeric::{LedgerMintIndex, TransactionNonce, Wei};
 use crate::transactions::EthTransactions;
 use candid::Principal;
 use ic_canister_log::log;
@@ -35,7 +36,9 @@ pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub ledger_id: Principal,
+    pub ethereum_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
+    pub minimum_withdrawal_amount: Wei,
     pub last_scraped_block_number: BlockNumber,
     pub last_finalized_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeSet<ReceivedEthEvent>,
@@ -53,55 +56,44 @@ pub struct State {
     pub active_tasks: HashSet<TaskType>,
 }
 
-impl Default for State {
-    fn default() -> Self {
-        let next_transaction_nonce = TransactionNonce::ZERO;
-        let ethereum_network = EthereumNetwork::default();
-        Self {
-            ethereum_network,
-            ecdsa_key_name: "test_key_1".to_string(),
-            ledger_id: Principal::anonymous(),
-            ecdsa_public_key: None,
-            // Note that the default block to start from for logs scrapping
-            // depends on the chain we are using:
-            // Ethereum and Sepolia have for example different block heights at a given time.
-            // https://sepolia.etherscan.io/block/3938798
-            last_scraped_block_number: BlockNumber::new(3_956_206),
-            last_finalized_block_number: None,
-            events_to_mint: Default::default(),
-            minted_events: Default::default(),
-            invalid_events: Default::default(),
-            next_transaction_nonce,
-            retrieve_eth_principals: BTreeSet::new(),
-            eth_transactions: EthTransactions::new(next_transaction_nonce),
-            active_tasks: Default::default(),
-        }
-    }
-}
-
-impl From<InitArg> for State {
-    fn from(
-        InitArg {
-            ethereum_network,
-            ecdsa_key_name,
-            ledger_id,
-            next_transaction_nonce,
-        }: InitArg,
-    ) -> Self {
-        let initial_nonce = TransactionNonce::try_from(next_transaction_nonce)
-            .expect("BUG: initial nonce must be less than U256::MAX");
-        Self {
-            ethereum_network,
-            ecdsa_key_name,
-            next_transaction_nonce: initial_nonce,
-            eth_transactions: EthTransactions::new(initial_nonce),
-            ledger_id,
-            ..Self::default()
-        }
-    }
+#[derive(Debug, Eq, PartialEq)]
+pub enum InvalidStateError {
+    InvalidTransactionNonce(String),
+    InvalidEcdsaKeyName(String),
+    InvalidLedgerId(String),
+    InvalidEthereumContractAddress(String),
+    InvalidMinimumWithdrawalAmount(String),
 }
 
 impl State {
+    pub fn validate_config(&self) -> Result<(), InvalidStateError> {
+        if self.ecdsa_key_name.trim().is_empty() {
+            return Err(InvalidStateError::InvalidEcdsaKeyName(
+                "ecdsa_key_name cannot be blank".to_string(),
+            ));
+        }
+        if self.ledger_id == Principal::anonymous() {
+            return Err(InvalidStateError::InvalidLedgerId(
+                "ledger_id cannot be the anonymous principal".to_string(),
+            ));
+        }
+        if self
+            .ethereum_contract_address
+            .iter()
+            .any(|address| address == &Address::ZERO)
+        {
+            return Err(InvalidStateError::InvalidEthereumContractAddress(
+                "ethereum_contract_address cannot be the zero address".to_string(),
+            ));
+        }
+        if self.minimum_withdrawal_amount == Wei::ZERO {
+            return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
+                "minimum_withdrawal_amount must be positive".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn minter_address(&self) -> Option<Address> {
         let pubkey = PublicKey::deserialize_sec1(&self.ecdsa_public_key.as_ref()?.public_key)
             .unwrap_or_else(|e| {
@@ -170,8 +162,44 @@ impl State {
         current_nonce
     }
 
+    pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
+        self.next_transaction_nonce = new_nonce;
+        self.eth_transactions
+            .update_next_transaction_nonce(new_nonce);
+    }
+
     pub const fn ethereum_network(&self) -> EthereumNetwork {
         self.ethereum_network
+    }
+
+    pub fn upgrade(&mut self, upgrade_args: UpgradeArg) -> Result<(), InvalidStateError> {
+        use std::str::FromStr;
+
+        let UpgradeArg {
+            next_transaction_nonce,
+            minimum_withdrawal_amount,
+            ethereum_contract_address,
+        } = upgrade_args;
+        if let Some(nonce) = next_transaction_nonce {
+            let nonce = TransactionNonce::try_from(nonce).map_err(|e| {
+                InvalidStateError::InvalidTransactionNonce(format!("ERROR: {:?}", e))
+            })?;
+            self.next_transaction_nonce = nonce;
+            self.eth_transactions.update_next_transaction_nonce(nonce);
+        }
+        if let Some(amount) = minimum_withdrawal_amount {
+            let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
+                InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {:?}", e))
+            })?;
+            self.minimum_withdrawal_amount = minimum_withdrawal_amount;
+        }
+        if let Some(address) = ethereum_contract_address {
+            let ethereum_contract_address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+            })?;
+            self.ethereum_contract_address = Some(ethereum_contract_address);
+        }
+        self.validate_config()
     }
 }
 
