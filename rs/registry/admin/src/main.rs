@@ -68,7 +68,7 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
-    hostos_version::v1::HostOsVersionRecord,
+    hostos_version::v1::HostosVersionRecord,
     node::v1::NodeRecord,
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
@@ -122,7 +122,6 @@ use prost::Message;
 use registry_canister::mutations::{
     common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
-    do_add_hostos_version::AddHostOsVersionPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
@@ -130,9 +129,10 @@ use registry_canister::mutations::{
     do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
+    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
     do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostOsVersionPayload,
+    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
     do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -435,12 +435,13 @@ enum SubCommand {
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
     /// Propose to set the Bitcoin configuration
     ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
-    /// Add a HostOS version
-    ProposeToAddHostOsVersion(ProposeToAddHostOsVersionCmd),
+    /// Submits a proposal to update currently elected HostOS versions, by electing
+    /// a new version and/or unelecting multiple versions.
+    ProposeToUpdateElectedHostosVersions(ProposeToUpdateElectedHostosVersionsCmd),
     /// Set or remove a HostOS version on Nodes
-    ProposeToManageHostOsVersion(ProposeToManageHostOsVersionCmd),
-    /// Get current list of HostOS versions
-    GetHostOsVersions,
+    ProposeToUpdateNodesHostosVersion(ProposeToUpdateNodesHostosVersionCmd),
+    /// Get current list of elected HostOS versions
+    GetElectedHostosVersions,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -4022,49 +4023,62 @@ async fn propose_to_create_service_nervous_system(
     }
 }
 
-/// Sub-command to add a new HostOS version to the registry.
+/// Sub-command to submit a proposal to update elected HostOS versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToAddHostOsVersionCmd {
-    /// Version ID. This can be anything, it has no semantics. The reason it is
-    /// part of the payload is that it will be needed in the subsequent step
-    /// of upgrading the HostOSs of individual nodes.
-    pub hostos_version_id: String,
+struct ProposeToUpdateElectedHostosVersionsCmd {
+    #[clap(long)]
+    /// The HostOS version ID to elect.
+    pub hostos_version_to_elect: Option<String>,
 
+    #[clap(long)]
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_urls'.
-    release_package_sha256_hex: String,
+    pub release_package_sha256_hex: Option<String>,
 
+    #[clap(long, multiple_values(true))]
     /// The URLs against which an HTTP GET request will return a release
     /// package that corresponds to this version.
     pub release_package_urls: Vec<String>,
+
+    #[clap(long, multiple_values(true))]
+    /// The HostOS version ids to remove.
+    pub hostos_versions_to_unelect: Vec<String>,
 }
 
-impl ProposalTitle for ProposeToAddHostOsVersionCmd {
+impl ProposalTitle for ProposeToUpdateElectedHostosVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => format!("Add HostOS version: {}", self.hostos_version_id,),
+            None => match self.hostos_version_to_elect.as_ref() {
+                Some(v) => format!("Elect new HostOS binary revision (commit {v})"),
+                None => "Retire IC HostOS version(s)".to_string(),
+            },
         }
     }
 }
 
 #[async_trait]
-impl ProposalPayload<AddHostOsVersionPayload> for ProposeToAddHostOsVersionCmd {
-    async fn payload(&self, _: Url) -> AddHostOsVersionPayload {
-        AddHostOsVersionPayload {
-            hostos_version_id: self.hostos_version_id.clone(),
+impl ProposalPayload<UpdateElectedHostosVersionsPayload>
+    for ProposeToUpdateElectedHostosVersionsCmd
+{
+    async fn payload(&self, _: Url) -> UpdateElectedHostosVersionsPayload {
+        let payload = UpdateElectedHostosVersionsPayload {
+            hostos_version_to_elect: self.hostos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-        }
+            hostos_versions_to_unelect: self.hostos_versions_to_unelect.clone(),
+        };
+        payload.validate().expect("Failed to validate payload");
+        payload
     }
 }
 
 /// Sub-command to set HostOS version on a set of Nodes.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToManageHostOsVersionCmd {
-    /// The list of nodes on which to set the given HostOsVersion
+struct ProposeToUpdateNodesHostosVersionCmd {
+    /// The list of nodes on which to set the given HostosVersion
     #[clap(name = "NODE_ID", multiple_values(true), required = true)]
     pub node_ids: Vec<PrincipalId>,
 
@@ -4074,7 +4088,7 @@ struct ProposeToManageHostOsVersionCmd {
     pub hostos_version_id: Option<String>,
 }
 
-impl ProposalTitle for ProposeToManageHostOsVersionCmd {
+impl ProposalTitle for ProposeToUpdateNodesHostosVersionCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -4094,8 +4108,8 @@ impl ProposalTitle for ProposeToManageHostOsVersionCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateNodesHostOsVersionPayload> for ProposeToManageHostOsVersionCmd {
-    async fn payload(&self, _: Url) -> UpdateNodesHostOsVersionPayload {
+impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToUpdateNodesHostosVersionCmd {
+    async fn payload(&self, _: Url) -> UpdateNodesHostosVersionPayload {
         let node_ids = self
             .node_ids
             .clone()
@@ -4103,7 +4117,7 @@ impl ProposalPayload<UpdateNodesHostOsVersionPayload> for ProposeToManageHostOsV
             .map(NodeId::from)
             .collect();
 
-        UpdateNodesHostOsVersionPayload {
+        UpdateNodesHostosVersionPayload {
             node_ids,
             hostos_version_id: self.hostos_version_id.clone(),
         }
@@ -4196,8 +4210,8 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToOpenSnsTokenSwap(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
-            SubCommand::ProposeToAddHostOsVersion(_) => (),
-            SubCommand::ProposeToManageHostOsVersion(_) => (),
+            SubCommand::ProposeToUpdateElectedHostosVersions(_) => (),
+            SubCommand::ProposeToUpdateNodesHostosVersion(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
             _ => panic!(
@@ -5314,11 +5328,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToAddHostOsVersion(cmd) => {
+        SubCommand::ProposeToUpdateElectedHostosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::AddHostOsVersion,
+                NnsFunction::UpdateElectedHostosVersions,
                 make_canister_client(
                     opts.nns_url,
                     opts.verify_nns_responses,
@@ -5329,11 +5343,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToManageHostOsVersion(cmd) => {
+        SubCommand::ProposeToUpdateNodesHostosVersion(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateNodesHostOsVersion,
+                NnsFunction::UpdateNodesHostosVersion,
                 make_canister_client(
                     opts.nns_url,
                     opts.verify_nns_responses,
@@ -5344,7 +5358,7 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::GetHostOsVersions => {
+        SubCommand::GetElectedHostosVersions => {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
@@ -5370,8 +5384,8 @@ async fn main() {
                     .get_value(&key, registry_client.get_latest_version())
                     .unwrap()
                     .unwrap();
-                let hostos_version_record = HostOsVersionRecord::decode(&bytes[..])
-                    .expect("Error decoding HostOsVersionRecord from registry");
+                let hostos_version_record = HostosVersionRecord::decode(&bytes[..])
+                    .expect("Error decoding HostosVersionRecord from registry");
                 println!("{}", hostos_version_record.hostos_version_id);
             }
         }

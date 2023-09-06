@@ -76,7 +76,7 @@ pub fn make_replica_version_key<S: AsRef<str>>(replica_version_id: S) -> String 
     )
 }
 
-/// Makes a key for a HostOsVersion registry entry.
+/// Makes a key for a HostosVersion registry entry.
 pub fn make_hostos_version_key<S: AsRef<str>>(hostos_version_id: S) -> String {
     format!(
         "{}{}",

@@ -3508,16 +3508,17 @@ pub enum NnsFunction {
     /// This ensures that the replica cannot upgrade to these versions anymore.
     UpdateElectedReplicaVersions = 38,
     BitcoinSetConfig = 39,
-    /// A proposal to add a new version to which the HostOS can be
-    /// upgraded.
-    /// The proposal registers a HostOS version (identified by the hash of the
-    /// installation image) in the registry. By itself, this proposal
-    /// does not effect any upgrade.
-    AddHostOsVersion = 40,
+    /// A proposal to update currently elected HostOS versions, by electing a new
+    /// version, and/or unelecting multiple unused versions. The version to elect
+    /// (often identified by the hash of the installation image) is added to the
+    /// registry. By itself, this proposal does not effect any upgrade. The
+    /// specified versions to unelect are removed from the registry. This ensures
+    /// that the HostOS cannot upgrade to these versions anymore.
+    UpdateElectedHostosVersions = 40,
     /// Update the HostOS version running on a given list of nodes.
     /// The proposal changes the HostOS version that is used on the specified
     /// nodes. The version must be contained in the list of HostOS versions.
-    UpdateNodesHostOsVersion = 41,
+    UpdateNodesHostosVersion = 41,
     /// Uninstall and Install Root with the WASM provided in the function.  If InitArgs are provided
     /// They will be passed to the canister_init function of the WASM provided.
     /// This function is meant as a Break Glass mechanism for when an open call context in
@@ -3577,8 +3578,10 @@ impl NnsFunction {
                 "NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS"
             }
             NnsFunction::BitcoinSetConfig => "NNS_FUNCTION_BITCOIN_SET_CONFIG",
-            NnsFunction::AddHostOsVersion => "NNS_FUNCTION_ADD_HOST_OS_VERSION",
-            NnsFunction::UpdateNodesHostOsVersion => "NNS_FUNCTION_UPDATE_NODES_HOST_OS_VERSION",
+            NnsFunction::UpdateElectedHostosVersions => {
+                "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS"
+            }
+            NnsFunction::UpdateNodesHostosVersion => "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION",
             NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
         }
     }

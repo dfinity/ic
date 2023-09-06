@@ -929,8 +929,8 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
         // that adding a new function causes a compile error here, ensuring that the developer
         // makes an explicit decision on how the payload is handled.
         NnsFunction::Unspecified
-        | NnsFunction::AddHostOsVersion
-        | NnsFunction::UpdateNodesHostOsVersion
+        | NnsFunction::UpdateElectedHostosVersions
+        | NnsFunction::UpdateNodesHostosVersion
         | NnsFunction::AssignNoid
         | NnsFunction::CreateSubnet
         | NnsFunction::AddNodeToSubnet
