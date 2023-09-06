@@ -1,6 +1,6 @@
 use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
-use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
@@ -40,23 +40,15 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
     use hyper_tls::HttpsConnector;
     use std::env;
 
-    if http_requests {
-        env::set_var(
-            "SSL_CERT_FILE",
-            env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
-        );
-        env::remove_var("NIX_SSL_CERT_FILE");
-
-        // Set up Universal VM for httpbin testing service
-        UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-            .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
-            .start(&env)
-            .expect("failed to set up universal VM");
-    }
-
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(16)),
+        memory_kibibytes: None,
+        boot_image_minimal_size_gibibytes: None,
+    };
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_default_vm_resources(vm_resources)
                 .with_features(SubnetFeatures {
                     http_requests,
                     ..SubnetFeatures::default()
@@ -65,6 +57,7 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(vm_resources)
                 .with_features(SubnetFeatures {
                     http_requests,
                     ..SubnetFeatures::default()
@@ -100,6 +93,17 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
     });
 
     if http_requests {
+        env::set_var(
+            "SSL_CERT_FILE",
+            env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
+        );
+        env::remove_var("NIX_SSL_CERT_FILE");
+
+        // Set up Universal VM for httpbin testing service
+        UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+            .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
+            .start(&env)
+            .expect("failed to set up universal VM");
         let log = env.logger();
         retry(log.clone(), secs(300), secs(10), || {
             block_on(async {

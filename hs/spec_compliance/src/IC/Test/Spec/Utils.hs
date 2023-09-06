@@ -206,12 +206,12 @@ ic00viaWithCyclesRefund amount = ic00viaWithCyclesSubnetImpl (relayReplyRefund a
 
 install' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 install' cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install' ic00 (enum #install) cid universal_wasm (run prog)
 
 installAt :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 installAt cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install ic00 (enum #install) cid universal_wasm (run prog)
 
 -- Also calls create, used default 'ic00'
@@ -226,22 +226,22 @@ create ecid = ic_provisional_create ic00 ecid Nothing (Just (2 ^ (60 :: Int))) e
 
 upgrade' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 upgrade' cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install' ic00 (enum #upgrade) cid universal_wasm (run prog)
 
 upgrade :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 upgrade cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install ic00 (enum #upgrade) cid universal_wasm (run prog)
 
 reinstall' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 reinstall' cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install' ic00 (enum #reinstall) cid universal_wasm (run prog)
 
 reinstall :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 reinstall cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install ic00 (enum #reinstall) cid universal_wasm (run prog)
 
 callRequestAs :: (HasCallStack, HasAgentConfig) => Blob -> Blob -> Prog -> GenR
@@ -384,7 +384,7 @@ getTestFile file =
 
 getTestWasm :: FilePath -> IO BS.ByteString
 getTestWasm base = do
-  fp <- getTestFile $ base <.> "wasm"
+  fp <- getTestFile base
   BS.readFile fp
 
 -- * Helper patterns

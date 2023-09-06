@@ -188,13 +188,13 @@ icTests my_sub other_sub =
                                                                          ],
                                                                        let inst name = do
                                                                              cid <- create ecid
-                                                                             wasm <- getTestWasm name
+                                                                             wasm <- getTestWasm (name ++ ".wasm")
                                                                              ic_install ic00 (enum #install) cid wasm ""
                                                                              return cid
                                                                         in let good name = testCase ("valid: " ++ name) $ void $ inst name
                                                                             in let bad name = testCase ("invalid: " ++ name) $ do
                                                                                      cid <- create ecid
-                                                                                     wasm <- getTestWasm name
+                                                                                     wasm <- getTestWasm (name ++ ".wasm")
                                                                                      ic_install' ic00 (enum #install) cid wasm "" >>= isReject [5]
                                                                                 in let read cid m =
                                                                                          ( awaitCall cid $
@@ -564,7 +564,7 @@ icTests my_sub other_sub =
                                                                          step "Reinstall on empty"
                                                                          ic_install (ic00via cid) (enum #reinstall) can_id2 trivialWasmModule "",
                                                                        simpleTestCase "aaaaa-aa (inter-canister, large)" ecid $ \cid -> do
-                                                                         universal_wasm <- getTestWasm "universal_canister"
+                                                                         universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                          can_id <- ic_provisional_create (ic00via cid) ecid Nothing Nothing empty
                                                                          ic_install (ic00via cid) (enum #install) can_id universal_wasm ""
                                                                          do call can_id $ replyData "Hi"
@@ -636,7 +636,7 @@ icTests my_sub other_sub =
                                                                              [ testCase "A canister can request its own status if it does not control itself" $ do
                                                                                  let controllers = [Principal defaultUser, Principal otherUser]
                                                                                  cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install ic00 (enum #install) cid universal_wasm ""
 
                                                                                  cs <- ic_canister_status (ic00via cid) cid
@@ -645,7 +645,7 @@ icTests my_sub other_sub =
                                                                                testCase "Changing controllers" $ do
                                                                                  let controllers = [Principal defaultUser, Principal otherUser]
                                                                                  cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install ic00 (enum #install) cid universal_wasm ""
 
                                                                                  -- Set new controller
@@ -661,7 +661,7 @@ icTests my_sub other_sub =
                                                                                testCase "Multiple controllers (provisional)" $ do
                                                                                  let controllers = [Principal defaultUser, Principal otherUser]
                                                                                  cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install ic00 (enum #install) cid universal_wasm ""
 
                                                                                  -- Controllers should be able to fetch the canister status.
@@ -677,7 +677,7 @@ icTests my_sub other_sub =
                                                                                simpleTestCase "Multiple controllers (aaaaa-aa)" ecid $ \cid -> do
                                                                                  let controllers = [Principal cid, Principal otherUser]
                                                                                  cid2 <- ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install (ic00via cid) (enum #install) cid2 universal_wasm ""
 
                                                                                  -- Controllers should be able to fetch the canister status.
@@ -1610,13 +1610,13 @@ icTests my_sub other_sub =
                                                                            testCase "uninstall and reinstall wipes state" $ do
                                                                              cid <- install ecid (setGlobal "FOO")
                                                                              ic_uninstall ic00 cid
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
                                                                              query cid (replyData getGlobal) >>= is "BAR",
                                                                            testCase "uninstall and reinstall wipes stable memory" $ do
                                                                              cid <- install ecid (ignore (stableGrow (int 1)) >>> stableWrite (int 0) "FOO")
                                                                              ic_uninstall ic00 cid
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
                                                                              query cid (replyData (i2b stableSize)) >>= asWord32 >>= is 0
                                                                              do
@@ -1633,7 +1633,7 @@ icTests my_sub other_sub =
                                                                              cid <- install ecid $ setCertifiedData "FOO"
                                                                              query cid (replyData getCertificate) >>= extractCertData cid >>= is "FOO"
                                                                              ic_uninstall ic00 cid
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run noop)
                                                                              query cid (replyData getCertificate) >>= extractCertData cid >>= is "",
                                                                            simpleTestCase "uninstalled rejects calls" ecid $ \cid -> do
@@ -1731,7 +1731,7 @@ icTests my_sub other_sub =
                                                                              awaitStatus grs1 >>= isReject [4]
 
                                                                              step "Reinstall"
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
 
                                                                              step "Create second long-running call"
@@ -1890,7 +1890,7 @@ icTests my_sub other_sub =
                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [],
                                                                                testCase "module_hash of universal canister" $ do
                                                                                  cid <- install ecid noop
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  cert <- getStateCert anonymousUser cid [["canister", cid, "module_hash"]]
                                                                                  certValue @Blob cert ["canister", cid, "module_hash"] >>= is (sha256 universal_wasm),
                                                                                testGroup
@@ -2105,7 +2105,7 @@ icTests my_sub other_sub =
                                                                                return cid
                                                                              create_via cid initial_cycles = do
                                                                                cid2 <- ic_create (ic00viaWithCycles cid initial_cycles) ecid empty
-                                                                               universal_wasm <- getTestWasm "universal_canister"
+                                                                               universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                ic_install (ic00via cid) (enum #install) cid2 universal_wasm (run noop)
                                                                                return cid2
                                                                           in [ testGroup "cycles API - backward compatibility" $
