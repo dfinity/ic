@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use anyhow::Error;
 use axum::{
     body::Body,
     extract::State,
@@ -9,63 +8,73 @@ use axum::{
     response::Response,
 };
 use http::header;
-use opentelemetry::{
-    metrics::{Counter, Histogram, Meter},
-    sdk::metrics::{new_view, Aggregation, Instrument, MeterProviderBuilder, Stream},
-    KeyValue,
+use prometheus::{
+    register_histogram_vec_with_registry, register_int_counter_vec_with_registry, Encoder,
+    HistogramOpts, HistogramVec, IntCounterVec, Registry, TextEncoder,
 };
-use prometheus::{Encoder, Registry, TextEncoder};
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::routes::RequestContext;
 
-pub struct HistogramDefinition(
-    pub &'static str,   // action
-    pub &'static [f64], // boundaries
-);
+pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2.0, 3.0, 10.0];
+pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] = &[128.0, 256.0, 512.0, 1024.0, 2048.0, 4096.0];
+pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] =
+    &[1024.0, 2048.0, 4096.0, 8192.0, 16384.0, 32768.0, 65536.0];
 
-pub fn apply_histogram_definitions(
-    b: MeterProviderBuilder,
-    defs: &[HistogramDefinition],
-) -> Result<MeterProviderBuilder, Error> {
-    defs.iter()
-        .try_fold(b, |b, &HistogramDefinition(action, boundaries)| {
-            Ok::<_, Error>(b.with_view(new_view(
-                Instrument::new().name(format!("{action}_duration_sec")), // criteria
-                Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
-                    boundaries: boundaries.to_owned(),
-                    record_min_max: false,
-                }), // mask
-            )?))
-        })
-}
+const LABELS_HTTP: &[&str] = &[
+    "request_type",
+    "status_code",
+    "subnet_id",
+    "node_id",
+    "error_cause",
+    "is_anonymous",
+];
 
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
 #[derive(Clone)]
 pub struct MetricParams {
     pub action: String,
-    pub counter: Counter<u64>,
-    pub recorder: Histogram<f64>,
+    pub counter: IntCounterVec,
+    pub recorder: HistogramVec,
 }
 
 impl MetricParams {
-    pub fn new(meter: &Meter, action: &str) -> Self {
+    pub fn new(registry: &Registry, action: &str) -> Self {
+        Self::new_with_opts(registry, action, &["status"], None)
+    }
+
+    pub fn new_with_opts(
+        registry: &Registry,
+        action: &str,
+        labels: &[&str],
+        buckets: Option<&[f64]>,
+    ) -> Self {
+        let mut recorder_opts = HistogramOpts::new(
+            format!("{action}_duration_sec"),
+            format!("Records the duration of {action} calls in seconds"),
+        );
+
+        if let Some(b) = buckets {
+            recorder_opts.buckets = b.to_vec();
+        }
+
         Self {
             action: action.to_string(),
 
-            // Counter
-            counter: meter
-                .u64_counter(format!("{action}_total"))
-                .with_description(format!("Counts occurences of {action} calls"))
-                .init(),
+            // Count
+            counter: register_int_counter_vec_with_registry!(
+                format!("{action}_total"),
+                format!("Counts occurences of {action} calls"),
+                labels,
+                registry
+            )
+            .unwrap(),
 
             // Duration
-            recorder: meter
-                .f64_histogram(format!("{action}_duration_sec"))
-                .with_description(format!("Records the duration of {action} calls in seconds"))
-                .init(),
+            recorder: register_histogram_vec_with_registry!(recorder_opts, labels, registry)
+                .unwrap(),
         }
     }
 }
@@ -73,32 +82,51 @@ impl MetricParams {
 #[derive(Clone)]
 pub struct HttpMetricParams {
     pub action: String,
-    pub counter: Counter<u64>,
-    pub durationer: Histogram<f64>,
-    pub request_sizer: Histogram<u64>,
-    pub response_sizer: Histogram<u64>,
+    pub counter: IntCounterVec,
+    pub durationer: HistogramVec,
+    pub request_sizer: HistogramVec,
+    pub response_sizer: HistogramVec,
 }
 
 impl HttpMetricParams {
-    pub fn new(meter: &Meter, action: &str) -> Self {
+    pub fn new(registry: &Registry, action: &str) -> Self {
         Self {
             action: action.to_string(),
-            counter: meter
-                .u64_counter(format!("{action}_total"))
-                .with_description(format!("Counts occurences of {action} calls"))
-                .init(),
-            durationer: meter
-                .f64_histogram(format!("{action}_duration_sec"))
-                .with_description(format!("Records the duration of {action} calls in seconds"))
-                .init(),
-            request_sizer: meter
-                .u64_histogram(format!("{action}_request_size"))
-                .with_description(format!("Records the size of {action} requests"))
-                .init(),
-            response_sizer: meter
-                .u64_histogram(format!("{action}_response_size"))
-                .with_description(format!("Records the size of {action} responses."))
-                .init(),
+
+            counter: register_int_counter_vec_with_registry!(
+                format!("{action}_total"),
+                format!("Counts occurences of {action} calls"),
+                LABELS_HTTP,
+                registry
+            )
+            .unwrap(),
+
+            durationer: register_histogram_vec_with_registry!(
+                format!("{action}_duration_sec"),
+                format!("Records the duration of {action} calls in seconds"),
+                LABELS_HTTP,
+                HTTP_DURATION_BUCKETS.to_vec(),
+                registry
+            )
+            .unwrap(),
+
+            request_sizer: register_histogram_vec_with_registry!(
+                format!("{action}_request_size"),
+                format!("Records the size of {action} requests"),
+                LABELS_HTTP,
+                HTTP_REQUEST_SIZE_BUCKETS.to_vec(),
+                registry
+            )
+            .unwrap(),
+
+            response_sizer: register_histogram_vec_with_registry!(
+                format!("{action}_response_size"),
+                format!("Records the size of {action} responses"),
+                LABELS_HTTP,
+                HTTP_RESPONSE_SIZE_BUCKETS.to_vec(),
+                registry
+            )
+            .unwrap(),
         }
     }
 }
@@ -109,8 +137,6 @@ pub async fn with_metrics_middleware(
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<Response, Response> {
-    let start_time = Instant::now();
-
     let request_size = request
         .headers()
         .get(header::CONTENT_LENGTH)
@@ -124,9 +150,16 @@ pub async fn with_metrics_middleware(
         .unwrap_or("bad_request_id")
         .to_owned();
 
+    let start_time = Instant::now();
     let response = next.run(request).await;
-
     let duration = start_time.elapsed().as_secs_f64();
+
+    let response_size = response
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
 
     let routes_ctx = response
         .extensions()
@@ -134,10 +167,31 @@ pub async fn with_metrics_middleware(
         .cloned()
         .unwrap_or_default();
 
-    let subnet_id = routes_ctx.node.as_ref().map(|x| x.subnet_id.to_string());
-    let node_id = routes_ctx.node.as_ref().map(|x| x.id.to_string());
+    let request_type = routes_ctx.request_type.to_string();
+    let status_code = response.status();
+    let subnet_id = routes_ctx
+        .node
+        .as_ref()
+        .map(|x| x.subnet_id.to_string())
+        .unwrap_or("unknown".to_string());
+    let node_id = routes_ctx
+        .node
+        .as_ref()
+        .map(|x| x.id.to_string())
+        .unwrap_or("unknown".to_string());
     let error_cause = format!("{}", routes_ctx.error_cause);
+
     let sender = routes_ctx.sender.map(|x| x.to_string());
+    let is_anonymous = routes_ctx
+        .sender
+        .map(|p| {
+            if p.to_string() == *"2vxsx-fae" {
+                "1"
+            } else {
+                "0"
+            }
+        })
+        .unwrap_or("0");
 
     let HttpMetricParams {
         action,
@@ -148,37 +202,22 @@ pub async fn with_metrics_middleware(
     } = metric_params;
 
     let labels = &[
-        KeyValue::new("request_type", routes_ctx.request_type.to_string()),
-        KeyValue::new("status_code", response.status().as_str().to_owned()),
-        KeyValue::new("subnet_id", subnet_id.clone().unwrap_or(String::from("-"))),
-        KeyValue::new("node_id", node_id.clone().unwrap_or(String::from("-"))),
-        KeyValue::new("error_cause", error_cause.clone()),
-        KeyValue::new(
-            "is_anonymous",
-            routes_ctx
-                .sender
-                .map(|p| {
-                    if p.to_string() == *"2vxsx-fae" {
-                        "1"
-                    } else {
-                        "0"
-                    }
-                })
-                .unwrap_or("-"),
-        ),
+        request_type.as_str(),
+        status_code.as_str(),
+        subnet_id.as_str(),
+        node_id.as_str(),
+        error_cause.as_str(),
+        is_anonymous,
     ];
 
-    let response_size = response
-        .headers()
-        .get(header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(0);
-
-    counter.add(1, labels);
-    durationer.record(duration, labels);
-    request_sizer.record(request_size.into(), labels);
-    response_sizer.record(response_size.into(), labels);
+    counter.with_label_values(labels).inc();
+    durationer.with_label_values(labels).observe(duration);
+    request_sizer
+        .with_label_values(labels)
+        .observe(request_size.into());
+    response_sizer
+        .with_label_values(labels)
+        .observe(response_size.into());
 
     info!(
         action,
@@ -186,7 +225,7 @@ pub async fn with_metrics_middleware(
         request_type = format!("{}", routes_ctx.request_type),
         error_cause,
         error_details = routes_ctx.error_cause.details(),
-        status = response.status().as_u16(),
+        status = status_code.as_u16(),
         subnet_id,
         node_id,
         canister_id = routes_ctx.canister_id.map(|x| x.to_string()),
