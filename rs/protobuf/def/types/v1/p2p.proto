@@ -2,6 +2,11 @@ syntax = "proto3";
 
 package types.v1;
 
+import "types/v1/canister_http.proto";
+import "types/v1/consensus.proto";
+import "types/v1/dkg.proto";
+import "types/v1/ecdsa.proto";
+
 message GossipMessage {
   oneof body {
     GossipAdvert advert = 1;
@@ -58,10 +63,28 @@ message StateSyncFilter {
   uint64 height = 1;
 }
 
+message FileTreeSyncArtifact {
+  bytes absolute_path = 1; // UNIX-compatible path
+  string id = 2;
+}
+
+message Artifact {
+  oneof kind {
+    types.v1.ConsensusMessage consensus = 1;
+    bytes signed_ingress = 2; // CBOR-encoded signed ingress message
+    types.v1.CertificationMessage certification = 3;
+    types.v1.DkgMessage dkg = 4;
+    types.v1.EcdsaMessage ecdsa = 5;
+    types.v1.CanisterHttpShare http_share = 6;
+    FileTreeSyncArtifact file_tree_sync = 7;
+  }
+}
+
 message ArtifactChunk {
   repeated bytes witnesses = 1;
   oneof data {
-    bytes artifact = 2; // TODO(P2P-483): bincode-encoded Artifact to proto-encoding
     bytes chunk = 3;
+    Artifact artifact = 4;
   }
+  reserved 2;
 }

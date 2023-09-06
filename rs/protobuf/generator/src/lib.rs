@@ -358,6 +358,19 @@ fn build_types_proto(def: &Path, out: &Path) {
         ".types.v1.ConsensusMessage",
         "#[allow(clippy::large_enum_variant)]",
     );
+    config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
+    config.type_attribute(
+        ".types.v1.ArtifactChunk",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.GossipChunk",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.GossipMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
     let files = [
         def.join("types/v1/ic00_types.proto"),
         def.join("types/v1/types.proto"),
