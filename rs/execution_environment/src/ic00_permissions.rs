@@ -143,6 +143,14 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::UploadChunk
+            | Ic00Method::StoredChunks
+            | Ic00Method::DeleteChunks
+            | Ic00Method::ClearChunkStore => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
         }
     }
 

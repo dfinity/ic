@@ -970,6 +970,16 @@ impl ExecutionEnvironment {
                     msg.take_cycles(),
                 ))
             }
+            Ok(Ic00Method::UploadChunk)
+            | Ok(Ic00Method::StoredChunks)
+            | Ok(Ic00Method::DeleteChunks)
+            | Ok(Ic00Method::ClearChunkStore) => Some((
+                Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Chunked upload API is not yet implemented.",
+                )),
+                msg.take_cycles(),
+            )),
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
