@@ -183,11 +183,19 @@ where
     }
 
     /// An operation bound to an instance (a Computation) can be issued.
-    /// This function determines if the computation
-    ///   a) can be run, or whether the instance is already busy,
-    ///   b) must be run, or can be read from the cache, i.e., the state graph
-    ///   c) returns within a short time and the result can be returned immediately
-    ///      or if it takes a long time and only poll information (Busy) can be returned.
+    ///
+    /// * If the instance is busy executing an operation, the call returns [IssueOutcome::Busy]
+    /// immediately. In that case, the state label and operation id contained in the result
+    /// indicate that the instance is busy with a previous operation.
+    ///
+    /// * If the instance is available and the computation exceeds a (short) timeout,
+    /// [IssueOutcome::Busy] is returned.
+    ///
+    /// * If the computation finished within the timeout, [IssueOutcome::Output] is returned
+    /// containing the result.
+    ///
+    /// Operations are _not_ queued. Thus, if the instance is busy with an existing operation, the
+    /// client has to retry until the operation is accepted.
     pub async fn issue<S>(&self, computation: Computation<S>) -> IssueResult
     where
         S: Operation<TargetType = T> + Send + 'static,
@@ -268,14 +276,6 @@ where
                         }
                     });
 
-                    // cache lookup
-                    if let Some(cached_computations) =
-                        self.inner.graph.read().await.get(&state_label)
-                    {
-                        if let Some(cached_result) = cached_computations.get(&op_id) {
-                            return Ok(IssueOutcome::Output(cached_result.1.clone()));
-                        }
-                    }
                     // cache miss: replace pocket_ic instance in the vector with Busy
                     (bg_task, IssueOutcome::Busy { state_label, op_id })
                 }
