@@ -12,7 +12,6 @@ use std::process::Command;
 use std::time::Duration;
 use std::time::Instant;
 
-const POCKET_IC_BIN_PATH: &str = "../../target/debug/pocket-ic-server";
 const LOCALHOST: &str = "127.0.0.1";
 
 // TODO: use asserts. best achieved with a uniform reponse type from the rest-api.
@@ -111,7 +110,8 @@ fn save_and_load_checkpoint() {
 
 fn start_server() -> Url {
     let parent_pid = std::os::unix::process::parent_id();
-    Command::new(PathBuf::from(POCKET_IC_BIN_PATH))
+    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    Command::new(PathBuf::from(bin_path))
         .arg("--pid")
         .arg(parent_pid.to_string())
         .spawn()

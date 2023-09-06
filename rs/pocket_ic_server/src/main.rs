@@ -124,7 +124,7 @@ async fn start(runtime: Arc<Runtime>) {
         .route("/instances", get(list_instances))
         //
         // Create a new IC instance. Returns an InstanceId.
-        // Body is currently ignored.
+        // Body can contain a checkpoint name to restore from a checkpoint, or can be left empty to create a new instance.
         .route("/instances", post(create_instance))
         //
         // Call the specified IC instance.
@@ -138,11 +138,6 @@ async fn start(runtime: Arc<Runtime>) {
         //
         // List all checkpoints.
         .route("/checkpoints", get(list_checkpoints))
-        //
-        // Creates a new instance from an existing checkpoint.
-        // Takes a name:String in the request body.
-        // Returns an instance_id.
-        .route("/checkpoints/load", post(load_checkpoint))
         //
         // Deletes an instance.
         .route("/instances/:id/delete", delete(delete_instance))
@@ -255,24 +250,54 @@ async fn status() -> StatusCode {
     StatusCode::OK
 }
 
-/// Create a new IC instance.
+/// Create a new empty IC instance or restore from checkpoint
 /// The new InstanceId will be returned
 async fn create_instance(
     State(AppState {
         instance_map,
         last_request: _,
-        checkpoints: _,
+        checkpoints,
         instances_sequence_counter: counter,
         runtime,
     }): State<AppState>,
-) -> String {
-    let sm = tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
-        .await
-        .expect("Failed to launch a state machine");
-    let mut guard = instance_map.write().await;
-    let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
-    guard.insert(instance_id.clone(), RwLock::new(sm));
-    instance_id
+    body: Option<axum::extract::Json<String>>,
+) -> (StatusCode, String) {
+    match body {
+        Some(body) => {
+            let checkpoint_name = body.0;
+            let checkpoints = checkpoints.read().await;
+            if !checkpoints.contains_key(&checkpoint_name) {
+                return (
+                    StatusCode::NOT_FOUND,
+                    format!("Checkpoint {} does not exist.", checkpoint_name),
+                );
+            }
+            let proto_dir = checkpoints.get(&checkpoint_name).unwrap();
+            let new_instance_dir = TempDir::new().expect("Failed to create tempdir");
+            copy_dir(proto_dir.path(), new_instance_dir.path())
+                .expect("Failed to copy state directory");
+            drop(checkpoints);
+            // create instance
+            let sm = tokio::task::spawn_blocking(|| {
+                create_state_machine(Some(new_instance_dir), runtime)
+            })
+            .await
+            .expect("Failed to launch a state machine");
+            let mut instance_map = instance_map.write().await;
+            let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
+            instance_map.insert(instance_id.clone(), RwLock::new(sm));
+            (StatusCode::OK, instance_id)
+        }
+        None => {
+            let sm = tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
+                .await
+                .expect("Failed to launch a state machine");
+            let mut guard = instance_map.write().await;
+            let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
+            guard.insert(instance_id.clone(), RwLock::new(sm));
+            (StatusCode::OK, instance_id)
+        }
+    }
 }
 
 async fn list_instances(State(inst_map): State<InstanceMap>) -> String {
@@ -340,37 +365,6 @@ async fn save_checkpoint(
             format!("Instance with ID {} was not found.", &id),
         )
     }
-}
-
-async fn load_checkpoint(
-    State(AppState {
-        instance_map,
-        last_request: _,
-        checkpoints,
-        instances_sequence_counter: counter,
-        runtime,
-    }): State<AppState>,
-    axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
-) -> (StatusCode, String) {
-    let checkpoints = checkpoints.read().await;
-    if !checkpoints.contains_key(&checkpoint_name) {
-        return (
-            StatusCode::NOT_FOUND,
-            format!("Checkpoint {} does not exist.", checkpoint_name),
-        );
-    }
-    let proto_dir = checkpoints.get(&checkpoint_name).unwrap();
-    let new_instance_dir = TempDir::new().expect("Failed to create tempdir");
-    copy_dir(proto_dir.path(), new_instance_dir.path()).expect("Failed to copy state directory");
-    drop(checkpoints);
-    // create instance
-    let sm = tokio::task::spawn_blocking(|| create_state_machine(Some(new_instance_dir), runtime))
-        .await
-        .expect("Failed to launch a state machine");
-    let mut instance_map = instance_map.write().await;
-    let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
-    instance_map.insert(instance_id.clone(), RwLock::new(sm));
-    (StatusCode::OK, instance_id)
 }
 
 async fn delete_instance(

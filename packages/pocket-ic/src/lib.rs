@@ -14,8 +14,6 @@ use std::process::Command;
 use std::time::{Duration, Instant, SystemTime};
 
 const LOCALHOST: &str = "127.0.0.1";
-const POCKET_IC_BIN_PATH: &str = "../../target/debug/pocket-ic-server";
-
 type InstanceId = String;
 
 // ======================================================================================================
@@ -25,7 +23,7 @@ pub struct PocketIc {
     pub instance_id: InstanceId,
     // The PocketIC server's base address.
     server_url: Url,
-    // The PocketIC server's base address plus "/instance/<instance_id>".
+    // The PocketIC server's base address plus "/instances/<instance_id>".
     // All communication with this IC instance goes through this endpoint.
     instance_url: Url,
     reqwest_client: reqwest::blocking::Client,
@@ -33,25 +31,16 @@ pub struct PocketIc {
 
 impl PocketIc {
     pub fn new() -> Self {
-        // Attempt to start new PocketIC server if it's not already running.
-        let parent_pid = std::os::unix::process::parent_id();
-        Command::new(PathBuf::from(POCKET_IC_BIN_PATH))
-            .arg("--pid")
-            .arg(parent_pid.to_string())
-            .spawn()
-            .expect("Failed to start PocketIC binary");
-        // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-        let server_url = Self::get_server_url(parent_pid);
+        let server_url = Self::get_server_url();
         let reqwest_client = reqwest::blocking::Client::new();
         let instance_id = reqwest_client
-            .post(server_url.join("instance").unwrap())
+            .post(server_url.join("instances").unwrap())
             .send()
             .expect("Failed to get result")
             .text()
             .expect("Failed to get text");
-        println!("Created new instance with id {}", instance_id);
         let instance_url = server_url
-            .join("instance/")
+            .join("instances/")
             .unwrap()
             .join(&instance_id)
             .unwrap();
@@ -64,7 +53,54 @@ impl PocketIc {
         }
     }
 
-    fn get_server_url(parent_pid: u32) -> Url {
+    pub fn new_from_snapshot<S: AsRef<str> + std::fmt::Display>(name: S) -> Result<Self, String> {
+        let server_url = Self::get_server_url();
+        let reqwest_client = reqwest::blocking::Client::new();
+        let response = reqwest_client
+            .post(server_url.join("instances").unwrap())
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(format!("\"{}\"", name))
+            .send()
+            .expect("Failed to get result");
+        let status = response.status();
+        match status {
+            reqwest::StatusCode::OK => {
+                let instance_id = response.text().expect("Failed to get text");
+                let instance_url = server_url
+                    .join("instances/")
+                    .unwrap()
+                    .join(&instance_id)
+                    .unwrap();
+
+                Ok(Self {
+                    instance_id,
+                    server_url,
+                    instance_url,
+                    reqwest_client,
+                })
+            }
+            reqwest::StatusCode::NOT_FOUND => {
+                Err(format!("Could not find snapshot named '{name}'."))
+            }
+            _ => Err(format!(
+                "The PocketIC server returned status code {}: {:?}!",
+                status,
+                response.text()
+            )),
+        }
+    }
+
+    fn get_server_url() -> Url {
+        // Attempt to start new PocketIC server if it's not already running.
+        // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
+        let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+        let parent_pid = std::os::unix::process::parent_id();
+        Command::new(PathBuf::from(bin_path))
+            .arg("--pid")
+            .arg(parent_pid.to_string())
+            .spawn()
+            .expect("Failed to start PocketIC binary");
+
         let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
         let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
         let start = Instant::now();
@@ -74,10 +110,7 @@ impl PocketIc {
                     let port_string = std::fs::read_to_string(port_file_path)
                         .expect("Failed to read port from port file");
                     let port: u16 = port_string.parse().expect("Failed to parse port to number");
-                    let server_url =
-                        Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
-                    println!("Found PocketIC running at {}", server_url);
-                    return server_url;
+                    return Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
                 }
                 _ => std::thread::sleep(Duration::from_millis(20)),
             }
@@ -88,7 +121,7 @@ impl PocketIc {
     }
 
     pub fn list_instances(&self) -> Vec<InstanceId> {
-        let url = self.server_url.join("instance").unwrap();
+        let url = self.server_url.join("instances").unwrap();
         let response = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -102,6 +135,21 @@ impl PocketIc {
         self.reqwest_client
             .post(self.instance_url.clone())
             .json(&request)
+            .send()
+            .expect("Failed to get result")
+            .text()
+            .expect("Failed to get text")
+    }
+
+    pub fn create_snapshot(&self, name: &str) -> String {
+        self.reqwest_client
+            .post(
+                self.server_url
+                    .join(&format!("{}/save_checkpoint", self.instance_url))
+                    .unwrap(),
+            )
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(format!("\"{}\"", name))
             .send()
             .expect("Failed to get result")
             .text()
