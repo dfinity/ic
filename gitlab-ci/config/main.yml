@@ -164,13 +164,6 @@ bazel-build-fuzzers-archives:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
 
-.bazel-rules-post-master:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
-
 .bazel-test-all:
   extends:
     - .build-k8s
@@ -259,7 +252,7 @@ bazel-test-all-allow-to-fail:
 bazel-system-test-hourly:
   extends:
     - .bazel-test-all
-    - .bazel-rules-post-master
+    - .rules-post-master
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly"
   timeout: 120 minutes
@@ -298,7 +291,7 @@ bazel-config-check-all-rebuild:
 bazel-test-all-rebuild:
   extends:
     - .bazel-test-all
-    - .bazel-rules-post-master
+    - .rules-post-master
   variables:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
@@ -415,7 +408,7 @@ macos-openssl-static-binaries:
 build-ic:
   extends:
     - .build-ic
-    - .bazel-rules-pipeline-no-merge-train
+    - .rules-master-pipeline-no-merge-train
 
 # Scheduled Pipeline
 build-ic-release:
@@ -493,10 +486,7 @@ pre-commit:
 gitlab-ci-config-validation:
   extends:
     - .ubuntu-k8s
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - .rules-master-pipeline-no-merge-train
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
   artifacts:
@@ -516,6 +506,7 @@ python-gitlab-ci-tests:
   extends:
     - .ubuntu-k8s
   rules:
+    # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
@@ -536,7 +527,7 @@ python-gitlab-ci-tests:
 check-bins-linux:
   extends:
     - .ubuntu-k8s
-    - .bazel-rules-pipeline-no-merge-train
+    - .rules-master-pipeline-no-merge-train
   needs:
     - job: linux-openssl-static-binaries
       artifacts: false
@@ -702,7 +693,7 @@ host-os-upgrade-test:
 build-determinism:
   extends:
     - .build-k8s
-    - .bazel-rules-pipeline-no-merge-train
+    - .rules-master-pipeline-no-merge-train
   needs:
     - job: bazel-test-all
       artifacts: false
