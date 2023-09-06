@@ -3,7 +3,7 @@
 # A tool for generating test coverage report for SNS/NNS canisters.
 # It uses https://github.com/taiki-e/cargo-llvm-cov
 
-set -eo pipefail
+set -Eeuo pipefail
 
 NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$NNS_TOOLS_DIR/../lib.sh"
