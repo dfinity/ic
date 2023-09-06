@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -17,4 +17,18 @@ rust_library(
     srcs = ["src/lib.rs"],
     version = "0.0.0",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    srcs = ["tests/tests.rs"],
+    data = [
+        "tests/counter.wasm",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
+    },
+    deps = [":pocket-ic"] + DEPENDENCIES,
 )
