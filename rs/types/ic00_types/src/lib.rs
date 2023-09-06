@@ -77,6 +77,12 @@ pub enum Method {
     // need to fabricate cycles without burning ICP first.
     ProvisionalCreateCanisterWithCycles,
     ProvisionalTopUpCanister,
+
+    // Support for chunked uploading of Wasm modules.
+    UploadChunk,
+    StoredChunks,
+    DeleteChunks,
+    ClearChunkStore,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {

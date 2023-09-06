@@ -199,6 +199,15 @@ pub(super) fn resolve_destination(
                 EcdsaSubnetKind::OnlyHoldsKey,
             )
         }
+        Ok(Ic00Method::UploadChunk)
+        | Ok(Ic00Method::StoredChunks)
+        | Ok(Ic00Method::DeleteChunks)
+        | Ok(Ic00Method::ClearChunkStore) => {
+            Err(ResolveDestinationError::UserError(UserError::new(
+                ic_error_types::ErrorCode::CanisterRejectedMessage,
+                "Chunked upload API is not yet implemented",
+            )))
+        }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
         )),

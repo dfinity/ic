@@ -126,6 +126,10 @@ impl Request {
                     Err(_) => None,
                 }
             }
+            Ok(Method::UploadChunk)
+            | Ok(Method::StoredChunks)
+            | Ok(Method::DeleteChunks)
+            | Ok(Method::ClearChunkStore) => None,
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)

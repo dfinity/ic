@@ -379,7 +379,14 @@ impl CanisterManager {
                         format!("Caller {} is not allowed to call ic00 method {}", sender, method_name)
                     ))
                 }
-            }
+            },
+            Ok(Ic00Method::UploadChunk) |
+            Ok(Ic00Method::StoredChunks) |
+            Ok(Ic00Method::DeleteChunks) |
+            Ok(Ic00Method::ClearChunkStore) => Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "Chunked upload API is not yet implemented"
+            )),
         }
     }
 

@@ -2180,7 +2180,11 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | ProvisionalCreateCanisterWithCycles
-            | ProvisionalTopUpCanister => default_limits,
+            | ProvisionalTopUpCanister
+            | UploadChunk
+            | StoredChunks
+            | DeleteChunks
+            | ClearChunkStore => default_limits,
             InstallCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,
