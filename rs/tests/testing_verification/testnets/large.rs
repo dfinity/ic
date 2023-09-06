@@ -56,7 +56,8 @@ use ic_tests::driver::{
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
+const NUM_APP_SUBNETS: u64 = 2;
+const NUM_BN: u64 = 1;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -69,48 +70,45 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(2),
-        )
-        .add_subnet(
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(64)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+    };
+    let mut ic = InternetComputer::new();
+    ic = ic.add_subnet(
+        Subnet::new(SubnetType::System)
+            .with_default_vm_resources(vm_resources)
+            .add_nodes(2),
+    );
+    let nodes_per_app_subnet = if NUM_APP_SUBNETS <= 4 { 2 } else { 1 };
+    for _ in 0..NUM_APP_SUBNETS {
+        ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(2),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(2),
-        )
-        .setup_and_start(&env)
+                .with_default_vm_resources(vm_resources)
+                .add_nodes(nodes_per_app_subnet),
+        );
+    }
+    ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
+    for i in 0..NUM_BN {
+        let bn_name = format!("boundary-node-{}", i);
+        BoundaryNode::new(bn_name)
+            .allocate_vm(&env)
+            .expect("Allocation of BoundaryNode failed.")
+            .for_ic(&env, "")
+            .use_real_certs_and_dns()
+            .start(&env)
+            .expect("failed to setup BoundaryNode VM");
+    }
     env.sync_with_prometheus();
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+    for i in 0..NUM_BN {
+        let bn_name = format!("boundary-node-{}", i);
+        await_boundary_node_healthy(&env, &bn_name);
+    }
 }
