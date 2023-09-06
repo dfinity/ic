@@ -303,3 +303,4 @@ go_deps.bzl               @dfinity-lab/teams/idx
 *.lock                    @dfinity-lab/teams/ghost
 Cargo.toml                @dfinity-lab/teams/ghost
 .gitignore                @dfinity-lab/teams/ghost
+stackage_snapshot.json    @dfinity-lab/teams/ghost
