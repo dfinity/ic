@@ -41,8 +41,8 @@ fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
                 .freeze_threshold
                 .get();
 
-            for principal in update_settings_args.settings.controllers.unwrap() {
-                assert!(controllers.contains(&principal));
+            for principal in update_settings_args.settings.controllers.unwrap().get() {
+                assert!(controllers.contains(principal));
             }
             assert_eq!(
                 compute_allocation,

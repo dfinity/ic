@@ -113,6 +113,9 @@ const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-c
 /// The capacity of the Wasm compilation cache.
 pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 
+/// Maximum number of controllers allowed in a request (specified in the interface spec).
+pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -254,9 +257,7 @@ impl Default for Config {
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
             // The default freeze threshold is 30 days.
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),
-            // Maximum number of controllers allowed in a request (specified in the public
-            // Spec).
-            max_controllers: 10,
+            max_controllers: MAX_ALLOWED_CONTROLLERS_COUNT,
             canister_sandboxing_flag: FlagStatus::Enabled,
             query_execution_threads_total: QUERY_EXECUTION_THREADS_TOTAL,
             query_scheduling_time_slice_per_canister: QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER,
