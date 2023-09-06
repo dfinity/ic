@@ -527,7 +527,7 @@ message BuyerState {
   // where `P` is the principal ID associated with this buyer's state.
   //
   // ownership
-  // * PENDING - a `BuyerState` cannot exists
+  // * PENDING - a `BuyerState` cannot exist
   // * OPEN - owned by the buyer, cannot be transferred out
   // * COMMITTED - owned by the SNS governance canister, can be transferred out
   // * ABORTED - owned by the buyer, can be transferred out
