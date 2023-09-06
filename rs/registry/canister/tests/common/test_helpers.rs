@@ -161,6 +161,21 @@ pub fn prepare_registry_with_nodes(
     node_count: u64,
     starting_mutation_id: u8,
 ) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
+    let default_template = NodeRecord {
+        node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
+        ..Default::default()
+    };
+
+    prepare_registry_with_nodes_from_template(node_count, starting_mutation_id, default_template)
+}
+
+/// Following the same as `prepare_registry_with_nodes`, and additionally allow
+/// passing a "template" used to fill values on each `NodeRecord`.
+pub fn prepare_registry_with_nodes_from_template(
+    node_count: u64,
+    starting_mutation_id: u8,
+    node_template: NodeRecord,
+) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = vec![];
     let node_ids: Vec<NodeId> = (0..node_count)
@@ -178,8 +193,7 @@ pub fn prepare_registry_with_nodes(
                     .iter()
                     .map(|x| flow_endpoint_from_string(x))
                     .collect(),
-                node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
-                ..Default::default()
+                ..node_template.clone()
             };
             mutations.append(&mut make_add_node_registry_mutations(
                 node_id,

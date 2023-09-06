@@ -538,16 +538,17 @@ enum NnsFunction {
 
   NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
 
-  // A proposal to add a new version to which the HostOS can be
-  // upgraded.
-  // The proposal registers a HostOS version (identified by the hash of the
-  // installation image) in the registry. By itself, this proposal
-  // does not effect any upgrade.
-  NNS_FUNCTION_ADD_HOST_OS_VERSION = 40;
+  // A proposal to update currently elected HostOS versions, by electing a new
+  // version, and/or unelecting multiple unused versions. The version to elect
+  // (often identified by the hash of the installation image) is added to the
+  // registry. By itself, this proposal does not effect any upgrade. The
+  // specified versions to unelect are removed from the registry. This ensures
+  // that the HostOS cannot upgrade to these versions anymore.
+  NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS = 40;
   // Update the HostOS version running on a given list of nodes.
   // The proposal changes the HostOS version that is used on the specified
   // nodes. The version must be contained in the list of HostOS versions.
-  NNS_FUNCTION_UPDATE_NODES_HOST_OS_VERSION = 41;
+  NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION = 41;
 
   // Uninstall and Install Root with the WASM provided in the function.  If InitArgs are provided
   // They will be passed to the canister_init function of the WASM provided.

@@ -510,8 +510,10 @@ impl NnsFunction {
             NnsFunction::UpdateSubnetReplicaVersion => {
                 (REGISTRY_CANISTER_ID, "update_subnet_replica_version")
             }
-            NnsFunction::AddHostOsVersion => (REGISTRY_CANISTER_ID, "add_hostos_version"),
-            NnsFunction::UpdateNodesHostOsVersion => {
+            NnsFunction::UpdateElectedHostosVersions => {
+                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+            }
+            NnsFunction::UpdateNodesHostosVersion => {
                 (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
@@ -646,8 +648,8 @@ impl Proposal {
                             | NnsFunction::RemoveNodeOperators
                             | NnsFunction::RemoveNodes
                             | NnsFunction::UpdateUnassignedNodesConfig
-                            | NnsFunction::AddHostOsVersion
-                            | NnsFunction::UpdateNodesHostOsVersion => Topic::NodeAdmin,
+                            | NnsFunction::UpdateElectedHostosVersions
+                            | NnsFunction::UpdateNodesHostosVersion => Topic::NodeAdmin,
                             NnsFunction::CreateSubnet
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet
