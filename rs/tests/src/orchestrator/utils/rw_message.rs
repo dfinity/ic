@@ -278,7 +278,7 @@ pub fn install_nns_with_customizations_and_check_progress(
                     node.effective_canister_id(),
                     &logger,
                     /*timeout=*/ secs(600),
-                    /*backoff=*/ secs(10),
+                    /*backoff=*/ secs(2),
                 );
             }
         } else {
