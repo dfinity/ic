@@ -181,21 +181,20 @@ impl State {
             ethereum_contract_address,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
-            let nonce = TransactionNonce::try_from(nonce).map_err(|e| {
-                InvalidStateError::InvalidTransactionNonce(format!("ERROR: {:?}", e))
-            })?;
+            let nonce = TransactionNonce::try_from(nonce)
+                .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {}", e)))?;
             self.next_transaction_nonce = nonce;
             self.eth_transactions.update_next_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
-                InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {:?}", e))
+                InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
             })?;
             self.minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
             let ethereum_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
             })?;
             self.ethereum_contract_address = Some(ethereum_contract_address);
         }
