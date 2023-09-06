@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, HashMap};
 /// A GovernanceProto representation on the heap, which should have everything except for neurons.
 /// This should never be serialized by itself, but reassembled into GovernanceProto in pre_upgrade.
 /// See crate::pb::v1::Governance for the meaning of each field.
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct HeapGovernanceData {
     pub proposals: BTreeMap<u64, ProposalData>,
     pub to_claim_transfers: Vec<NeuronStakeTransfer>,
@@ -150,12 +150,83 @@ pub fn reassemble_governance_proto(
     }
 }
 
-#[test]
-fn private_voting_period_assumed_to_be_48h() {
-    // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-    let (_, heap_governance_proto) = split_governance_proto(GovernanceProto::default());
-    assert_eq!(
-        heap_governance_proto.neuron_management_voting_period_seconds,
-        48 * 60 * 60
-    );
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::pb::v1::{Neuron, ProposalData};
+
+    use maplit::{btreemap, hashmap};
+
+    // The members are chosen to be the simplest form that's not their default().
+    fn simple_governance_proto() -> GovernanceProto {
+        GovernanceProto {
+            neurons: btreemap! {
+                1 => Neuron::default(),
+            },
+            proposals: btreemap! {
+                1 => ProposalData::default(),
+            },
+            to_claim_transfers: vec![NeuronStakeTransfer::default()],
+            wait_for_quiet_threshold_seconds: 2,
+            economics: Some(NetworkEconomics::default()),
+            latest_reward_event: Some(RewardEvent::default()),
+            in_flight_commands: hashmap! { 1 => NeuronInFlightCommand::default() },
+            genesis_timestamp_seconds: 3,
+            node_providers: vec![NodeProvider::default()],
+            default_followees: hashmap! { 1 => Followees::default() },
+            short_voting_period_seconds: 4,
+            neuron_management_voting_period_seconds: Some(5),
+            metrics: Some(GovernanceCachedMetrics::default()),
+            most_recent_monthly_node_provider_rewards: Some(
+                MostRecentMonthlyNodeProviderRewards::default(),
+            ),
+            cached_daily_maturity_modulation_basis_points: Some(6),
+            maturity_modulation_last_updated_at_timestamp_seconds: Some(7),
+            spawning_neurons: Some(true),
+            making_sns_proposal: Some(MakingSnsProposal::default()),
+            migrations: Some(Migrations::default()),
+        }
+    }
+
+    #[test]
+    fn split_and_reassemble_equal() {
+        let governance_proto = simple_governance_proto();
+
+        let (heap_neurons, heap_governance_data) = split_governance_proto(governance_proto.clone());
+        let reassembled_governance_proto =
+            reassemble_governance_proto(heap_neurons, heap_governance_data);
+
+        assert_eq!(reassembled_governance_proto, governance_proto);
+    }
+
+    #[test]
+    fn split_and_reassemble_not_equal() {
+        let governance_proto = GovernanceProto {
+            neuron_management_voting_period_seconds: None,
+            ..simple_governance_proto()
+        };
+
+        let (heap_neurons, heap_governance_data) = split_governance_proto(governance_proto.clone());
+        let reassembled_governance_proto =
+            reassemble_governance_proto(heap_neurons, heap_governance_data);
+
+        assert_eq!(
+            reassembled_governance_proto,
+            GovernanceProto {
+                neuron_management_voting_period_seconds: Some(48 * 60 * 60),
+                ..governance_proto
+            }
+        );
+    }
+
+    #[test]
+    fn private_voting_period_assumed_to_be_48h() {
+        // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
+        let (_, heap_governance_proto) = split_governance_proto(GovernanceProto::default());
+        assert_eq!(
+            heap_governance_proto.neuron_management_voting_period_seconds,
+            48 * 60 * 60
+        );
+    }
 }
