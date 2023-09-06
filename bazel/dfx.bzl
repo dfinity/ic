@@ -28,6 +28,8 @@ def _dfx_impl(repository_ctx):
     os_name = repository_ctx.os.name
     if os_name == "linux":
         platform = "linux"
+    elif os_name == "mac os x":
+        platform = "darwin"
     else:
         fail("Unsupported operating system: " + os_name)
 
