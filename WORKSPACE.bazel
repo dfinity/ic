@@ -719,6 +719,10 @@ load(
     "stack_snapshot",
 )
 
+#
+# Run this command to regenerate lock file after changing the rule above:
+# bazel run @stackage-unpinned//:pin
+#
 stack_snapshot(
     name = "stackage",
     components = {
@@ -820,6 +824,7 @@ stack_snapshot(
         "zlib",
     ],
     snapshot = "nightly-2023-07-29",
+    stack_snapshot_json = "//:stackage_snapshot.json",
 )
 
 http_archive(
