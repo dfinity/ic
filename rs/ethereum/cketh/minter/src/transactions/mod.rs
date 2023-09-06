@@ -74,6 +74,10 @@ impl EthTransactions {
         }
     }
 
+    pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
+        self.next_nonce = new_nonce;
+    }
+
     pub fn maybe_process_new_transaction(&self) -> Option<EthWithdrawalRequest> {
         if self.has_pending_tx() {
             return None;

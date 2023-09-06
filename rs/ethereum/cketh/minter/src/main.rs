@@ -1,18 +1,17 @@
 use candid::{candid_method, Nat};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::api::stable::{StableReader, StableWriter};
+use ic_cdk::api::stable::StableWriter;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, Address};
 use ic_cketh_minter::endpoints::WithdrawalError;
-use ic_cketh_minter::endpoints::{
-    Eip1559TransactionPrice, MinterArg, RetrieveEthRequest, RetrieveEthStatus,
-};
+use ic_cketh_minter::endpoints::{Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus};
 use ic_cketh_minter::eth_logs::report_transaction_error;
 use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory};
 use ic_cketh_minter::eth_rpc::{BlockNumber, JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
+use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::{
@@ -36,7 +35,6 @@ const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs
 const MINT_RETRY_DELAY: Duration = Duration::from_secs(3 * 60);
 
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
-pub const MINIMUM_WITHDRAWAL_AMOUNT: Wei = Wei::from_milliether(10);
 
 #[init]
 #[candid_method(init)]
@@ -44,9 +42,12 @@ fn init(arg: MinterArg) {
     match arg {
         MinterArg::InitArg(init_arg) => {
             log!(INFO, "[init]: initialized minter with arg: {:?}", init_arg);
-            STATE.with(|cell| *cell.borrow_mut() = Some(State::from(init_arg)));
+            STATE.with(|cell| {
+                *cell.borrow_mut() =
+                    Some(State::try_from(init_arg).expect("BUG: failed to initialize minter"))
+            });
         }
-        MinterArg::UpgradeArg => {
+        MinterArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state with upgrade args");
         }
     }
@@ -73,18 +74,36 @@ async fn scrap_eth_logs() {
         Ok(guard) => guard,
         Err(_) => return,
     };
+    let contract_address = match read_state(|s| s.ethereum_contract_address) {
+        Some(address) => address,
+        None => {
+            log!(
+                DEBUG,
+                "[scrap_eth_logs]: skipping scrapping ETH logs: no contract address"
+            );
+            return;
+        }
+    };
     let mut last_scraped_block_number = read_state(|s| s.last_scraped_block_number);
     let last_queried_block_number = update_last_finalized_block_number().await;
     while last_scraped_block_number < last_queried_block_number {
-        last_scraped_block_number =
-            scrap_eth_logs_between(last_scraped_block_number, last_queried_block_number).await;
+        last_scraped_block_number = scrap_eth_logs_between(
+            contract_address,
+            last_scraped_block_number,
+            last_queried_block_number,
+        )
+        .await;
     }
 }
 
 /// Scraps Ethereum logs between `from` and `min(from + 1024, to)` since certain RPC providers
 /// require that the number of blocks queried is no greater than 1024.
 /// Returns the last block number that was scraped (which is `min(from + 1024, to)`).
-async fn scrap_eth_logs_between(from: BlockNumber, to: BlockNumber) -> BlockNumber {
+async fn scrap_eth_logs_between(
+    contract_address: Address,
+    from: BlockNumber,
+    to: BlockNumber,
+) -> BlockNumber {
     const MAX_BLOCK_SPREAD: u128 = 1024;
     match from.cmp(&to) {
         Ordering::Less => {
@@ -96,8 +115,12 @@ async fn scrap_eth_logs_between(from: BlockNumber, to: BlockNumber) -> BlockNumb
                 last_scraped_block_number
             );
 
-            let (transaction_events, errors) =
-                eth_logs::last_received_eth_events(from, last_scraped_block_number).await;
+            let (transaction_events, errors) = eth_logs::last_received_eth_events(
+                contract_address,
+                from,
+                last_scraped_block_number,
+            )
+            .await;
             let has_new_events = !transaction_events.is_empty();
             for event in transaction_events {
                 log!(
@@ -458,9 +481,10 @@ async fn withdraw(amount: Nat, recipient: String) -> Result<RetrieveEthRequest, 
 
     let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
 
-    if amount < MINIMUM_WITHDRAWAL_AMOUNT {
+    let minimum_withdrawal_amount = read_state(|s| s.minimum_withdrawal_amount);
+    if amount < minimum_withdrawal_amount {
         return Err(WithdrawalError::AmountTooLow {
-            min_withdrawal_amount: MINIMUM_WITHDRAWAL_AMOUNT.into(),
+            min_withdrawal_amount: minimum_withdrawal_amount.into(),
         });
     }
 
@@ -557,28 +581,13 @@ async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
 
 #[post_upgrade]
 fn post_upgrade(minter_arg: Option<MinterArg>) {
+    use ic_cketh_minter::lifecycle;
     match minter_arg {
         Some(MinterArg::InitArg(_)) => {
             ic_cdk::trap("cannot upgrade canister state with init args");
         }
-        None | Some(MinterArg::UpgradeArg) => {
-            let start = ic_cdk::api::instruction_counter();
-
-            STATE.with(|cell| {
-                *cell.borrow_mut() = Some(
-                    ciborium::de::from_reader(StableReader::default())
-                        .expect("failed to decode ledger state"),
-                );
-            });
-
-            let end = ic_cdk::api::instruction_counter();
-
-            log!(
-                INFO,
-                "[upgrade]: upgrade consumed {} instructions",
-                end - start
-            );
-        }
+        Some(MinterArg::UpgradeArg(upgrade_args)) => lifecycle::post_upgrade(Some(upgrade_args)),
+        None => lifecycle::post_upgrade(None),
     }
     setup_timers();
 }

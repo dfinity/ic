@@ -9,14 +9,21 @@ type InitArg = record {
     // The minter will interact with this Ethereum network.
     ethereum_network : EthereumNetwork;
     ecdsa_key_name : text;
+    ethereum_contract_address: opt text;
     ledger_id : principal;
+    minimum_withdrawal_amount: nat;
     next_transaction_nonce: nat
+};
+type UpgradeArg = record {
+    next_transaction_nonce: opt nat;
+    minimum_withdrawal_amount: opt nat;
+    ethereum_contract_address: opt text
 };
 type JsonRpcResult = variant {
   Error : record { code : int64; message : text };
    Result : text;
 };
-type MinterArg = variant { UpgradeArg; InitArg : InitArg };
+type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
 type RetrieveEthStatus = variant {
     NotFound;
     Pending;

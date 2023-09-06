@@ -28,6 +28,7 @@ fn nat_into_u256(value: Nat) -> Result<u256, String> {
 }
 
 impl Wei {
+    pub const ZERO: Wei = Wei::new(0);
     pub const TWO: Wei = Wei::new(2);
 
     pub const fn new(value: u128) -> Self {

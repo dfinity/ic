@@ -17,8 +17,6 @@ use std::fmt::{Display, Formatter};
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
-pub const SMART_CONTRACT_ADDRESS: [u8; 20] = hex!("b44B5e756A894775FC32EDdf3314Bb1B1944dC34");
-
 pub enum EthLogIndexTag {}
 pub type LogIndex = phantom_newtype::Id<EthLogIndexTag, u256>;
 
@@ -60,6 +58,7 @@ impl ReceivedEthEvent {
 }
 
 pub async fn last_received_eth_events(
+    contract_address: Address,
     from: BlockNumber,
     to: BlockNumber,
 ) -> (Vec<ReceivedEthEvent>, Vec<ReceivedEthEventError>) {
@@ -76,7 +75,7 @@ pub async fn last_received_eth_events(
         .eth_get_logs(GetLogsParam {
             from_block: from.into(),
             to_block: to.into(),
-            address: vec![Address::new(SMART_CONTRACT_ADDRESS)],
+            address: vec![contract_address],
             topics: vec![FixedSizeData(RECEIVED_ETH_EVENT_TOPIC)],
         })
         .await

@@ -1,10 +1,9 @@
 mod mint_transaction {
-    use crate::endpoints::InitArg;
     use crate::eth_logs::{EventSourceError, LogIndex, ReceivedEthEvent};
     use crate::eth_rpc::BlockNumber;
+    use crate::lifecycle::init::InitArg;
     use crate::numeric::{LedgerMintIndex, Wei};
     use crate::state::{MintedEvent, State};
-    use candid::{Nat, Principal};
     use ethnum::u256;
 
     #[test]
@@ -102,12 +101,17 @@ mod mint_transaction {
     }
 
     fn dummy_state() -> State {
-        State::from(InitArg {
-            ecdsa_key_name: "test_key_1".to_string(),
-            ledger_id: Principal::anonymous(),
+        use candid::Principal;
+        State::try_from(InitArg {
             ethereum_network: Default::default(),
-            next_transaction_nonce: Nat::from(0u64),
+            ecdsa_key_name: "test_key_1".to_string(),
+            ethereum_contract_address: None,
+            ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
+                .expect("BUG: invalid principal"),
+            minimum_withdrawal_amount: Wei::from_milliether(10).into(),
+            next_transaction_nonce: Default::default(),
         })
+        .expect("init args should be valid")
     }
 
     fn received_eth_event() -> ReceivedEthEvent {

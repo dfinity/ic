@@ -94,8 +94,22 @@ mod timer_guard {
 }
 
 fn init_state() {
+    use crate::lifecycle::init::InitArg;
+    use crate::numeric::Wei;
     use crate::state::State;
+    use candid::Principal;
     crate::state::STATE.with(|s| {
-        *s.borrow_mut() = Some(State::default());
+        *s.borrow_mut() = Some(
+            State::try_from(InitArg {
+                ethereum_network: Default::default(),
+                ecdsa_key_name: "test_key_1".to_string(),
+                ethereum_contract_address: None,
+                ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
+                    .expect("BUG: invalid principal"),
+                minimum_withdrawal_amount: Wei::from_milliether(10).into(),
+                next_transaction_nonce: Default::default(),
+            })
+            .expect("init args should be valid"),
+        );
     });
 }
