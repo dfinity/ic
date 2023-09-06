@@ -469,6 +469,7 @@ impl ExecutionEnvironment {
                                         args.message_hash,
                                         args.derivation_path
                                             .get()
+                                            .clone()
                                             .into_iter()
                                             .map(|x| x.into_vec())
                                             .collect(),
@@ -829,6 +830,7 @@ impl ExecutionEnvironment {
                                             canister_id,
                                             args.derivation_path
                                                 .get()
+                                                .clone()
                                                 .into_iter()
                                                 .map(|x| x.into_vec())
                                                 .collect(),

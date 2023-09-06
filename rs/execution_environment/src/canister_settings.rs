@@ -90,7 +90,9 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
 
         Ok(CanisterSettings::new(
             controller,
-            input.controllers,
+            input
+                .controllers
+                .map(|controllers| controllers.get().clone()),
             compute_allocation,
             memory_allocation,
             freezing_threshold,

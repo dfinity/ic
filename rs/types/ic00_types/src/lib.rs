@@ -99,6 +99,107 @@ pub trait Payload<'a>: Sized + CandidType + Deserialize<'a> {
     }
 }
 
+const MAX_ALLOWED_ELEMENTS_EXCEEDED_MESSAGE_PREFIX: &str =
+    "The number of elements exceeds maximum allowed ";
+
+#[derive(CandidType, Debug, Clone, PartialEq, Eq)]
+pub struct BoundedVec<const MAX_ALLOWED_SIZE: usize, T>(Vec<T>);
+
+impl<const MAX_ALLOWED_SIZE: usize, T> BoundedVec<MAX_ALLOWED_SIZE, T> {
+    pub fn new(data: Vec<T>) -> Self {
+        Self(data)
+    }
+
+    pub fn get(&self) -> &Vec<T> {
+        &self.0
+    }
+}
+
+impl<'de, const MAX_ALLOWED_SIZE: usize, T: Deserialize<'de>> Deserialize<'de>
+    for BoundedVec<MAX_ALLOWED_SIZE, T>
+{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct SeqVisitor<const MAX_ALLOWED_SIZE: usize, T> {
+            _marker: std::marker::PhantomData<T>,
+        }
+
+        use serde::de::{SeqAccess, Visitor};
+
+        impl<'de, const MAX_ALLOWED_SIZE: usize, T: Deserialize<'de>> Visitor<'de>
+            for SeqVisitor<MAX_ALLOWED_SIZE, T>
+        {
+            type Value = BoundedVec<MAX_ALLOWED_SIZE, T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                write!(
+                    formatter,
+                    "a sequence with no more than {} elements",
+                    MAX_ALLOWED_SIZE
+                )
+            }
+
+            fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                let mut elements = Vec::with_capacity(MAX_ALLOWED_SIZE);
+                while let Some(element) = seq.next_element::<T>()? {
+                    if elements.len() >= MAX_ALLOWED_SIZE {
+                        return Err(serde::de::Error::custom(format!(
+                            "{}{}",
+                            MAX_ALLOWED_ELEMENTS_EXCEEDED_MESSAGE_PREFIX, MAX_ALLOWED_SIZE
+                        )));
+                    }
+                    elements.push(element);
+                }
+                Ok(BoundedVec::new(elements))
+            }
+        }
+
+        deserializer.deserialize_seq(SeqVisitor::<MAX_ALLOWED_SIZE, T> {
+            _marker: std::marker::PhantomData,
+        })
+    }
+}
+
+#[test]
+fn test_bounded_vector_sizes() {
+    // This test verifies that the structures containing BoundedVec correctly
+    // throw an error when the number of elements exceeds the maximum allowed.
+    type SomeTestData = BoundedVec<MAX_ALLOWED_SIZE, u8>;
+
+    impl Payload<'_> for SomeTestData {}
+
+    const MAX_ALLOWED_SIZE: usize = 30;
+    const TEST_START: usize = 20;
+    const TEST_END: usize = 40;
+    for i in TEST_START..=TEST_END {
+        // Arrange.
+        let data = SomeTestData::new(vec![42; i]);
+
+        // Act.
+        let res = SomeTestData::decode(&data.encode());
+
+        // Assert.
+        if i <= MAX_ALLOWED_SIZE {
+            // Verify decoding without errors for allowed sizes.
+            assert_eq!(res.unwrap(), data);
+        } else {
+            // Verify decoding with errors for disallowed sizes.
+            let error = res.unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                error.description().contains(&format!(
+                    "Deserialize error: The number of elements exceeds maximum allowed {}",
+                    MAX_ALLOWED_SIZE
+                )),
+                "Actual: {}",
+                error.description()
+            );
+        }
+    }
+}
+
 /// Struct used for encoding/decoding `(record {canister_id})`.
 #[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct CanisterIdRecord {
@@ -1309,6 +1410,45 @@ impl<'a> Arbitrary<'a> for UpdateSettingsArgs {
 
 impl Payload<'_> for UpdateSettingsArgs {}
 
+/// Maximum number of controllers allowed in a request (specified in the interface spec).
+const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
+
+pub type BoundedControllers = BoundedVec<MAX_ALLOWED_CONTROLLERS_COUNT, PrincipalId>;
+
+impl Payload<'_> for BoundedControllers {}
+
+#[test]
+fn verify_max_bounded_controllers_length() {
+    const TEST_START: usize = 5;
+    const THRESHOLD: usize = 10;
+    const TEST_END: usize = 15;
+    for i in TEST_START..=TEST_END {
+        // Arrange.
+        let controllers = BoundedControllers::new(vec![PrincipalId::new_anonymous(); i]);
+
+        // Act.
+        let res = BoundedControllers::decode(&controllers.encode());
+
+        // Assert.
+        if i <= THRESHOLD {
+            // Verify decoding without errors for allowed sizes.
+            assert_eq!(res.unwrap(), controllers);
+        } else {
+            // Verify decoding with errors for disallowed sizes.
+            let error = res.unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                error.description().contains(&format!(
+                    "Deserialize error: The number of elements exceeds maximum allowed {}",
+                    MAX_ALLOWED_CONTROLLERS_COUNT
+                )),
+                "Actual: {}",
+                error.description()
+            );
+        }
+    }
+}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     controller: opt principal;
@@ -1316,11 +1456,11 @@ impl Payload<'_> for UpdateSettingsArgs {}
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
 /// })`
-#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq)]
 pub struct CanisterSettingsArgs {
     /// The field controller is deprecated and should not be used in new code.
     controller: Option<PrincipalId>,
-    pub controllers: Option<Vec<PrincipalId>>,
+    pub controllers: Option<BoundedControllers>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
@@ -1337,7 +1477,7 @@ impl CanisterSettingsArgs {
     ) -> Self {
         Self {
             controller: None,
-            controllers,
+            controllers: controllers.map(BoundedControllers::new),
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
             freezing_threshold: freezing_threshold.map(candid::Nat::from),
@@ -1367,7 +1507,7 @@ impl CanisterSettingsArgsBuilder {
     pub fn build(self) -> CanisterSettingsArgs {
         CanisterSettingsArgs {
             controller: self.controller,
-            controllers: self.controllers,
+            controllers: self.controllers.map(BoundedControllers::new),
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
@@ -1420,7 +1560,7 @@ impl CanisterSettingsArgsBuilder {
 /// `(record {
 ///     settings : opt canister_settings;
 /// })`
-#[derive(Default, Clone, CandidType, Deserialize)]
+#[derive(Default, Debug, Clone, CandidType, Deserialize, PartialEq)]
 pub struct CreateCanisterArgs {
     pub settings: Option<CanisterSettingsArgs>,
     pub sender_canister_version: Option<u64>,
@@ -1434,16 +1574,73 @@ impl CreateCanisterArgs {
 
 impl<'a> Payload<'a> for CreateCanisterArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let result = Decode!(blob, Self);
-        match result {
-            Err(_) => match EmptyBlob::decode(blob) {
-                Err(_) => Err(UserError::new(
-                    ErrorCode::InvalidManagementPayload,
-                    "Payload deserialization error.".to_string(),
-                )),
-                Ok(_) => Ok(CreateCanisterArgs::default()),
-            },
+        match Decode!(blob, Self) {
+            Err(err) => {
+                // First check if deserialization failed due to exceeding the maximum allowed limit.
+                if format!("{err:?}").contains(MAX_ALLOWED_ELEMENTS_EXCEEDED_MESSAGE_PREFIX) {
+                    Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Payload deserialization error: {err:?}"),
+                    ))
+                } else {
+                    // Decoding an empty blob is added for backward compatibility.
+                    match EmptyBlob::decode(blob) {
+                        Err(_) => Err(UserError::new(
+                            ErrorCode::InvalidManagementPayload,
+                            "Payload deserialization error.".to_string(),
+                        )),
+                        Ok(_) => Ok(CreateCanisterArgs::default()),
+                    }
+                }
+            }
             Ok(settings) => Ok(settings),
+        }
+    }
+}
+
+#[test]
+fn test_create_canister_args_decode_empty_blob() {
+    // This test is added for backward compatibility to allow decoding an empty blob.
+    let encoded = EmptyBlob {}.encode();
+    let result = CreateCanisterArgs::decode(&encoded);
+    assert_eq!(result, Ok(CreateCanisterArgs::default()));
+}
+
+#[test]
+fn test_create_canister_args_decode_controllers_count() {
+    const TEST_START: usize = 5;
+    const THRESHOLD: usize = 10;
+    const TEST_END: usize = 15;
+    for i in TEST_START..=TEST_END {
+        // Arrange.
+        let args = CreateCanisterArgs {
+            settings: Some(CanisterSettingsArgs::new(
+                Some(vec![PrincipalId::new_anonymous(); i]),
+                None,
+                None,
+                None,
+            )),
+            sender_canister_version: None,
+        };
+
+        // Act.
+        let result = CreateCanisterArgs::decode(&args.encode());
+
+        // Assert.
+        if i <= THRESHOLD {
+            // Assert decoding without errors for allowed sizes.
+            assert_eq!(result.unwrap(), args);
+        } else {
+            // Assert decoding with errors for disallowed sizes.
+            let error = result.unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                error
+                    .description()
+                    .contains("The number of elements exceeds maximum allowed "),
+                "Actual: {}",
+                error.description()
+            );
         }
     }
 }
@@ -1454,7 +1651,7 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
 ///     canister_id : principal;
 ///     controller: principal;
 /// })`
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub struct SetControllerArgs {
     canister_id: PrincipalId,
     new_controller: PrincipalId,
@@ -1717,53 +1914,7 @@ fn ecdsa_key_id_round_trip() {
     }
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
-pub struct DerivationPath(Vec<ByteBuf>);
-
-impl DerivationPath {
-    pub fn new(path: Vec<ByteBuf>) -> Self {
-        Self(path)
-    }
-
-    pub fn get(&self) -> Vec<ByteBuf> {
-        self.0.clone()
-    }
-}
-
-impl<'de> Deserialize<'de> for DerivationPath {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct SeqVisitor;
-
-        use serde::de::{SeqAccess, Visitor};
-
-        impl<'de> Visitor<'de> for SeqVisitor {
-            type Value = DerivationPath;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a sequence of binary blobs")
-            }
-
-            fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
-            where
-                S: SeqAccess<'de>,
-            {
-                let mut elements = Vec::with_capacity(MAXIMUM_DERIVATION_PATH_LENGTH);
-                while let Some(element) = seq.next_element::<ByteBuf>()? {
-                    if elements.len() >= MAXIMUM_DERIVATION_PATH_LENGTH {
-                        return Err(serde::de::Error::custom(format!(
-                            "Derivation path length exceeds maximum allowed {}",
-                            MAXIMUM_DERIVATION_PATH_LENGTH
-                        )));
-                    }
-                    elements.push(element);
-                }
-                Ok(DerivationPath(elements))
-            }
-        }
-
-        deserializer.deserialize_seq(SeqVisitor)
-    }
-}
+pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, ByteBuf>;
 
 impl Payload<'_> for DerivationPath {}
 
@@ -1812,7 +1963,7 @@ fn verify_max_derivation_path_length() {
         assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
         assert!(
             res.description().contains(&format!(
-                "Deserialize error: Derivation path length exceeds maximum allowed {}",
+                "Deserialize error: The number of elements exceeds maximum allowed {}",
                 MAXIMUM_DERIVATION_PATH_LENGTH
             )),
             "Actual: {}",
@@ -1833,7 +1984,7 @@ fn verify_max_derivation_path_length() {
         assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
         assert!(
             res.description().contains(&format!(
-                "Deserialize error: Derivation path length exceeds maximum allowed {}",
+                "Deserialize error: The number of elements exceeds maximum allowed {}",
                 MAXIMUM_DERIVATION_PATH_LENGTH
             )),
             "Actual: {}",
@@ -1854,7 +2005,7 @@ fn verify_max_derivation_path_length() {
         assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
         assert!(
             res.description().contains(&format!(
-                "Deserialize error: Derivation path length exceeds maximum allowed {}",
+                "Deserialize error: The number of elements exceeds maximum allowed {}",
                 MAXIMUM_DERIVATION_PATH_LENGTH
             )),
             "Actual: {}",
