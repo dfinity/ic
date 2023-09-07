@@ -140,6 +140,7 @@ pub struct CanisterStateBits {
     pub cycles_balance: Cycles,
     pub cycles_debit: Cycles,
     pub reserved_balance: Cycles,
+    pub reserved_balance_limit: Option<Cycles>,
     pub status: CanisterStatus,
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
@@ -1603,6 +1604,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             cycles_balance: Some(item.cycles_balance.into()),
             cycles_debit: Some(item.cycles_debit.into()),
             reserved_balance: Some(item.reserved_balance.into()),
+            reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
             canister_status: Some((&item.status).into()),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
@@ -1700,6 +1702,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_balance,
             cycles_debit,
             reserved_balance,
+            reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",
