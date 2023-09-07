@@ -488,6 +488,8 @@ fn create_and_upload_config_disk_image(
     cmd.arg(img_path.clone())
         .arg("--hostname")
         .arg(boundary_node.name.clone())
+        .arg("--env")
+        .arg("test")
         .arg("--accounts_ssh_authorized_keys")
         .arg(ssh_authorized_pub_keys_dir)
         .arg("--elasticsearch_tags")

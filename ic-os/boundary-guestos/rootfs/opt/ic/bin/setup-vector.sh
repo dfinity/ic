@@ -33,9 +33,6 @@ function read_variables() {
             "logging_2xx_sample_rate") LOGGING_2XX_SAMPLE_RATE="${value}" ;;
         esac
     done <"${BN_CONFIG}"
-
-    # Default to 1% sampling rate (value is 1/N)
-    LOGGING_2XX_SAMPLE_RATE=${LOGGING_2XX_SAMPLE_RATE:-100}
 }
 
 function generate_vector_config() {
