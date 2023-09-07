@@ -458,12 +458,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.18.11",
             ),
             "icrc1-test-env": crate.spec(
-                git = "https://github.com/dfinity/ICRC-1",
-                rev = "bdcf39e32a12185fbcec33897001d93c901d6689",
+                version = "^0.1.1",
             ),
             "icrc1-test-suite": crate.spec(
-                git = "https://github.com/dfinity/ICRC-1",
-                rev = "bdcf39e32a12185fbcec33897001d93c901d6689",
+                version = "^0.1.1",
             ),
             "ic-agent": crate.spec(
                 version = "^0.27.0",
