@@ -11488,7 +11488,10 @@ dependencies = [
 name = "icrc-ledger-types"
 version = "0.1.1"
 dependencies = [
+ "assert_matches",
+ "base32",
  "candid",
+ "crc32fast",
  "hex",
  "num-traits",
  "serde",
