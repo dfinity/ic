@@ -7426,16 +7426,7 @@ fn total_community_fund_maturity_e8s_equivalent(neuron_store: &NeuronStore) -> u
 /// (i.e. neurons with joined_community_fund_timestamp_seconds > 0).
 #[must_use]
 fn community_fund_total_joined_neurons(neuron_store: &NeuronStore) -> u64 {
-    neuron_store
-        .heap_neurons()
-        .values()
-        .filter(|neuron| {
-            neuron
-                .joined_community_fund_timestamp_seconds
-                .unwrap_or_default()
-                > 0
-        })
-        .count() as u64
+    neuron_store.list_community_fund_neuron_ids().len() as u64
 }
 
 /// Decrements maturity from Neuron's Fund neurons (i.e. those with a nonzero
