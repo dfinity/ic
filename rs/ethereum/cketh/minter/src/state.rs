@@ -15,6 +15,9 @@ use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use strum_macros::EnumIter;
 
+#[cfg(test)]
+mod tests;
+
 thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
 }
@@ -54,6 +57,11 @@ pub struct State {
     /// Locks preventing concurrent execution timer tasks
     #[serde(skip)]
     pub active_tasks: HashSet<TaskType>,
+
+    /// Number of HTTP outcalls since the last upgrade.
+    /// Used to correlate request and response in logs.
+    #[serde(skip)]
+    pub http_request_counter: u64,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -160,6 +168,14 @@ impl State {
             .checked_increment()
             .expect("transaction nonce overflow only possible after U256::MAX transactions");
         current_nonce
+    }
+
+    pub fn next_request_id(&mut self) -> u64 {
+        let current_request_id = self.http_request_counter;
+        // overflow is not an issue here because we only use `next_request_id` to correlate
+        // requests and responses in logs.
+        self.http_request_counter = self.http_request_counter.wrapping_add(1);
+        current_request_id
     }
 
     pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
