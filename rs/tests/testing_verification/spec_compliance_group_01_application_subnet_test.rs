@@ -27,19 +27,17 @@ pub fn test(env: TestEnv) {
     test_subnet(
         env,
         true,
-        false,
+        true,
         Some(SubnetType::Application),
         None,
+        vec![],
         vec![
-            "($0 ~ /NNS canisters/)",
-            "($0 ~ /API availability/)",
             "($0 ~ /canister history/)",
             "($0 ~ /canister version/)",
             "($0 ~ /canister global timer/)",
             "($0 ~ /canister http calls/)",
             "($0 ~ /WebAssembly module validation/)",
         ],
-        vec![],
     );
 }
 

@@ -202,12 +202,20 @@ name = "ic-systest-spec-compliance-system-subnet"
 path = "testing_verification/spec_compliance_system_subnet_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-system-api-application-subnet"
-path = "testing_verification/spec_compliance_system_api_application_subnet_test.rs"
+name = "ic-systest-spec-compliance-group-01-application-subnet"
+path = "testing_verification/spec_compliance_group_01_application_subnet_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-system-api-system-subnet"
-path = "testing_verification/spec_compliance_system_api_system_subnet_test.rs"
+name = "ic-systest-spec-compliance-group-01-system-subnet"
+path = "testing_verification/spec_compliance_group_01_system_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-group-02-application-subnet"
+path = "testing_verification/spec_compliance_group_02_application_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-group-02-system-subnet"
+path = "testing_verification/spec_compliance_group_02_system_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
