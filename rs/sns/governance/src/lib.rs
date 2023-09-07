@@ -127,34 +127,38 @@ fn field_err(field_name: &str, field_value: impl Debug, defect: &str) -> Result<
     ))
 }
 
-pub fn account_from_proto(
-    account: pb::v1::Account,
-) -> Result<icrc_ledger_types::icrc1::account::Account, String> {
-    let owner = *validate_required_field("owner", &account.owner)?;
-    let subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount> = match account.subaccount
-    {
-        Some(s) => match s.subaccount.as_slice().try_into() {
-            Ok(s) => Ok(Some(s)),
-            Err(_) => Err(format!(
-                "Invalid Subaccount length. Expected 32, found {}",
-                s.subaccount.len()
-            )),
-        },
-        None => Ok(None),
-    }?;
-    Ok(icrc_ledger_types::icrc1::account::Account {
-        owner: owner.0,
-        subaccount,
-    })
+impl TryFrom<pb::v1::Account> for icrc_ledger_types::icrc1::account::Account {
+    type Error = String;
+
+    fn try_from(account: pb::v1::Account) -> Result<Self, String> {
+        let owner = *validate_required_field("owner", &account.owner)?;
+        let subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount> =
+            match account.subaccount {
+                Some(s) => match s.subaccount.as_slice().try_into() {
+                    Ok(s) => Ok(Some(s)),
+                    Err(_) => Err(format!(
+                        "Invalid Subaccount length. Expected 32, found {}",
+                        s.subaccount.len()
+                    )),
+                },
+                None => Ok(None),
+            }?;
+        Ok(Self {
+            owner: owner.0,
+            subaccount,
+        })
+    }
 }
 
-pub fn account_to_proto(account: icrc_ledger_types::icrc1::account::Account) -> pb::v1::Account {
-    let maybe_subaccount_pb = account.subaccount.map(|subaccount| SubaccountProto {
-        subaccount: subaccount.into(),
-    });
-    pb::v1::Account {
-        owner: Some(account.owner.into()),
-        subaccount: maybe_subaccount_pb,
+impl From<icrc_ledger_types::icrc1::account::Account> for pb::v1::Account {
+    fn from(account: icrc_ledger_types::icrc1::account::Account) -> Self {
+        let maybe_subaccount_pb = account.subaccount.map(|subaccount| SubaccountProto {
+            subaccount: subaccount.into(),
+        });
+        pb::v1::Account {
+            owner: Some(account.owner.into()),
+            subaccount: maybe_subaccount_pb,
+        }
     }
 }
 

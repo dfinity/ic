@@ -244,6 +244,10 @@ type MergeMaturityResponse = record {
   merged_maturity_e8s : nat64;
   new_stake_e8s : nat64;
 };
+type MintTokensRequest = record {
+  recipient : opt Account;
+  amount_e8s : opt nat64;
+};
 type Motion = record { motion_text : text };
 type NervousSystemFunction = record {
   id : nat64;
@@ -434,6 +438,7 @@ service : (Governance) -> {
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  mint_tokens : (MintTokensRequest) -> (record {});
   set_mode : (SetMode) -> (record {});
   update_neuron : (Neuron) -> (opt GovernanceError);
 }
