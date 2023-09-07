@@ -172,17 +172,16 @@ mod tls_public_key_cert {
 }
 
 mod allowed_clients {
-    use crate::{AllowedClients, AllowedClientsError, SomeOrAllNodes};
+    use crate::{AllowedClients, SomeOrAllNodes};
     use assert_matches::assert_matches;
     use ic_types::{NodeId, PrincipalId};
     use maplit::btreeset;
-    use std::collections::BTreeSet;
 
     #[test]
     fn should_correctly_construct_with_new() {
         let nodes = SomeOrAllNodes::Some(btreeset! {node_id(1)});
 
-        let allowed_clients = AllowedClients::new(nodes.clone()).unwrap();
+        let allowed_clients = AllowedClients::new(nodes.clone());
 
         assert_eq!(allowed_clients.nodes(), &nodes);
     }
@@ -191,7 +190,7 @@ mod allowed_clients {
     fn should_correctly_construct_with_new_with_nodes() {
         let nodes = btreeset! {node_id(1)};
 
-        let allowed_clients = AllowedClients::new_with_nodes(nodes.clone()).unwrap();
+        let allowed_clients = AllowedClients::new_with_nodes(nodes.clone());
 
         assert_eq!(allowed_clients.nodes(), &SomeOrAllNodes::Some(nodes));
     }
@@ -211,24 +210,6 @@ mod allowed_clients {
         assert!(some_nodes.contains(node_id(1)));
         assert!(some_nodes.contains(node_id(2)));
         assert!(!some_nodes.contains(node_id(3)));
-    }
-
-    #[test]
-    fn should_fail_on_new_if_nodes_empty() {
-        let allowed_clients = AllowedClients::new(SomeOrAllNodes::Some(BTreeSet::new()));
-        assert_eq!(
-            allowed_clients.unwrap_err(),
-            AllowedClientsError::ClientsEmpty {}
-        );
-    }
-
-    #[test]
-    fn should_fail_on_new_with_nodes_if_nodes_empty() {
-        let allowed_clients = AllowedClients::new_with_nodes(BTreeSet::new());
-        assert_eq!(
-            allowed_clients.unwrap_err(),
-            AllowedClientsError::ClientsEmpty {}
-        );
     }
 
     #[test]

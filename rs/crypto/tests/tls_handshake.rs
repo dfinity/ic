@@ -222,6 +222,30 @@ mod server {
     use openssl::ssl::SslVersion;
 
     #[test]
+    fn should_return_error_if_allowed_clients_empty() {
+        const NOT_ALLOWED_CLIENT: NodeId = CLIENT_ID_3;
+        let registry = TlsRegistry::new();
+        let server = Server::builder(SERVER_ID_1).build(registry.get());
+        assert!(server.allowed_clients().is_empty());
+        let client = Client::builder(NOT_ALLOWED_CLIENT, SERVER_ID_1).build(registry.get());
+        registry
+            .add_cert(SERVER_ID_1, server.cert())
+            .add_cert(NOT_ALLOWED_CLIENT, client.cert())
+            .add_cert(CLIENT_ID_1, generate_cert_using_temp_crypto(CLIENT_ID_1))
+            .add_cert(CLIENT_ID_2, generate_cert_using_temp_crypto(CLIENT_ID_2))
+            .update();
+
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
+
+        assert_handshake_server_error_containing(
+            &server_result,
+            "The peer certificate with node ID 2o3ay-vafaa-aaaaa-aaaap-2ai is \
+            not allowed. Allowed node IDs: Some({})",
+        );
+    }
+
+    #[test]
     fn should_return_error_if_client_not_allowed_and_allowed_clients_exist() {
         const NOT_ALLOWED_CLIENT: NodeId = CLIENT_ID_3;
         let registry = TlsRegistry::new();

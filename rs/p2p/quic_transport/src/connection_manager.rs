@@ -29,7 +29,7 @@
 //!     - Currently there is a periodic check that checks the status of the connection
 //!       and reconnects if necessary.
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, RwLock},
@@ -207,10 +207,11 @@ pub(crate) fn start_connection_manager(
     // seconds because we are not able to respond to keep-alives.
     // Maybe in the future we could derive a key from our tls key.
     let endpoint_config = EndpointConfig::default();
-    // TODO: Restrict this to current subnet. What do if it fails?
     let rustls_server_config = tls_config
         .server_config(
-            AllowedClients::new(ic_crypto_tls_interfaces::SomeOrAllNodes::All).unwrap(),
+            AllowedClients::new(ic_crypto_tls_interfaces::SomeOrAllNodes::Some(
+                BTreeSet::new(),
+            )),
             registry_client.get_latest_version(),
         )
         .unwrap();
@@ -398,8 +399,7 @@ impl ConnectionManager {
 
         // Set new server config to only accept connections from the current set.
         match self.tls_config.server_config(
-            AllowedClients::new(subnet_nodes)
-                .unwrap_or_else(|_| AllowedClients::new(SomeOrAllNodes::All).unwrap()),
+            AllowedClients::new(subnet_nodes),
             self.topology.latest_registry_version(),
         ) {
             Ok(rustls_server_config) => {

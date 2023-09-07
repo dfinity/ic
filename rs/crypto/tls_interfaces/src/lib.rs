@@ -568,14 +568,12 @@ pub struct AllowedClients {
 }
 
 impl AllowedClients {
-    pub fn new(nodes: SomeOrAllNodes) -> Result<Self, AllowedClientsError> {
-        let allowed_clients = Self { nodes };
-        Self::ensure_clients_not_empty(&allowed_clients)?;
-        Ok(allowed_clients)
+    pub fn new(nodes: SomeOrAllNodes) -> Self {
+        Self { nodes }
     }
 
     /// Create an `AllowedClients` with a set of nodes.
-    pub fn new_with_nodes(node_ids: BTreeSet<NodeId>) -> Result<Self, AllowedClientsError> {
+    pub fn new_with_nodes(node_ids: BTreeSet<NodeId>) -> Self {
         Self::new(SomeOrAllNodes::Some(node_ids))
     }
 
@@ -583,33 +581,11 @@ impl AllowedClients {
     pub fn nodes(&self) -> &SomeOrAllNodes {
         &self.nodes
     }
-
-    fn ensure_clients_not_empty(candidate: &Self) -> Result<(), AllowedClientsError> {
-        match &candidate.nodes {
-            SomeOrAllNodes::Some(node_ids) => {
-                if node_ids.is_empty() {
-                    return Err(AllowedClientsError::ClientsEmpty);
-                }
-            }
-            SomeOrAllNodes::All => { /* All is considered non-empty */ }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// The allowed clients could not be created.
-pub enum AllowedClientsError {
-    /// Attempted to create an `AllowedClients` with a malformed certificate
-    /// protobuf.
-    MalformedCertProto { internal_error: String },
-    /// Attempted to create an `AllowedClients` with `Some` clients
-    /// but empty nodes and certificates lists.
-    ClientsEmpty,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A list of node IDs, or "all nodes"
+// TODO: NET-1533
 pub enum SomeOrAllNodes {
     Some(BTreeSet<NodeId>),
     All,
