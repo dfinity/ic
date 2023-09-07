@@ -6,7 +6,10 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_protobuf::state::system_metadata::v1::{SplitFrom, SystemMetadata};
+use ic_protobuf::state::{
+    stats::v1::Stats,
+    system_metadata::v1::{SplitFrom, SystemMetadata},
+};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
@@ -402,6 +405,10 @@ fn serialize_to_tip(
 
     tip.subnet_queues()
         .serialize((state.subnet_queues()).into())?;
+
+    tip.stats().serialize(Stats {
+        query_stats: state.query_stats().as_query_stats(),
+    })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
         serialize_canister_to_tip(log, canister_state, tip)

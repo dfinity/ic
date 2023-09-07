@@ -8,7 +8,7 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
         canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
-        queues::v1 as pb_queues, system_metadata::v1 as pb_metadata,
+        queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
     },
 };
 use ic_replicated_state::{
@@ -50,6 +50,7 @@ pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
 pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
 pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
+pub const STATS_FILE: &str = "stats.pbuf";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -1290,6 +1291,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn split_marker(&self) -> ProtoFileWith<pb_metadata::SplitFrom, Permissions> {
         self.root.join(SPLIT_MARKER_FILE).into()
+    }
+
+    pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {
+        self.root.join(STATS_FILE).into()
     }
 
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {

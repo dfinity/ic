@@ -8,8 +8,9 @@ mod self_validating;
 mod xnet;
 
 pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
-pub use self::execution_environment::EpochStats;
-pub use self::execution_environment::QueryStatsPayload;
+pub use self::execution_environment::{
+    CanisterQueryStats, EpochStats, EpochStatsMessages, QueryStatsPayload, ReceivedEpochStats,
+};
 pub use self::ingress::{IngressPayload, IngressPayloadError};
 pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
 pub use self::xnet::XNetPayload;
@@ -93,6 +94,7 @@ pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
+    pub query_stats: EpochStatsMessages,
 }
 
 impl BatchPayload {
@@ -105,6 +107,7 @@ impl BatchPayload {
             signed_ingress_msgs: self.ingress.try_into()?,
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
+            query_stats: EpochStatsMessages::default(),
         })
     }
 

@@ -45,6 +45,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
+    batch::ReceivedEpochStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
@@ -188,6 +189,7 @@ where
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
+                        ReceivedEpochStats::default(),
                     )),
                 )
             });

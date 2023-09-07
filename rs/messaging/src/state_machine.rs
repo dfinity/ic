@@ -3,11 +3,14 @@ use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::{error, fatal, ReplicaLogger};
 use ic_metrics::Timer;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
+use ic_types::batch::{CanisterQueryStats, EpochStatsMessages, ReceivedEpochStats};
 use ic_types::{batch::Batch, ExecutionRound};
+use ic_types::{epoch_from_height, Height};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -75,6 +78,14 @@ impl StateMachine for StateMachineImpl {
         node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
         let phase_timer = Timer::start();
+
+        // Get query stats from blocks and add them to the state, so that they can be aggregated later.
+        deliver_query_stats(
+            &self.log,
+            &batch.messages.query_stats,
+            &mut state,
+            batch.batch_number,
+        );
 
         if batch.time >= state.metadata.batch_time {
             state.metadata.batch_time = batch.time;
@@ -146,5 +157,46 @@ impl StateMachine for StateMachineImpl {
         self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &phase_timer);
 
         state_after_stream_builder
+    }
+}
+
+/// Add the epoch stats of the current round to the metadata
+/// and on a new epoch aggregate currently stored stats into
+/// the canister query stats.
+fn deliver_query_stats(
+    logger: &ReplicaLogger,
+    query_stats: &EpochStatsMessages,
+    state: &mut ReplicatedState,
+    height: Height,
+) {
+    let epoch = epoch_from_height(height);
+
+    // If current epoch doesn't match the epoch we received
+    // TODO: Aggregate data from previous epoch to canister state
+    if Some(epoch) != state.epoch_query_stats.epoch {
+        state.epoch_query_stats = ReceivedEpochStats {
+            epoch: Some(epoch),
+            stats: BTreeMap::new(),
+        };
+    }
+
+    let epoch_query_stats = &mut state.epoch_query_stats;
+    for (canister_id, stats) in &query_stats.stats {
+        let previous_value = epoch_query_stats.stats.insert(
+            (*canister_id, query_stats.proposer),
+            CanisterQueryStats {
+                num_calls: stats.num_calls,
+                num_instructions: stats.num_instructions,
+                ingress_payload_size: stats.ingress_payload_size,
+                egress_payload_size: stats.egress_payload_size,
+            },
+        );
+        if previous_value.is_some() {
+            error!(
+                    logger,
+                    "Received duplicate query stats for canister {} from same proposer {}. This is a bug, possibly in the payload builder.",
+                    canister_id, query_stats.proposer
+                );
+        }
     }
 }
