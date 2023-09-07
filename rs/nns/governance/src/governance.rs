@@ -90,6 +90,7 @@ use std::{
 use crate::neuron_store::NeuronStore;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 
 mod manage_neuron_request;
 pub mod test_data;
@@ -6622,13 +6623,22 @@ impl Governance {
                     let maturity = neuron.maturity_e8s_equivalent;
                     let subaccount = neuron.account.clone();
 
-                    let neuron_stake: u64 = (maturity as u128)
-                        .checked_mul((10000 + maturity_modulation).try_into().unwrap())
-                        .unwrap()
-                        .checked_div(10000)
-                        .unwrap()
-                        .try_into()
-                        .expect("Couldn't convert stake to u64");
+                    let neuron_stake: u64 = match apply_maturity_modulation(
+                        maturity,
+                        maturity_modulation,
+                    ) {
+                        Ok(neuron_stake) => neuron_stake,
+                        Err(err) => {
+                            // Do not retain the lock so that other Neuron operations can continue.
+                            // This is safe as no changes to the neuron have been made to the neuron
+                            // both internally to governance and externally in ledger.
+                            println!(
+                                "{}Could not apply modulation to {:?} for neuron {:?} due to {:?}, skipping",
+                                LOG_PREFIX, neuron.maturity_e8s_equivalent, neuron.id, err
+                            );
+                            continue;
+                        }
+                    };
 
                     println!(
                         "{}Spawning neuron: {:?}. Performing ledger update.",

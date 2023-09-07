@@ -28,8 +28,6 @@ pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod memory_manager_upgrade_storage;
 
-pub const BASIS_POINTS_PER_UNITY: u64 = 10_000;
-
 // 10^8
 pub const E8: u64 = 100_000_000;
 

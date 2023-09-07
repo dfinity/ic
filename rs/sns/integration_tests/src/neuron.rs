@@ -944,107 +944,10 @@ fn test_disburse_maturity_fails_if_no_maturity() {
             manage_neuron_response.command.as_ref().expect("Missing command response"),
             CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
                 if *code == ErrorType::PreconditionFailed as i32 &&
-                   msg.to_lowercase().contains("can't merge an amount less than"),
+                   msg.to_lowercase().contains("can't disburse an amount less than"),
             "{:#?}",
             manage_neuron_response,
         );
-
-        Ok(())
-    });
-}
-
-#[test]
-fn test_disburse_maturity_no_maturity_modulation() {
-    local_test_on_sns_subnet(|runtime| async move {
-        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-        let account_identifier = Account {
-            owner: user.get_principal_id().0,
-            subaccount: None,
-        };
-        let alloc = Tokens::from_tokens(1000).unwrap();
-
-        let sys_params = NervousSystemParameters {
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
-            }),
-            ..NervousSystemParameters::with_default_values()
-        };
-
-        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(account_identifier, alloc)
-            .with_nervous_system_parameters(sys_params.clone())
-            .build();
-
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
-        // Assert that SNS governance does not know any maturity modulation
-        // value. Ofc, that shouldn't be possible, since there is no Cycles
-        // Minting Canister in this test. This is just a sanity test, not a test
-        // of the code under test (called later).
-        assert_eq!(
-            sns_canisters
-                .get_maturity_modulation()
-                .await
-                .maturity_modulation,
-            None,
-        );
-
-        // Stake and claim a neuron capable of making a proposal
-        let neuron_id = sns_canisters
-            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
-            .await;
-
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Error creating the subaccount");
-
-        let neuron = sns_canisters.get_neuron(&neuron_id).await;
-
-        // No maturity should have been gained as no voting rewards have been distributed
-        assert_eq!(neuron.maturity_e8s_equivalent, 0);
-
-        // Disburse all of the neuron's rewards aka maturity.
-        let ManageNeuronResponse { command } = sns_canisters
-            .governance
-            .update_from_sender(
-                "manage_neuron",
-                candid_one,
-                ManageNeuron {
-                    subaccount: subaccount.to_vec(),
-                    command: Some(Command::DisburseMaturity(DisburseMaturity {
-                        percentage_to_disburse: 100,
-                        to_account: None,
-                    })),
-                },
-                &user,
-            )
-            .await
-            .expect("Error calling the manage_neuron API.");
-
-        match &command {
-            Some(CommandResponse::Error(GovernanceError {
-                error_type,
-                error_message,
-            })) => {
-                assert_eq!(
-                    ErrorType::from_i32(*error_type).unwrap(),
-                    ErrorType::Unavailable,
-                    "{:#?}",
-                    command
-                );
-                assert!(
-                    error_message.to_lowercase().contains("maturity modulation"),
-                    "{:#?}",
-                    command
-                );
-                assert!(error_message.contains("retriev"), "{:#?}", command);
-                assert!(
-                    error_message.contains("Cycles Minting Canister"),
-                    "{:#?}",
-                    command
-                );
-            }
-            _ => panic!("Unexpected response: {:#?}", command),
-        }
 
         Ok(())
     });

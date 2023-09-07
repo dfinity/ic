@@ -48,6 +48,8 @@ pub struct ProposalId {
     ::prost::Message,
 )]
 pub struct DisburseMaturityInProgress {
+    /// This field is the quantity of maturity in e8s that has been decremented from a Neuron to
+    /// be modulated and disbursed as SNS tokens.
     #[prost(uint64, tag = "1")]
     pub amount_e8s: u64,
     #[prost(uint64, tag = "2")]
@@ -2252,9 +2254,18 @@ pub mod manage_neuron_response {
         ::prost::Message,
     )]
     pub struct DisburseMaturityResponse {
-        /// The amount disbursed in e8s of the governance token.
+        /// The amount of maturity in e8s of the governance token deducted from the Neuron.
+        /// This amount will undergo maturity modulation if enabled, and may be increased or
+        /// decreased at the time of disbursement.
+        /// This field is being sunset in favor of `amount_deducted_e8s` but will be populated
+        /// with the same values until NNS1-2576 is done.
         #[prost(uint64, tag = "2")]
         pub amount_disbursed_e8s: u64,
+        /// The amount of maturity in e8s of the governance token deducted from the Neuron.
+        /// This amount will undergo maturity modulation if enabled, and may be increased or
+        /// decreased at the time of disbursement.
+        #[prost(uint64, optional, tag = "3")]
+        pub amount_deducted_e8s: ::core::option::Option<u64>,
     }
     #[derive(
         candid::CandidType,

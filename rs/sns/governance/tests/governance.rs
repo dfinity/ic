@@ -532,7 +532,7 @@ fn test_disburse_maturity_fails_if_maturity_too_low() {
     assert_matches!(
         command_response,
         CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
-            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't disburse an amount less than"));
 }
 
 #[test]
@@ -682,6 +682,7 @@ fn test_vesting_neuron_manage_neuron_operations() {
 
     let disburse_maturity_response = DisburseMaturityResponse {
         amount_disbursed_e8s: 100000,
+        amount_deducted_e8s: Some(100000),
     };
 
     let merge_maturity = MergeMaturity {
@@ -2632,8 +2633,10 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
 
     let DisburseMaturityResponse {
         amount_disbursed_e8s,
+        amount_deducted_e8s,
     } = disburse_maturity_response;
-    assert_eq!(amount_disbursed_e8s, expected_amount_disbursed_e8s);
+    assert_eq!(amount_deducted_e8s.unwrap(), amount_disbursed_e8s);
+    assert_eq!(amount_deducted_e8s.unwrap(), initial_maturity_e8s);
 
     // Assert that the neuron's maturity is now zero
     let neuron = canister_fixture.get_neuron(&neuron_id);
@@ -2650,6 +2653,130 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
         account_balance_after_disbursal,
         expected_amount_disbursed_e8s
     );
+}
+
+/// Tests that `ManageNeuron::DisburseMaturity` applies maturity modulation at the
+/// end of the time window.
+#[tokio::test]
+async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
+    let initial_maturity_modulation_basis_points = 100;
+    let time_of_disbursement_maturity_modulation_basis_points = 200;
+    let initial_maturity_e8s = E8;
+
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id = neuron_id(user_principal, /*memo*/ 0);
+
+    // Set up the test environment with a single dissolved neuron
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&user_principal),
+            )
+            .set_maturity(initial_maturity_e8s),
+        )
+        // Set an initial maturity modulation that will be different then the final maturity modulation
+        .set_maturity_modulation(initial_maturity_modulation_basis_points)
+        .create();
+
+    // This is supposed to cause Governance to poll CMC for the maturity modulation.
+    canister_fixture.heartbeat();
+
+    let current_basis_points = canister_fixture
+        .get_maturity_modulation()
+        .maturity_modulation
+        .unwrap()
+        .current_basis_points
+        .unwrap();
+
+    assert_eq!(
+        current_basis_points,
+        initial_maturity_modulation_basis_points
+    );
+
+    // Get the Neuron and assert its maturity is set as expected
+    let neuron = canister_fixture.get_neuron(&neuron_id);
+    let neuron_maturity_before_disbursal = neuron.maturity_e8s_equivalent;
+    assert_eq!(neuron_maturity_before_disbursal, E8);
+
+    let destination_account = icrc_ledger_types::icrc1::account::Account {
+        owner: user_principal.into(),
+        subaccount: None,
+    };
+
+    let account_balance_before_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+    assert_eq!(account_balance_before_disbursal, 0);
+
+    // Disburse the neuron to self and assert that it succeeds
+    let manage_neuron_response = canister_fixture.manage_neuron(
+        &neuron_id,
+        manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: Some(AccountProto {
+                owner: Some(user_principal),
+                subaccount: None,
+            }),
+        }),
+        user_principal,
+    );
+
+    let disburse_maturity_response = match manage_neuron_response.command.unwrap() {
+        CommandResponse::DisburseMaturity(response) => response,
+        CommandResponse::Error(error) => {
+            panic!("Unexpected error when disbursing maturity: {}", error)
+        }
+        _ => panic!("Unexpected command response when disbursing maturity"),
+    };
+
+    let DisburseMaturityResponse {
+        amount_disbursed_e8s,
+        amount_deducted_e8s,
+    } = disburse_maturity_response;
+    assert_eq!(amount_disbursed_e8s, amount_deducted_e8s.unwrap());
+    assert_eq!(amount_deducted_e8s.unwrap(), initial_maturity_e8s);
+
+    // Assert that the neuron's maturity is now zero
+    let neuron = canister_fixture.get_neuron(&neuron_id);
+    assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+    // Update the maturity_modulation that the CMC will serve before the disbursement
+    *canister_fixture
+        .cmc_fixture
+        .maturity_modulation
+        .try_lock()
+        .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
+
+    // Advancing time and triggering a heartbeat should force a query of the new modulation
+    canister_fixture.advance_time_by(2 * SECONDS_PER_DAY);
+    canister_fixture.heartbeat();
+    let current_basis_points = canister_fixture
+        .get_maturity_modulation()
+        .maturity_modulation
+        .unwrap()
+        .current_basis_points
+        .unwrap();
+
+    assert_eq!(
+        current_basis_points,
+        time_of_disbursement_maturity_modulation_basis_points
+    );
+    // Assert that the Neuron owner's account balance has not changed
+    let account_balance_before_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+
+    assert_eq!(account_balance_before_disbursal, 0);
+
+    // Advancing time and triggering a heartbeat should trigger the final disbursal
+    canister_fixture.advance_time_by(5 * SECONDS_PER_DAY + 1);
+    canister_fixture.heartbeat();
+
+    // Assert that the Neuron owner's account balance has increased the expected amount
+    let account_balance_after_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+
+    assert_eq!(account_balance_after_disbursal, 102_000_000);
 }
 
 #[test]
