@@ -3,8 +3,9 @@ use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -203,49 +204,76 @@ pub fn transfer_args_with_sender(
     prop::collection::vec(transfer_arg(sender), 0..num)
 }
 
-/// icrc1 TransferArg plus the caller
 #[derive(Clone, Debug)]
-pub struct CallerTransferArg {
-    pub caller: Principal,
-    pub transfer_arg: TransferArg,
+pub enum LedgerEndpointArg {
+    ApproveArg(ApproveArgs),
+    TransferArg(TransferArg),
 }
 
-impl CallerTransferArg {
+impl LedgerEndpointArg {
+    fn subaccount_from(&self) -> Option<Subaccount> {
+        match self {
+            Self::ApproveArg(arg) => arg.from_subaccount,
+            Self::TransferArg(arg) => arg.from_subaccount,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ArgWithCaller {
+    pub caller: Principal,
+    pub arg: LedgerEndpointArg,
+}
+
+impl ArgWithCaller {
     pub fn from(&self) -> Account {
         Account {
             owner: self.caller,
-            subaccount: self.transfer_arg.from_subaccount,
+            subaccount: self.arg.subaccount_from(),
         }
     }
 
     pub fn accounts(&self) -> Vec<Account> {
-        vec![self.from(), self.transfer_arg.to]
+        let mut res = vec![self.from()];
+        if let LedgerEndpointArg::TransferArg(arg) = &self.arg {
+            res.push(arg.to)
+        }
+        res
+    }
+
+    pub fn fee(&self) -> Option<u64> {
+        let fee = match &self.arg {
+            LedgerEndpointArg::ApproveArg(arg) => arg.fee.as_ref(),
+            LedgerEndpointArg::TransferArg(arg) => arg.fee.as_ref(),
+        };
+        fee.as_ref().map(|fee| fee.0.to_u64().unwrap())
     }
 }
 
 #[derive(Clone, Debug, Default)]
 struct TransactionsAndBalances {
-    transactions: Vec<CallerTransferArg>,
+    transactions: Vec<ArgWithCaller>,
     balances: HashMap<Account, u64>,
+    // TODO: approvals
 }
 
 impl TransactionsAndBalances {
-    pub fn apply(&mut self, minter: Account, default_fee: u64, tx: CallerTransferArg) {
-        if tx.transfer_arg.to != minter {
-            self.credit(
-                tx.transfer_arg.to,
-                tx.transfer_arg.amount.0.to_u64().unwrap(),
-            );
-        }
+    pub fn apply(&mut self, minter: Account, default_fee: u64, tx: ArgWithCaller) {
         let from = tx.from();
-        if from != minter {
-            let amount = tx.transfer_arg.amount.0.to_u64().unwrap();
-            let fee = tx
-                .transfer_arg
-                .fee
-                .as_ref()
-                .map_or(default_fee, |fee| fee.0.to_u64().unwrap());
-            self.debit(from, amount + fee);
+        let fee = tx.fee().unwrap_or(default_fee);
+        match &tx.arg {
+            LedgerEndpointArg::ApproveArg(_) => {
+                self.debit(from, fee);
+            }
+            LedgerEndpointArg::TransferArg(transfer_arg) => {
+                if transfer_arg.to != minter {
+                    self.credit(transfer_arg.to, transfer_arg.amount.0.to_u64().unwrap());
+                }
+                if from != minter {
+                    let amount = transfer_arg.amount.0.to_u64().unwrap();
+                    self.debit(from, amount + fee);
+                }
+            }
         }
         self.transactions.push(tx);
     }
@@ -293,24 +321,24 @@ pub fn valid_transactions_strategy(
     minter: Account,
     default_fee: u64,
     length: usize,
-) -> impl Strategy<Value = Vec<CallerTransferArg>> {
-    fn mint_strategy(minter: Account) -> impl Strategy<Value = CallerTransferArg> {
+) -> impl Strategy<Value = Vec<ArgWithCaller>> {
+    fn mint_strategy(minter: Account) -> impl Strategy<Value = ArgWithCaller> {
         (account_strategy(), amount_strategy()).prop_filter_map(
             "The minting account is not a valid target for a mint operation",
             move |(to, amount)| {
                 if to == minter {
                     None
                 } else {
-                    Some(CallerTransferArg {
+                    Some(ArgWithCaller {
                         caller: minter.owner,
-                        transfer_arg: TransferArg {
+                        arg: LedgerEndpointArg::TransferArg(TransferArg {
                             from_subaccount: minter.subaccount,
                             to,
                             amount: amount.into(),
                             created_at_time: None,
                             fee: None,
                             memo: None,
-                        },
+                        }),
                     })
                 }
             },
@@ -321,19 +349,19 @@ pub fn valid_transactions_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter: Account,
         default_fee: u64,
-    ) -> impl Strategy<Value = CallerTransferArg> {
+    ) -> impl Strategy<Value = ArgWithCaller> {
         account_balance.prop_flat_map(move |(from, balance)| {
             // user can burn between the fee, i.e. the minimum, and the total balance
-            (default_fee..=balance).prop_map(move |amount| CallerTransferArg {
+            (default_fee..=balance).prop_map(move |amount| ArgWithCaller {
                 caller: from.owner,
-                transfer_arg: TransferArg {
+                arg: LedgerEndpointArg::TransferArg(TransferArg {
                     from_subaccount: from.subaccount,
                     to: minter,
                     amount: amount.into(),
                     created_at_time: None,
                     fee: None,
                     memo: None,
-                },
+                }),
             })
         })
     }
@@ -342,7 +370,7 @@ pub fn valid_transactions_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter: Account,
         default_fee: u64,
-    ) -> impl Strategy<Value = CallerTransferArg> {
+    ) -> impl Strategy<Value = ArgWithCaller> {
         account_balance.prop_flat_map(move |(from, balance)| {
             (account_strategy(), 0..=(balance - default_fee)).prop_filter_map(
                 "Self transfers are disabled",
@@ -350,16 +378,47 @@ pub fn valid_transactions_strategy(
                     if to == from || to == minter || from == minter {
                         None
                     } else {
-                        Some(CallerTransferArg {
+                        Some(ArgWithCaller {
                             caller: from.owner,
-                            transfer_arg: TransferArg {
+                            arg: LedgerEndpointArg::TransferArg(TransferArg {
                                 from_subaccount: from.subaccount,
                                 to,
                                 amount: amount.into(),
                                 created_at_time: None,
                                 fee: Some(default_fee.into()),
                                 memo: None,
-                            },
+                            }),
+                        })
+                    }
+                },
+            )
+        })
+    }
+
+    fn approve_strategy(
+        account_balance: impl Strategy<Value = (Account, u64)>,
+        minter: Account,
+        default_fee: u64,
+    ) -> impl Strategy<Value = ArgWithCaller> {
+        account_balance.prop_flat_map(move |(from, balance)| {
+            (account_strategy(), 0..=(balance - default_fee)).prop_filter_map(
+                "Self transfers are disabled",
+                move |(spender, amount)| {
+                    if spender == from || spender == minter || from == minter {
+                        None
+                    } else {
+                        Some(ArgWithCaller {
+                            caller: from.owner,
+                            arg: LedgerEndpointArg::ApproveArg(ApproveArgs {
+                                from_subaccount: from.subaccount,
+                                spender,
+                                amount: amount.into(),
+                                created_at_time: None,
+                                fee: None,
+                                memo: None,
+                                expected_allowance: None,
+                                expires_at: None,
+                            }),
                         })
                     }
                 },
@@ -388,11 +447,14 @@ pub fn valid_transactions_strategy(
             mint_strategy
         } else {
             let account_balance = Rc::new(select(balances));
+            let approve_strategy =
+                approve_strategy(account_balance.clone(), minter, default_fee).boxed();
             let burn_strategy = burn_strategy(account_balance.clone(), minter, default_fee).boxed();
             let transfer_strategy = transfer_strategy(account_balance, minter, default_fee).boxed();
             proptest::strategy::Union::new_weighted(vec![
-                (1, mint_strategy),
+                (10, approve_strategy),
                 (1, burn_strategy),
+                (1, mint_strategy),
                 (1000, transfer_strategy),
             ])
             .boxed()
