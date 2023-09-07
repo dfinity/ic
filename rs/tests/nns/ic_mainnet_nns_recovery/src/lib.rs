@@ -1,6 +1,13 @@
 // A small Rust library that exports a setup() function to be used in system-tests,
 // like the nns_upgrade_test, which sets up an IC with an NNS which is recovered
 // from the latest mainnet backup.
+//
+// There are tests that use this library. Run them using either:
+//
+// * rm -rf test_tmpdir; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_env=SSH_AUTH_SOCK --test_tmpdir=test_tmpdir
+//
+// * rm -rf test_tmpdir; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_env=SSH_AUTH_SOCK --test_tmpdir=test_tmpdir --flaky_test_attempts=1
+
 use anyhow::Result;
 
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
@@ -47,6 +54,7 @@ use ic_tests::util::{block_on, runtime_from_url};
 use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
+use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::net::IpAddr;
@@ -74,6 +82,7 @@ const NNS_STATE_BACKUP_TARBALL_PATH: &str = "nns_state.tar.zst";
 const CONTROLLER: &str = "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae";
 const ORIGINAL_NNS_ID: &str = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
 const IC_CONFIG_SRC_PATH: &str = "/run/ic-node/config/ic.json5";
+const SET_TESTNET_ENV_VARS_SH: &str = "set_testnet_env_variables.sh";
 
 #[derive(Deserialize, Serialize)]
 pub struct RecoveredNnsNodeUrl {
@@ -147,53 +156,9 @@ pub fn setup(env: TestEnv) {
         );
         test_recovered_nns(env_clone.clone(), neuron_id, recovered_nns_node.clone());
 
-        let ic_admin_path = env_clone
-            .clone()
-            .get_dependency_path("rs/tests/recovery/binaries/ic-admin");
-        let recovered_nns_url = recovered_nns_node.get_public_url();
-        let recovered_nns_nns_public_key = env_clone.clone().get_path("recovered_nns_pubkey.pem");
-        Command::new(ic_admin_path)
-            .arg("--nns-url")
-            .arg(recovered_nns_url.to_string())
-            .arg("get-subnet-public-key")
-            .arg(ORIGINAL_NNS_ID)
-            .arg(recovered_nns_nns_public_key.clone())
-            .output()
-            .unwrap_or_else(|e| {
-                panic!("Could not get the public key of the recovered NNS because {e:?}",)
-            });
+        write_sh_lib(env_clone.clone(), neuron_id, recovered_nns_node.clone());
 
-        BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-            .allocate_vm(&env_clone)
-            .expect("Allocation of BoundaryNode failed.")
-            .for_ic(&env_clone, "")
-            .with_nns_public_key(recovered_nns_nns_public_key)
-            .with_nns_urls(vec![recovered_nns_url])
-            .use_real_certs_and_dns()
-            .start(&env_clone)
-            .expect("failed to setup BoundaryNode VM");
-
-        let boundary_node = env_clone
-            .clone()
-            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-            .unwrap()
-            .get_snapshot()
-            .unwrap();
-
-        await_boundary_node_healthy(&env_clone, BOUNDARY_NODE_NAME);
-
-        let recovered_nns_node_id = recovered_nns_node.node_id;
-        boundary_node.block_on_bash_script(&format!(r#"
-            set -e
-            cp /etc/nginx/conf.d/002-mainnet-nginx.conf /tmp/
-            sed 's/set $subnet_id "$random_route_subnet_id";/set $subnet_id "{ORIGINAL_NNS_ID}";/' -i /tmp/002-mainnet-nginx.conf
-            sed 's/set $subnet_type "$random_route_subnet_type";/set $subnet_type "system";/' -i /tmp/002-mainnet-nginx.conf
-            sed 's/set $node_id "$random_route_node_id";/set $node_id "{recovered_nns_node_id}";/' -i /tmp/002-mainnet-nginx.conf
-            sudo mount --bind /tmp/002-mainnet-nginx.conf /etc/nginx/conf.d/002-mainnet-nginx.conf
-            sudo systemctl reload nginx
-        "#)).unwrap_or_else(|e| {
-            panic!("Could not reconfigure nginx on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
-        });
+        setup_boundary_node(env_clone, recovered_nns_node);
     });
 
     // Start a p8s VM concurrently:
@@ -279,6 +244,64 @@ pub fn setup(env: TestEnv) {
     nns_state_thread
         .join()
         .unwrap_or_else(|e| std::panic::resume_unwind(e));
+}
+
+fn setup_boundary_node(env: TestEnv, recovered_nns_node: IcNodeSnapshot) {
+    let ic_admin_path = env
+        .clone()
+        .get_dependency_path("rs/tests/recovery/binaries/ic-admin");
+    let recovered_nns_url = recovered_nns_node.get_public_url();
+    let recovered_nns_nns_public_key = env.clone().get_path("recovered_nns_pubkey.pem");
+    Command::new(ic_admin_path)
+        .arg("--nns-url")
+        .arg(recovered_nns_url.to_string())
+        .arg("get-subnet-public-key")
+        .arg(ORIGINAL_NNS_ID)
+        .arg(recovered_nns_nns_public_key.clone())
+        .output()
+        .unwrap_or_else(|e| {
+            panic!("Could not get the public key of the recovered NNS because {e:?}",)
+        });
+
+    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+        .allocate_vm(&env)
+        .expect("Allocation of BoundaryNode failed.")
+        .for_ic(&env, "")
+        .with_nns_public_key(recovered_nns_nns_public_key)
+        .with_nns_urls(vec![recovered_nns_url])
+        .use_real_certs_and_dns()
+        .start(&env)
+        .expect("failed to setup BoundaryNode VM");
+
+    let boundary_node = env
+        .clone()
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+
+    let recovered_nns_node_id = recovered_nns_node.node_id;
+    boundary_node.block_on_bash_script(&format!(r#"
+        set -e
+        cp /etc/nginx/conf.d/002-mainnet-nginx.conf /tmp/
+        sed 's/set $subnet_id "$random_route_subnet_id";/set $subnet_id "{ORIGINAL_NNS_ID}";/' -i /tmp/002-mainnet-nginx.conf
+        sed 's/set $subnet_type "$random_route_subnet_type";/set $subnet_type "system";/' -i /tmp/002-mainnet-nginx.conf
+        sed 's/set $node_id "$random_route_node_id";/set $node_id "{recovered_nns_node_id}";/' -i /tmp/002-mainnet-nginx.conf
+        sudo mount --bind /tmp/002-mainnet-nginx.conf /etc/nginx/conf.d/002-mainnet-nginx.conf
+        sudo systemctl reload nginx
+    "#)).unwrap_or_else(|e| {
+        panic!("Could not reconfigure nginx on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
+    });
+    let bn = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
+    let bn_snapshot = bn.get_snapshot().unwrap();
+    if let Some(playnet) = bn_snapshot.playnet {
+        info!(
+            env.logger(),
+            "NNS Dapp: https://qoctq-giaaa-aaaaa-aaaea-cai.{playnet}"
+        );
+    }
 }
 
 fn get_ssh_session_to_backup_pod() -> Result<Session> {
@@ -548,7 +571,7 @@ fn recover_nns_subnet(
 }
 
 fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapshot) {
-    let logger = env.clone().logger();
+    let logger: slog::Logger = env.clone().logger();
     info!(logger, "Testing recovered NNS ...");
     let contents = env
         .clone()
@@ -576,9 +599,43 @@ fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapsho
     info!(
         logger,
         "Successfully recovered NNS at {}. Interact with it using {:?}.",
-        recovered_nns_node_url,
+        recovered_nns_node_url.clone(),
         neuron_id,
     );
+}
+
+/// Write a shell script containing some environment variable exports.
+/// This script can be sourced such that we can easily use the legacy
+/// nns-tools shell scripts in /testnet/tools/nns-tools/ with the dynamic
+/// testnet deployed by this system-test.
+fn write_sh_lib(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapshot) {
+    let logger: slog::Logger = env.clone().logger();
+    let set_testnet_env_vars_sh_path = env.get_path(SET_TESTNET_ENV_VARS_SH);
+    let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
+    let ic_admin =
+        fs::canonicalize(env.get_dependency_path("rs/tests/recovery/binaries/ic-admin")).unwrap();
+    let sns_cli = fs::canonicalize(env.get_dependency_path("rs/sns/cli/sns")).unwrap();
+    let pem = fs::canonicalize(env.get_dependency_path("rs/tests/nns/secret_key.pem")).unwrap();
+    let recovered_nns_node_url = nns_node.get_public_url();
+    let neuron_id_number = neuron_id.0;
+    fs::write(
+        set_testnet_env_vars_sh_path.clone(),
+        format!(
+            "export IC_ADMIN={ic_admin:?}; \
+             export SNS_CLI={sns_cli:?}; \
+             export PEM={pem:?}; \
+             export NNS_URL=\"{recovered_nns_node_url}\"; \
+             export NEURON_ID={neuron_id_number:?};"
+        ),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "Writing {set_testnet_env_vars_sh_str} failed because: {}",
+            e
+        )
+    });
+    let canonical_sh_lib_path = fs::canonicalize(set_testnet_env_vars_sh_path.clone()).unwrap();
+    info!(logger, "source {canonical_sh_lib_path:?}");
 }
 
 fn bless_replica_version(
