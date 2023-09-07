@@ -6,7 +6,7 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemMetadata;
 use ic_state_layout::{
-    canister_id_from_path, INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE,
+    canister_id_from_path, INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, STATS_FILE, SUBNET_QUEUES_FILE,
     SYSTEM_METADATA_FILE,
 };
 use ic_types::state_sync::{
@@ -117,6 +117,16 @@ pub fn split_manifest(
 
                     // Replace with default on subnet B.
                     manifest_b.append_system_metadata(subnet_b, subnet_type, batch_time);
+                }
+                Some(STATS_FILE) => {
+                    // Append empty stats file
+                    let empty_stats = ic_protobuf::state::stats::v1::Stats { query_stats: None };
+                    let as_protobuf = empty_stats.encode_to_vec();
+
+                    // Don't write the file if it's empty. This is an optimization done by MR
+                    // If the serialized protobuf will ever not be empty, need to write the
+                    // file via append_single_chunk_file
+                    assert_eq!(as_protobuf.len(), 0);
                 }
                 _ => {
                     return Err(ManifestValidationError::InconsistentManifest {

@@ -15,6 +15,7 @@ use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
+    batch::ReceivedEpochStats,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     xnet::QueueId,
@@ -367,6 +368,10 @@ pub struct ReplicatedState {
     /// The queue is, therefore, emptied at the end of every round.
     // TODO(EXE-109): Move this queue into `subnet_queues`
     pub consensus_queue: Vec<Response>,
+
+    /// Temporary query stats received during the current epoch.
+    /// Reset during the start of each epoch.
+    pub epoch_query_stats: ReceivedEpochStats,
 }
 
 impl ReplicatedState {
@@ -377,6 +382,7 @@ impl ReplicatedState {
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
             consensus_queue: Vec::new(),
+            epoch_query_stats: ReceivedEpochStats::default(),
         }
     }
 
@@ -385,12 +391,14 @@ impl ReplicatedState {
         canister_states: BTreeMap<CanisterId, CanisterState>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
+        epoch_query_stats: ReceivedEpochStats,
     ) -> Self {
         let mut res = Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue: Vec::new(),
+            epoch_query_stats,
         };
         res.update_stream_responses_size_bytes();
         res
@@ -735,6 +743,11 @@ impl ReplicatedState {
         &self.subnet_queues
     }
 
+    /// Returns an immutable reference to `self.epoch_query_stats`.
+    pub fn query_stats(&self) -> &ReceivedEpochStats {
+        &self.epoch_query_stats
+    }
+
     /// Updates the byte size of responses in streams for each canister.
     fn update_stream_responses_size_bytes(&mut self) {
         let stream_responses_size_bytes = self.metadata.streams.responses_size_bytes();
@@ -843,6 +856,7 @@ impl ReplicatedState {
             metadata,
             mut subnet_queues,
             consensus_queue,
+            epoch_query_stats: _,
         } = self;
 
         // Consensus queue is always empty at the end of the round.
@@ -877,6 +891,7 @@ impl ReplicatedState {
             metadata,
             subnet_queues,
             consensus_queue,
+            epoch_query_stats: ReceivedEpochStats::default(), // Don't preserve query stats during subnet splitting.
         })
     }
 
@@ -898,7 +913,11 @@ impl ReplicatedState {
             ref mut metadata,
             ref mut subnet_queues,
             consensus_queue: _,
+            epoch_query_stats: _,
         } = self;
+
+        // Reset query stats after subnet split
+        self.epoch_query_stats = ReceivedEpochStats::default();
 
         metadata
             .split_from

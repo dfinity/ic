@@ -33,6 +33,8 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_types::batch::{CanisterQueryStats, ReceivedEpochStats};
+use ic_types::epoch_from_height;
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
     chunkable::{ChunkId, ChunkableArtifact},
@@ -481,6 +483,47 @@ fn starting_height_independent_of_remove_states_below() {
         let canister_id: Vec<CanisterId> = vec![canister_test_id(100), canister_test_id(200)];
         let (_height, recovered_tip) = state_manager.take_tip();
         assert_eq!(canister_ids(&recovered_tip), canister_id);
+    });
+}
+
+#[test]
+fn query_stats_are_persisted() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let proposer_id: NodeId = node_test_id(42);
+
+        let (curr_height, mut state) = state_manager.take_tip();
+
+        let epoch = epoch_from_height(curr_height);
+        let test_query_stats: CanisterQueryStats = CanisterQueryStats {
+            num_calls: 1337,
+            num_instructions: 100000,
+            ingress_payload_size: 100001,
+            egress_payload_size: 100002,
+        };
+
+        let mut stats = BTreeMap::new();
+        stats.insert((canister_id, proposer_id), test_query_stats.clone());
+        state.epoch_query_stats = ReceivedEpochStats {
+            epoch: Some(epoch),
+            stats,
+        };
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let state_manager = restart_fn(state_manager, None);
+
+        let (_height, recovered_tip) = state_manager.take_tip();
+
+        let recovered_stats = recovered_tip.epoch_query_stats;
+        assert_eq!(recovered_stats.epoch, Some(epoch));
+        assert_eq!(recovered_stats.stats.len(), 1);
+        assert_eq!(
+            recovered_stats
+                .stats
+                .get(&(canister_id, proposer_id))
+                .unwrap(),
+            &test_query_stats
+        );
     });
 }
 

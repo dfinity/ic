@@ -44,7 +44,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
 };
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
+    batch::{BatchPayload, ReceivedEpochStats, ValidationContext},
     consensus::{
         certification::{Certification, CertificationContent},
         dkg::Dealings,
@@ -206,6 +206,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
+            ReceivedEpochStats::default(),
         )),
     )
 }
