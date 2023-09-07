@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use crate::common::{ConnectivityChecker, PeerRestrictedSevHandshake, PeerRestrictedTlsConfig};
+use crate::common::{PeerRestrictedSevHandshake, PeerRestrictedTlsConfig};
 use bytes::Bytes;
 use either::Either;
 use futures::FutureExt;
@@ -14,6 +14,7 @@ use ic_p2p_test_utils::{
         add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout,
         PeerManagerAction,
     },
+    ConnectivityChecker,
 };
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
 use ic_test_utilities_logger::with_test_replica_logger;
