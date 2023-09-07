@@ -1,5 +1,5 @@
 {
-  "checksum": "c4d804ee561489277b449af3982ea0c9f5e2e95b0960685753cca5a5864dd9ba",
+  "checksum": "5cbee4debf2668d9687c1b65273774ba4fe96b9dd1ccfeaf20ba8371830beaeb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13358,7 +13358,7 @@
               "target": "ic_bls12_381"
             },
             {
-              "id": "icrc1-test-env 0.1.0",
+              "id": "icrc1-test-env 0.1.1",
               "target": "icrc1_test_env"
             },
             {
@@ -22572,16 +22572,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "icrc1-test-env 0.1.0": {
+    "icrc1-test-env 0.1.1": {
       "name": "icrc1-test-env",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/ICRC-1",
-          "commitish": {
-            "Rev": "bdcf39e32a12185fbcec33897001d93c901d6689"
-          },
-          "strip_prefix": "test/env"
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/icrc1-test-env/0.1.1/download",
+          "sha256": "1de228913a69be63eec41a6435701d5c1daa6b4e156a92748cf5c50690ca8e40"
         }
       },
       "targets": [
@@ -22631,7 +22628,7 @@
           ],
           "selects": {}
         },
-        "version": "0.1.0"
+        "version": "0.1.1"
       },
       "license": "Apache-2.0"
     },
@@ -22639,12 +22636,9 @@
       "name": "icrc1-test-suite",
       "version": "0.1.1",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/ICRC-1",
-          "commitish": {
-            "Rev": "bdcf39e32a12185fbcec33897001d93c901d6689"
-          },
-          "strip_prefix": "test/suite"
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/icrc1-test-suite/0.1.1/download",
+          "sha256": "917e17fd43d9afc946d75422a1282ecacb03867dfee9ab3863868388c9a4b127"
         }
       },
       "targets": [
@@ -22678,7 +22672,7 @@
               "target": "futures"
             },
             {
-              "id": "icrc1-test-env 0.1.0",
+              "id": "icrc1-test-env 0.1.1",
               "target": "icrc1_test_env"
             }
           ],

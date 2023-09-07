@@ -4502,8 +4502,9 @@ dependencies = [
 
 [[package]]
 name = "icrc1-test-env"
-version = "0.1.0"
-source = "git+https://github.com/dfinity/ICRC-1?rev=bdcf39e32a12185fbcec33897001d93c901d6689#bdcf39e32a12185fbcec33897001d93c901d6689"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1de228913a69be63eec41a6435701d5c1daa6b4e156a92748cf5c50690ca8e40"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4515,7 +4516,8 @@ dependencies = [
 [[package]]
 name = "icrc1-test-suite"
 version = "0.1.1"
-source = "git+https://github.com/dfinity/ICRC-1?rev=bdcf39e32a12185fbcec33897001d93c901d6689#bdcf39e32a12185fbcec33897001d93c901d6689"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "917e17fd43d9afc946d75422a1282ecacb03867dfee9ab3863868388c9a4b127"
 dependencies = [
  "anyhow",
  "candid",
