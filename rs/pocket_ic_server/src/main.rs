@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http,
     http::StatusCode,
     middleware::{self, Next},
@@ -141,6 +141,7 @@ async fn start(runtime: Arc<Runtime>) {
         //
         // Deletes an instance.
         .route("/instances/:id/delete", delete(delete_instance))
+        .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             bump_last_request_timestamp,
