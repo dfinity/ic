@@ -532,6 +532,9 @@ pub struct CanisterStateBits {
     /// Resource reservation cycles.
     #[prost(message, optional, tag = "38")]
     pub reserved_balance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// The user-specified upper limit on `reserved_balance`.
+    #[prost(message, optional, tag = "39")]
+    pub reserved_balance_limit: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

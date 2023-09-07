@@ -331,4 +331,6 @@ message CanisterStateBits {
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;
+  // The user-specified upper limit on `reserved_balance`.
+  state.queues.v1.Cycles reserved_balance_limit = 39;
 }

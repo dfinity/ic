@@ -496,6 +496,7 @@ fn serialize_canister_to_tip(
             cycles_balance: canister_state.system_state.balance(),
             cycles_debit: canister_state.system_state.ingress_induction_cycles_debit(),
             reserved_balance: canister_state.system_state.reserved_balance(),
+            reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
             status: canister_state.system_state.status.clone(),
             scheduled_as_first: canister_state

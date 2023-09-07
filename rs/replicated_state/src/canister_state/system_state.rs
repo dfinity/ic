@@ -301,6 +301,12 @@ pub struct SystemState {
     /// Resource reservation cycles.
     reserved_balance: Cycles,
 
+    /// The user-specified upper limit on `reserved_balance`.
+    ///
+    /// A resource allocation operation that attempts to reserve `N` cycles will
+    /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
+    reserved_balance_limit: Option<Cycles>,
+
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
     pub task_queue: VecDeque<ExecutionTask>,
@@ -697,6 +703,7 @@ impl SystemState {
             cycles_balance: initial_cycles,
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
+            reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
             status,
@@ -738,6 +745,7 @@ impl SystemState {
         cycles_balance: Cycles,
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
+        reserved_balance_limit: Option<Cycles>,
         task_queue: VecDeque<ExecutionTask>,
         global_timer: CanisterTimer,
         canister_version: u64,
@@ -755,6 +763,7 @@ impl SystemState {
             cycles_balance,
             ingress_induction_cycles_debit,
             reserved_balance,
+            reserved_balance_limit,
             task_queue,
             global_timer,
             canister_version,
@@ -786,6 +795,11 @@ impl SystemState {
     /// Returns resource reservation cycles.
     pub fn reserved_balance(&self) -> Cycles {
         self.reserved_balance
+    }
+
+    /// Returns the user-specified upper limit on `reserved_balance`.
+    pub fn reserved_balance_limit(&self) -> Option<Cycles> {
+        self.reserved_balance_limit
     }
 
     /// Records the given amount as debit that will be charged from the balance
