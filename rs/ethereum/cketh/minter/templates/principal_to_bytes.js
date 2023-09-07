@@ -1,4 +1,14 @@
+/**
+ * Converts a principal into a fixed 32-byte representation suitable for calling Ethereum smart contracts.
+ * @param {string} text The textual representation of a principal.
+ * @return {string} A 32-byte hex-encoded byte string.
+ */
 function principalToBytes32(text) {
+    /**
+     * Decodes a base32-encoded string into a byte array.
+     * @param {string} text A base-32 encoded string.
+     * @return {Array<number>} A byte array.
+     */
     function base32Decode(text) {
         const ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
         let width = 0;
@@ -22,12 +32,23 @@ function principalToBytes32(text) {
         return bytes;
     }
 
+    /**
+     * Appends a hex representation of a number to string.
+     * @param {string} s A string to append the hex to.
+     * @param {number} b A byte.
+     * @return {string} An updated string.
+     */
     function appendHexByte(s, b) {
         s += ((b >> 4) & 0x0f).toString(16);
         s += (b & 0x0f).toString(16);
         return s;
     }
 
+    /**
+     * Encodes a byte array as Ethereum data hex (staring with 0x).
+     * @param {Array<number>} bytes A byte array.
+     * @return {string} A hex string.
+     */
     function bytes32Encode(bytes) {
         let n = bytes.length;
         let s = "0x";
@@ -41,7 +62,7 @@ function principalToBytes32(text) {
         return s;
     }
 
-    let ungroup = text.replaceAll("-", "");
+    let ungroup = text.replace(/-/g, "");
     let rawBytes = base32Decode(ungroup);
     if (rawBytes.length < 4) {
         throw Error("Invalid principal: too short");

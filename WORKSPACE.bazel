@@ -378,6 +378,22 @@ load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
 
 rosetta_cli_repository(name = "rosetta-cli")
 
+# Closure compiler for JavaScript
+http_archive(
+    name = "io_bazel_rules_closure",
+    sha256 = "a3bef45d4d052adfd7b0146efdfe55989753adbb66e1f4fa4fa8c4f9df4f8196",
+    strip_prefix = "rules_closure-4326045ee6c941f12518a2ad5ad990504cf3df9d",
+    urls = [
+        "https://github.com/bazelbuild/rules_closure/archive/4326045ee6c941f12518a2ad5ad990504cf3df9d.zip",
+    ],
+)
+
+load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
+
+rules_closure_dependencies()
+
+rules_closure_toolchains()
+
 # NodeJS dependencies
 
 http_archive(
