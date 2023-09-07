@@ -220,7 +220,7 @@ build-base-images-ref-update:
      for FILE in digestfile-*; do
          IMAGE="$(head -1 "$FILE")"
          REF_FILE="$(tail -1 "$FILE")"
-         echo "$IMAGE" > "$REF_FILE"
+         echo "docker.io/$IMAGE" > "$REF_FILE"
      done
      rm -f digestfile*
 

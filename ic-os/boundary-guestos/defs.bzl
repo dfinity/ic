@@ -18,22 +18,6 @@ def image_deps(mode, sev = False):
       A dict containing all file inputs to build this image.
     """
 
-    extra_rootfs_deps = {
-        "dev": {
-            "//typescript/service-worker:favicon.png": "/var/www/html/favicon.png:0644",
-            "//typescript/service-worker:index.html": "/var/www/html/index.html:0644",
-            "//typescript/service-worker:install-script.js": "/var/www/html/install-script.js:0644",
-            "//typescript/service-worker:install-script.js.map": "/var/www/html/install-script.js.map:0644",
-            "//typescript/service-worker:style.css": "/var/www/html/style.css:0644",
-            "//typescript/service-worker:sw.js": "/var/www/html/sw.js:0644",
-            "//typescript/service-worker:sw.js.map": "/var/www/html/sw.js.map:0644",
-            "//typescript/service-worker:web_bg.wasm": "/var/www/html/web_bg.wasm:0644",
-        },
-        "prod": {},
-    }
-    sev_rootfs_deps = {
-        "@sevtool": "/opt/ic/bin/sevtool:0755",
-    }
     deps = {
         "bootfs": {
             # base layer
@@ -62,8 +46,43 @@ def image_deps(mode, sev = False):
             "//publish/binaries:systemd-journal-gatewayd-shim": "/opt/ic/bin/systemd-journal-gatewayd-shim:0755",
         },
     }
-    deps["rootfs"].update(extra_rootfs_deps[mode])
+
+    extra_deps = {
+        "dev": {
+            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/dev:build_container_filesystem_config.txt",
+        },
+        "dev-sev": {
+            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/dev-sev:build_container_filesystem_config.txt",
+        },
+        "prod": {
+            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/prod:build_container_filesystem_config.txt",
+        },
+        "prod-sev": {
+            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/prod-sev:build_container_filesystem_config.txt",
+        },
+    }
+
+    deps.update(extra_deps[mode])
+
+    extra_rootfs_deps = {
+        "dev": {
+            "//typescript/service-worker:favicon.png": "/var/www/html/favicon.png:0644",
+            "//typescript/service-worker:index.html": "/var/www/html/index.html:0644",
+            "//typescript/service-worker:install-script.js": "/var/www/html/install-script.js:0644",
+            "//typescript/service-worker:install-script.js.map": "/var/www/html/install-script.js.map:0644",
+            "//typescript/service-worker:style.css": "/var/www/html/style.css:0644",
+            "//typescript/service-worker:sw.js": "/var/www/html/sw.js:0644",
+            "//typescript/service-worker:sw.js.map": "/var/www/html/sw.js.map:0644",
+            "//typescript/service-worker:web_bg.wasm": "/var/www/html/web_bg.wasm:0644",
+        },
+    }
+
+    deps["rootfs"].update(extra_rootfs_deps.get(mode, default = {}))
+
     if sev:
+        sev_rootfs_deps = {
+            "@sevtool": "/opt/ic/bin/sevtool:0755",
+        }
         deps["rootfs"].update(sev_rootfs_deps)
 
     return deps

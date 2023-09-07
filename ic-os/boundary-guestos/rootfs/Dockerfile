@@ -2,7 +2,7 @@
 #
 # Build step for exmaple:
 # - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev --build-arg SW=true \ `
-#   `--build-arg BASE_IMAGE=dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
+#   `--build-arg BASE_IMAGE=docker.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
 #
 #
 # The base images are defined in docker-base.prod and docker-base.dev. Update
@@ -101,6 +101,12 @@ RUN mkdir -p /boot/config \
 
 COPY etc /etc
 
+# Change permissions on special files as they are copied.
+# See ic-os/guestos/rootfs/Dockerfile for details
+COPY --chmod=644 etc/hosts /etc/hosts
+COPY --chmod=644 etc/hostname /etc/hostname
+COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+
 # Install Nginx NJS Plugins
 COPY --from=download \
     /tmp/njs-plugin-is-bot.js /etc/nginx/njs/
@@ -158,9 +164,12 @@ RUN for SERVICE in /etc/systemd/system/*; do \
     systemd-resolved \
     systemd-journal-gatewayd
 
-    # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
-    # E.g., systemd-timesync/coredump
-RUN faketime "1970-1-1 0" systemd-sysusers && \
+# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
+# E.g., systemd-timesync/coredump
+RUN systemd-sysusers && \
+    # Fix reproducibility issue. Notes in guestos/rootfs/Dockerfile    
+    usermod -p '!!' systemd-timesync && \
+    usermod -p '!!' systemd-coredump && \
     # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
     echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
 

@@ -34,8 +34,7 @@ def image_deps(mode, _malicious = False):
         },
 
         # Set various configuration values
-        "base_image": Label("//ic-os/setupos:rootfs/docker-base." + mode),
-        "docker_context": Label("//ic-os/setupos:rootfs-files"),
+        "container_context_files": Label("//ic-os/setupos:rootfs-files"),
         "partition_table": Label("//ic-os/setupos:partitions.csv"),
         "rootfs_size": "1750M",
         "bootfs_size": "100M",
@@ -45,6 +44,21 @@ def image_deps(mode, _malicious = False):
         # Add any custom partitions to the manifest
         "custom_partitions": lambda: (_custom_partitions)(mode),
     }
+
+    # Add extra files depending on image variant
+    extra_deps = {
+        "dev": {
+            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev:build_container_filesystem_config.txt",
+        },
+        "dev-sev": {
+            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev-sev:build_container_filesystem_config.txt",
+        },
+        "prod": {
+            "build_container_filesystem_config_file": "//ic-os/setupos/envs/prod:build_container_filesystem_config.txt",
+        },
+    }
+
+    deps.update(extra_deps[mode])
 
     return deps
 
