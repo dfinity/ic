@@ -79,7 +79,7 @@ type IcpXdrConversionRateResponse = record {
   data : IcpXdrConversionRate;
 
   // CBOR-serialized hash tree as specified in
-  // https://smartcontracts.org/docs/interface-spec/index.html#certification-encoding.
+  // https://internetcomputer.org/docs/interface-spec/index.html#certification-encoding
   // The hash tree is used for certification and hash the following structure:
   // ```
   // *
@@ -91,7 +91,7 @@ type IcpXdrConversionRateResponse = record {
   hash_tree : blob;
 
   // System certificate as specified in
-  // https://smartcontracts.org/docs/interface-spec/index.html#certification-encoding
+  // https://internetcomputer.org/docs/interface-spec/index.html#certification-encoding
   certificate : blob;
 };
 

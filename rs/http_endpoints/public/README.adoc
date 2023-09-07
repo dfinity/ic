@@ -32,7 +32,7 @@ For each HTTP(s) endpoint there is a module that processes the corresponding req
 
 ==== Call
 
-According to the https://smartcontracts.org/docs/interface-spec/index.html[IC spec], first steps of the high-level workflow of calling a canister are:
+According to the https://internetcomputer.org/docs/interface-spec/index.html[IC spec], first steps of the high-level workflow of calling a canister are:
 
 . A user submits a call via the HTTPS Interface. No useful information is returned in the immediate response (as such information cannot be trustworthy anyways).
 . For a certain amount of time, the IC behaves as if it does not know about the call.
