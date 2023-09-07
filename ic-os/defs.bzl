@@ -2,21 +2,30 @@
 A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem", "disk_image", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
-def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, upgrades = True, vuln_scan = True, visibility = None, ic_version = "//bazel:version.txt"):
+def icos_build(
+        name,
+        upload_prefix,
+        image_deps_func,
+        mode = None,
+        malicious = False,
+        upgrades = True,
+        vuln_scan = True,
+        visibility = None,
+        ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
 
     Args:
       name: Name for the generated filegroup.
       upload_prefix: Prefix to be used as the target when uploading
-      image_deps: Function to be used to generate image manifest
+      image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
       upgrades: if True, build upgrade images as well
@@ -28,7 +37,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     if mode == None:
         mode = name
 
-    image_deps = image_deps(mode, malicious)
+    image_deps = image_deps_func(mode, malicious)
 
     # -------------------- Version management --------------------
 
@@ -55,27 +64,14 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     build_grub_partition("partition-grub.tar", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
 
     # -------------------- Build the docker image --------------------
+    build_container_filesystem_config_file = Label(image_deps.get("build_container_filesystem_config_file"))
 
-    build_args = ["BUILD_TYPE=" + mode]
-
-    # set root password only in dev mode
-    if mode == "dev":
-        build_args.extend(["ROOT_PASSWORD=root"])
-
-    elif mode == "dev-sev":
-        build_args.extend(["ROOT_PASSWORD=root"])
-
-    file_build_args = {image_deps["base_image"]: "BASE_IMAGE"}
-
-    docker_tar(
-        visibility = visibility,
+    build_container_filesystem(
         name = "rootfs-tree.tar",
-        dep = [image_deps["docker_context"]],
-        build_args = build_args,
-        file_build_args = file_build_args,
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        context_files = [image_deps["container_context_files"]],
+        config_file = build_container_filesystem_config_file,
+        visibility = visibility,
+        target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
 
@@ -246,7 +242,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     # -------------------- Assemble disk image --------------------
 
-    # Build a list of custom partitions with a funciton, to allow "injecting" build steps at this point
+    # Build a list of custom partitions with a function, to allow "injecting" build steps at this point
     if "custom_partitions" not in image_deps:
         custom_partitions = []
     else:
@@ -446,7 +442,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             ],
             env = {
                 "trivy_path": "$(rootpath @trivy//:trivy)",
-                "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+                "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },
             tags = ["manual"],
@@ -472,13 +468,19 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
 # end def icos_build
 
-def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibility = None, ic_version = "//bazel:version.txt"):
+def boundary_node_icos_build(
+        name,
+        image_deps_func,
+        mode = None,
+        sev = False,
+        visibility = None,
+        ic_version = "//bazel:version.txt"):
     """
     A boundary node ICOS build parameterized by mode.
 
     Args:
       name: Name for the generated filegroup.
-      image_deps: Function to be used to generate image manifest
+      image_deps_func: Function to be used to generate image manifest
       mode: dev, or prod. If not specified, will use the value of `name`
       sev: if True, build an SEV-SNP enabled image
       visibility: See Bazel documentation
@@ -487,26 +489,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
     if mode == None:
         mode = name
 
-    image_deps = image_deps(mode, sev = sev)
-
-    rootfs_args = []
-
-    if mode == "dev":
-        rootfs_args = [
-            "ROOT_PASSWORD=root",
-            "SW=false",
-        ]
-    elif mode == "prod":
-        rootfs_args = [
-            "ROOT_PASSWORD=",
-            "SW=true",
-        ]
-
-    if sev:
-        base_suffix = "snp"
-    else:
-        base_suffix = "prod"
-    file_build_args = {"//ic-os/boundary-guestos:rootfs/docker-base." + base_suffix: "BASE_IMAGE"}
+    image_deps = image_deps_func(mode, sev = sev)
 
     native.sh_binary(
         name = "vuln-scan",
@@ -518,7 +501,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         ],
         env = {
             "trivy_path": "$(rootpath @trivy//:trivy)",
-            "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+            "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
             "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
         },
         tags = ["manual"],
@@ -526,17 +509,14 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
 
     build_grub_partition("partition-grub.tar")
 
-    docker_tar(
-        visibility = visibility,
+    build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
+
+    build_container_filesystem(
         name = "rootfs-tree.tar",
-        dep = ["//ic-os/boundary-guestos:rootfs-files"],
-        build_args = [
-            "BUILD_TYPE=" + mode,
-        ] + rootfs_args,
-        file_build_args = file_build_args,
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        context_files = ["//ic-os/boundary-guestos:rootfs-files"],
+        config_file = build_container_filesystem_config_file,
+        visibility = visibility,
+        target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
 
@@ -696,13 +676,18 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         visibility = visibility,
     )
 
-def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None, ic_version = "//bazel:version.txt"):
+def boundary_api_guestos_build(
+        name,
+        image_deps_func,
+        mode = None,
+        visibility = None,
+        ic_version = "//bazel:version.txt"):
     """
     A boundary API GuestOS build parameterized by mode.
 
     Args:
       name: Name for the generated filegroup.
-      image_deps: Function to be used to generate image manifest
+      image_deps_func: Function to be used to generate image manifest
       mode: dev, or prod. If not specified, will use the value of `name`
       visibility: See Bazel documentation
       ic_version: the label pointing to the target that returns IC version
@@ -710,18 +695,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
     if mode == None:
         mode = name
 
-    image_deps = image_deps()
-
-    rootfs_args = []
-
-    if mode == "dev":
-        rootfs_args = [
-            "ROOT_PASSWORD=root",
-        ]
-    elif mode == "prod":
-        rootfs_args = [
-            "ROOT_PASSWORD=",
-        ]
+    image_deps = image_deps_func(mode)
 
     native.sh_binary(
         name = "vuln-scan",
@@ -733,7 +707,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         ],
         env = {
             "trivy_path": "$(rootpath @trivy//:trivy)",
-            "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+            "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
             "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
         },
         tags = ["manual"],
@@ -741,19 +715,14 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
 
     build_grub_partition("partition-grub.tar")
 
-    docker_tar(
-        visibility = visibility,
+    build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
+
+    build_container_filesystem(
         name = "rootfs-tree.tar",
-        dep = ["//ic-os/boundary-api-guestos:rootfs-files"],
-        build_args = [
-            "BUILD_TYPE=" + mode,
-        ] + rootfs_args,
-        file_build_args = {
-            "//ic-os/boundary-api-guestos:rootfs/docker-base.prod": "BASE_IMAGE",
-        },
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        context_files = ["//ic-os/boundary-api-guestos:rootfs-files"],
+        config_file = build_container_filesystem_config_file,
+        visibility = visibility,
+        target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
 

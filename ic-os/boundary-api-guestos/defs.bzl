@@ -7,14 +7,17 @@ Hold manifest common to all Boundary API GuestOS variants.
 # compute the hash over all inputs going into the image and derive the
 # "version.txt" file from it.
 
-def image_deps():
+def image_deps(mode):
     """
     Define all Boundary API GuestOS inputs.
+
+    Args:
+      mode: Variant to be built, dev or prod.
 
     Returns:
       A dict containing all file inputs to build this image.
     """
-    return {
+    deps = {
         "bootfs": {
             # base layer
             ":rootfs-tree.tar": "/",
@@ -36,3 +39,16 @@ def image_deps():
             "//publish/binaries:ic-boundary": "/opt/ic/bin/ic-boundary:0755",
         },
     }
+
+    extra_deps = {
+        "dev": {
+            "build_container_filesystem_config_file": "//ic-os/boundary-api-guestos/envs/dev:build_container_filesystem_config.txt",
+        },
+        "prod": {
+            "build_container_filesystem_config_file": "//ic-os/boundary-api-guestos/envs/prod:build_container_filesystem_config.txt",
+        },
+    }
+
+    deps.update(extra_deps[mode])
+
+    return deps

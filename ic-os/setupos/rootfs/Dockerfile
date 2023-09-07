@@ -24,6 +24,12 @@ RUN mkdir -p /config \
              /boot/grub
 COPY etc /etc
 
+# Change permissions on special files as they are copied.
+# See ic-os/guestos/rootfs/Dockerfile for details
+COPY --chmod=644 etc/hosts /etc/hosts
+COPY --chmod=644 etc/hostname /etc/hostname
+COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \

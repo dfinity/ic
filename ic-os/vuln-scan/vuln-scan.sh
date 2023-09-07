@@ -89,7 +89,7 @@ function execution() {
     # make the assumption of which element in the list comes first and decided to
     # check
     log " * select the correct docker tar"
-    for f in $DOCKER_TAR; do
+    for f in $CONTAINER_TAR; do
         if [ "${f: -4}" == ".tar" ]; then
             TAR_FILE=$f
             log " + TAR_FILE=$TAR_FILE"
