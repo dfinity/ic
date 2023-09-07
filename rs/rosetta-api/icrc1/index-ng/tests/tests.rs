@@ -8,14 +8,15 @@ use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{
-    ChangeFeeCollector, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
+    ChangeFeeCollector, FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
     UpgradeArgs as LedgerUpgradeArgs,
 };
-use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
+use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
@@ -101,7 +102,8 @@ fn install_ledger(
         .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
         .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
         .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
-        .with_archive_options(archive_options);
+        .with_archive_options(archive_options)
+        .with_feature_flags(FeatureFlags { icrc2: true });
     if let Some(fee_collector_account) = fee_collector_account {
         builder = builder.with_fee_collector_account(fee_collector_account);
     }
@@ -346,6 +348,21 @@ fn icrc1_transfer(
         })
 }
 
+fn apply_arg_with_caller(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    arg: ArgWithCaller,
+) -> BlockIndex {
+    match arg.arg {
+        LedgerEndpointArg::ApproveArg(approve_arg) => {
+            icrc2_approve(env, ledger_id, PrincipalId(arg.caller), approve_arg)
+        }
+        LedgerEndpointArg::TransferArg(transfer_arg) => {
+            icrc1_transfer(env, ledger_id, PrincipalId(arg.caller), transfer_arg)
+        }
+    }
+}
+
 fn transfer(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -363,6 +380,55 @@ fn transfer(
         memo: None,
     };
     icrc1_transfer(env, ledger_id, owner.into(), req)
+}
+
+fn icrc2_approve(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: ApproveArgs,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode ApproveArgs");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc2_approve", req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to approve tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+        .bytes();
+    Decode!(&res, Result<BlockIndex, ApproveError>)
+        .expect("Failed to decode Result<BlockIndex, ApproveError>")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to approve. caller:{} arg:{:?} error:{:?}",
+                caller, arg, e
+            )
+        })
+}
+
+fn approve(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Account,
+    spender: Account,
+    amount: u64,
+) -> u64 {
+    let req = ApproveArgs {
+        from_subaccount: from.subaccount,
+        spender,
+        amount: Nat::from(amount),
+        expected_allowance: None,
+        expires_at: None,
+        fee: None,
+        memo: None,
+        created_at_time: None,
+    };
+    icrc2_approve(env, ledger, PrincipalId(from.owner), req)
+        .0
+        .to_u64()
+        .unwrap()
 }
 
 // Same as get_account_transactions but with the old index interface
@@ -494,6 +560,15 @@ fn test_ledger_growing() {
     }
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
+
+    // test block with an approval
+    approve(env, ledger_id, account(1, 0), account(2, 0), 100000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        icrc1_balance_of(env, index_id, account(1, 0))
+    );
 }
 
 #[test]
@@ -815,12 +890,8 @@ fn test_icrc1_balance_of() {
                 let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
                 let index_id = install_index_ng(env, ledger_id);
 
-                for CallerTransferArg {
-                    caller,
-                    transfer_arg,
-                } in &transactions
-                {
-                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
                 }
                 wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1148,12 +1219,8 @@ fn test_get_account_transactions_vs_old_index() {
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
 
-                for CallerTransferArg {
-                    caller,
-                    transfer_arg,
-                } in &transactions
-                {
-                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
                 }
                 wait_until_sync_is_completed(env, index_ng_id, ledger_id);
 
@@ -1190,12 +1257,8 @@ fn test_upgrade_index_to_index_ng() {
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
 
-                for CallerTransferArg {
-                    caller,
-                    transfer_arg,
-                } in &transactions
-                {
-                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
                 }
 
                 env.tick();

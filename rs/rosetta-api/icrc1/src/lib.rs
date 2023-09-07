@@ -448,10 +448,10 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         effective_fee: Tokens,
         fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
-        let effective_fee = if let Operation::Transfer { fee, .. } = &transaction.operation {
-            fee.is_none().then_some(effective_fee)
-        } else {
-            None
+        let effective_fee = match &transaction.operation {
+            Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
+            Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
+            _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {
