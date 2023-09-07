@@ -815,6 +815,7 @@ impl SchedulerTestBuilder {
             SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
+            self.scheduler_config.scheduler_cores,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,

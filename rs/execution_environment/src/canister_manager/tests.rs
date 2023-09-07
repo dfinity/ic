@@ -6162,3 +6162,130 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     let reply = get_reply(result);
     assert_eq!(reply, data);
 }
+
+#[test]
+fn resource_saturation_scaling_works_in_create_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+    const USAGE: u64 = CAPACITY - THRESHOLD;
+    const SCALING: u64 = 4;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(SCALING as usize)
+        .build();
+
+    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD / SCALING))
+        .unwrap();
+
+    let subnet_memory_usage =
+        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+
+    let balance_before = CYCLES;
+    let canister_id = test
+        .create_canister_with_allocation(balance_before, None, Some(USAGE))
+        .unwrap();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .bytes()
+            .get(),
+        USAGE,
+    );
+
+    let reserved_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+
+    assert_eq!(
+        reserved_cycles,
+        test.cycles_account_manager().storage_reservation_cycles(
+            NumBytes::new(USAGE),
+            &ResourceSaturation::new(
+                subnet_memory_usage / SCALING,
+                THRESHOLD / SCALING,
+                CAPACITY / SCALING
+            ),
+            test.subnet_size(),
+        )
+    );
+
+    assert!(
+        balance_before - balance_after >= reserved_cycles,
+        "Unexpected balance change: {} >= {}",
+        balance_before - balance_after,
+        reserved_cycles,
+    );
+}
+
+#[test]
+fn resource_saturation_scaling_works_in_install_code() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+    const SCALING: u64 = 4;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_resource_saturation_scaling(SCALING as usize)
+        .build();
+
+    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD / SCALING))
+        .unwrap();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (func (export "canister_init")
+                (if (i64.eq (call $stable64_grow (i64.const 150000)) (i64.const -1))
+                  (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+
+    let wasm_binary = wat::parse_str(wat).unwrap();
+
+    let subnet_memory_usage =
+        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    test.install_canister(canister_id, wasm_binary).unwrap();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+
+    let reserved_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+
+    assert_eq!(
+        reserved_cycles,
+        test.cycles_account_manager().storage_reservation_cycles(
+            memory_usage_after - memory_usage_before,
+            &ResourceSaturation::new(
+                subnet_memory_usage / SCALING,
+                THRESHOLD / SCALING,
+                CAPACITY / SCALING
+            ),
+            test.subnet_size(),
+        )
+    );
+
+    assert!(
+        balance_before - balance_after >= reserved_cycles,
+        "Unexpected balance change: {} >= {}",
+        balance_before - balance_after,
+        reserved_cycles,
+    );
+}

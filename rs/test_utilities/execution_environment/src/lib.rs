@@ -1513,6 +1513,7 @@ pub struct ExecutionTestBuilder {
     subnet_features: String,
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     time: Time,
+    resource_saturation_scaling: usize,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1551,6 +1552,7 @@ impl Default for ExecutionTestBuilder {
             subnet_features: String::default(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: mock_time(),
+            resource_saturation_scaling: 1,
         }
     }
 }
@@ -1812,6 +1814,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_resource_saturation_scaling(mut self, scaling: usize) -> Self {
+        self.resource_saturation_scaling = scaling;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -1937,6 +1944,7 @@ impl ExecutionTestBuilder {
             100,
             config.clone(),
             Arc::clone(&cycles_account_manager),
+            self.resource_saturation_scaling,
         );
         let (query_stats_collector, _) = init_query_stats(self.log.clone());
 

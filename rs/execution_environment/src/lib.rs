@@ -137,6 +137,7 @@ impl ExecutionServices {
             SchedulerImpl::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
+            scheduler_config.scheduler_cores,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
