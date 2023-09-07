@@ -273,6 +273,7 @@ where
         100,
         config,
         cycles_account_manager,
+        SchedulerConfig::application_subnet().scheduler_cores,
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

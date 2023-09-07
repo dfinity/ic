@@ -262,6 +262,10 @@ pub struct ExecutionEnvironment {
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     paused_execution_registry: Arc<Mutex<PausedExecutionRegistry>>,
+    // This scaling factor accounts for the execution threads running in
+    // parallel and potentially reserving resources. It should be initialized to
+    // the number of scheduler cores.
+    resource_saturation_scaling: usize,
 }
 
 /// This is a helper enum that indicates whether the current DTS execution of
@@ -284,6 +288,7 @@ impl ExecutionEnvironment {
         compute_capacity: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        resource_saturation_scaling: usize,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -320,6 +325,7 @@ impl ExecutionEnvironment {
             own_subnet_id,
             own_subnet_type,
             paused_execution_registry: Default::default(),
+            resource_saturation_scaling,
         }
     }
 
@@ -2444,10 +2450,11 @@ impl ExecutionEnvironment {
             .get()
             .saturating_sub(subnet_available_memory);
 
-        ResourceSaturation::new(
+        ResourceSaturation::new_scaled(
             subnet_memory_usage,
             self.config.subnet_memory_threshold.get(),
             self.config.subnet_memory_capacity.get(),
+            self.resource_saturation_scaling as u64,
         )
     }
 
