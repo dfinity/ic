@@ -175,7 +175,7 @@ database = "default"
 table = "http_access"
 
   [sinks.clickhouse_nginx_access.healthcheck]
-  enabled = true
+  enabled = false
 
   [sinks.clickhouse_nginx_access.batch]
   max_bytes = 10485760 # 10 MB

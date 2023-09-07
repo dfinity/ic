@@ -163,6 +163,9 @@ options may be specified:
     path to a local registry store to be used instead of the one provided by the
     registry replicator.
 
+  --env
+    deployment environment (dev/prod/test)
+
 EOF
 }
 
@@ -367,6 +370,10 @@ function build_ic_bootstrap_tar() {
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
                 ;;
+            --env)
+                ENV="$2"
+                ;;
+
             *)
                 err "Unrecognized option: $1"
                 usage
@@ -383,6 +390,14 @@ function build_ic_bootstrap_tar() {
         fail=1
     elif [[ ! "${HOSTNAME}" =~ ^[a-zA-Z]+([a-zA-Z0-9])*(-+[a-zA-Z0-9]*)*$ ]]; then
         err "Invalid hostname: '${HOSTNAME}'"
+        fail=1
+    fi
+
+    if [ -z ${ENV+x} ]; then
+        err "--env not set"
+        fail=1
+    elif [[ ! "${ENV}" =~ ^(dev|prod|test)$ ]]; then
+        err "--env should be set to one of: dev/prod/test"
         fail=1
     fi
 
@@ -497,6 +512,7 @@ EOF
 $(printf "system_domains=%s\n" "${SYSTEM_DOMAINS[@]}")
 $(printf "application_domains=%s\n" "${APPLICATION_DOMAINS[@]}")
 denylist_url=${DENYLIST_URL:-}
+env=${ENV:-}
 elasticsearch_url=${ELASTICSEARCH_URL}
 elasticsearch_tags=${ELASTICSEARCH_TAGS:-}
 ipv4_http_ips=${IPV4_HTTP_IPS}
@@ -505,6 +521,12 @@ ipv6_debug_ips=${IPV6_DEBUG_IPS}
 ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
 require_seo_certification=${REQUIRE_SEO_CERTIFICATION:-}
 require_underscore_certification=${REQUIRE_UNDERSCORE_CERTIFICATION:-}
+ip_hash_salt=${IP_HASH_SALT:-"undefined"}
+logging_url=${LOGGING_URL:-"http://127.0.0.1:12345"}
+logging_user=${LOGGING_USER:-"undefined"}
+logging_password=${LOGGING_PASSWORD:-"undefined"}
+# Default to 1% sampling rate (value is 1/N)
+logging_2xx_sample_rate=${LOGGING_2XX_SAMPLE_RATE:-100}
 EOF
 
     # setup the prober identity
