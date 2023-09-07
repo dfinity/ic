@@ -5,6 +5,7 @@ use crate::address::Address;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{TransactionNonce, Wei};
+use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
 use ic_canister_log::log;
@@ -473,14 +474,14 @@ impl HttpResponsePayload for Block {}
 struct JsonRpcRequest<T> {
     jsonrpc: &'static str,
     method: String,
-    id: u32,
+    id: u64,
     params: T,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonRpcReply<T> {
-    pub id: u32,
+    pub id: u64,
     pub jsonrpc: String,
     #[serde(flatten)]
     pub result: JsonRpcResult<T>,
@@ -634,16 +635,17 @@ where
     O: DeserializeOwned + HttpResponsePayload,
 {
     let eth_method = method.into();
-    let payload = serde_json::to_string(&JsonRpcRequest {
+    let mut rpc_request = JsonRpcRequest {
         jsonrpc: "2.0",
         params,
         method: eth_method.clone(),
         id: 1,
-    })
-    .unwrap();
+    };
     let url = url.into();
 
     loop {
+        rpc_request.id = mutate_state(State::next_request_id);
+        let payload = serde_json::to_string(&rpc_request).unwrap();
         log!(
             TRACE_HTTP,
             "Calling url: {}, with payload: {payload}",
