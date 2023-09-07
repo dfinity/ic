@@ -83,8 +83,7 @@ impl TlsConfig for PeerRestrictedTlsConfig {
     ) -> Result<ServerConfig, TlsConfigError> {
         let allowed_clients = AllowedClients::new_with_nodes(BTreeSet::from_iter(
             self.allowed_peers.lock().unwrap().clone().into_iter(),
-        ))
-        .unwrap();
+        ));
         self.crypto.server_config(allowed_clients, registry_version)
     }
 

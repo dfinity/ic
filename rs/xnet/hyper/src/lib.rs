@@ -216,7 +216,7 @@ impl Accept for TlsAccept {
                         let future = async move {
                             tls.perform_tls_server_handshake(
                                 conn.into_inner(),
-                                AllowedClients::new(SomeOrAllNodes::All).unwrap(),
+                                AllowedClients::new(SomeOrAllNodes::All),
                                 registry_version,
                             )
                             .await

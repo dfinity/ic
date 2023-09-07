@@ -71,8 +71,7 @@ impl ServerBuilder {
         let allowed_clients = AllowedClients::new(
             self.allowed_nodes
                 .unwrap_or_else(|| SomeOrAllNodes::Some(BTreeSet::new())),
-        )
-        .expect("failed to construct allowed clients");
+        );
         Server {
             listener,
             crypto,
