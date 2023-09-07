@@ -91,11 +91,6 @@ impl ICRC1Ledger for LedgerFixture {
             fee_e8s
         );
 
-        let _to_e8s = ledger_fixture_state
-            .accounts
-            .get(&to)
-            .ok_or_else(|| NervousSystemError::new_with_message("Target account doesn't exist"))?;
-
         // Only change SNS governance's SNS token balance when transferring from
         // a non-default account. This is because when transferring from the
         // default account, the "transfer" is actually a minting transaction.

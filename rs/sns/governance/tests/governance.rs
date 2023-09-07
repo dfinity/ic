@@ -9,7 +9,6 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_sns_governance::{
-    account_to_proto,
     neuron::NeuronState,
     pb::{
         sns_root_types::{
@@ -34,9 +33,10 @@ use ic_sns_governance::{
             proposal::Action,
             Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
             ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse, Motion, Neuron,
-            NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
-            ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
+            MintTokensRequest, MintTokensResponse, Motion, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
+            RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
     types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
@@ -317,7 +317,7 @@ fn test_disburse_maturity_succeeds_to_other() {
         owner: receiver.0,
         subaccount: None,
     };
-    let destination_account_proto = account_to_proto(destination_account);
+    let destination_account_proto = AccountProto::from(destination_account);
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
@@ -437,7 +437,7 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
             owner: destination.0,
             subaccount: None,
         };
-        let destination_account_proto = account_to_proto(destination_account);
+        let destination_account_proto = AccountProto::from(destination_account);
         let command_response = env
             .gov_fixture
             .manage_neuron(
@@ -2676,4 +2676,30 @@ fn test_add_maturity() {
         add_maturity_result.new_maturity_e8s,
         Some(neuron_new.maturity_e8s_equivalent)
     );
+}
+
+#[tokio::test]
+async fn test_mint_tokens() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    const E8S_TO_MINT: u64 = 100_000;
+
+    let account = AccountProto {
+        owner: Some(user_principal),
+        subaccount: None,
+    };
+
+    let balance_original = canister_fixture
+        .get_account_balance(&(account.clone().try_into().unwrap()), TargetLedger::Sns);
+    let MintTokensResponse {} = canister_fixture
+        .governance
+        .mint_tokens(MintTokensRequest {
+            recipient: Some(account.clone()),
+            amount_e8s: Some(E8S_TO_MINT),
+        })
+        .await;
+    let balance_new = canister_fixture
+        .get_account_balance(&(account.clone().try_into().unwrap()), TargetLedger::Sns);
+
+    assert_eq!(balance_original + E8S_TO_MINT, balance_new);
 }

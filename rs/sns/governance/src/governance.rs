@@ -1,7 +1,8 @@
 #[cfg(feature = "test")]
-use crate::pb::v1::{AddMaturityRequest, AddMaturityResponse};
+use crate::pb::v1::{
+    AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
+};
 use crate::{
-    account_from_proto, account_to_proto,
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
@@ -1106,12 +1107,12 @@ impl Governance {
             let from_subaccount = neuron.subaccount()?;
 
             // If no account was provided, transfer to the caller's (default) account.
-            let to_account: Account = match disburse.to_account.as_ref() {
+            let to_account = match disburse.to_account.as_ref() {
                 None => Account {
                     owner: caller.0,
                     subaccount: None,
                 },
-                Some(ai_pb) => account_from_proto(ai_pb.clone()).map_err(|e| {
+                Some(ai_pb) => Account::try_from(ai_pb.clone()).map_err(|e| {
                     GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
                         format!("The recipient's subaccount is invalid due to: {}", e),
@@ -1599,7 +1600,7 @@ impl Governance {
                 owner: caller.0,
                 subaccount: None,
             },
-            Some(account) => account_from_proto(account.clone()).map_err(|e| {
+            Some(account) => Account::try_from(account.clone()).map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     format!(
@@ -1609,7 +1610,7 @@ impl Governance {
                 )
             })?,
         };
-        let to_account_proto: AccountProto = account_to_proto(to_account);
+        let to_account_proto: AccountProto = AccountProto::from(to_account);
 
         if disburse_maturity.percentage_to_disburse > 100
             || disburse_maturity.percentage_to_disburse == 0
@@ -4186,7 +4187,7 @@ impl Governance {
                             continue;
                         }
                     };
-                    let to_account = match account_from_proto(account_proto) {
+                    let to_account = match Account::try_from(account_proto) {
                         Ok(account) => account,
                         Err(e) => {
                             log!(
@@ -5171,6 +5172,28 @@ impl Governance {
         AddMaturityResponse {
             new_maturity_e8s: Some(neuron.maturity_e8s_equivalent),
         }
+    }
+
+    #[cfg(feature = "test")]
+    pub async fn mint_tokens(
+        &mut self,
+        add_maturity_request: MintTokensRequest,
+    ) -> MintTokensResponse {
+        self.ledger
+            .transfer_funds(
+                add_maturity_request.amount_e8s(),
+                0,    // Minting transfer don't pay a fee
+                None, // This is a minting transfer, no 'from' account is needed
+                add_maturity_request
+                    .recipient
+                    .expect("recipient must be set")
+                    .try_into()
+                    .unwrap(), // The account of the neuron on the ledger
+                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+            )
+            .await
+            .unwrap();
+        MintTokensResponse {}
     }
 
     /// Returns the ledger account identifier of the minting account on the ledger canister
@@ -8718,7 +8741,7 @@ mod tests {
         );
         let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(
-            account_from_proto(target_account_pb),
+            Account::try_from(target_account_pb),
             Ok(Account {
                 owner: setup.controller.0,
                 subaccount: None
@@ -8771,7 +8794,7 @@ mod tests {
         );
         let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(
-            account_from_proto(target_account_pb),
+            Account::try_from(target_account_pb),
             Ok(Account {
                 owner: target_principal.0,
                 subaccount: None
@@ -8826,7 +8849,7 @@ mod tests {
         );
         let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(
-            account_from_proto(target_account_pb),
+            Account::try_from(target_account_pb),
             Ok(Account {
                 owner: setup.controller.0,
                 subaccount: None

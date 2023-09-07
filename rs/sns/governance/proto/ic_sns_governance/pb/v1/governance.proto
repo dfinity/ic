@@ -1945,6 +1945,19 @@ message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
 }
 
+// A request to mint tokens for a particular principal. The associated endpoint
+// is only available on SNS governance, and only then when SNS governance is
+// compiled with the `test` feature enabled.
+message MintTokensRequest {
+  optional Account recipient = 1;
+  optional uint64 amount_e8s = 2;
+}
+
+// The response to a request to mint tokens for a particular principal. The
+// associated endpoint is only available on SNS governance, and only then when
+// SNS governance is compiled with the `test` feature enabled.
+message MintTokensResponse {}
+
 // A Ledger subaccount.
 message Subaccount {
   option (ic_base_types.pb.v1.tui_signed_message) = true;

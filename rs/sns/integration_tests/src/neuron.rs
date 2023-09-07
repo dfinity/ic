@@ -19,7 +19,6 @@ use ic_nns_test_utils::{
     itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
 };
 use ic_sns_governance::{
-    account_to_proto,
     governance::Governance,
     ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
@@ -777,7 +776,7 @@ fn test_disburse_maturity_succeeds_to_self() {
         let in_progress = &neuron.disburse_maturity_in_progress[0];
         let target_account = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
         assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
-        assert_eq!(target_account, account_to_proto(account_identifier));
+        assert_eq!(target_account, AccountProto::from(account_identifier));
         let now = get_sns_canisters_now_seconds();
         let ts = in_progress.timestamp_of_disbursement_seconds as i64;
         let d_age = now - ts;
@@ -854,7 +853,7 @@ fn test_disburse_maturity_succeeds_to_other_account() {
         assert_eq!(in_progress.amount_e8s, response.amount_disbursed_e8s);
         assert_eq!(
             target_account,
-            account_to_proto(Account {
+            AccountProto::from(Account {
                 owner: maturity_receiver.get_principal_id().0,
                 subaccount: None
             })

@@ -2843,6 +2843,35 @@ pub struct AddMaturityResponse {
     #[prost(uint64, optional, tag = "1")]
     pub new_maturity_e8s: ::core::option::Option<u64>,
 }
+/// A request to mint tokens for a particular principal. The associated endpoint
+/// is only available on SNS governance, and only then when SNS governance is
+/// compiled with the `test` feature enabled.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct MintTokensRequest {
+    #[prost(message, optional, tag = "1")]
+    pub recipient: ::core::option::Option<Account>,
+    #[prost(uint64, optional, tag = "2")]
+    pub amount_e8s: ::core::option::Option<u64>,
+}
+/// The response to a request to mint tokens for a particular principal. The
+/// associated endpoint is only available on SNS governance, and only then when
+/// SNS governance is compiled with the `test` feature enabled.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct MintTokensResponse {}
 /// A Ledger subaccount.
 #[derive(
     candid::CandidType,
