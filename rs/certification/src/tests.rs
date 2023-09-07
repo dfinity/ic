@@ -282,7 +282,7 @@ fn should_fail_certificate_with_invalid_signature() {
 
 #[test]
 fn should_fail_certificate_validation_with_wrong_public_key() {
-    // public key taken from the identity testnet subnet info https://smartcontracts.org/docs/interface-spec/index.html#state-tree-subnet
+    // public key taken from the identity testnet subnet info https://internetcomputer.org/docs/interface-spec/index.html#state-tree-subnet
     let wrong_pk = parse_threshold_sig_key_from_der(&hex::decode("308182301D060D2B0601040182DC7C0503010201060C2B0601040182DC7C05030201036100923A67B791270CD8F5320212AE224377CF407D3A8A2F44F11FED5915A97EE67AD0E90BC382A44A3F14C363AD2006640417B4BBB3A304B97088EC6B4FC87A25558494FC239B47E129260232F79973945253F5036FD520DDABD1E2DE57ABFB40CB").unwrap()).unwrap();
     let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
         canister_id: canister_id(1),

@@ -1,5 +1,5 @@
 // This module defines how update messages and canister tasks are executed.
-// See https://smartcontracts.org/docs/interface-spec/index.html#rule-message-execution
+// See https://internetcomputer.org/docs/interface-spec/index.html#rule-message-execution
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,

@@ -1,5 +1,5 @@
 // This module defines how replicated queries are executed.
-// See https://smartcontracts.org/docs/interface-spec/index.html#rule-message-execution
+// See https://internetcomputer.org/docs/interface-spec/index.html#rule-message-execution
 //
 // A replicated query is a call to a `canister_query` function in update
 // context.

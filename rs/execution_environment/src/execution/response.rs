@@ -1,5 +1,5 @@
 // This module defines how response callbacks are executed.
-// See https://smartcontracts.org/docs/interface-spec/index.html#_callback_invocation.
+// See https://internetcomputer.org/docs/interface-spec/index.html#callback-invocation
 
 use std::sync::Arc;
 
