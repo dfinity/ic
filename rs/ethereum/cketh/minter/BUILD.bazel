@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("//bazel:canisters.bzl", "rust_canister")
+load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -119,5 +120,20 @@ rust_binary(
     deps = [
         "@crate_index//:candid",
         "@crate_index//:hex",
+    ],
+)
+
+closure_js_library(
+    name = "principal_to_bytes",
+    srcs = ["templates/principal_to_bytes.js"],
+)
+
+closure_js_test(
+    name = "principal_to_bytes_test",
+    srcs = ["tests/principal_to_bytes_test.js"],
+    deps = [
+        ":principal_to_bytes",
+        "@com_google_javascript_closure_library//closure/goog/testing:asserts",
+        "@com_google_javascript_closure_library//closure/goog/testing:jsunit",
     ],
 )
