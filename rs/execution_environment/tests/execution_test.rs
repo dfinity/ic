@@ -5,10 +5,12 @@ use ic_config::{
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    Method, Payload, IC_00,
+    CreateCanisterArgs, EmptyBlob, Method, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, UserError};
+use ic_state_machine_tests::{
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
+};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumBytes};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use std::{convert::TryInto, sync::Arc, time::Duration};
@@ -720,6 +722,16 @@ fn assert_replied_with(result: Result<WasmResult, UserError>, expected: i64) {
     }
 }
 
+fn assert_rejected(result: Result<WasmResult, UserError>) {
+    match result {
+        Ok(wasm_result) => match wasm_result {
+            WasmResult::Reply(blob) => panic!("Unexpected reply: {:?}", blob),
+            WasmResult::Reject(_err) => {}
+        },
+        Err(err) => panic!("Got unexpected error: {}", err),
+    }
+}
+
 #[test]
 fn exceeding_memory_capacity_fails_during_message_execution() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
@@ -1230,4 +1242,132 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         wasm().message_payload().append_and_reply().build(),
     );
     assert_replied(res);
+}
+
+#[test]
+fn test_create_canister_with_empty_blob_args() {
+    // This test is checking backward compatibility without create canister args.
+    let args = EmptyBlob {}.encode();
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    env.set_checkpoints_enabled(false);
+    let canister_a =
+        create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE * 100_u128);
+
+    // Arrange.
+    let create_canister = wasm()
+        .call_with_cycles(
+            IC_00,
+            Method::CreateCanister,
+            call_args().other_side(args),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .build();
+
+    // Act.
+    let res = env.execute_ingress(canister_a, "update", create_canister);
+
+    // Assert.
+    assert_replied(res);
+}
+
+#[test]
+fn test_create_canister_with_different_controllers_amount() {
+    const TEST_START: usize = 5;
+    const THRESHOLD: usize = 10;
+    const TEST_END: usize = 15;
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    env.set_checkpoints_enabled(false);
+    let canister_a =
+        create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE * 100_u128);
+
+    for controllers_count in TEST_START..=TEST_END {
+        // Arrange.
+        let create_canister = wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::CreateCanister,
+                call_args().other_side(
+                    CreateCanisterArgs {
+                        settings: Some(
+                            CanisterSettingsArgsBuilder::new()
+                                .with_controllers(vec![canister_a.into(); controllers_count])
+                                .build(),
+                        ),
+                        sender_canister_version: None,
+                    }
+                    .encode(),
+                ),
+                INITIAL_CYCLES_BALANCE,
+            )
+            .build();
+
+        // Act.
+        let res = env.execute_ingress(canister_a, "update", create_canister);
+
+        // Assert.
+        if controllers_count <= THRESHOLD {
+            // Assert that the canister was created with allowed amount of controllers.
+            assert_replied(res);
+        } else {
+            // Assert that the canister was not created due to too many controllers.
+            assert_rejected(res);
+        }
+    }
+}
+
+#[test]
+fn test_update_settings_with_different_controllers_amount() {
+    const TEST_START: usize = 5;
+    const THRESHOLD: usize = 10;
+    const TEST_END: usize = 15;
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    env.set_checkpoints_enabled(false);
+    let canister_a =
+        create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE * 100_u128);
+    let canister_b = env.create_canister(Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![canister_a.into()])
+            .build(),
+    ));
+
+    for controllers_count in TEST_START..=TEST_END {
+        // Arrange.
+        let update_settings = wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::UpdateSettings,
+                call_args().other_side(
+                    UpdateSettingsArgs::new(
+                        canister_b,
+                        CanisterSettingsArgsBuilder::new()
+                            .with_controllers(vec![canister_a.into(); controllers_count])
+                            .build(),
+                    )
+                    .encode(),
+                ),
+                INITIAL_CYCLES_BALANCE,
+            )
+            .build();
+
+        // Act.
+        let res = env.execute_ingress(canister_a, "update", update_settings);
+
+        // Assert.
+        if controllers_count <= THRESHOLD {
+            // Assert that the canister was created with allowed amount of controllers.
+            assert_replied(res);
+        } else {
+            // Assert that the canister was not created due to too many controllers.
+            assert_rejected(res);
+        }
+    }
 }
