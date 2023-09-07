@@ -1283,6 +1283,12 @@ mod tests {
         result
     }
 
+    fn subaccount_1() -> Subaccount {
+        let mut subaccount = vec![0; 32];
+        subaccount[31] = 1;
+        Subaccount { subaccount }
+    }
+
     #[test]
     fn proposal_title_is_not_too_long() {
         let mut proposal = basic_motion_proposal();
@@ -2232,7 +2238,7 @@ Version {
 ## Memo: 1000"
         );
 
-        // Valid case with sub-account
+        // Valid case with default sub-account
         assert_eq!(
             validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
@@ -2251,7 +2257,30 @@ Version {
 ## Source treasury: ICP Treasury (NNS Ledger)
 ## Amount (e8s): 1000000
 ## Target principal: bg4sm-wzk
-## Target account: 0x0000000000000000000000000000000000000000000000000000000000000000.bg4sm-wzk
+## Target account: bg4sm-wzk
+## Memo: 0"
+        );
+
+        // Valid case with non-default sub-account
+        // The textual representation of ICRC-1 Accounts can be
+        // found at https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/TextualEncoding.md
+        assert_eq!(
+            validate_and_render_transfer_sns_treasury_funds(
+                &TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::IcpTreasury.into(),
+                    amount_e8s: 1000000,
+                    memo: None,
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: Some(subaccount_1())
+                },
+                0
+            )
+            .unwrap(),
+            r"# Proposal to transfer SNS Treasury funds:
+## Source treasury: ICP Treasury (NNS Ledger)
+## Amount (e8s): 1000000
+## Target principal: bg4sm-wzk
+## Target account: bg4sm-wzk-msokwai.1
 ## Memo: 0"
         );
     }
