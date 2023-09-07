@@ -625,26 +625,6 @@ impl MemoryUsage {
         }
     }
 
-    /// Tries to allocate the requested number of Wasm pages.
-    ///
-    /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if either the canister memory limit or the subnet memory limit would be
-    /// exceeded.
-    ///
-    /// Returns `Err(HypervisorError::InsufficientCyclesInMemoryGrow)` and
-    /// leaves `self` unchanged if freezing threshold check is needed for the
-    /// given API type and canister would be frozen after the allocation.
-    fn allocate_pages(
-        &mut self,
-        pages: usize,
-        api_type: &ApiType,
-        sandbox_safe_system_state: &SandboxSafeSystemState,
-    ) -> HypervisorResult<()> {
-        let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
-            .map_err(|_| HypervisorError::OutOfMemory)?;
-        self.allocate_execution_memory(bytes, api_type, sandbox_safe_system_state)
-    }
-
     /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
     /// If the canister has memory allocation, then this function doesn't allocate
@@ -661,7 +641,8 @@ impl MemoryUsage {
         &mut self,
         execution_bytes: NumBytes,
         api_type: &ApiType,
-        sandbox_safe_system_state: &SandboxSafeSystemState,
+        sandbox_safe_system_state: &mut SandboxSafeSystemState,
+        subnet_memory_saturation: &ResourceSaturation,
     ) -> HypervisorResult<()> {
         let (new_usage, overflow) = self
             .current_usage
@@ -675,6 +656,12 @@ impl MemoryUsage {
             api_type,
             self.current_usage,
             NumBytes::new(new_usage),
+        )?;
+
+        sandbox_safe_system_state.reserve_storage_cycles(
+            execution_bytes,
+            &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
+            api_type,
         )?;
 
         // The canister can increase its memory usage up to the reserved bytes without
@@ -2306,7 +2293,8 @@ impl SystemApi for SystemApiImpl {
             match self.memory_usage.allocate_execution_memory(
                 bytes,
                 &self.api_type,
-                &self.sandbox_safe_system_state,
+                &mut self.sandbox_safe_system_state,
+                &self.execution_parameters.subnet_memory_saturation,
             ) {
                 Ok(()) => Ok(()),
                 Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
@@ -2347,10 +2335,14 @@ impl SystemApi for SystemApiImpl {
         if resulting_size > MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64 {
             return Ok(StableGrowOutcome::Failure);
         }
-        match self.memory_usage.allocate_pages(
-            additional_pages as usize,
+        match self.memory_usage.allocate_execution_memory(
+            // From the checks above we know that converting `additional_pages`
+            // to bytes will not overflow, so the `unwrap()` will succeed.
+            ic_replicated_state::num_bytes_try_from(NumWasmPages::new(additional_pages as usize))
+                .unwrap(),
             &self.api_type,
-            &self.sandbox_safe_system_state,
+            &mut self.sandbox_safe_system_state,
+            &self.execution_parameters.subnet_memory_saturation,
         ) {
             Ok(()) => Ok(StableGrowOutcome::Success),
             Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
