@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/governance",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",

@@ -77,7 +77,10 @@ use ic_nervous_system_common::{
     cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, BASIS_POINTS_PER_UNITY, SECONDS_PER_DAY,
+    NervousSystemError, SECONDS_PER_DAY,
+};
+use ic_nervous_system_governance::maturity_modulation::{
+    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
@@ -1590,9 +1593,6 @@ impl Governance {
         let neuron = self.get_neuron_result(id)?;
         neuron.check_authorized(caller, NeuronPermissionType::DisburseMaturity)?;
 
-        let maturity_modulation_basis_points =
-            self.proto.effective_maturity_modulation_basis_points()?;
-
         // If no account was provided, transfer to the caller's account.
         let to_account: Account = match disburse_maturity.to_account.as_ref() {
             None => Account {
@@ -1619,7 +1619,7 @@ impl Governance {
                 "The percentage of maturity to disburse must be a value between 1 and 100 (inclusive)."));
         }
 
-        // The amount to deduct = the amout in the neuron * request.percentage / 100.
+        // The amount to deduct = the amount in the neuron * request.percentage / 100.
         let maturity_to_deduct = neuron
             .maturity_e8s_equivalent
             .checked_mul(disburse_maturity.percentage_to_disburse as u64)
@@ -1628,47 +1628,45 @@ impl Governance {
             .expect("Error when processing maturity to disburse.")
             as u128;
 
-        // Modulate maturity_to_deduct. That is, multiply by 1 + X where
-        // X = maturity_modulation_basis_points / 10_000.
-        //
-        // From the fact that maturity_to_deduct is converted from u64 to u128,
-        // it should not be possible that any of the lines that look like they
-        // might panic at face value actually panic.
-        let maturity_to_disburse: u64 = u64::try_from(
-            maturity_to_deduct
-                .checked_mul(
-                    (BASIS_POINTS_PER_UNITY as i32 + maturity_modulation_basis_points)
-                        .try_into()
-                        .unwrap(),
-                )
-                .unwrap()
-                .checked_div(BASIS_POINTS_PER_UNITY as u128)
-                .unwrap(),
-        )
-        .expect("Couldn't convert maturity to u64");
-
         let maturity_to_deduct = maturity_to_deduct as u64;
 
         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
-        if maturity_to_disburse < transaction_fee_e8s {
+        let worst_case_maturity_modulation =
+            apply_maturity_modulation(maturity_to_deduct, MIN_MATURITY_MODULATION_PERMYRIAD)
+                // Applying maturity modulation is a safe operation.
+                // However, in the case that the method fails to apply the equation, return an
+                // error instead of throwing a panic.
+                .map_err(|err| {
+                    GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        format!(
+                            "Could not calculate worst case maturity modulation \
+                            and therefore cannot disburse maturity. Err: {}",
+                            err
+                        ),
+                    )
+                })?;
+
+        if worst_case_maturity_modulation < transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Tried to merge {} e8s, but can't merge an amount \
-                     less than the transaction fee of {} e8s.",
-                    maturity_to_disburse, transaction_fee_e8s
+                    "If worst case maturity modulation is applied (-5%) then this neuron would \
+                     disburse {} e8s, but can't disburse an amount less than the transaction fee \
+                     of {} e8s.",
+                    worst_case_maturity_modulation, transaction_fee_e8s
                 ),
             ));
         }
 
         let disbursement_in_progress = DisburseMaturityInProgress {
-            amount_e8s: maturity_to_disburse,
+            amount_e8s: maturity_to_deduct,
             timestamp_of_disbursement_seconds: self.env.now(),
             account_to_disburse_to: Some(to_account_proto),
         };
 
         // Re-borrow the neuron mutably to update now that the maturity has been
-        // disbursed.
+        // deducted and is waiting until the end of the window to modulate and disburse.
         let neuron = self.get_neuron_result_mut(id)?;
         neuron.maturity_e8s_equivalent = neuron
             .maturity_e8s_equivalent
@@ -1678,7 +1676,9 @@ impl Governance {
             .push(disbursement_in_progress);
 
         Ok(DisburseMaturityResponse {
-            amount_disbursed_e8s: maturity_to_disburse,
+            // TODO(NNS1-2576) - deprecate amount_disbursed_e8s
+            amount_disbursed_e8s: maturity_to_deduct,
+            amount_deducted_e8s: Some(maturity_to_deduct),
         })
     }
 
@@ -4133,6 +4133,16 @@ impl Governance {
         if !self.can_finalize_disburse_maturity() {
             return;
         }
+
+        let maturity_modulation_basis_points =
+            match self.proto.effective_maturity_modulation_basis_points() {
+                Ok(maturity_modulation_basis_points) => maturity_modulation_basis_points,
+                Err(message) => {
+                    log!(ERROR, "{}", message.error_message);
+                    return;
+                }
+            };
+
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
         let disbursal_delay_elapsed_seconds = now_seconds - SEVEN_DAYS_IN_SECONDS;
@@ -4156,8 +4166,25 @@ impl Governance {
                         }
                         Some(id) => id,
                     };
-                    // TODO(NNS1-1708) add modulation
-                    let maturity_to_disburse_after_modulation_e8s = d.amount_e8s;
+
+                    let maturity_to_disburse_after_modulation_e8s: u64 =
+                        match apply_maturity_modulation(
+                            d.amount_e8s,
+                            maturity_modulation_basis_points,
+                        ) {
+                            Ok(maturity_to_disburse_after_modulation_e8s) => {
+                                maturity_to_disburse_after_modulation_e8s
+                            }
+                            Err(err) => {
+                                log!(
+                                    ERROR,
+                                    "Could not apply maturity modulation to {:?} for neuron {} due to {:?}, skipping",
+                                    d, neuron_id, err
+                                );
+                                continue;
+                            }
+                        };
+
                     let fdm = FinalizeDisburseMaturity {
                         amount_to_be_disbursed_e8s: maturity_to_disburse_after_modulation_e8s,
                         to_account: d.account_to_disburse_to.clone(),
@@ -8942,7 +8969,7 @@ mod tests {
         assert_matches!(
         result,
         Err(GovernanceError{error_type: code, error_message: msg})
-            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't disburse an amount less than"));
     }
 
     #[test]

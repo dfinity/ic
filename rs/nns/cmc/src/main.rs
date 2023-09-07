@@ -19,6 +19,9 @@ use ic_ic00_types::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
+use ic_nervous_system_governance::maturity_modulation::{
+    MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
+};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
@@ -54,10 +57,6 @@ const ONE_MINUTE_SECONDS: u64 = 60;
 const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
-
-/// The maturity modulation range in basis points.
-const MIN_MATURITY_MODULATION_PERMYRIAD: i32 = -500;
-const MAX_MATURITY_MODULATION_PERMYRIAD: i32 = 500;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::new(None);
