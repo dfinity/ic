@@ -27,6 +27,22 @@ impl<M: Memory> KnownNeuronIndex<M> {
         }
     }
 
+    /// Returns the number of entries (known_neuron_name, neuron_id) in the index. This is for
+    /// validation purpose: this should be equal to the known_neuron_data collection in the primary
+    /// storage.
+    pub fn num_entries(&self) -> usize {
+        self.known_neuron_name_to_id.len() as usize
+    }
+
+    /// Returns whether the (known_neuron_name, neuron_id) entry exists in the index. This is for
+    /// validation purpose: each such pair in the primary storage should exist in the index.
+    pub fn contains_entry(&self, neuron_id: NeuronId, known_neuron_name: &str) -> bool {
+        KnownNeuronName::new(known_neuron_name)
+            .and_then(|known_neuron_name| self.known_neuron_name_to_id.get(&known_neuron_name))
+            .map(|value| value == neuron_id.id)
+            .unwrap_or_default()
+    }
+
     /// Adds a known neuron to the index. Returns whether the known neuron is added.
     /// The reason the known neuron might not gets added into the index might be that:
     /// (1) the known neuron name already exists (caller should call `contains_known_neuron_name`
@@ -201,5 +217,29 @@ mod tests {
             Err(AddKnownNeuronError::ExceedsSizeLimit)
         );
         assert!(!index.contains_known_neuron_name(&very_long_name));
+    }
+
+    #[test]
+    fn index_len() {
+        let mut index = KnownNeuronIndex::new(VectorMemory::default());
+
+        assert_eq!(index.num_entries(), 0);
+
+        index
+            .add_known_neuron("known neuron", NeuronId { id: 1 })
+            .unwrap();
+
+        assert_eq!(index.num_entries(), 1);
+    }
+
+    #[test]
+    fn index_contains_entry() {
+        let mut index = KnownNeuronIndex::new(VectorMemory::default());
+
+        index
+            .add_known_neuron("known neuron", NeuronId { id: 1 })
+            .unwrap();
+
+        assert!(index.contains_entry(NeuronId { id: 1 }, "known neuron"));
     }
 }

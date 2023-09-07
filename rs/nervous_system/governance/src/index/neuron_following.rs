@@ -236,6 +236,25 @@ where
             category_followee_follower_to_null: StableBTreeMap::init(memory),
         }
     }
+
+    /// Returns the number of entries (category, followee, follower) in the index. This is for
+    /// validation purpose: this should be equal to the size of the followee collection within the
+    /// primary storage.
+    pub fn num_entries(&self) -> usize {
+        self.category_followee_follower_to_null.len() as usize
+    }
+
+    /// Returns whether the (category, followee, follower) entry exists in the index. This is for
+    /// validation purpose: each such pair in the primary storage should exist in the index.
+    pub fn contains_entry(
+        &self,
+        category: Category,
+        followee_id: &NeuronId,
+        follower_id: &NeuronId,
+    ) -> bool {
+        let key = ((category, followee_id.clone()), follower_id.clone());
+        self.category_followee_follower_to_null.contains_key(&key)
+    }
 }
 
 impl<NeuronId, Category, M> NeuronFollowingIndex<NeuronId, Category>
@@ -711,5 +730,44 @@ mod tests {
     #[test]
     fn test_update_followee_invalid_stable() {
         test_update_followee_invalid_helper(get_stable_index());
+    }
+
+    #[test]
+    fn test_stable_neuron_index_num_entries() {
+        let follower_id = TestNeuronId([1u8; 32]);
+        let followee_id = TestNeuronId([2u8; 32]);
+        let mut index = get_stable_index();
+
+        assert_eq!(index.num_entries(), 0);
+
+        assert_eq!(
+            add_neuron_followees(
+                &mut index,
+                &follower_id,
+                btreeset![(Topic::Topic1, followee_id.clone())],
+            ),
+            vec![]
+        );
+
+        assert_eq!(index.num_entries(), 1);
+    }
+
+    #[test]
+    fn test_stable_neuron_index_contains_entry() {
+        let follower_id = TestNeuronId([1u8; 32]);
+        let followee_id = TestNeuronId([2u8; 32]);
+        let mut index = get_stable_index();
+
+        assert_eq!(
+            add_neuron_followees(
+                &mut index,
+                &follower_id,
+                btreeset![(Topic::Topic1, followee_id.clone())],
+            ),
+            vec![]
+        );
+
+        assert!(index.contains_entry(Topic::Topic1, &followee_id, &follower_id));
+        assert!(!index.contains_entry(Topic::Topic1, &follower_id, &followee_id));
     }
 }

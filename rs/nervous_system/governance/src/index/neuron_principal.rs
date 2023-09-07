@@ -141,6 +141,20 @@ where
             principal_id_and_neuron_id_set: StableBTreeMap::init(memory),
         }
     }
+
+    /// Returns the number of entries (principal_id, neuron_id) in the index. This is for validation
+    /// purpose: this should be equal to the number of neurons (controller) plus the size of the hot
+    /// key collection within primary storage.
+    pub fn num_entries(&self) -> usize {
+        self.principal_id_and_neuron_id_set.len() as usize
+    }
+
+    /// Returns whether the (principal_id, neuron_id) entry exists in the index. This is for
+    /// validation purpose: each such pair in the primary storage should exist in the index.
+    pub fn contains_entry(&self, neuron_id: &NeuronId, principal_id: PrincipalId) -> bool {
+        let key = (principal_id, neuron_id.clone());
+        self.principal_id_and_neuron_id_set.contains_key(&key)
+    }
 }
 
 impl<NeuronId, M> NeuronPrincipalIndex<NeuronId> for StableNeuronPrincipalIndex<NeuronId, M>
@@ -454,5 +468,47 @@ mod tests {
     #[test]
     fn test_remove_absent_neuron_stable() {
         test_remove_absent_neuron_helper(get_stable_index());
+    }
+
+    #[test]
+    fn test_stable_neuron_index_len() {
+        let mut index = get_stable_index();
+
+        assert_eq!(index.num_entries(), 0);
+
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &TestNeuronId([1u8; 32]),
+                vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(2),
+                ],
+            ),
+            vec![]
+        );
+
+        assert_eq!(index.num_entries(), 2);
+    }
+
+    #[test]
+    fn test_stable_neuron_index_contains_entry() {
+        let mut index = get_stable_index();
+
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &TestNeuronId([1u8; 32]),
+                vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(2),
+                ],
+            ),
+            vec![]
+        );
+
+        assert!(index.contains_entry(&TestNeuronId([1u8; 32]), PrincipalId::new_user_test_id(1)));
+        assert!(index.contains_entry(&TestNeuronId([1u8; 32]), PrincipalId::new_user_test_id(2)));
+        assert!(!index.contains_entry(&TestNeuronId([1u8; 32]), PrincipalId::new_user_test_id(3)));
     }
 }
