@@ -135,6 +135,7 @@ system_test(
         GRAFANA_RUNTIME_DEPS + [
             "//rs/replay:ic-replay",
             "//rs/tests:recovery/binaries",
+            "//rs/sns/cli:sns",
             "//rs/tests/nns:secret_key.pem",
         ],
     deps = [
