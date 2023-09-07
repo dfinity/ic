@@ -18,6 +18,22 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
         }
     }
 
+    /// Returns the number of entries (subaccount, neuron_id) in the index. This is for validation
+    /// purpose: this should be equal to the size of the primary neuron storage since subaccount is
+    /// required.
+    pub fn num_entries(&self) -> usize {
+        self.subaccount_to_id.len() as usize
+    }
+
+    /// Returns whether the (subaccount, neuron_id) entry exists in the index. This is for
+    /// validation purpose: each such pair in the primary storage should exist in the index.
+    pub fn contains_entry(&self, neuron_id: NeuronId, subaccount: &Subaccount) -> bool {
+        self.subaccount_to_id
+            .get(&subaccount.0)
+            .map(|value| value == neuron_id.id)
+            .unwrap_or_default()
+    }
+
     /// Adds a neuron into the index. Returns error if the subaccount already exists
     /// in the index and the index should remain unchanged.
     pub fn add_neuron_subaccount(
@@ -188,5 +204,29 @@ mod tests {
             index.get_neuron_id_by_subaccount(&Subaccount([2u8; 32])),
             Some(NeuronId { id: 2 })
         );
+    }
+
+    #[test]
+    fn index_num_entries() {
+        let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
+
+        assert_eq!(index.num_entries(), 0);
+
+        assert!(index
+            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+            .is_ok());
+
+        assert_eq!(index.num_entries(), 1);
+    }
+
+    #[test]
+    fn index_contains() {
+        let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
+
+        assert!(index
+            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+            .is_ok());
+
+        assert!(index.contains_entry(NeuronId { id: 1 }, &Subaccount([1u8; 32])));
     }
 }
