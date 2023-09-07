@@ -456,29 +456,13 @@
 ".ic-build-legacy-image":
   artifacts:
     expire_in: 3 days
+  extends: ".ic-build-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:9a51c74a196deaca1c1a773edf00b525b63d06949c11b050cc78c4bbd9428534
   tags:
     - dfinity-ic
   variables:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-".macos-cargo-native":
-  artifacts:
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".build-env-base"
-  tags:
-    - dfinity
-    - macos
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".prod-nightly-test":
   artifacts:
     expire_in: 3 days
@@ -697,7 +681,6 @@
       - coredumps/*.gz
     when: always
   extends:
-    - ".build-env-base"
     - ".ubuntu-k8s"
     - ".ic-build-legacy-image"
   image:

@@ -108,24 +108,14 @@ after_script:
   extends:
     - .ubuntu-k8s
     - .ic-build-image
-  tags:
-    - dfinity-ic
 
 .ubuntu-cargo-k8s:
   extends:
-    - .build-env-base
     - .ubuntu-k8s
     - .ic-build-legacy-image
   variables:
     # This MUST match the directory used in our `build-ic.sh` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
-
-.macos-cargo-native:
-  extends:
-    - .build-env-base
-  tags:
-    - dfinity
-    - macos
 
 
 # Container images used by jobs.
@@ -141,14 +131,9 @@ after_script:
     GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
 
 .ic-build-legacy-image:
-  artifacts:
-    expire_in: 3 days
+  extends: .ic-build-image
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:9a51c74a196deaca1c1a773edf00b525b63d06949c11b050cc78c4bbd9428534"
-  tags:
-    - dfinity-ic
-  variables:
-    GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
 
 .cargo-rules:
   rules:
