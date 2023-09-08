@@ -1,7 +1,7 @@
 use crate::{
     governance::{Environment, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
-    storage::{NEURON_INDEXES, STABLE_NEURON_STORE},
+    storage::{neuron_indexes::CorruptedNeuronIndexes, NEURON_INDEXES, STABLE_NEURON_STORE},
 };
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -20,9 +20,11 @@ use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
     NeuronNotFound(NeuronNotFound),
+    CorruptedNeuronIndexes(CorruptedNeuronIndexes),
+    NeuronIdIsNone,
 }
 
 impl NeuronStoreError {
@@ -33,7 +35,7 @@ impl NeuronStoreError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct NeuronNotFound {
     neuron_id: NeuronId,
 }
@@ -47,6 +49,19 @@ impl From<NeuronStoreError> for GovernanceError {
                     format!("Neuron not found: {:?}", neuron_not_found.neuron_id),
                 )
             }
+            NeuronStoreError::CorruptedNeuronIndexes(corrupted_neuron_indexes) => {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Neuron indexes are corrupted: {:?}",
+                        corrupted_neuron_indexes
+                    ),
+                )
+            }
+            NeuronStoreError::NeuronIdIsNone => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Neuron id is none",
+            ),
         }
     }
 }
@@ -317,7 +332,9 @@ impl NeuronStore {
             .range(last_neuron_id.id + 1..)
             .take(batch_size)
         {
-            NEURON_INDEXES.with(|indexes| indexes.borrow_mut().add_neuron(neuron))?;
+            NEURON_INDEXES
+                .with(|indexes| indexes.borrow_mut().add_neuron(neuron))
+                .map_err(|error| GovernanceError::from(error).error_message)?;
             count += 1;
             new_last_neuron_id = Some(NeuronId { id: *neuron_id });
         }
