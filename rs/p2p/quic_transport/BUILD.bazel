@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/p2p/peer_manager",
+    "//rs/phantom_newtype",
     "//rs/registry/helpers",
     "//rs/types/types",
     "@crate_index//:axum",

@@ -9248,6 +9248,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-types",
  "ic-types-test-utils",
+ "phantom_newtype",
  "prometheus 0.12.0",
  "quinn",
  "serde",

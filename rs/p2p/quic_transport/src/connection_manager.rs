@@ -69,6 +69,7 @@ use tokio_util::time::DelayQueue;
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
+    ConnId,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
 
@@ -111,13 +112,14 @@ struct ConnectionManager {
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
+    conn_id_counter: ConnId,
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
-    outbound_connecting: JoinMap<NodeId, Result<ConnectionHandle, ConnectionEstablishError>>,
+    outbound_connecting: JoinMap<NodeId, Result<ConnectionWithPeerId, ConnectionEstablishError>>,
     /// Task joinset on which incoming connection requests are spawned. This is not a JoinMap
     /// because the peerId is not available until the TLS handshake succeeded.
-    inbound_connecting: JoinSet<Result<ConnectionHandle, ConnectionEstablishError>>,
+    inbound_connecting: JoinSet<Result<ConnectionWithPeerId, ConnectionEstablishError>>,
     /// JoinMap that stores active connection handlers keyed by peer id.
     active_connections: JoinMap<NodeId, ()>,
 
@@ -150,6 +152,11 @@ enum ConnectionEstablishError {
         client: NodeId,
         server: NodeId,
     },
+}
+
+struct ConnectionWithPeerId {
+    peer_id: NodeId,
+    connection: Connection,
 }
 
 impl std::fmt::Display for ConnectionEstablishError {
@@ -283,6 +290,7 @@ pub(crate) fn start_connection_manager(
         topology,
         connect_queue: DelayQueue::new(),
         peer_map,
+        conn_id_counter: ConnId::default(),
         watcher,
         endpoint,
         transport_config,
@@ -488,7 +496,6 @@ impl ConnectionManager {
         let transport_config = self.transport_config.clone();
         let earliest_registry_version = self.topology.earliest_registry_version();
         let last_registry_version = self.topology.latest_registry_version();
-        let metrics = self.metrics.clone();
         let conn_fut = async move {
             let mut quinn_client_config = quinn::ClientConfig::new(Arc::new(client_config?));
             quinn_client_config.transport_config(transport_config);
@@ -513,7 +520,10 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Outbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection, metrics))
+            Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
+                peer_id,
+                connection,
+            })
         };
 
         let timeout_conn_fut = async move {
@@ -533,19 +543,32 @@ impl ConnectionManager {
     /// the dialer. I.e lower node id.
     fn handle_connecting_result(
         &mut self,
-        conn_res: Result<ConnectionHandle, ConnectionEstablishError>,
+        conn_res: Result<ConnectionWithPeerId, ConnectionEstablishError>,
         peer_id: Option<NodeId>,
     ) {
         match conn_res {
-            Ok(connection) => {
+            Ok(ConnectionWithPeerId {
+                peer_id,
+                connection,
+            }) => {
                 self.metrics
                     .connection_results_total
                     .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
                     .inc();
-                let req_handler_connection = connection.clone();
-                let peer_id = connection.peer_id;
+                let mut peer_map_mut = self.peer_map.write().unwrap();
+                // Increase the connection ID for the newly connected peer.
+                // This should be done while holding a write lock to the peer map
+                // such that the next read call sees the new id.
+
+                self.conn_id_counter.inc_assign();
+                let conn_id = self.conn_id_counter;
+
+                let connection_handle =
+                    ConnectionHandle::new(peer_id, connection, self.metrics.clone(), conn_id);
+                let req_handler_connection_handle = connection_handle.clone();
+
                 // dropping the old connection will result in closing it
-                if let Some(old_conn) = self.peer_map.write().unwrap().insert(peer_id, connection) {
+                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle) {
                     old_conn
                         .connection
                         .close(VarInt::from_u32(0), b"using newer connection");
@@ -565,8 +588,9 @@ impl ConnectionManager {
                     peer_id,
                     run_stream_acceptor(
                         self.log.clone(),
-                        req_handler_connection.peer_id,
-                        req_handler_connection.connection,
+                        req_handler_connection_handle.peer_id,
+                        req_handler_connection_handle.conn_id(),
+                        req_handler_connection_handle.connection,
                         self.metrics.clone(),
                         self.router.clone(),
                     ),
@@ -593,7 +617,6 @@ impl ConnectionManager {
         let node_id = self.node_id;
         let earliest_registry_version = self.topology.earliest_registry_version();
         let last_registry_version = self.topology.latest_registry_version();
-        let metrics = self.metrics.clone();
         let conn_fut = async move {
             let established =
                 connecting
@@ -638,7 +661,10 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Inbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection, metrics))
+            Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
+                peer_id,
+                connection,
+            })
         };
 
         let timeout_conn_fut = async move {

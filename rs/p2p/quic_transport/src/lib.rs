@@ -47,6 +47,7 @@ use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_types::NodeId;
+use phantom_newtype::AmountOf;
 use quinn::AsyncUdpSocket;
 
 use crate::connection_handle::ConnectionHandle;
@@ -126,8 +127,13 @@ impl Transport for QuicTransport {
         peer.push(request).await
     }
 
-    fn peers(&self) -> Vec<NodeId> {
-        self.0.read().unwrap().keys().cloned().collect()
+    fn peers(&self) -> Vec<(NodeId, ConnId)> {
+        self.0
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(n, c)| (*n, c.conn_id()))
+            .collect()
     }
 }
 
@@ -166,8 +172,11 @@ pub trait Transport: Send + Sync {
 
     async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError>;
 
-    fn peers(&self) -> Vec<NodeId>;
+    fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }
+
+pub struct ConnIdTag {}
+pub type ConnId = AmountOf<ConnIdTag, u64>;
 
 /// This is a workaround for being able to iniate quic transport
 /// with both a real and virtual udp socket. This is needed due

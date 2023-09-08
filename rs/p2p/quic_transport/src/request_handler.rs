@@ -24,6 +24,7 @@ use crate::{
         ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
     utils::{read_request, write_response},
+    ConnId,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -31,6 +32,7 @@ const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 pub(crate) async fn run_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
+    conn_id: ConnId,
     connection: Connection,
     metrics: QuicTransportMetrics,
     router: Router,
@@ -55,6 +57,7 @@ pub(crate) async fn run_stream_acceptor(
                                 handle_uni_stream(
                                     log.clone(),
                                     peer_id,
+                                    conn_id,
                                     metrics.clone(),
                                     router.clone(),
                                     uni_rx,
@@ -83,6 +86,7 @@ pub(crate) async fn run_stream_acceptor(
                                 handle_bi_stream(
                                     log.clone(),
                                     peer_id,
+                                    conn_id,
                                     metrics.clone(),
                                     router.clone(),
                                     bi_tx,
@@ -123,6 +127,7 @@ pub(crate) async fn run_stream_acceptor(
 async fn handle_bi_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
+    conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
     mut bi_tx: SendStream,
@@ -141,6 +146,7 @@ async fn handle_bi_stream(
     };
 
     request.extensions_mut().insert::<NodeId>(peer_id);
+    request.extensions_mut().insert::<ConnId>(conn_id);
 
     let svc = router.oneshot(request);
     let stopped = bi_tx.stopped();
@@ -181,6 +187,7 @@ async fn handle_bi_stream(
 async fn handle_uni_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
+    conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
     uni_rx: RecvStream,
@@ -198,6 +205,7 @@ async fn handle_uni_stream(
     };
 
     request.extensions_mut().insert::<NodeId>(peer_id);
+    request.extensions_mut().insert::<ConnId>(conn_id);
 
     // Record application level errors.
     if !router

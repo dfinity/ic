@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::state_sync_client::StateSyncClient;
-use ic_quic_transport::{SendError, Transport};
+use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::chunkable::ArtifactChunk;
 use ic_types::{
     artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
@@ -48,7 +48,7 @@ mock! {
             request: Request<Bytes>,
         ) -> Result<(), SendError>;
 
-        fn peers(&self) -> Vec<NodeId>;
+        fn peers(&self) -> Vec<(NodeId, ConnId)>;
     }
 }
 
