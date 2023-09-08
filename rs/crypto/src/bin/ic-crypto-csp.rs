@@ -6,7 +6,9 @@ use ic_metrics::MetricsRegistry;
 use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
 
-const IC_CRYPTO_CSP_SOCKET_NAME: &str = "ic-crypto-csp.socket";
+// This corresponds to the name of the file where the sockets are defined, i.e.,
+// /ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.socket
+const IC_CRYPTO_CSP_SOCKET_FILENAME: &str = "ic-crypto-csp.socket";
 
 #[derive(Parser)]
 #[clap(
@@ -29,7 +31,7 @@ async fn main() {
 
     let sks_dir = ic_config.crypto.crypto_root.as_path();
 
-    ensure_single_named_systemd_socket(IC_CRYPTO_CSP_SOCKET_NAME);
+    ensure_n_named_systemd_sockets(2);
     let systemd_socket_listener = listener_from_first_systemd_socket();
 
     // The `AsyncGuard` must be kept in scope for asynchronously logged messages to appear in the logs.
@@ -72,14 +74,25 @@ fn get_ic_config(replica_config_file: PathBuf) -> Config {
     Config::load_with_tmpdir(ConfigSource::File(replica_config_file), tmpdir)
 }
 
-fn ensure_single_named_systemd_socket(socket_name: &str) {
+fn ensure_n_named_systemd_sockets(num_expected_sockets: usize) {
     const SYSTEMD_SOCKET_NAMES: &str = "LISTEN_FDNAMES"; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
     let systemd_socket_names =
         std::env::var(SYSTEMD_SOCKET_NAMES).expect("failed to read systemd socket names");
-    if systemd_socket_names != socket_name {
+    let num_sockets = systemd_socket_names
+        .split(':')
+        .map(|socket_name| {
+            if IC_CRYPTO_CSP_SOCKET_FILENAME != socket_name {
+                panic!(
+                    "Expected to receive {} systemd socket(s) named '{}' but instead got '{}'",
+                    num_expected_sockets, IC_CRYPTO_CSP_SOCKET_FILENAME, systemd_socket_names
+                );
+            }
+        })
+        .count();
+    if num_sockets != num_expected_sockets {
         panic!(
-            "Expected to receive a single systemd socket named '{}' but instead got '{}'",
-            socket_name, systemd_socket_names
+            "Expected to receive {} systemd socket named '{}' but instead got {} ('{}')",
+            num_expected_sockets, IC_CRYPTO_CSP_SOCKET_FILENAME, num_sockets, systemd_socket_names
         );
     }
 }
