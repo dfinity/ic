@@ -35,8 +35,7 @@ fn test_snapshot() {
 
     let reply = call_counter_can(&pic, can_id, "write");
     assert!(reply == WasmResult::Reply(vec![1, 0, 0, 0]));
-
-    pic.create_snapshot("my_snappy");
+    pic.tick_and_create_checkpoint("my_snappy");
 
     let other_ic = PocketIc::new_from_snapshot("my_snappy").unwrap();
     let reply = call_counter_can(&other_ic, can_id, "write");
