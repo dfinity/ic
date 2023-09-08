@@ -31,10 +31,10 @@ webpack(
     ],
     chdir = "typescript/service-worker",
     data = glob(["src/**"]) + [
-        "webpack.config.ts",
-        "@sw_npm//:node_modules",
         "package.json",
         "tsconfig.json",
+        "webpack.config.ts",
+        "@sw_npm//:node_modules",
     ],
     visibility = [
         "//ic-os/boundary-guestos/envs/dev:__pkg__",
@@ -51,10 +51,10 @@ jest_test(
         exclude = ["**/*.test.ts"],
     ) + [
         "test-setup.ts",
-        "@sw_npm//:node_modules",
-        "tsconfig.json",
-        "tsconfig.test.json",
         "test/html-loader.js",
         "test_utils/fixtures.json",
+        "tsconfig.json",
+        "tsconfig.test.json",
+        "@sw_npm//:node_modules",
     ],
 )

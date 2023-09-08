@@ -1,5 +1,5 @@
-load("//bazel:prost.bzl", "protobuf_generator")
 load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:prost.bzl", "protobuf_generator")
 
 package(default_visibility = ["//visibility:public"])
 

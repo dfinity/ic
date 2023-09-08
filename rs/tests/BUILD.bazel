@@ -1,10 +1,10 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
-load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
-load(":system_tests.bzl", "uvm_config_image")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
+load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
+load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "symlink_dirs", "tip_nns_canisters", "tip_sns_canisters")
+load(":system_tests.bzl", "uvm_config_image")
 
 package(default_visibility = ["//visibility:public"])
 

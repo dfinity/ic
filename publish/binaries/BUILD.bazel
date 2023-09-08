@@ -1,6 +1,6 @@
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
 LINUX_ONLY = [
     "sevctl",

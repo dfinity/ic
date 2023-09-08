@@ -27,8 +27,8 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_features = ["js"],
     deps = COMMON_DEPS + [
-        "@crate_index//:wasm-bindgen",
         "@crate_index//:getrandom",
+        "@crate_index//:wasm-bindgen",
     ],
 )
 

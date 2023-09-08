@@ -19,11 +19,11 @@ rust_library(
         "//conditions:default": [],
     }) + select({
         "@rules_rust//rust/platform:linux": [
+            "//rs/sys",
             "@crate_index//:cvt",
             "@crate_index//:libc",
             "@crate_index//:nix",
             "@crate_index//:thiserror",
-            "//rs/sys",
         ],
         "//conditions:default": [],
     }),

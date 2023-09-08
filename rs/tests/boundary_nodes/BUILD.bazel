@@ -1,5 +1,5 @@
-load("//rs/tests:system_tests.bzl", "system_test")
 load("//rs/tests:common.bzl", "API_BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 

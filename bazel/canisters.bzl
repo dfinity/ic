@@ -2,8 +2,8 @@
 This module defines utilities for building Rust canisters.
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 def _wasm_rust_transition_impl(_settings, _attr):
     return {

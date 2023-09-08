@@ -1,7 +1,7 @@
-load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
-load("@python_deps//:requirements.bzl", "requirement")
 load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("//rs/tests:common.bzl", "symlink_dir")
 
 IC_OS_ENV = "//ic-os/guestos/envs/dev-fixed-version"

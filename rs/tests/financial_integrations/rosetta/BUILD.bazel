@@ -1,5 +1,5 @@
-load("//rs/tests:system_tests.bzl", "system_test")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,8 +10,8 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -25,9 +25,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -41,9 +41,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -57,9 +57,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -73,9 +73,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -89,9 +89,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -105,9 +105,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -121,9 +121,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -137,9 +137,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -153,9 +153,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -169,9 +169,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -185,9 +185,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -201,9 +201,9 @@ system_test(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:rosetta_workspace",
             "//rs/rosetta-api:ic-rosetta-api",
             "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
