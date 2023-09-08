@@ -1,6 +1,7 @@
 #![allow(unused)] // TODO(NNS1-2443): Re-enable clippy once we start actually using this code.
 
 use crate::{
+    governance::LOG_PREFIX,
     pb::v1::{
         governance_error::ErrorType, neuron::Followees, BallotInfo, GovernanceError,
         KnownNeuronData, Neuron, NeuronStakeTransfer,
@@ -12,6 +13,7 @@ use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{BoundedStorable, StableBTreeMap, Storable, VectorMemory};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use maplit::{hashmap, hashset};
 use prost::Message;
@@ -87,7 +89,7 @@ where
     // Collections
     hot_keys_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), PrincipalId, Memory>,
     recent_ballots_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), BallotInfo, Memory>,
-    followees_map: StableBTreeMap<FolloweesKey, (), Memory>,
+    followees_map: StableBTreeMap<FolloweesKey, /* index */ u64, Memory>,
 
     // Singletons
     known_neuron_data_map: StableBTreeMap</* Neuron ID */ u64, KnownNeuronData, Memory>,
@@ -203,54 +205,13 @@ where
 
         // Auxiliary Data
         // --------------
-        //
-        // TODO(NNS1-2505): Uninline.
 
-        // 1.
         let hot_keys = read_repeated_field(NeuronId { id: neuron_id }, &self.hot_keys_map);
-        // 2.
         let recent_ballots =
             read_repeated_field(NeuronId { id: neuron_id }, &self.recent_ballots_map);
+        let followees = self.read_followees(NeuronId { id: neuron_id });
 
-        // 3.
-        let followees = {
-            let follower_id = neuron_id;
-            let first = FolloweesKey {
-                follower_id,
-                ..FolloweesKey::MIN
-            };
-            let last = FolloweesKey {
-                follower_id,
-                ..FolloweesKey::MAX
-            };
-            let range = self.followees_map.range(first..=last);
-
-            // Convert range to HashMap<topic_id, Followees>.
-            let mut followees = HashMap::</* topic ID */ i32, Followees>::new();
-            for (key, ()) in range {
-                let FolloweesKey {
-                    follower_id,
-                    topic_id,
-                    followee_id,
-                } = key;
-                // assert_eq!(follower_id, neuron_id);
-
-                // Because impl BoundedStorable for i32 does not exist.
-                let topic_id = i32::from(topic_id);
-
-                // Insert followee_id.
-                followees
-                    .entry(topic_id)
-                    .or_default() // Intermediate insert, if necessary.
-                    .followees
-                    .push(NeuronId { id: followee_id }) // Real insert here.
-            }
-            followees
-        };
-
-        // 4.
         let known_neuron_data = self.known_neuron_data_map.get(&neuron_id);
-        // 5.
         let transfer = self.transfer_map.get(&neuron_id);
 
         // Final Assembly
@@ -424,6 +385,37 @@ where
     // Misc Private Helper(s)
     // ----------------------
 
+    fn read_followees(&self, follower_id: NeuronId) -> HashMap</* topic ID */ i32, Followees> {
+        // Read from stable memory.
+        let follower_id = follower_id.id;
+        let first = FolloweesKey {
+            follower_id,
+            ..FolloweesKey::MIN
+        };
+        let last = FolloweesKey {
+            follower_id,
+            ..FolloweesKey::MAX
+        };
+        let range = self.followees_map.range(first..=last);
+
+        range
+            // create groups for topics
+            .group_by(|(followees_key, _index)| followees_key.topic_id)
+            .into_iter()
+            // convert (Signed32, group) into (i32, followees)
+            .map(|(topic, group)| {
+                let followees = group
+                    .sorted_by_key(|(_, index)| *index)
+                    .map(|(followees_key, _index)| NeuronId {
+                        id: followees_key.followee_id,
+                    })
+                    .collect::<Vec<_>>();
+
+                (i32::from(topic), Followees { followees })
+            })
+            .collect()
+    }
+
     fn update_followees(
         &mut self,
         neuron_id: NeuronId,
@@ -433,15 +425,14 @@ where
 
         // This will replace whatever was there before (if anything). As
         // elsewhere, "new" does not mean "additional".
-        let new_entries = new_followees
-            .into_iter()
-            .flat_map(|(topic_id, followees)| {
-                let topic_id = Signed32(topic_id);
-                followees
-                    .followees
-                    .into_iter()
-                    .map(move // Take ownership of topic_id.
-                        |followee_id| {
+        let new_entries =
+            new_followees
+                .into_iter()
+                .flat_map(|(topic_id, followees)| {
+                    let topic_id = Signed32(topic_id);
+                    followees.followees.into_iter().enumerate().map(
+                        move // Take ownership of topic_id.
+                        |(index, followee_id)| {
                             let followee_id = followee_id.id;
 
                             let key = FolloweesKey {
@@ -450,10 +441,11 @@ where
                                 followee_id,
                             };
 
-                            (key, ())
-                        })
-            })
-            .collect();
+                            (key, index as u64)
+                        },
+                    )
+                })
+                .collect();
 
         let range = {
             let first = FolloweesKey {
