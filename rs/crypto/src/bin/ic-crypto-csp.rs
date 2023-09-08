@@ -24,15 +24,20 @@ struct Opts {
     config: PathBuf,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_name("Crypto_CSP_Thread".to_string())
+        .enable_all()
+        .build()
+        .expect("should create tokio runtime");
+
     let opts = Opts::parse();
     let ic_config = get_ic_config(opts.config);
 
     let sks_dir = ic_config.crypto.crypto_root.as_path();
 
     ensure_n_named_systemd_sockets(2);
-    let systemd_socket_listener = listener_from_first_systemd_socket();
+    let systemd_socket_listener = listener_from_first_systemd_socket(rt.handle().clone());
 
     // The `AsyncGuard` must be kept in scope for asynchronously logged messages to appear in the logs.
     let (logger, _async_log_guard) = new_replica_logger_from_config(&ic_config.csp_vault_logger);
@@ -50,8 +55,13 @@ async fn main() {
     // This way we can capture all the context if a critical error happens.
     abort_on_panic();
     let metrics = CryptoMetrics::new(Some(&MetricsRegistry::global()));
-    ic_crypto_internal_csp::run_csp_vault_server(sks_dir, systemd_socket_listener, logger, metrics)
-        .await;
+
+    rt.block_on(ic_crypto_internal_csp::run_csp_vault_server(
+        sks_dir,
+        systemd_socket_listener,
+        logger,
+        metrics,
+    ));
 }
 
 /// Aborts the whole program with a core dump if a single thread panics.
@@ -97,7 +107,9 @@ fn ensure_n_named_systemd_sockets(num_expected_sockets: usize) {
     }
 }
 
-fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
+fn listener_from_first_systemd_socket(
+    rt_handle: tokio::runtime::Handle,
+) -> tokio::net::UnixListener {
     const SD_LISTEN_FDS_START: i32 = 3; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
 
     let std_unix_listener = unsafe {
@@ -113,6 +125,7 @@ fn listener_from_first_systemd_socket() -> tokio::net::UnixListener {
         .set_nonblocking(true)
         .expect("Failed to make listener non-blocking");
 
+    let _enter_guard = rt_handle.enter();
     tokio::net::UnixListener::from_std(std_unix_listener)
         .expect("Failed to convert UnixListener into Tokio equivalent")
 }
