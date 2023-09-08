@@ -13985,7 +13985,9 @@ dependencies = [
  "ic-config",
  "ic-crypto",
  "ic-crypto-iccsa",
+ "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-interfaces-state-manager",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
@@ -13995,6 +13997,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.9.9",
  "tempfile",
  "tokio",
 ]

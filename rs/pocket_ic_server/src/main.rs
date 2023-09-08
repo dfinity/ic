@@ -474,7 +474,7 @@ fn to_canister_id(raw_id: RawCanisterId) -> CanisterId {
     CanisterId::try_from(raw_id.canister_id).expect("invalid canister id")
 }
 
-struct ParsedCanisterCall {
+pub struct ParsedCanisterCall {
     sender: PrincipalId,
     canister_id: CanisterId,
     method: String,

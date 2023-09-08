@@ -36,14 +36,18 @@
 
 pub mod state_api;
 
+pub mod pocket_ic;
+
 use crate::state_api::state::OpOut;
+use ic_crypto_sha2::Sha256;
 use ic_types::time::Time;
 
 /// Represents an identifiable operation on a TargetType.
 pub trait Operation {
     type TargetType: Send + Sync;
 
-    fn compute(&self, _mocket_ic: &mut Self::TargetType) -> OpOut;
+    /// Consumes self and executes computation.
+    fn compute(self, _mocket_ic: &mut Self::TargetType) -> OpOut;
 
     fn id(&self) -> OpId;
 }
@@ -72,26 +76,28 @@ impl<T: Operation + 'static> BindOperation for T {
     }
 }
 
-#[derive(Clone)]
-struct QueryOp {
-    payload: usize,
-}
-#[derive(Clone)]
-struct UpdateOp {
-    payload: usize,
-}
-#[derive(Clone)]
-struct SetTime {
-    payload: Time,
-}
-#[derive(Clone)]
-struct GetTime {}
-
 /// A mock implementation of PocketIC, primarily for testing purposes.
 pub mod mocket_ic {
+    use ic_state_machine_tests::WasmResult;
+
     use super::*;
     use crate::state_api::state::{HasStateLabel, StateLabel};
     use std::time::Duration;
+
+    #[derive(Clone)]
+    pub struct QueryOp {
+        pub payload: usize,
+    }
+    #[derive(Clone)]
+    pub struct UpdateOp {
+        pub payload: usize,
+    }
+    #[derive(Clone)]
+    pub struct SetTime {
+        pub payload: Time,
+    }
+    #[derive(Clone)]
+    pub struct GetTime {}
 
     #[derive(Clone)]
     pub struct MocketIc {
@@ -131,7 +137,7 @@ pub mod mocket_ic {
     impl Operation for Delay {
         type TargetType = MocketIc;
 
-        fn compute(&self, _mocket_ic: &mut MocketIc) -> OpOut {
+        fn compute(self, _mocket_ic: &mut MocketIc) -> OpOut {
             std::thread::sleep(self.duration);
             OpOut::NoOutput
         }
@@ -144,8 +150,10 @@ pub mod mocket_ic {
     impl Operation for QueryOp {
         type TargetType = MocketIc;
 
-        fn compute(&self, mocket_ic: &mut MocketIc) -> OpOut {
-            OpOut::Bytes(mocket_ic.query(self.payload).to_be_bytes().to_vec())
+        fn compute(self, mocket_ic: &mut MocketIc) -> OpOut {
+            OpOut::IcResult(Ok(WasmResult::Reply(
+                mocket_ic.query(self.payload).to_be_bytes().to_vec(),
+            )))
         }
 
         fn id(&self) -> OpId {
@@ -156,7 +164,7 @@ pub mod mocket_ic {
     impl Operation for UpdateOp {
         type TargetType = MocketIc;
 
-        fn compute(&self, mocket_ic: &mut MocketIc) -> OpOut {
+        fn compute(self, mocket_ic: &mut MocketIc) -> OpOut {
             mocket_ic.update(self.payload);
             OpOut::NoOutput
         }
@@ -169,7 +177,7 @@ pub mod mocket_ic {
     impl Operation for SetTime {
         type TargetType = MocketIc;
 
-        fn compute(&self, mocket_ic: &mut MocketIc) -> OpOut {
+        fn compute(self, mocket_ic: &mut MocketIc) -> OpOut {
             mocket_ic.set_time(self.payload);
             OpOut::NoOutput
         }
@@ -182,8 +190,8 @@ pub mod mocket_ic {
     impl Operation for GetTime {
         type TargetType = MocketIc;
 
-        fn compute(&self, mocket_ic: &mut MocketIc) -> OpOut {
-            OpOut::Time(mocket_ic.get_time())
+        fn compute(self, mocket_ic: &mut MocketIc) -> OpOut {
+            OpOut::Time(mocket_ic.get_time().as_nanos_since_unix_epoch())
         }
 
         fn id(&self) -> OpId {
@@ -193,7 +201,10 @@ pub mod mocket_ic {
 
     impl HasStateLabel for MocketIc {
         fn get_state_label(&self) -> StateLabel {
-            StateLabel(format!("MIC_{}_{:?}", &self.state, &self.time))
+            let mut hasher = Sha256::new();
+            hasher.write(&self.state.to_be_bytes());
+            hasher.write(&self.time.as_nanos_since_unix_epoch().to_be_bytes());
+            StateLabel(hasher.finish())
         }
     }
 }
@@ -202,7 +213,13 @@ pub mod mocket_ic {
 mod tests {
     use super::mocket_ic::*;
     use super::*;
+    use crate::pocket_ic::{ExecuteIngressMessage, PocketIc};
     use crate::state_api::state::*;
+    use candid::{decode_args, encode_args};
+    use ic_cdk::api::management_canister::main::CreateCanisterArgument;
+    use ic_cdk::api::management_canister::provisional::CanisterIdRecord;
+    use ic_state_machine_tests::WasmResult;
+    use ic_types::{CanisterId, PrincipalId};
     use tokio::runtime::Runtime;
 
     #[test]
@@ -253,6 +270,47 @@ mod tests {
     }
 
     #[test]
+    fn test_pocket_ic() {
+        let rt = Runtime::new().unwrap();
+        let pocket_ic = PocketIc::new();
+        let api_state = PocketIcApiStateBuilder::new()
+            .add_initial_instance(pocket_ic)
+            .build();
+        let instance_id = 0;
+        let msg1 = ExecuteIngressMessage {
+            sender: PrincipalId::default(),
+            canister_id: CanisterId::ic_00(),
+            method: "create_canister".to_string(),
+            payload: encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
+        };
+        let res = rt
+            .block_on(api_state.issue(msg1.on_instance(instance_id)))
+            .unwrap();
+        // TODO: fixme: we have to poll
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        println!("result is: {:?}", res);
+        if let IssueOutcome::Output(OpOut::IcResult(result)) = res {
+            match result {
+                Ok(wasmresult) => match wasmresult {
+                    WasmResult::Reply(bytes) => {
+                        println!("wasm result bytes {:?}", bytes);
+                        let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
+                        println!("result: {}", canister_id);
+                    }
+                    WasmResult::Reject(x) => {
+                        println!("wasm reject {:?}", x);
+                    }
+                },
+                Err(user_error) => {
+                    println!("user error: {:?}", user_error);
+                }
+            }
+        } else {
+            println!("did not get expected IssueOutcome");
+        }
+    }
+
+    #[test]
     fn test_long_request() {
         let (rt, api_state) = api_with_single_instance();
         let instance_id = 0;
@@ -262,8 +320,13 @@ mod tests {
             duration: std::time::Duration::from_secs(1),
         };
         let IssueOutcome::Output(OpOut::NoOutput) = rt
-            .block_on(api_state.issue_with_timeout(delay.on_instance(instance_id), sync_wait_timeout))
-            .unwrap() else {panic!("result did not match!")};
+            .block_on(
+                api_state.issue_with_timeout(delay.on_instance(instance_id), sync_wait_timeout),
+            )
+            .unwrap()
+        else {
+            panic!("result did not match!")
+        };
     }
 
     fn api_with_single_instance() -> (Runtime, PocketIcApiState<MocketIc>) {
