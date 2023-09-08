@@ -134,7 +134,11 @@ async fn start(runtime: Arc<Runtime>) {
         //
         // Save this instance to a checkpoint with the given name.
         // Takes a name:String in the request body.
-        .route("/instances/:id/save_checkpoint", post(save_checkpoint))
+        // TODO: Add a function that separates those two.
+        .route(
+            "/instances/:id/tick_and_create_checkpoint",
+            post(tick_and_create_checkpoint),
+        )
         //
         // List all checkpoints.
         .route("/checkpoints", get(list_checkpoints))
@@ -214,14 +218,14 @@ fn create_state_machine(state_dir: Option<TempDir>, runtime: Arc<Runtime>) -> St
     if let Some(state_dir) = state_dir {
         StateMachineBuilder::new()
             .with_config(Some(config))
-            .with_checkpoints_enabled(true)
+            .with_checkpoints_enabled(false)
             .with_state_dir(state_dir)
             .with_runtime(runtime)
             .build()
     } else {
         StateMachineBuilder::new()
             .with_config(Some(config))
-            .with_checkpoints_enabled(true)
+            .with_checkpoints_enabled(false)
             .with_runtime(runtime)
             .build()
     }
@@ -332,7 +336,8 @@ async fn call_instance(
     }
 }
 
-async fn save_checkpoint(
+// TODO: Add a function that separates those two.
+async fn tick_and_create_checkpoint(
     State(AppState {
         instance_map,
         last_request: _,
@@ -352,6 +357,10 @@ async fn save_checkpoint(
     let guard_map = instance_map.read().await;
     if let Some(rw_lock) = guard_map.get(&id) {
         let guard_sm = rw_lock.write().await;
+        // Enable checkpoints and make a tick to write a checkpoint.
+        guard_sm.set_checkpoints_enabled(true);
+        guard_sm.tick();
+        guard_sm.set_checkpoints_enabled(false);
         // copy state directory to named location
         let checkpoint_dir = TempDir::new().expect("Failed to create tempdir");
         copy_dir(guard_sm.state_dir.path(), checkpoint_dir.path())

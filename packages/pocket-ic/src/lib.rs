@@ -141,11 +141,12 @@ impl PocketIc {
             .expect("Failed to get text")
     }
 
-    pub fn create_snapshot(&self, name: &str) -> String {
+    // TODO: Add a function that separates those two
+    pub fn tick_and_create_checkpoint(&self, name: &str) -> String {
         self.reqwest_client
             .post(
                 self.server_url
-                    .join(&format!("{}/save_checkpoint", self.instance_url))
+                    .join(&format!("{}/tick_and_create_checkpoint", self.instance_url))
                     .unwrap(),
             )
             .header(reqwest::header::CONTENT_TYPE, "application/json")
