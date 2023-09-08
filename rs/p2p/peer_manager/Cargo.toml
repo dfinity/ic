@@ -15,7 +15,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 
 [dev-dependencies]
 ic-p2p-test-utils = { path = "../test_utils" }
