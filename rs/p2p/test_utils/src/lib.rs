@@ -64,22 +64,13 @@ pub struct RegistryConsensusHandle {
 }
 
 impl RegistryConsensusHandle {
-    pub fn add_node(
-        &mut self,
-        version: RegistryVersion,
-        node_id: NodeId,
-        endpoint: Option<(&str, u16)>,
-    ) {
+    pub fn add_node(&mut self, version: RegistryVersion, node_id: NodeId, ip_addr: Option<&str>) {
         let mut subnet_record = SubnetRecord::default();
 
         let mut membership = self.membership.lock().unwrap();
         membership.push(node_id.get().to_vec());
         subnet_record.membership = membership.clone();
 
-        let endpoint = endpoint.map(|endpoint| ConnectionEndpoint {
-            ip_addr: endpoint.0.to_string(),
-            port: endpoint.1.into(),
-        });
         add_subnet_record(
             &self.data_provider,
             version.get(),
@@ -87,7 +78,10 @@ impl RegistryConsensusHandle {
             subnet_record,
         );
         let node_record = NodeRecord {
-            http: endpoint,
+            http: ip_addr.map(|addr| ConnectionEndpoint {
+                ip_addr: addr.to_string(),
+                port: 8080,
+            }),
             ..Default::default()
         };
         self.data_provider
