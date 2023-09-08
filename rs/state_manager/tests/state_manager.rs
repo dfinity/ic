@@ -5,6 +5,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
+use ic_interfaces::artifact_pool::ChangeResult;
 use ic_interfaces::{artifact_pool::UnvalidatedArtifact, certification::Verifier};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
@@ -1717,12 +1718,14 @@ fn delivers_state_adverts_once() {
             hash,
         };
 
-        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
+        let ChangeResult { adverts, .. } =
+            state_sync.process_changes(time_source.as_ref(), Default::default());
         assert_eq!(adverts.len(), 1);
         assert_eq!(adverts[0].id, id);
         assert!(state_sync.has_artifact(&id));
 
-        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
+        let ChangeResult { adverts, .. } =
+            state_sync.process_changes(time_source.as_ref(), Default::default());
         assert_eq!(adverts.len(), 0);
         assert!(state_sync.has_artifact(&id));
     });
