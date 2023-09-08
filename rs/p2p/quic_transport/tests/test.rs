@@ -300,8 +300,12 @@ fn test_peer_restart() {
         info!(log, "Restarting node 1");
         sim.bounce(NODE_1.to_string());
 
-        wait_for(&mut sim, || conn_checker.fully_connected())
-            .expect("The network did not reach a fully connected state after restarting node 1");
+        wait_for(&mut sim, || {
+            conn_checker.fully_connected()
+                && conn_checker.connected_with_min_id(&NODE_2, &NODE_1, 1)
+                && conn_checker.connected_with_min_id(&NODE_1, &NODE_2, 0)
+        })
+        .expect("Node 2 reconnected to Node 1 and should now use connection id 2 and all nodes should be connected");
 
         info!(log, "Crashing node 2");
         sim.crash(NODE_2.to_string());
@@ -313,8 +317,12 @@ fn test_peer_restart() {
         info!(log, "Restarting node 2");
         sim.bounce(NODE_2.to_string());
 
-        wait_for(&mut sim, || conn_checker.fully_connected())
-            .expect("The network did not reach a fully connected state after restarting node 2.");
+        wait_for(&mut sim, || {
+            conn_checker.fully_connected()
+                && conn_checker.connected_with_min_id(&NODE_1, &NODE_2, 1)
+                && conn_checker.connected_with_min_id(&NODE_2, &NODE_1, 0)
+        })
+        .expect("The network did not reach a fully connected state after restarting node 2 and all nodes should be connected.");
 
         // Finish test by exiting client.
         exit_notify.notify_waiters();
@@ -500,6 +508,7 @@ fn test_changing_subnet_membership() {
             .unwrap();
         wait_for(&mut sim, || {
             conn_checker.fully_connected_except(vec![NODE_1])
+                && conn_checker.connected_with_min_id(&NODE_2, &NODE_3, 1)
         })
         .unwrap();
 
@@ -612,7 +621,12 @@ fn test_transient_failing_sev() {
 
         // Allow all nodes again
         sev.set_allowed_peers(vec![NODE_1, NODE_2]);
-        wait_for(&mut sim, || conn_checker.fully_connected()).expect("Nodes failed to reconnect");
+        wait_for(&mut sim, || {
+            conn_checker.fully_connected()
+                && conn_checker.connected_with_min_id(&NODE_2, &NODE_1, 1)
+                && conn_checker.connected_with_min_id(&NODE_1, &NODE_2, 0)
+        })
+        .expect("Nodes failed to reconnect or node 2 didn't increase connection id");
 
         // Do the inverse
         // Node 2 will start to reject connections from node 1.
@@ -632,7 +646,12 @@ fn test_transient_failing_sev() {
 
         // Allow all nodes again
         sev.set_allowed_peers(vec![NODE_1, NODE_2]);
-        wait_for(&mut sim, || conn_checker.fully_connected()).expect("Nodes failed to reconnect");
+        wait_for(&mut sim, || {
+            conn_checker.fully_connected()
+                && conn_checker.connected_with_min_id(&NODE_1, &NODE_2, 1)
+                && conn_checker.connected_with_min_id(&NODE_2, &NODE_1, 0)
+        })
+        .expect("Nodes failed to reconnect or node 1 didn't increase connection id");
 
         exit_notify.notify_waiters();
         sim.run().unwrap();
@@ -857,8 +876,18 @@ fn test_bad_network() {
         sim.release(NODE_4.to_string(), NODE_3.to_string());
         sim.release(NODE_3.to_string(), NODE_5.to_string());
 
-        wait_for(&mut sim, || conn_checker.fully_connected())
-            .expect("Nodes should be fully connected again.");
+        wait_for(&mut sim, || {
+            conn_checker.fully_connected()
+                && conn_checker.connected_with_min_id(&NODE_1, &NODE_2, 1)
+                && conn_checker.connected_with_min_id(&NODE_2, &NODE_1, 1)
+                && conn_checker.connected_with_min_id(&NODE_1, &NODE_3, 1)
+                && conn_checker.connected_with_min_id(&NODE_3, &NODE_1, 1)
+                && conn_checker.connected_with_min_id(&NODE_4, &NODE_3, 1)
+                && conn_checker.connected_with_min_id(&NODE_3, &NODE_4, 1)
+                && conn_checker.connected_with_min_id(&NODE_3, &NODE_5, 1)
+                && conn_checker.connected_with_min_id(&NODE_5, &NODE_3, 1)
+        })
+        .expect("Nodes should be fully connected again.");
 
         exit_notify.notify_waiters();
 

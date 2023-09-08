@@ -40,7 +40,7 @@ use axum::{
 };
 use bytes::{Buf, BufMut, Bytes};
 use http::{Request, Response};
-use ic_quic_transport::{SendError, Transport};
+use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -299,8 +299,14 @@ impl Transport for PeerTransport {
         Ok(())
     }
 
-    fn peers(&self) -> Vec<NodeId> {
-        self.global.peers.read().unwrap().keys().cloned().collect()
+    fn peers(&self) -> Vec<(NodeId, ConnId)> {
+        self.global
+            .peers
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
+            .collect()
     }
 }
 

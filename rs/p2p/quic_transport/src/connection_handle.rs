@@ -15,7 +15,7 @@ use crate::{
         ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
     utils::{read_response, write_request},
-    SendError,
+    ConnId, SendError,
 };
 
 #[derive(Clone, Debug)]
@@ -23,6 +23,7 @@ pub(crate) struct ConnectionHandle {
     pub peer_id: NodeId,
     pub connection: Connection,
     pub metrics: QuicTransportMetrics,
+    conn_id: ConnId,
 }
 
 impl ConnectionHandle {
@@ -30,12 +31,18 @@ impl ConnectionHandle {
         peer_id: NodeId,
         connection: Connection,
         metrics: QuicTransportMetrics,
+        conn_id: ConnId,
     ) -> Self {
         Self {
             peer_id,
             connection,
             metrics,
+            conn_id,
         }
+    }
+
+    pub(crate) fn conn_id(&self) -> ConnId {
+        self.conn_id
     }
 
     pub(crate) async fn rpc(

@@ -14,7 +14,7 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::Transport;
+use ic_quic_transport::{ConnId, Transport};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
@@ -242,7 +242,7 @@ pub fn mainnet_app_subnet() -> SubnetId {
 #[derive(Clone, Debug)]
 #[allow(clippy::type_complexity)]
 pub struct ConnectivityChecker {
-    peers: Arc<RwLock<HashMap<NodeId, HashSet<NodeId>>>>,
+    peers: Arc<RwLock<HashMap<NodeId, HashMap<NodeId, ConnId>>>>,
 }
 
 impl ConnectivityChecker {
@@ -250,7 +250,7 @@ impl ConnectivityChecker {
         let mut hm = HashMap::new();
 
         for peer_id in peers {
-            hm.insert(*peer_id, HashSet::new());
+            hm.insert(*peer_id, HashMap::new());
         }
 
         Self {
@@ -283,7 +283,7 @@ impl ConnectivityChecker {
     async fn check(&self, this_peer: NodeId, transport: Arc<dyn Transport>) {
         // Collect rpc futures to all peers
         let mut futs = vec![];
-        for peer in transport.peers() {
+        for (peer, conn_id) in transport.peers() {
             let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
             let transport_clone = transport.clone();
             futs.push(async move {
@@ -294,6 +294,7 @@ impl ConnectivityChecker {
                     )
                     .await,
                     peer,
+                    conn_id,
                 )
             });
         }
@@ -303,10 +304,10 @@ impl ConnectivityChecker {
         peers.get_mut(&this_peer).unwrap().clear();
         for res in futs_res {
             match res {
-                (Ok(Ok(_)), peer) => {
-                    peers.get_mut(&this_peer).unwrap().insert(peer);
+                (Ok(Ok(_)), peer, conn_id) => {
+                    peers.get_mut(&this_peer).unwrap().insert(peer, conn_id);
                 }
-                (_, peer) => {
+                (_, peer, _) => {
                     peers.get_mut(&this_peer).unwrap().remove(&peer);
                 }
             }
@@ -368,7 +369,15 @@ impl ConnectivityChecker {
         let connected_peer_1 = peers.get(peer_1).unwrap();
         let connected_peer_2 = peers.get(peer_2).unwrap();
 
-        connected_peer_1.contains(peer_2) && connected_peer_2.contains(peer_1)
+        connected_peer_1.contains_key(peer_2) && connected_peer_2.contains_key(peer_1)
+    }
+
+    pub fn connected_with_min_id(&self, peer_1: &NodeId, peer_2: &NodeId, conn_id: u64) -> bool {
+        let peers = self.peers.read().unwrap();
+        if let Some(v) = peers.get(peer_1) {
+            return v.get(peer_2) >= Some(&ConnId::from(conn_id));
+        }
+        false
     }
 
     /// Checks if peer1 is disconnected from peer2.
@@ -377,6 +386,6 @@ impl ConnectivityChecker {
 
         let connected_peer_1 = peers.get(peer_1).unwrap();
 
-        !connected_peer_1.contains(peer_2)
+        !connected_peer_1.contains_key(peer_2)
     }
 }
