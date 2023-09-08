@@ -2,14 +2,13 @@ use crate::{
     notification_client::NotificationClient,
     util::{block_on, sleep_secs},
 };
+use chrono::{DateTime, Utc};
 use ic_recovery::{
     command_helper::exec_cmd, error::RecoveryError, file_sync_helper::download_binary,
 };
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{ReplicaVersion, SubnetId};
-
-use chrono::{DateTime, Utc};
 use rand::{seq::SliceRandom, thread_rng};
 use slog::{debug, error, info, warn, Logger};
 use std::{
@@ -27,6 +26,9 @@ use std::{
 const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
 const BUCKET_SIZE: u64 = 10000;
+/// For how many days should we keep the states in the hot storage. States older than this number
+/// will be moved to the cold storage.
+const DAYS_TO_KEEP_STATES_IN_HOT_STORAGE: usize = 3;
 
 pub struct BackupHelper {
     pub subnet_id: SubnetId,
@@ -139,17 +141,18 @@ impl BackupHelper {
             "[#{}] Check if there are new artifacts.", self.thread_id
         );
 
-        let cup_file = format!(
+        let cup_file = self.spool_dir().join(format!(
             "{}/{}/{}/catch_up_package.bin",
             replica_version,
             start_height - start_height % 10000,
             start_height
-        );
+        ));
         // Make sure that the CUP from this replica version and at this height is
         // already synced from the node.
         // That way it is guaranteed that the node is running the new replica version and
         // has the latest version of the ic.json5 file.
-        while !self.spool_dir().join(cup_file.as_str()).exists() {
+        while !cup_file.exists() {
+            debug!(self.log, "CUP file {} not yet present", cup_file.display());
             sleep_secs(30);
         }
         debug!(
@@ -409,7 +412,7 @@ impl BackupHelper {
 
         let finish_height = self.last_state_checkpoint();
         if finish_height > start_height {
-            debug!(self.log, "[#{}] Replay was successful!", self.thread_id);
+            info!(self.log, "[#{}] Replay was successful!", self.thread_id);
 
             if self.archive_state(finish_height).is_ok() {
                 self.notification_client.message_slack(format!(
@@ -427,6 +430,15 @@ impl BackupHelper {
             self.notification_client.report_failure_slack(
                 "No height progress after the last replay detected!".to_string(),
             );
+        }
+
+        match self.maybe_cold_store_states() {
+            Ok(false) => info!(self.log, "No need to move any states to the cold storage"),
+            Ok(true) => info!(self.log, "Moved some states to the cold storage"),
+            Err(err) => warn!(
+                self.log,
+                "Failed moving some states to the cold storage: {}", err
+            ),
         }
     }
 
@@ -717,7 +729,7 @@ impl BackupHelper {
         if spool_dirs.len() != dir_heights.len() {
             error!(
                 self.log,
-                "Nonequal size of collections - spool: {} heights: {}",
+                "Non equal size of collections - spool: {} heights: {}",
                 spool_dirs.len(),
                 dir_heights.len()
             )
@@ -742,7 +754,7 @@ impl BackupHelper {
         drop(guard);
 
         if self.do_cold_storage {
-            // process moved artifact dirs
+            // process moved artifact directories
             let cold_storage_artifacts_dir = self.cold_storage_artifacts_dir();
             let work_dir_str = work_dir
                 .clone()
@@ -793,6 +805,59 @@ impl BackupHelper {
         Ok(max_height)
     }
 
+    /// Moves some of the states to the cold storage, such that the states from the last
+    /// [DAYS_TO_KEEP_STATES_IN_HOT_STORAGE] days remain in the hot storage.
+    ///
+    /// Since we produced [BackupHelper::daily_replays] per day, we will keep at least
+    /// [DAYS_TO_KEEP_STATES_IN_HOT_STORAGE] * [BackupHelper::daily_replays] states in the hot
+    /// storage.
+    ///
+    /// For example if [DAYS_TO_KEEP_STATES_IN_HOT_STORAGE] = 1, [BackupHelper::daily_replays] = 3,
+    /// and the archive comprises of states at heights: 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+    /// then we will move the states at the heights 30 and 60 to the cold storage; we will delete
+    /// states at heights 10, 20, 40, and 50; and we will keep the states at heights
+    /// 70, 80, 90, and 100 in the hot storage.
+    fn maybe_cold_store_states(&self) -> Result<bool, String> {
+        let min_states_to_remain_in_cold_storage =
+            self.daily_replays * DAYS_TO_KEEP_STATES_IN_HOT_STORAGE;
+        let max_number_of_states = min_states_to_remain_in_cold_storage + self.daily_replays - 1;
+
+        let states = collect_only_dirs(&self.archive_dir())?;
+
+        info!(
+            self.log,
+            "Number of states in the hot storage: {}. \
+            Will move some of them to the cold storage if the number is > {}.",
+            states.len(),
+            max_number_of_states
+        );
+
+        // Nothing to do in this case.
+        if states.len() <= max_number_of_states {
+            return Ok(false);
+        }
+
+        let mut heights: Vec<_> = states
+            .iter()
+            .map(|dir_entry| height_from_dir_entry_radix(dir_entry, 10))
+            .collect();
+
+        heights.sort();
+
+        // We always remove an integer multiple of [BackupHelper::daily_replays] from the hot
+        // storage:
+        // 1) 1 / [BackupHelper::daily_replays] proportion of them are moved to the cold storage;
+        // 2) and the rest is removed from the disk.
+        let number_of_states_to_remove_from_hot_storage = largest_multiple_of(
+            heights.len() - min_states_to_remain_in_cold_storage,
+            self.daily_replays,
+        );
+
+        let max_height = heights[number_of_states_to_remove_from_hot_storage - 1];
+
+        self.cold_store_states(max_height).map(|_| true)
+    }
+
     fn cold_store_states(&self, max_height: u64) -> Result<(), String> {
         info!(
             self.log,
@@ -822,7 +887,7 @@ impl BackupHelper {
                 // skip some of the states if we replay more than one per day
                 if self.daily_replays > 1 {
                     // one element is consumed in the next() call above,
-                    // and one in the nth(), hence the substract 2
+                    // and one in the nth(), hence the subtract 2
                     reversed.nth(self.daily_replays - 2);
                 }
             }
@@ -843,7 +908,7 @@ impl BackupHelper {
             exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {:?}", err))?;
         }
 
-        remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trashdir: {:?}", err))?;
+        remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trash dir: {:?}", err))?;
 
         Ok(())
     }
@@ -976,6 +1041,11 @@ pub fn retrieve_replica_version_last_replayed(
     current_replica_version
 }
 
+/// Returns the largest integer multiple of `multiplier` which is at most `upper_bound`
+fn largest_multiple_of(upper_bound: usize, multiplier: usize) -> usize {
+    multiplier * (upper_bound / multiplier)
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -992,7 +1062,11 @@ mod tests {
     fn need_cold_storage_move_test() {
         let dir = tmpdir("test_dir");
 
-        let backup_helper = fake_backup_helper(dir.as_ref(), /*versions_hot=*/ 2);
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
 
         create_dir_all(backup_helper.spool_dir().join("replica_version_1")).unwrap();
         create_dir_all(backup_helper.spool_dir().join("replica_version_2")).unwrap();
@@ -1009,7 +1083,11 @@ mod tests {
     fn does_not_need_cold_storage_move_test() {
         let dir = tmpdir("test_dir");
 
-        let backup_helper = fake_backup_helper(dir.as_ref(), /*versions_hot=*/ 2);
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
 
         create_dir_all(backup_helper.spool_dir().join("replica_version_1")).unwrap();
         create_dir_all(backup_helper.spool_dir().join("replica_version_2")).unwrap();
@@ -1025,7 +1103,11 @@ mod tests {
     fn cold_store_artifacts_test() {
         let dir = tmpdir("test_dir");
 
-        let backup_helper = fake_backup_helper(dir.as_ref(), /*versions_hot=*/ 2);
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
 
         create_artifacts_dir_with_heights(
             &backup_helper.spool_dir().join("replica_version_1"),
@@ -1046,7 +1128,7 @@ mod tests {
 
         assert_eq!(max_height, 150);
 
-        let cold_storage_dirs = collect_dir_entries(
+        let cold_storage_dirs = collect_and_sort_dir_entries(
             &backup_helper
                 .cold_storage_dir
                 .join(FAKE_SUBNET_ID)
@@ -1057,7 +1139,7 @@ mod tests {
         assert_eq!(cold_storage_dirs.len(), 1);
         assert!(cold_storage_dirs[0].ends_with("_000000000150_replica_version_1.tgz"));
 
-        let artifacts_dirs = collect_dir_entries(&backup_helper.spool_dir());
+        let artifacts_dirs = collect_and_sort_dir_entries(&backup_helper.spool_dir());
 
         // The artifacts from the earliest replica version are removed from the hot storage.
         assert_eq!(artifacts_dirs.len(), 2);
@@ -1070,7 +1152,11 @@ mod tests {
     fn cold_store_states_test() {
         let dir = tmpdir("test_dir");
 
-        let backup_helper = fake_backup_helper(dir.as_ref(), /*versions_hot=*/ 2);
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
 
         for height in [0, 10, 20, 30, 40, 50] {
             create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
@@ -1080,7 +1166,7 @@ mod tests {
             .cold_store_states(30)
             .expect("should execute successfully");
 
-        let cold_storage_dirs = collect_dir_entries(
+        let cold_storage_dirs = collect_and_sort_dir_entries(
             &backup_helper
                 .cold_storage_dir
                 .join(FAKE_SUBNET_ID)
@@ -1091,12 +1177,90 @@ mod tests {
         assert!(cold_storage_dirs.contains(&"30".to_string()));
         assert!(cold_storage_dirs.contains(&"10".to_string()));
 
-        let archives_dirs = collect_dir_entries(&backup_helper.archive_dir());
+        let archives_dirs = collect_and_sort_dir_entries(&backup_helper.archive_dir());
 
         // The artifacts from the earliest replica version are removed from the hot storage.
         assert_eq!(archives_dirs.len(), 2);
         assert!(archives_dirs.contains(&"40".to_string()));
         assert!(archives_dirs.contains(&"50".to_string()));
+    }
+
+    #[test]
+    fn maybe_cold_store_states_moves_test() {
+        let dir = tmpdir("test_dir");
+
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+
+        for height in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] {
+            create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
+        }
+
+        let cold_stored_states = backup_helper
+            .maybe_cold_store_states()
+            .expect("should execute successfully");
+
+        assert!(cold_stored_states);
+
+        let cold_storage_dirs = collect_and_sort_dir_entries(
+            &backup_helper
+                .cold_storage_dir
+                .join(FAKE_SUBNET_ID)
+                .join("states"),
+        );
+
+        assert_eq!(cold_storage_dirs, vec!["10".to_string(), "30".to_string()]);
+
+        assert_eq!(
+            collect_and_sort_dir_entries(&backup_helper.archive_dir()),
+            vec![
+                "100".to_string(),
+                "40".to_string(),
+                "50".to_string(),
+                "60".to_string(),
+                "70".to_string(),
+                "80".to_string(),
+                "90".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn maybe_cold_store_states_does_not_move_test() {
+        let dir = tmpdir("test_dir");
+
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+
+        for height in [0, 10, 20, 30, 40, 50, 60] {
+            create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
+        }
+
+        let cold_stored_states = backup_helper
+            .maybe_cold_store_states()
+            .expect("should execute successfully");
+
+        assert!(!cold_stored_states);
+
+        // Assert that old the states remain in the hot storage
+        assert_eq!(
+            collect_and_sort_dir_entries(&backup_helper.archive_dir()),
+            vec![
+                "0".to_string(),
+                "10".to_string(),
+                "20".to_string(),
+                "30".to_string(),
+                "40".to_string(),
+                "50".to_string(),
+                "60".to_string(),
+            ]
+        );
     }
 
     // Utility functions below
@@ -1113,7 +1277,11 @@ mod tests {
         }
     }
 
-    fn fake_backup_helper(temp_dir: &Path, versions_hot: usize) -> BackupHelper {
+    fn fake_backup_helper(
+        temp_dir: &Path,
+        versions_hot: usize,
+        daily_replays: usize,
+    ) -> BackupHelper {
         let data_provider = Arc::new(LocalStoreImpl::new(
             temp_dir.join("ic_registry_local_store"),
         ));
@@ -1147,7 +1315,7 @@ mod tests {
             cold_storage_dir: temp_dir.join("cold_storage"),
             versions_hot,
             artifacts_guard: Mutex::new(true),
-            daily_replays: 2,
+            daily_replays,
             do_cold_storage: true,
             thread_id: 1,
             blacklisted_nodes: Arc::new(vec![]),
@@ -1155,8 +1323,8 @@ mod tests {
         }
     }
 
-    fn collect_dir_entries(dir: &Path) -> Vec<String> {
-        std::fs::read_dir(dir)
+    fn collect_and_sort_dir_entries(dir: &Path) -> Vec<String> {
+        let mut dirs = std::fs::read_dir(dir)
             .unwrap()
             .map(|entry| {
                 entry
@@ -1167,6 +1335,10 @@ mod tests {
                     .to_string_lossy()
                     .into()
             })
-            .collect()
+            .collect::<Vec<_>>();
+
+        dirs.sort();
+
+        dirs
     }
 }
