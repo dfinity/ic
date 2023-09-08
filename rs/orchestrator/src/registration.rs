@@ -102,6 +102,7 @@ impl NodeRegistration {
         .unwrap()
         {
             warn!(self.log, "Node keys are not setup: {:?}", e);
+            UtilityCommand::notify_host(format!("Node keys are not setup: {:?}", e).as_str(), 1);
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
@@ -129,11 +130,27 @@ impl NodeRegistration {
                         )
                         .await
                     {
-                        warn!(self.log, "Registration request failed: {:?}", e);
+                        warn!(self.log, "Registration request failed: {}", e);
+                        UtilityCommand::notify_host(
+                            format!(
+                                "node-id {}: Registration request failed: {}",
+                                self.node_id, e
+                            )
+                            .as_str(),
+                            1,
+                        );
                     };
                 }
                 Err(e) => {
-                    warn!(self.log, "Failed to create the message signer: {:?}", e);
+                    warn!(self.log, "Failed to create the message signer: {}", e);
+                    UtilityCommand::notify_host(
+                        format!(
+                            "node-id {}: Failed to create the message signer: {}",
+                            self.node_id, e
+                        )
+                        .as_str(),
+                        1,
+                    );
                 }
             };
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -141,11 +158,11 @@ impl NodeRegistration {
 
         UtilityCommand::notify_host(
             format!(
-                "Join request successful! The node has successfully joined the Internet Computer, and the node onboarding is now complete.\nNode id: {}\nVerify that the node has successfully onboarded by checking its status on the Internet Computer dashboard.",
+                "node-id {}:\nJoin request successful! The node has successfully joined the Internet Computer, and the node onboarding is now complete.\nVerify that the node has successfully onboarded by checking its status on the Internet Computer dashboard.",
                 self.node_id
             )
             .as_str(),
-            20,
+            10,
         );
     }
 
@@ -208,6 +225,10 @@ impl NodeRegistration {
         {
             self.metrics.observe_key_rotation_error();
             warn!(self.log, "Failed to check keys with registry: {e:?}");
+            UtilityCommand::notify_host(
+                format!("Failed to check keys with registry: {:?}", e).as_str(),
+                1,
+            );
         }
 
         if !self.is_time_to_rotate(registry_version, subnet_id, delta) {
@@ -238,6 +259,7 @@ impl NodeRegistration {
             Err(e) => {
                 self.metrics.observe_key_rotation_error();
                 warn!(self.log, "Key rotation error: {e:?}");
+                UtilityCommand::notify_host(format!("Key rotation error: {:?}", e).as_str(), 1);
             }
         }
     }
