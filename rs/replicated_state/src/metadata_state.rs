@@ -1480,7 +1480,6 @@ impl Streams {
 pub struct StreamHandle<'a> {
     stream: &'a mut Stream,
 
-    #[allow(unused)]
     responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
 }
 
