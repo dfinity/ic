@@ -84,6 +84,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
     pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) total_canister_balance: Gauge,
+    pub(super) total_canister_reserved_balance: Gauge,
     pub(super) canister_paused_execution: Histogram,
     pub(super) canister_aborted_execution: Histogram,
     pub(super) canister_paused_install_code: Histogram,
@@ -554,6 +555,10 @@ impl SchedulerMetrics {
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
                 "Total canister balance in Cycles.",
+            ),
+            total_canister_reserved_balance: metrics_registry.gauge(
+                "scheduler_canister_reserved_balance_cycles_total",
+                "Total canister reserved balance in Cycles.",
             ),
             canister_paused_execution: dts_pause_or_abort_histogram(
                 "scheduler_canister_paused_execution",
