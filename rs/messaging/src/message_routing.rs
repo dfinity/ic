@@ -1080,6 +1080,38 @@ impl MessageRoutingImpl {
         registry: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
+        let (batch_processor, metrics) = Self::new_components(
+            state_manager.clone(),
+            certified_stream_store,
+            ingress_history_writer,
+            scheduler,
+            hypervisor_config,
+            cycles_account_manager,
+            subnet_id,
+            metrics_registry,
+            log.clone(),
+            registry,
+            malicious_flags,
+        );
+
+        let batch_processor = Box::new(batch_processor);
+        Self::from_batch_processor(state_manager, batch_processor, Arc::clone(&metrics), log)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_components(
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        hypervisor_config: HypervisorConfig,
+        cycles_account_manager: Arc<CyclesAccountManager>,
+        subnet_id: SubnetId,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+        registry: Arc<dyn RegistryClient>,
+        malicious_flags: MaliciousFlags,
+    ) -> (BatchProcessorImpl, Arc<MessageRoutingMetrics>) {
         let time_in_stream_metrics = Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             metrics_registry,
         )));
@@ -1118,7 +1150,7 @@ impl MessageRoutingImpl {
             Arc::clone(&metrics),
         ));
 
-        let batch_processor = Box::new(BatchProcessorImpl::new(
+        let batch_processor = BatchProcessorImpl::new(
             state_manager.clone(),
             state_machine,
             registry,
@@ -1126,9 +1158,9 @@ impl MessageRoutingImpl {
             Arc::clone(&metrics),
             log.clone(),
             malicious_flags,
-        ));
+        );
 
-        Self::from_batch_processor(state_manager, batch_processor, Arc::clone(&metrics), log)
+        (batch_processor, metrics)
     }
 
     /// Creates a new `MessageRoutingImpl` for the given subnet using a fake
@@ -1226,5 +1258,75 @@ impl MessageRouting for MessageRoutingImpl {
             .unwrap()
             .increment()
             .max(self.state_manager.latest_state_height().increment())
+    }
+}
+
+/// An MessageRouting implementation that processes batches synchronously. Primarily used for
+/// testing.
+pub struct SyncMessageRouting {
+    batch_processor: Arc<Mutex<dyn BatchProcessor>>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+}
+
+impl SyncMessageRouting {
+    /// Creates a new `SyncMessageRoutingImpl` for the given subnet using the
+    /// provided `StateManager` and `ExecutionEnvironment`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState> + 'static>,
+        scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        hypervisor_config: HypervisorConfig,
+        cycles_account_manager: Arc<CyclesAccountManager>,
+        subnet_id: SubnetId,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+        registry: Arc<dyn RegistryClient>,
+        malicious_flags: MaliciousFlags,
+    ) -> Self {
+        let (batch_processor, _metrics) = MessageRoutingImpl::new_components(
+            state_manager.clone(),
+            certified_stream_store,
+            ingress_history_writer,
+            scheduler,
+            hypervisor_config,
+            cycles_account_manager,
+            subnet_id,
+            metrics_registry,
+            log.clone(),
+            registry,
+            malicious_flags,
+        );
+
+        let batch_processor = Arc::new(Mutex::new(batch_processor));
+
+        Self {
+            batch_processor,
+            state_manager,
+        }
+    }
+
+    /// Process a batch synchronously.
+    ///
+    /// This method blocks until the batch has been processed.
+    ///
+    /// An error is returned if the height of the given batch does not match the expected height.
+    pub fn process_batch(&self, batch: Batch) -> Result<(), MessageRoutingError> {
+        let batch_number = batch.batch_number;
+        let batch_processor = self.batch_processor.lock().unwrap();
+        let expected_number = self.expected_batch_height();
+        if expected_number != batch_number {
+            return Err(MessageRoutingError::Ignored {
+                expected_height: expected_number,
+                actual_height: batch_number,
+            });
+        }
+        batch_processor.process_batch(batch);
+        Ok(())
+    }
+
+    pub fn expected_batch_height(&self) -> Height {
+        self.state_manager.latest_state_height().increment()
     }
 }

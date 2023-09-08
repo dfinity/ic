@@ -23,14 +23,13 @@ pub use ic_ic00_types::{
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     execution_environment::{IngressHistoryReader, QueryHandler},
-    messaging::MessageRouting,
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
-use ic_messaging::MessageRoutingImpl;
+use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
@@ -302,7 +301,7 @@ pub struct StateMachine {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
-    message_routing: MessageRoutingImpl,
+    message_routing: SyncMessageRouting,
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
@@ -615,7 +614,7 @@ impl StateMachine {
             )
         });
 
-        let message_routing = MessageRoutingImpl::new(
+        let message_routing = SyncMessageRouting::new(
             Arc::clone(&state_manager) as _,
             Arc::clone(&state_manager) as _,
             Arc::clone(&execution_services.ingress_history_writer) as _,
@@ -875,35 +874,12 @@ impl StateMachine {
             consensus_responses: payload.consensus_responses,
         };
         self.message_routing
-            .deliver_batch(batch)
-            .expect("MR queue overflow");
-        self.await_height(batch_number);
+            .process_batch(batch)
+            .expect("Could not process batch");
     }
 
     pub fn execute_block_with_xnet_payload(&self, xnet_payload: XNetPayload) {
         self.execute_payload(PayloadBuilder::new().xnet_payload(xnet_payload));
-    }
-
-    fn await_height(&self, h: Height) {
-        const SLEEP_TIME: Duration = Duration::from_millis(100);
-        // TODO[NNS1-2370] decrease MAX_WAIT_TIME back to 180 seconds.
-        const MAX_WAIT_TIME: Duration = Duration::from_secs(270);
-
-        let started_at = Instant::now();
-
-        while started_at.elapsed() < MAX_WAIT_TIME {
-            if self.state_manager.latest_state_height() >= h {
-                return;
-            }
-            std::thread::sleep(SLEEP_TIME);
-        }
-
-        panic!(
-            "Did not finish executing block {} in {:?}, last executed block: {}",
-            h,
-            started_at.elapsed(),
-            self.state_manager.latest_state_height(),
-        )
     }
 
     /// Returns an immutable reference to the metrics registry.
