@@ -2830,3 +2830,73 @@ async fn test_mint_tokens() {
 
     assert_eq!(balance_original + E8S_TO_MINT, balance_new);
 }
+
+#[tokio::test]
+async fn test_process_proposals_tallies_votes_for_proposals_where_voting_is_possible() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(10)
+        .create();
+
+    canister_fixture.governance.proto.proposals.insert(
+        10,
+        ProposalData {
+            decided_timestamp_seconds: 9, // proposal is decided
+            action: 1,
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 20, // voting period is still open
+            }),
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Test".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: None,
+            ..ProposalData::default()
+        },
+    );
+    canister_fixture.governance.process_proposals();
+    let proposal = canister_fixture
+        .governance
+        .proto
+        .proposals
+        .get(&10)
+        .unwrap();
+
+    assert!(proposal.latest_tally.is_some());
+}
+
+#[tokio::test]
+async fn test_process_proposals_doesnt_tally_votes_for_proposals_where_voting_is_impossible() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(30)
+        .create();
+
+    canister_fixture.governance.proto.proposals.insert(
+        10,
+        ProposalData {
+            decided_timestamp_seconds: 9, // proposal is decided
+            action: 1,
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 20, // voting period is still open
+            }),
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Test".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: None,
+            ..ProposalData::default()
+        },
+    );
+    canister_fixture.governance.process_proposals();
+    let proposal = canister_fixture
+        .governance
+        .proto
+        .proposals
+        .get(&10)
+        .unwrap();
+
+    assert_eq!(proposal.latest_tally, None);
+}

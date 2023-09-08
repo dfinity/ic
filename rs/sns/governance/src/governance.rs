@@ -1928,17 +1928,18 @@ impl Governance {
             Some(p) => p,
         };
 
-        if proposal_data.status() != ProposalDecisionStatus::Open {
-            return;
+        // Recompute the tally here. It should correctly reflect all votes until
+        // the deadline, even after the proposal has been decided.
+        if proposal_data.status() == ProposalDecisionStatus::Open
+            || proposal_data.accepts_vote(now_seconds)
+        {
+            proposal_data.recompute_tally(now_seconds);
         }
 
-        // Recompute the tally here. It is imperative that only
-        // 'open' proposals have their tally recomputed. Votes may
-        // arrive after a decision has been made: such votes count
-        // for voting rewards, but shall not make it into the
-        // tally.
-        proposal_data.recompute_tally(now_seconds);
-        if !proposal_data.can_make_decision(now_seconds) {
+        // If the status is open
+        if proposal_data.status() != ProposalDecisionStatus::Open
+            || !proposal_data.can_make_decision(now_seconds)
+        {
             return;
         }
 
@@ -1983,7 +1984,7 @@ impl Governance {
     }
 
     /// Processes all proposals with decision status ProposalStatusOpen
-    fn process_proposals(&mut self) {
+    pub fn process_proposals(&mut self) {
         if self.env.now() < self.closest_proposal_deadline_timestamp_seconds {
             // Nothing to do.
             return;
@@ -1993,7 +1994,9 @@ impl Governance {
             .proto
             .proposals
             .iter()
-            .filter(|(_, info)| info.status() == ProposalDecisionStatus::Open)
+            .filter(|(_, info)| {
+                info.status() == ProposalDecisionStatus::Open || info.accepts_vote(self.env.now())
+            })
             .map(|(pid, _)| *pid)
             .collect::<Vec<u64>>();
 
