@@ -27,8 +27,10 @@ lazy_static! {
             },
             1 => Followees {
                 followees: vec![
-                    NeuronId { id: 210 },
+                    // Not sorted, to make sure we preserve order.
                     NeuronId { id: 211 },
+                    NeuronId { id: 212 },
+                    NeuronId { id: 210 },
                 ],
             },
         },
