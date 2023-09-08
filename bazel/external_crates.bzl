@@ -1107,7 +1107,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3.20",
             ),
             "tokio": crate.spec(
-                version = "^1.29.0",
+                version = "^1.32.0",
                 features = [
                     "full",
                     "io-util",
@@ -1163,7 +1163,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.8.2",
             ),
             "tower": crate.spec(
-                version = "^0.4.11",
+                version = "^0.4.13",
                 features = [
                     "buffer",
                     "limit",
@@ -1174,7 +1174,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "tower-http": crate.spec(
-                version = "^0.4",
+                version = "^0.4.4",
                 features = [
                     "trace",
                     "request-id",

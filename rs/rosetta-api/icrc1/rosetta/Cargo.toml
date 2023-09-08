@@ -35,7 +35,7 @@ rand = "0.8.4"
 axum = "0.6.1"
 url = "2.2.1"
 clap = { version = "4.0.29", features = ["derive"] }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 ic-agent = { workspace = true }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 hex = "0.4.2"
@@ -64,7 +64,6 @@ once_cell = "1.8.0"
 ring = { version = "0.16.11", features = ["std"] }
 reqwest = "0.11.1"
 futures = "0.3.28"
-tokio = "1.27.0"
 ic-icrc-rosetta-client = { path = "client" }
 ic-icrc-rosetta-runner = { path = "runner" }
 

@@ -7,4 +7,4 @@ edition = "2021"
 ic-artifact-manager = { path = "../../../artifact_manager" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-types = { path = "../../../types/types" }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }

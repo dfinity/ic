@@ -7,6 +7,6 @@ edition = "2021"
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-types = { path = "../../types/types" }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 
