@@ -10,11 +10,11 @@ exports_files([
 # nns_upgrade_test is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 system_test(
     name = "nns_upgrade_test",
+    env_inherit = ["SSH_AUTH_SOCK"],
     tags = [
-        "local",
-        "manual",
         "no-cache",
         "no-sandbox",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =

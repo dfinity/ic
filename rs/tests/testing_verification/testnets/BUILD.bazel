@@ -119,6 +119,7 @@ system_test(
 # recovered_mainnet_nns is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 system_test(
     name = "recovered_mainnet_nns",
+    env_inherit = ["SSH_AUTH_SOCK"],
     tags = [
         "dynamic_testnet",
         "local",

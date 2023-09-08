@@ -4,9 +4,9 @@
 //
 // There are tests that use this library. Run them using either:
 //
-// * rm -rf test_tmpdir; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_env=SSH_AUTH_SOCK --test_tmpdir=test_tmpdir
+// * rm -rf test_tmpdir; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_tmpdir=test_tmpdir
 //
-// * rm -rf test_tmpdir; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_env=SSH_AUTH_SOCK --test_tmpdir=test_tmpdir --flaky_test_attempts=1
+// * rm -rf test_tmpdir; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_tmpdir=test_tmpdir --flaky_test_attempts=1
 
 use anyhow::Result;
 

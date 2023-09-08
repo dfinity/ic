@@ -58,7 +58,10 @@ def _run_system_test(ctx):
                 ),
             ),
         ),
-        RunEnvironmentInfo(environment = env),
+        RunEnvironmentInfo(
+            environment = env,
+            inherited_environment = ctx.attr.env_inherit,
+        ),
     ]
 
 run_system_test = rule(
@@ -70,6 +73,7 @@ run_system_test = rule(
         "env": attr.string_dict(allow_empty = True),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.label_keyed_string_dict(allow_files = True),
+        "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
         "version_file_path": attr.label(allow_single_file = True, default = "//bazel:version_file_path"),
     },
 )
@@ -91,6 +95,7 @@ def system_test(
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
         ic_os_fixed_version = True,
+        env_inherit = [],
         **kwargs):
     """Declares a system-test.
 
@@ -114,6 +119,7 @@ def system_test(
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       ic_os_fixed_version: the test can work with ic-os that contains synthetic stable ic version.
+      env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 
@@ -160,6 +166,7 @@ def system_test(
         src = bin_name,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
+        env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         timeout = test_timeout,
@@ -181,6 +188,7 @@ def system_test(
             bin_name,
         ],
         env_deps = _env_deps,
+        env_inherit = env_inherit,
         env = {
             "COLOCATED_TEST": name,
             "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),

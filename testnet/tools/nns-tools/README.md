@@ -61,18 +61,14 @@ rm -rf test_tmpdir; \
     --lifetime-mins 120 \
     --set-required-host-features=dc=zh1 \
     --verbose \
-    -- \
-    --test_env=SSH_AUTH_SOCK \
-    --test_tmpdir=test_tmpdir
+    -- --test_tmpdir=test_tmpdir
 ```
 
 `--lifetime-mins` specifies how long your testnet will be online. Make sure that it's long enough to complete your testing.
 
 `--set-required-host-features=dc=zh1` ensures the testnet will be created in the `zh1` DC which speeds up the deployment. This is because the program needs to download the NNS state backup from the backup pod hosted in `zh1` and upload it from the test driver, running in `zh1`, to the IC deployed in `zh1`.
 
-`-- --test_env=SSH_AUTH_SOCK` ensures that the program can `scp` the backup from the backup pod, provided that you're authorised to SSH to that host.
-
-`--test_tmpdir=test_tmpdir` makes sure all the artifacts produced by the test driver are accessible on the filesystem in directory `test_tmpdir` which we need later on.
+`-- --test_tmpdir=test_tmpdir` makes sure all the artifacts produced by the test driver are accessible on the filesystem in directory `test_tmpdir` which we need later on.
 
 ### Interacting Afterwards
 
