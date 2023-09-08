@@ -1545,6 +1545,7 @@ impl Scheduler for SchedulerImpl {
             {
                 let mut cycles_out_sum = Cycles::zero();
                 let mut total_canister_balance = Cycles::zero();
+                let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_usage = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
@@ -1576,6 +1577,7 @@ impl Scheduler for SchedulerImpl {
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();
+                    total_canister_reserved_balance += canister.system_state.reserved_balance();
                     cycles_out_sum += canister.system_state.queues().output_queue_cycles();
                 }
                 cycles_out_sum += total_canister_balance;
@@ -1583,6 +1585,10 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .total_canister_balance
                     .set(total_canister_balance.get() as f64);
+
+                self.metrics
+                    .total_canister_reserved_balance
+                    .set(total_canister_reserved_balance.get() as f64);
 
                 // TODO(EXC-1124): Re-enable the check below once it's fixed.
                 //
