@@ -2,12 +2,12 @@
 A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
-load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem", "disk_image", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem", "disk_image", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 
 def icos_build(
         name,

@@ -3,8 +3,8 @@ Hold manifest common to all SetupOS variants.
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to

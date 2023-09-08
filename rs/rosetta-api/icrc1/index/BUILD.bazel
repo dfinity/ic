@@ -59,9 +59,9 @@ rust_test(
     name = "index_crate_test",
     crate = ":index",
     deps = DEPENDENCIES + [
+        "@crate_index//:assert_matches",
         "@crate_index//:proptest",
         "@crate_index//:serde_json",
-        "@crate_index//:assert_matches",
     ],
 )
 

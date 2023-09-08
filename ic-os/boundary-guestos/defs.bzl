@@ -77,7 +77,7 @@ def image_deps(mode, sev = False):
         },
     }
 
-    deps["rootfs"].update(extra_rootfs_deps.get(mode, default = {}))
+    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
 
     if sev:
         sev_rootfs_deps = {

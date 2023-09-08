@@ -90,9 +90,9 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**"]) + [
         ":protos",
-        "//rs/types/base_types:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/sns/swap:protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/init",
     deps = DEV_DEPENDENCIES,

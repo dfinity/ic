@@ -41,7 +41,7 @@ rust_bench(
     srcs = ["benches/certification.rs"],
     crate_root = "benches/certification.rs",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
-        "@crate_index//:criterion",
         ":certification",
+        "@crate_index//:criterion",
     ],
 )

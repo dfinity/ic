@@ -96,6 +96,6 @@ def image_deps(mode, malicious = False):
         },
     }
 
-    deps["rootfs"].update(extra_rootfs_deps.get(mode, default = {}))
+    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
 
     return deps

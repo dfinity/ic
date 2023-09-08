@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -225,8 +225,8 @@ generated_files_check(
     data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/protobuf:protos",
-        "//rs/types/base_types:protos",
         "//rs/rosetta-api/icp_ledger:protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/governance",
     deps = [
