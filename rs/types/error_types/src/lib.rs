@@ -118,7 +118,9 @@ impl From<ErrorCode> for RejectCode {
 /// convention: the most significant digit is the corresponding reject
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
-#[derive(Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize,
+)]
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
@@ -229,7 +231,7 @@ const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserError {
     code: ErrorCode,
     description: String,

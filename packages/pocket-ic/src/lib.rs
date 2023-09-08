@@ -19,7 +19,7 @@ type InstanceId = String;
 // ======================================================================================================
 // Code borrowed from https://github.com/dfinity/test-state-machine-client/blob/main/src/lib.rs
 // The StateMachine struct is renamed to `PocketIc` and given new interface.
-pub struct PocketIc {
+pub struct PocketIcServer {
     pub instance_id: InstanceId,
     // The PocketIC server's base address.
     server_url: Url,
@@ -29,7 +29,7 @@ pub struct PocketIc {
     reqwest_client: reqwest::blocking::Client,
 }
 
-impl PocketIc {
+impl PocketIcServer {
     pub fn new() -> Self {
         let server_url = Self::get_server_url();
         let reqwest_client = reqwest::blocking::Client::new();
@@ -399,7 +399,7 @@ impl PocketIc {
     }
 }
 
-impl Default for PocketIc {
+impl Default for PocketIcServer {
     fn default() -> Self {
         Self::new()
     }
@@ -472,7 +472,7 @@ impl From<Principal> for RawCanisterId {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CanisterCall {
     #[serde(with = "base64")]
     pub sender: Vec<u8>,
@@ -485,7 +485,7 @@ pub struct CanisterCall {
 
 /// Call a canister candid query method, anonymous.
 pub fn query_candid<Input, Output>(
-    env: &PocketIc,
+    env: &PocketIcServer,
     canister_id: Principal,
     method: &str,
     input: Input,
@@ -499,7 +499,7 @@ where
 
 /// Call a canister candid query method, authenticated.
 pub fn query_candid_as<Input, Output>(
-    env: &PocketIc,
+    env: &PocketIcServer,
     canister_id: Principal,
     sender: Principal,
     method: &str,
@@ -517,7 +517,7 @@ where
 /// Call a canister candid method, authenticated.
 /// The state machine executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid_as<Input, Output>(
-    env: &PocketIc,
+    env: &PocketIcServer,
     canister_id: Principal,
     sender: Principal,
     method: &str,
@@ -535,7 +535,7 @@ where
 /// Call a canister candid method, anonymous.
 /// The state machine executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid<Input, Output>(
-    env: &PocketIc,
+    env: &PocketIcServer,
     canister_id: Principal,
     method: &str,
     input: Input,
@@ -553,7 +553,7 @@ where
 /// convention: the most significant digit is the corresponding reject
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
@@ -607,7 +607,7 @@ impl fmt::Display for ErrorCode {
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserError {
     pub code: ErrorCode,
     pub description: String,
@@ -628,7 +628,7 @@ pub enum CallError {
 
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case
     Reply(#[serde(with = "serde_bytes")] Vec<u8>),

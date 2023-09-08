@@ -1,5 +1,6 @@
 use crate::{Computation, OpId, Operation};
-use ic_types::time::Time;
+use ic_state_machine_tests::UserError;
+use ic_state_machine_tests::WasmResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,7 +12,7 @@ const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_millis(150);
 
 /// Uniquely identifies a state.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct StateLabel(pub String);
+pub struct StateLabel(pub [u8; 32]);
 
 /// The state of the PocketIc-API.
 ///
@@ -94,8 +95,8 @@ impl<T> Default for PocketIcApiStateBuilder<T> {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Debug)]
 pub enum OpOut {
     NoOutput,
-    Time(Time),
-    Bytes(Vec<u8>),
+    Time(u64),
+    IcResult(Result<WasmResult, UserError>),
 }
 
 pub type Computations = HashMap<OpId, (StateLabel, OpOut)>;
@@ -216,73 +217,75 @@ where
     {
         let st = self.inner.clone();
         let mut instances = st.instances.write().await;
-        let (bg_task, busy_outcome) = if let Some(instance_state) =
-            instances.get(computation.instance_id)
-        {
-            // If this instance is busy, return the running op and initial state
-            match instance_state {
-                // TODO: cache lookup possible with this state_label and our own op_id
-                InstanceState::Busy { state_label, op_id } => {
-                    return Ok(IssueOutcome::Busy {
-                        state_label: state_label.clone(),
-                        op_id: op_id.clone(),
-                    });
+        let (bg_task, busy_outcome) =
+            if let Some(instance_state) = instances.get(computation.instance_id) {
+                // If this instance is busy, return the running op and initial state
+                match instance_state {
+                    // TODO: cache lookup possible with this state_label and our own op_id
+                    InstanceState::Busy { state_label, op_id } => {
+                        return Ok(IssueOutcome::Busy {
+                            state_label: state_label.clone(),
+                            op_id: op_id.clone(),
+                        });
+                    }
+                    InstanceState::Available(mocket_ic) => {
+                        let state_label = mocket_ic.get_state_label();
+                        let op_id = computation.op.id();
+                        let busy = InstanceState::Busy {
+                            state_label: state_label.clone(),
+                            op_id: op_id.clone(),
+                        };
+                        let InstanceState::Available(mut mocket_ic) =
+                            std::mem::replace(&mut instances[computation.instance_id], busy)
+                        else {
+                            unreachable!()
+                        };
+
+                        let op = computation.op;
+                        let instance_id = computation.instance_id;
+
+                        // We schedule a blocking background task on the tokio runtime. Note that if all
+                        // blocking workers are busy, the task is put on a queue (which is what we want).
+                        //
+                        // Note: One issue here is that we drop the join handle "on the floor". Threads
+                        // that are not awaited upon before exiting the process are known to cause spurios
+                        // issues. This should not be a problem as the tokio Executor will wait
+                        // indefinitively for threads to return, unless a shutdown timeout is configured.
+                        //
+                        // See: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
+                        let bg_task = spawn_blocking({
+                            let op_id = op_id.clone();
+                            let state_label = state_label.clone();
+                            let st = self.inner.clone();
+                            move || {
+                                println!("Starting computation");
+                                let result = op.compute(&mut mocket_ic);
+                                let new_state_label = mocket_ic.get_state_label();
+                                println!("Finished computation. Writing to graph.");
+                                // add result to graph
+                                let mut instances = st.instances.blocking_write();
+                                let mut guard = st.graph.blocking_write();
+
+                                let _ = std::mem::replace(
+                                    &mut instances[instance_id],
+                                    InstanceState::Available(mocket_ic),
+                                );
+                                let cached_computations =
+                                    guard.entry(state_label.clone()).or_insert(HashMap::new());
+                                cached_computations
+                                    .insert(op_id.clone(), (new_state_label, result.clone()));
+                                println!("Finished writing to graph");
+                                result
+                            }
+                        });
+
+                        // cache miss: replace pocket_ic instance in the vector with Busy
+                        (bg_task, IssueOutcome::Busy { state_label, op_id })
+                    }
                 }
-                InstanceState::Available(mocket_ic) => {
-                    let state_label = mocket_ic.get_state_label();
-                    let op_id = computation.op.id();
-                    let busy = InstanceState::Busy {
-                        state_label: state_label.clone(),
-                        op_id: op_id.clone(),
-                    };
-                    let InstanceState::Available(mut mocket_ic) =
-                    std::mem::replace(&mut instances[computation.instance_id], busy) else {unreachable!()};
-
-                    let op = computation.op;
-                    let instance_id = computation.instance_id;
-
-                    // We schedule a blocking background task on the tokio runtime. Note that if all
-                    // blocking workers are busy, the task is put on a queue (which is what we want).
-                    //
-                    // Note: One issue here is that we drop the join handle "on the floor". Threads
-                    // that are not awaited upon before exiting the process are known to cause spurios
-                    // issues. This should not be a problem as the tokio Executor will wait
-                    // indefinitively for threads to return, unless a shutdown timeout is configured.
-                    //
-                    // See: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
-                    let bg_task = spawn_blocking({
-                        let op_id = op_id.clone();
-                        let state_label = state_label.clone();
-                        let st = self.inner.clone();
-                        move || {
-                            println!("Starting computation");
-                            let result = op.compute(&mut mocket_ic);
-                            let new_state_label = mocket_ic.get_state_label();
-                            println!("Finished computation. Writing to graph.");
-                            // add result to graph
-                            let mut instances = st.instances.blocking_write();
-                            let mut guard = st.graph.blocking_write();
-
-                            let _ = std::mem::replace(
-                                &mut instances[instance_id],
-                                InstanceState::Available(mocket_ic),
-                            );
-                            let cached_computations =
-                                guard.entry(state_label.clone()).or_insert(HashMap::new());
-                            cached_computations
-                                .insert(op_id.clone(), (new_state_label, result.clone()));
-                            println!("Finished writing to graph");
-                            result
-                        }
-                    });
-
-                    // cache miss: replace pocket_ic instance in the vector with Busy
-                    (bg_task, IssueOutcome::Busy { state_label, op_id })
-                }
-            }
-        } else {
-            return Err(IssueError::InstanceNotFound);
-        };
+            } else {
+                return Err(IssueError::InstanceNotFound);
+            };
         // drop lock, otherwise we end up with a deadlock
         std::mem::drop(instances);
 

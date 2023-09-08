@@ -166,7 +166,7 @@ impl IngressSets {
 
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case
     Reply(#[serde(with = "serde_bytes")] Vec<u8>),
