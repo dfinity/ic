@@ -1,7 +1,8 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
+use crate::artifact_pool::ChangeResult;
 use crate::{artifact_pool::UnvalidatedArtifact, time_source::TimeSource};
 use derive_more::From;
-use ic_types::artifact::{ArtifactPriorityFn, PriorityFn};
+use ic_types::artifact::{Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
 
 /// Event loops/actors that implement a graceful shutdown on destruction implement this trait.
@@ -15,6 +16,11 @@ pub trait JoinGuard {}
 /// the return type for the `on_artifact` function of `ArtifactManager`.
 pub enum OnArtifactError {
     NotProcessed,
+}
+
+pub enum ArtifactProcessorEvent<Artifact: ArtifactKind> {
+    Advert(Advert<Artifact>),
+    Purge(Artifact::Id),
 }
 
 /// An abstraction of artifact processing for a sub-type of the overall
@@ -105,15 +111,15 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
     /// As part of the processing, it may also modify its own state
     /// including both unvalidated and validated pools. The return
     /// result includes a list of adverts for P2P to disseminate to
-    /// peers, as well as a result flag indicating if there are more
-    /// changes to be processed so that the caller can decide whether
-    /// this function should be called again immediately, or after
-    /// certain period of time.
+    /// peers, deleted artifact,  as well as a result flag indicating
+    /// if there are more changes to be processed so that the caller
+    /// can decide whether this function should be called again
+    /// immediately, or after certain period of time.
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
         new_artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
-    ) -> (Vec<artifact::Advert<Artifact>>, bool);
+    ) -> ChangeResult<Artifact>;
 }
 
 /// The Artifact Manager stores artifacts to be used by this and other nodes in

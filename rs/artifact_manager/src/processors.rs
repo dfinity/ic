@@ -3,7 +3,7 @@
 
 use ic_interfaces::{
     artifact_manager::ArtifactProcessor,
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    artifact_pool::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_types::{artifact::*, artifact_kind::*, messages::SignedIngress};
@@ -33,7 +33,7 @@ impl<A: ArtifactKind, C, P: MutablePool<A, C> + Send + Sync + 'static> ArtifactP
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<A::Message>>,
-    ) -> (Vec<Advert<A>>, bool) {
+    ) -> ChangeResult<A> {
         {
             let mut pool = self.pool.write().unwrap();
             for artifact in artifacts {
@@ -43,13 +43,10 @@ impl<A: ArtifactKind, C, P: MutablePool<A, C> + Send + Sync + 'static> ArtifactP
         let change_set = self
             .change_set_producer
             .on_state_change(&self.pool.read().unwrap());
-        let result = self
-            .pool
+        self.pool
             .write()
             .unwrap()
-            .apply_changes(time_source, change_set);
-
-        (result.adverts, result.changed)
+            .apply_changes(time_source, change_set)
     }
 }
 
@@ -82,7 +79,7 @@ impl<C, P: MutablePool<IngressArtifact, C> + Send + Sync + 'static>
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<SignedIngress>>,
-    ) -> (Vec<Advert<IngressArtifact>>, bool) {
+    ) -> ChangeResult<IngressArtifact> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact in artifacts {
@@ -99,6 +96,10 @@ impl<C, P: MutablePool<IngressArtifact, C> + Send + Sync + 'static>
             .apply_changes(time_source, change_set);
         // We ignore the ingress pool's "changed" result and return StateUnchanged,
         // in order to not trigger an immediate re-processing.
-        (result.adverts, false)
+        ChangeResult {
+            adverts: result.adverts,
+            purged: result.purged,
+            changed: false,
+        }
     }
 }

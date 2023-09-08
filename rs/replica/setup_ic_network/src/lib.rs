@@ -33,7 +33,7 @@ use ic_https_outcalls_consensus::{
 use ic_icos_sev::Sev;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard},
+    artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
     artifact_pool::UnvalidatedArtifact,
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
@@ -219,7 +219,9 @@ pub fn setup_consensus_and_p2p(
                 metrics_registry.clone(),
                 client_on_state_change,
                 move |req| {
-                    let _ = advert_tx.send(req.into());
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
                 },
             );
             join_handles.push(jh);
@@ -252,7 +254,9 @@ pub fn setup_consensus_and_p2p(
                 metrics_registry.clone(),
                 Box::new(client.clone()) as Box<_>,
                 move |req| {
-                    let _ = advert_tx.send(req.into());
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
+                        let _ = advert_tx.send(advert.into());
+                    }
                 },
             );
             join_handles.push(jh);
@@ -441,7 +445,9 @@ fn start_consensus(
         // Create the consensus client.
         let (client, jh) = create_consensus_handlers(
             move |req| {
-                let _ = advert_tx.send(req.into());
+                if let ArtifactProcessorEvent::Advert(advert) = req {
+                    let _ = advert_tx.send(advert.into());
+                }
             },
             consensus_setup(
                 replica_config.clone(),
@@ -479,7 +485,9 @@ fn start_consensus(
         let ingress_prioritizer = IngressPrioritizer::new(time_source.clone());
         let (client, jh) = create_ingress_handlers(
             move |req| {
-                let _ = advert_tx.send(req.into());
+                if let ArtifactProcessorEvent::Advert(advert) = req {
+                    let _ = advert_tx.send(advert.into());
+                }
             },
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
@@ -497,7 +505,9 @@ fn start_consensus(
         // Create the certification client.
         let (client, jh) = create_certification_handlers(
             move |req| {
-                let _ = advert_tx.send(req.into());
+                if let ArtifactProcessorEvent::Advert(advert) = req {
+                    let _ = advert_tx.send(advert.into());
+                }
             },
             certification_setup(
                 replica_config,
@@ -521,7 +531,9 @@ fn start_consensus(
         // Create the DKG client.
         let (client, jh) = create_dkg_handlers(
             move |req| {
-                let _ = advert_tx.send(req.into());
+                if let ArtifactProcessorEvent::Advert(advert) = req {
+                    let _ = advert_tx.send(advert.into());
+                }
             },
             (
                 dkg::DkgImpl::new(
@@ -559,7 +571,9 @@ fn start_consensus(
         let advert_tx = advert_tx.clone();
         let (client, jh) = create_ecdsa_handlers(
             move |req| {
-                let _ = advert_tx.send(req.into());
+                if let ArtifactProcessorEvent::Advert(advert) = req {
+                    let _ = advert_tx.send(advert.into());
+                }
             },
             (
                 ecdsa::EcdsaImpl::new(
@@ -589,7 +603,9 @@ fn start_consensus(
         let advert_tx = advert_tx.clone();
         let (client, jh) = create_https_outcalls_handlers(
             move |req| {
-                let _ = advert_tx.send(req.into());
+                if let ArtifactProcessorEvent::Advert(advert) = req {
+                    let _ = advert_tx.send(advert.into());
+                }
             },
             (
                 CanisterHttpPoolManagerImpl::new(

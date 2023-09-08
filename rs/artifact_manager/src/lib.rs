@@ -100,10 +100,10 @@ mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard},
+    artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
     artifact_pool::{
-        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
     canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
@@ -233,7 +233,7 @@ impl Drop for ArtifactProcessorJoinGuard {
 
 pub fn run_artifact_processor<
     Artifact: ArtifactKind + 'static,
-    S: Fn(Advert<Artifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
 >(
     time_source: Arc<SysTimeSource>,
     metrics_registry: MetricsRegistry,
@@ -279,7 +279,10 @@ where
 
 // The artifact processor thread loop
 #[allow(clippy::too_many_arguments)]
-fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + Send + 'static>(
+fn process_messages<
+    Artifact: ArtifactKind + 'static,
+    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
+>(
     time_source: Arc<SysTimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Box<S>,
@@ -309,14 +312,18 @@ fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + 
             Err(RecvTimeoutError::Disconnected) => return,
         };
         time_source.update_time().ok();
-        let (adverts, on_state_change_result) = metrics
+        let ChangeResult {
+            adverts,
+            purged: _,
+            changed,
+        } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifacts));
         for advert in adverts {
             metrics.outbound_artifacts.inc();
             metrics.outbound_artifact_bytes.inc_by(advert.size as u64);
-            send_advert(advert);
+            send_advert(ArtifactProcessorEvent::Advert(advert));
         }
-        last_on_state_change_result = on_state_change_result;
+        last_on_state_change_result = changed;
     }
 }
 
@@ -341,7 +348,7 @@ pub fn create_ingress_handlers<
         + ValidatedPoolReader<IngressArtifact>
         + 'static,
     G: PriorityFnAndFilterProducer<IngressArtifact, PoolIngress> + 'static,
-    S: Fn(Advert<IngressArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
     time_source: Arc<SysTimeSource>,
@@ -383,7 +390,7 @@ pub fn create_consensus_handlers<
         + 'static,
     C: ChangeSetProducer<PoolConsensus, ChangeSet = ConsensusChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<ConsensusArtifact, PoolConsensus> + 'static,
-    S: Fn(Advert<ConsensusArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<ConsensusArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (consensus, consensus_gossip): (C, G),
@@ -419,7 +426,7 @@ pub fn create_certification_handlers<
         + 'static,
     C: ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<CertificationArtifact, PoolCertification> + 'static,
-    S: Fn(Advert<CertificationArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<CertificationArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (certifier, certifier_gossip): (C, G),
@@ -458,7 +465,7 @@ pub fn create_dkg_handlers<
         + 'static,
     C: ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<DkgArtifact, PoolDkg> + 'static,
-    S: Fn(Advert<DkgArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<DkgArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (dkg, dkg_gossip): (C, G),
@@ -491,7 +498,7 @@ pub fn create_ecdsa_handlers<
         + 'static,
     C: ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<EcdsaArtifact, PoolEcdsa> + 'static,
-    S: Fn(Advert<EcdsaArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<EcdsaArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (ecdsa, ecdsa_gossip): (C, G),
@@ -524,7 +531,7 @@ pub fn create_https_outcalls_handlers<
         + 'static,
     C: ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
-    S: Fn(Advert<CanisterHttpArtifact>) + Send + 'static,
+    S: Fn(ArtifactProcessorEvent<CanisterHttpArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (pool_manager, canister_http_gossip): (C, G),
