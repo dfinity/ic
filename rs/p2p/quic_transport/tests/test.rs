@@ -131,12 +131,12 @@ fn test_real_socket() {
         registry_handler.add_node(
             RegistryVersion::from(2),
             NODE_1,
-            Some((&socket_1.ip().to_string(), socket_1.port())),
+            Some(&socket_1.ip().to_string()),
         );
         registry_handler.add_node(
             RegistryVersion::from(3),
             NODE_2,
-            Some((&socket_2.ip().to_string(), socket_2.port())),
+            Some(&socket_2.ip().to_string()),
         );
         registry_handler.registry_client.reload();
         registry_handler.registry_client.update_to_latest_version();

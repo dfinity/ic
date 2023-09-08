@@ -1,6 +1,6 @@
 use crate::framework::file_tree_artifact_mgr::ArtifactChunkingTestImpl;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::{subnet_config::SubnetConfig, transport::TransportConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::time_source::SysTimeSource;
@@ -37,6 +37,15 @@ use tempfile::Builder;
 pub const P2P_TEST_END_BARRIER: &str = "TEST_END";
 pub const P2P_TEST_START_BARRIER: &str = "TEST_START";
 
+pub fn get_replica_transport_config() -> TransportConfig {
+    TransportConfig {
+        node_ip: "127.0.0.1".to_string(),
+        listening_port: 0,
+        send_queue_size: 8,
+        ..Default::default()
+    }
+}
+
 /// Setup and execute a test for replica with Mock dependencies.
 /// Currently these components' mocked versions are used:
 /// StateManager
@@ -67,7 +76,7 @@ fn execute_test(
         let state_manager = Arc::new(FakeStateManager::new());
         let node_id = replica_config.node_id;
         let subnet_id = replica_config.subnet_id;
-        let transport_config = get_replica_transport_config(&replica_config, Arc::clone(&registry));
+        let transport_config = get_replica_transport_config();
         info!(log, "Spawning Replica with config {:?}", transport_config);
         let message_router =
             FakeMessageRouting::with_state_manager(Arc::clone(&state_manager) as Arc<_>);
@@ -232,8 +241,7 @@ fn execute_test_chunking_pool(
         let state_manager = Arc::new(FakeStateManager::new());
         let node_id = replica_config.node_id;
         let subnet_id = replica_config.subnet_id;
-
-        let transport_config = get_replica_transport_config(&replica_config, Arc::clone(&registry));
+        let transport_config = get_replica_transport_config();
         debug!(log, "Spawning Replica with config {:?}", transport_config);
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,

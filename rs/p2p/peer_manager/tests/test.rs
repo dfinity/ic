@@ -22,7 +22,7 @@ fn test_single_node() {
             registry_consensus_handle.add_node(
                 RegistryVersion::from(1),
                 node_id,
-                Some(("2a02:41b:300e:0:6801:a3ff:fe71:4168", 100)),
+                Some("2a02:41b:300e:0:6801:a3ff:fe71:4168"),
             );
             registry_consensus_handle
                 .set_oldest_consensus_registry_version(RegistryVersion::from(0));
@@ -55,7 +55,7 @@ fn test_single_node_with_invalid_ip() {
             registry_consensus_handle.add_node(
                 RegistryVersion::from(1),
                 node_id,
-                Some(("2a02:41b:300e:0:6801:a3ff:fe71::::", 1000)),
+                Some("2a02:41b:300e:0:6801:a3ff:fe71::::"),
             );
             registry_consensus_handle
                 .set_oldest_consensus_registry_version(RegistryVersion::from(0));
@@ -88,7 +88,7 @@ fn test_add_multiple_nodes() {
             registry_consensus_handle.add_node(
                 RegistryVersion::from(1),
                 node_id_1,
-                Some(("2a02:41b:300e:0:6801:a3ff:fe71:4168", 100)),
+                Some("2a02:41b:300e:0:6801:a3ff:fe71:4168"),
             );
             registry_consensus_handle
                 .set_oldest_consensus_registry_version(RegistryVersion::from(0));
@@ -104,7 +104,7 @@ fn test_add_multiple_nodes() {
             registry_consensus_handle.add_node(
                 RegistryVersion::from(2),
                 node_id_2,
-                Some(("2a02:41b:300e:0:6801:a3ff:fe71:4168", 100)),
+                Some("2a02:41b:300e:0:6801:a3ff:fe71:4168"),
             );
 
             // Wait for the peer manager to pick up the change.
@@ -145,7 +145,7 @@ fn test_endpoint_with_no_addr() {
             registry_consensus_handle.add_node(
                 RegistryVersion::from(2),
                 node_id_1,
-                Some(("2a02:41b:300e:0:6801:a3ff:fe71:4169", 1000)),
+                Some("2a02:41b:300e:0:6801:a3ff:fe71:4169"),
             );
             receiver.changed().await.unwrap();
             assert!(receiver.borrow().is_member(&node_id_1));
@@ -177,7 +177,7 @@ fn test_add_multiple_nodes_remove_node() {
                 registry_consensus_handle.add_node(
                     RegistryVersion::from(i),
                     node_id,
-                    Some(("2a02:41b:300e:0:6801:a3ff:fe71:4168", 1000)),
+                    Some("2a02:41b:300e:0:6801:a3ff:fe71:4168"),
                 );
             }
 
