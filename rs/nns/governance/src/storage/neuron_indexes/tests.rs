@@ -9,9 +9,9 @@ use ic_nns_common::pb::v1::NeuronId;
 use maplit::{hashmap, hashset};
 
 #[test]
-fn add_one_neuron() {
+fn add_remove_neuron() {
+    // Step 1: prepare indexes and neurons.
     let mut indexes = new_heap_based();
-
     let neuron = Neuron {
         id: Some(NeuronId { id: 1 }),
         account: [1u8; 32].to_vec(),
@@ -36,38 +36,37 @@ fn add_one_neuron() {
         ..Default::default()
     };
 
+    // Step 2: reading indexes return empty before adding neuron to them.
     assert_eq!(
         indexes
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap()),
         None
     );
-
     assert_eq!(
         indexes
             .principal()
             .get_neuron_ids(PrincipalId::new_user_test_id(1)),
         hashset! {}
     );
-
     assert_eq!(
         indexes
             .following()
             .get_followers_by_followee_and_category(&2, Signed32::from(1)),
         Vec::<u64>::default()
     );
-
     assert_eq!(indexes.known_neuron().list_known_neuron_ids(), vec![]);
 
+    // Step 3: adding a neuron.
     assert_eq!(indexes.add_neuron(&neuron), Ok(()));
 
+    // Step 4: verify that reading indexes now return the added neuron.
     assert_eq!(
         indexes
             .subaccount()
             .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap()),
         Some(NeuronId { id: 1 })
     );
-
     for principal_num in 1..=3 {
         assert_eq!(
             indexes
@@ -76,7 +75,6 @@ fn add_one_neuron() {
             hashset! { 1 }
         );
     }
-
     for followee_id in 2..=4 {
         assert_eq!(
             indexes
@@ -85,9 +83,32 @@ fn add_one_neuron() {
             vec![1]
         );
     }
-
     assert_eq!(
         indexes.known_neuron().list_known_neuron_ids(),
         vec![NeuronId { id: 1 }]
     );
+
+    // Step 5: remove the neuron.
+    assert_eq!(indexes.remove_neuron(&neuron), Ok(()));
+
+    // Step 6: verify that indexes are again empty.
+    assert_eq!(
+        indexes
+            .subaccount()
+            .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap()),
+        None
+    );
+    assert_eq!(
+        indexes
+            .principal()
+            .get_neuron_ids(PrincipalId::new_user_test_id(1)),
+        hashset! {}
+    );
+    assert_eq!(
+        indexes
+            .following()
+            .get_followers_by_followee_and_category(&2, Signed32::from(1)),
+        Vec::<u64>::default()
+    );
+    assert_eq!(indexes.known_neuron().list_known_neuron_ids(), vec![]);
 }
