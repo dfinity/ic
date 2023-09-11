@@ -1,5 +1,5 @@
 {
-  "checksum": "60ad67b255c9a4331ad543ab0288235613a91aaf118c8ec02b3b2e9d3f38862e",
+  "checksum": "7a34733bdda23ceb1f10339a82d2858ddf451fe7fa323320462e0b81272f3b15",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -166,7 +166,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -285,7 +285,7 @@
               "target": "brotli"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -805,7 +805,7 @@
               "target": "ahash"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -3447,7 +3447,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -3598,7 +3598,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -3703,7 +3703,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -6784,13 +6784,13 @@
       },
       "license": "Unlicense OR MIT"
     },
-    "bytes 1.4.0": {
+    "bytes 1.5.0": {
       "name": "bytes",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bytes/1.4.0/download",
-          "sha256": "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
+          "url": "https://crates.io/api/v1/crates/bytes/1.5.0/download",
+          "sha256": "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
         }
       },
       "targets": [
@@ -6827,7 +6827,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.4.0"
+        "version": "1.5.0"
       },
       "license": "MIT"
     },
@@ -6859,7 +6859,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             }
           ],
@@ -13037,7 +13037,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -13952,7 +13952,7 @@
               "target": "tokio_io_timeout"
             },
             {
-              "id": "tokio-metrics 0.2.2",
+              "id": "tokio-metrics 0.3.0",
               "target": "tokio_metrics"
             },
             {
@@ -16183,7 +16183,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -19215,7 +19215,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -19518,7 +19518,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -20166,7 +20166,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -20213,7 +20213,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -20539,7 +20539,7 @@
               "target": "bstr"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -20745,7 +20745,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -21140,7 +21140,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -29368,7 +29368,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -31704,7 +31704,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -31761,7 +31761,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -36708,7 +36708,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             }
           ],
@@ -36762,7 +36762,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -36900,7 +36900,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -37363,7 +37363,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -37447,7 +37447,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -37528,7 +37528,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -39763,7 +39763,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -40491,7 +40491,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -49240,7 +49240,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -49395,13 +49395,13 @@
       },
       "license": "MIT"
     },
-    "tokio-metrics 0.2.2": {
+    "tokio-metrics 0.3.0": {
       "name": "tokio-metrics",
-      "version": "0.2.2",
+      "version": "0.3.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-metrics/0.2.2/download",
-          "sha256": "b60ac6224d622f71d0b80546558eedf8ff6c2d3817517a9d3ed87ce24fccf6a6"
+          "url": "https://crates.io/api/v1/crates/tokio-metrics/0.3.0/download",
+          "sha256": "d4b2fc67d5dec41db679b9b052eb572269616926040b7831e32c8a152df77b84"
         }
       },
       "targets": [
@@ -49450,7 +49450,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.2"
+        "version": "0.3.0"
       },
       "license": "MIT"
     },
@@ -49726,7 +49726,7 @@
               "alias": "bincode_crate"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -49903,7 +49903,7 @@
               "target": "async_stream"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -50025,7 +50025,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -50248,7 +50248,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -50565,7 +50565,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -51659,7 +51659,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -51736,7 +51736,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
@@ -53630,7 +53630,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.4.0",
+              "id": "bytes 1.5.0",
               "target": "bytes"
             },
             {
