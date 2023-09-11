@@ -458,6 +458,9 @@ impl CanisterManager {
             }
             canister.system_state.memory_allocation = memory_allocation;
         }
+        if let Some(limit) = settings.reserved_cycles_limit() {
+            canister.system_state.set_reserved_balance_limit(limit);
+        }
         canister
             .system_state
             .reserve_cycles(settings.reservation_cycles())

@@ -1,8 +1,9 @@
+use ic00::CanisterSettingsArgsBuilder;
 use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
-use ic_state_machine_tests::{CanisterSettingsArgs, StateMachine};
+use ic_state_machine_tests::StateMachine;
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 
@@ -35,12 +36,11 @@ fn test(wat: &str, mode: CanisterInstallMode) {
             ic00::Method::ProvisionalCreateCanisterWithCycles,
             ic00::ProvisionalCreateCanisterWithCyclesArgs {
                 amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![user_id]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id])
+                        .build(),
+                ),
                 specified_id: None,
                 sender_canister_version: None,
             }

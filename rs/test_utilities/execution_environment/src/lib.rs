@@ -473,12 +473,12 @@ impl ExecutionTest {
         memory_allocation: Option<u64>,
     ) -> Result<CanisterId, UserError> {
         let mut args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()), None);
-        args.settings = Some(CanisterSettingsArgs::new(
-            None,
-            compute_allocation,
-            memory_allocation,
-            None,
-        ));
+        args.settings = Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_maybe_compute_allocation(compute_allocation)
+                .with_maybe_memory_allocation(memory_allocation)
+                .build(),
+        );
 
         let result =
             self.subnet_message(Method::ProvisionalCreateCanisterWithCycles, args.encode());
@@ -503,7 +503,10 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(None, compute_allocation, memory_allocation, None),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_maybe_compute_allocation(compute_allocation)
+                .with_maybe_memory_allocation(memory_allocation)
+                .build(),
             sender_canister_version: None,
         }
         .encode();
@@ -518,7 +521,24 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+            settings: CanisterSettingsArgs::new(Some(controllers), None, None, None, None),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    /// Updates the reserved cycles limit of the canister.
+    pub fn canister_update_reserved_cycles_limit(
+        &mut self,
+        canister_id: CanisterId,
+        reserved_cycles_limit: Cycles,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(reserved_cycles_limit.get())
+                .build(),
             sender_canister_version: None,
         }
         .encode();

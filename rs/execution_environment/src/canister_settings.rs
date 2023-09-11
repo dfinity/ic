@@ -20,6 +20,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) compute_allocation: Option<ComputeAllocation>,
     pub(crate) memory_allocation: Option<MemoryAllocation>,
     pub(crate) freezing_threshold: Option<NumSeconds>,
+    pub(crate) reserved_cycles_limit: Option<Cycles>,
 }
 
 impl CanisterSettings {
@@ -29,6 +30,7 @@ impl CanisterSettings {
         compute_allocation: Option<ComputeAllocation>,
         memory_allocation: Option<MemoryAllocation>,
         freezing_threshold: Option<NumSeconds>,
+        reserved_cycles_limit: Option<Cycles>,
     ) -> Self {
         Self {
             controller,
@@ -36,6 +38,7 @@ impl CanisterSettings {
             compute_allocation,
             memory_allocation,
             freezing_threshold,
+            reserved_cycles_limit,
         }
     }
 
@@ -57,6 +60,10 @@ impl CanisterSettings {
 
     pub fn freezing_threshold(&self) -> Option<NumSeconds> {
         self.freezing_threshold
+    }
+
+    pub fn reserved_cycles_limit(&self) -> Option<Cycles> {
+        self.reserved_cycles_limit
     }
 }
 
@@ -88,6 +95,13 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let reserved_cycles_limit = match input.reserved_cycles_limit {
+            Some(limit) => Some(Cycles::from(limit.0.to_u128().ok_or(
+                UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided: limit },
+            )?)),
+            None => None,
+        };
+
         Ok(CanisterSettings::new(
             controller,
             input
@@ -96,6 +110,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             compute_allocation,
             memory_allocation,
             freezing_threshold,
+            reserved_cycles_limit,
         ))
     }
 }
@@ -117,6 +132,7 @@ pub(crate) struct CanisterSettingsBuilder {
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
     freezing_threshold: Option<NumSeconds>,
+    reserved_cycles_limit: Option<Cycles>,
 }
 
 #[allow(dead_code)]
@@ -128,6 +144,7 @@ impl CanisterSettingsBuilder {
             compute_allocation: None,
             memory_allocation: None,
             freezing_threshold: None,
+            reserved_cycles_limit: None,
         }
     }
 
@@ -138,6 +155,7 @@ impl CanisterSettingsBuilder {
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
+            reserved_cycles_limit: self.reserved_cycles_limit,
         }
     }
 
@@ -148,7 +166,7 @@ impl CanisterSettingsBuilder {
         }
     }
 
-    pub fn with_controllerr(self, controllers: Vec<PrincipalId>) -> Self {
+    pub fn with_controllers(self, controllers: Vec<PrincipalId>) -> Self {
         Self {
             controllers: Some(controllers),
             ..self
@@ -175,12 +193,20 @@ impl CanisterSettingsBuilder {
             ..self
         }
     }
+
+    pub fn with_reserved_cycles_limit(self, reserved_cycles_limit: Cycles) -> Self {
+        Self {
+            reserved_cycles_limit: Some(reserved_cycles_limit),
+            ..self
+        }
+    }
 }
 
 pub enum UpdateSettingsError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),
     FreezingThresholdOutOfRange { provided: candid::Nat },
+    ReservedCyclesLimitOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -209,6 +235,13 @@ impl From<UpdateSettingsError> for UserError {
                     provided
                 ),
             ),
+            UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {}",
+                    provided
+                ),
+            ),
         }
     }
 }
@@ -231,6 +264,7 @@ pub(crate) struct ValidatedCanisterSettings {
     compute_allocation: Option<ComputeAllocation>,
     memory_allocation: Option<MemoryAllocation>,
     freezing_threshold: Option<NumSeconds>,
+    reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
 }
 
@@ -253,6 +287,10 @@ impl ValidatedCanisterSettings {
 
     pub fn freezing_threshold(&self) -> Option<NumSeconds> {
         self.freezing_threshold
+    }
+
+    pub fn reserved_cycles_limit(&self) -> Option<Cycles> {
+        self.reserved_cycles_limit
     }
 
     pub fn reservation_cycles(&self) -> Cycles {
@@ -415,7 +453,10 @@ pub(crate) fn validate_canister_settings(
             subnet_memory_saturation,
             subnet_size,
         );
-        if let Some(limit) = canister_reserved_balance_limit {
+        let reserved_balance_limit = settings
+            .reserved_cycles_limit()
+            .or(canister_reserved_balance_limit);
+        if let Some(limit) = reserved_balance_limit {
             if canister_reserved_balance + reservation_cycles > limit {
                 return Err(
                     CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
@@ -446,6 +487,7 @@ pub(crate) fn validate_canister_settings(
         compute_allocation: settings.compute_allocation(),
         memory_allocation: settings.memory_allocation(),
         freezing_threshold: settings.freezing_threshold(),
+        reserved_cycles_limit: settings.reserved_cycles_limit(),
         reservation_cycles,
     })
 }
