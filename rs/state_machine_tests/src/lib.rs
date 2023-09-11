@@ -644,16 +644,6 @@ impl StateMachine {
             combined_public_key(&public_coefficients).unwrap(),
         ));
 
-        let mut ecdsa_subnet_public_keys = BTreeMap::new();
-        for ecdsa_key in ecdsa_keys {
-            ecdsa_subnet_public_keys.insert(
-                ecdsa_key,
-                MasterEcdsaPublicKey {
-                    algorithm_id: AlgorithmId::EcdsaSecp256k1,
-                    public_key: b"master_ecdsa_public_key".to_vec(),
-                },
-            );
-        }
         // The following key has been randomly generated using:
         // https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/crypto/ecdsa_secp256k1/src/lib.rs
         // It's the sec1 representation of the key in a hex string.
@@ -667,6 +657,18 @@ impl StateMachine {
 
         let ecdsa_secret_key: PrivateKey =
             PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
+
+        let mut ecdsa_subnet_public_keys = BTreeMap::new();
+
+        for ecdsa_key in ecdsa_keys {
+            ecdsa_subnet_public_keys.insert(
+                ecdsa_key,
+                MasterEcdsaPublicKey {
+                    algorithm_id: AlgorithmId::EcdsaSecp256k1,
+                    public_key: b"master_ecdsa_public_key".to_vec(),
+                },
+            );
+        }
 
         ecdsa_subnet_public_keys.insert(
             EcdsaKeyId {
@@ -800,11 +802,16 @@ impl StateMachine {
             // to ensure deterministic generation of child keys from the master key.
             // We are using an array with 32 zeros by default.
 
-            let signature = sign_message_with_derived_key(
+            let derivation_path = DerivationPath::new(
+                std::iter::once(ecdsa_context.request.sender.get().as_slice().to_vec())
+                    .chain(ecdsa_context.derivation_path.clone().into_iter())
+                    .map(DerivationIndex)
+                    .collect::<Vec<_>>(),
+            );
+            let signature = sign_prehashed_message_with_derived_key(
                 &self.ecdsa_secret_key,
                 &ecdsa_context.message_hash,
-                &ecdsa_context.derivation_path,
-                &[0; 32],
+                derivation_path,
             );
 
             let reply = SignWithECDSAReply { signature };
@@ -1824,33 +1831,37 @@ impl StateMachine {
     }
 }
 
-fn sign_message_with_derived_key(
+fn sign_prehashed_message_with_derived_key(
     ecdsa_secret_key: &PrivateKey,
     message_hash: &[u8],
-    derivation_path: &[Vec<u8>],
-    chain_code: &[u8],
+    derivation_path: DerivationPath,
 ) -> Vec<u8> {
+    const CHAIN_CODE: &[u8] = &[0; 32];
+
     let public_key = ecdsa_secret_key.public_key();
-    let derivation_path = DerivationPath::new(
-        derivation_path
-            .iter()
-            .cloned()
-            .map(DerivationIndex)
-            .collect(),
-    );
     let derived_public_key_bytes = derivation_path
-        .public_key_derivation(&public_key.serialize_sec1(true), chain_code)
+        .public_key_derivation(&public_key.serialize_sec1(true), CHAIN_CODE)
         .expect("couldn't derive ecdsa public key");
+
     let derived_private_key_bytes = derivation_path
-        .private_key_derivation(&ecdsa_secret_key.serialize_sec1(), chain_code)
+        .private_key_derivation(&ecdsa_secret_key.serialize_sec1(), CHAIN_CODE)
         .expect("couldn't derive ecdsa private key");
     let derived_private_key =
         PrivateKey::deserialize_sec1(&derived_private_key_bytes.derived_private_key)
             .expect("couldn't deserialize to sec1 ecdsa private key");
-    let signature = derived_private_key.sign_message(message_hash);
-    let pk = PublicKey::deserialize_sec1(&derived_public_key_bytes.derived_public_key)
-        .expect("couldn't deserialize sec1");
-    assert!(pk.verify_signature(message_hash, &signature));
+    let derived_public_key =
+        PublicKey::deserialize_sec1(&derived_public_key_bytes.derived_public_key)
+            .expect("couldn't deserialize sec1");
+
+    assert_eq!(
+        derived_private_key.public_key().serialize_sec1(true),
+        derived_public_key_bytes.derived_public_key
+    );
+    let signature = derived_private_key
+        .sign_digest(message_hash)
+        .expect("failed to sign");
+
+    assert!(derived_public_key.verify_signature_prehashed(message_hash, &signature));
     signature.to_vec()
 }
 

@@ -413,7 +413,7 @@ impl ExecutionEnvironment {
         let method = Ic00Method::from_str(msg.method_name());
         let payload = msg.method_payload();
 
-        if let Ok(permissions) = method.map(|method| Ic00MethodPermissions::new(method)) {
+        if let Ok(permissions) = method.map(Ic00MethodPermissions::new) {
             if let Err(err) = permissions.verify(&msg, &state) {
                 let refund = msg.take_cycles();
                 let state =
@@ -869,7 +869,7 @@ impl ExecutionEnvironment {
                                 ) {
                                     Ok(_) => self
                                         .compute_initial_ecdsa_dealings(&mut state, args, request)
-                                        .map_or_else(|err: UserError| Some(err), |()| None),
+                                        .map_or_else(Some, |()| None),
                                     Err(err) => Some(err),
                                 },
                                 Err(err) => Some(err),

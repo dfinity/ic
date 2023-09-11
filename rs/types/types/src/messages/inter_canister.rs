@@ -466,7 +466,7 @@ impl From<pb_queues::RequestMetadata> for RequestMetadata {
                 }),
             call_subtree_deadline: metadata
                 .call_subtree_deadline_nanos
-                .map(|deadline| Time::from_nanos_since_unix_epoch(deadline)),
+                .map(Time::from_nanos_since_unix_epoch),
         }
     }
 }

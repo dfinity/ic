@@ -592,9 +592,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .unwrap_or_else(Cycles::zero);
                 ExecutionTask::AbortedInstallCode {
                     message,
-                    call_id: aborted
-                        .call_id
-                        .map(|call_id| InstallCodeCallId::from(call_id)),
+                    call_id: aborted.call_id.map(InstallCodeCallId::from),
                     prepaid_execution_cycles,
                 }
             }
