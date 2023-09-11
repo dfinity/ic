@@ -287,6 +287,7 @@ pub(crate) fn validate_canister_settings(
     cycles_account_manager: &CyclesAccountManager,
     subnet_size: usize,
     canister_reserved_balance: Cycles,
+    canister_reserved_balance_limit: Option<Cycles>,
 ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
     let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
     let new_memory_bytes = match settings.memory_allocation {
@@ -414,6 +415,17 @@ pub(crate) fn validate_canister_settings(
             subnet_memory_saturation,
             subnet_size,
         );
+        if let Some(limit) = canister_reserved_balance_limit {
+            if canister_reserved_balance + reservation_cycles > limit {
+                return Err(
+                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
+                        memory_allocation: new_memory_allocation,
+                        requested: canister_reserved_balance + reservation_cycles,
+                        limit,
+                    },
+                );
+            }
+        }
         // Note that this check does not include the freezing threshold to be
         // consistent with the `reserve_cycles()` function, which moves
         // cycles between the main and reserved balances without checking

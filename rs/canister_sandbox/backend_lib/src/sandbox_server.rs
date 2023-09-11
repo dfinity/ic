@@ -201,6 +201,7 @@ mod tests {
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
+            None,
             BTreeMap::new(),
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),

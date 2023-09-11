@@ -140,6 +140,11 @@ pub enum HypervisorError {
         available: Cycles,
         threshold: Cycles,
     },
+    ReservedCyclesLimitExceededInMemoryGrow {
+        bytes: NumBytes,
+        requested: Cycles,
+        limit: Cycles,
+    },
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -333,6 +338,14 @@ impl HypervisorError {
                      bytes,
                      threshold - available)
             ),
+            Self::ReservedCyclesLimitExceededInMemoryGrow { bytes, requested, limit } => UserError::new(
+                E::ReservedCyclesLimitExceededInMemoryGrow,
+                    format!(
+                        "Canister cannot grow memory by {} bytes due to its reserved cycles limit. \
+                         The current limit ({}) would be exceeded by {}.",
+                        bytes, limit, requested - limit,
+                    ),
+            ),
         }
     }
 
@@ -365,6 +378,9 @@ impl HypervisorError {
             HypervisorError::MemoryAccessLimitExceeded(_) => "MemoryAccessLimitExceeded",
             HypervisorError::InsufficientCyclesInMemoryGrow { .. } => {
                 "InsufficientCyclesInMemoryGrow"
+            }
+            HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. } => {
+                "ReservedCyclesLimitExceededInMemoryGrow"
             }
         }
     }

@@ -633,9 +633,15 @@ impl TryFrom<pb::CanisterHistory> for CanisterHistory {
 }
 
 #[derive(Debug)]
-pub struct InsufficientCyclesError {
-    pub requested: Cycles,
-    pub available: Cycles,
+pub enum ReservationError {
+    InsufficientCycles {
+        requested: Cycles,
+        available: Cycles,
+    },
+    ReservedLimitExceed {
+        requested: Cycles,
+        limit: Cycles,
+    },
 }
 
 impl SystemState {
@@ -798,6 +804,11 @@ impl SystemState {
     /// Returns the user-specified upper limit on `reserved_balance`.
     pub fn reserved_balance_limit(&self) -> Option<Cycles> {
         self.reserved_balance_limit
+    }
+
+    /// Sets the user-specified upper limit on `reserved_balance()`.
+    pub fn set_reserved_balance_limit(&mut self, limit: Cycles) {
+        self.reserved_balance_limit = Some(limit);
     }
 
     /// Records the given amount as debit that will be charged from the balance
@@ -1269,9 +1280,17 @@ impl SystemState {
 
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
-    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), InsufficientCyclesError> {
+    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+        if let Some(reserved_balance_limit) = self.reserved_balance_limit {
+            if self.reserved_balance + amount > reserved_balance_limit {
+                return Err(ReservationError::ReservedLimitExceed {
+                    requested: self.reserved_balance + amount,
+                    limit: reserved_balance_limit,
+                });
+            }
+        }
         if amount > self.cycles_balance {
-            Err(InsufficientCyclesError {
+            Err(ReservationError::InsufficientCycles {
                 requested: amount,
                 available: self.cycles_balance,
             })
