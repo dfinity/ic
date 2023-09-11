@@ -4,6 +4,7 @@ use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
     GetAccountIdentifierTransactionsResult, Status, TransactionWithId,
 };
+use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
@@ -150,20 +151,25 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .expect("Balance must be a u64!")
 }
 
-fn index_balance_of(
-    env: &StateMachine,
-    canister_id: CanisterId,
-    account_identifier: AccountIdentifier,
-) -> u64 {
+fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
+    let res = env
+        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .expect("Failed to send icrc1_balance_of")
+        .bytes();
+    let account_balance =
+        Decode!(&res, u64).expect("Failed to decode get_account_balance response");
     let res = env
         .execute_ingress(
             canister_id,
             "get_account_identifier_balance",
-            Encode!(&account_identifier).unwrap(),
+            Encode!(&AccountIdentifier::from(account)).unwrap(),
         )
         .expect("Failed to send get_account_identifier_balance")
         .bytes();
-    Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response")
+    let accountidentifier_balance =
+        Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response");
+    assert_eq!(account_balance, accountidentifier_balance);
+    accountidentifier_balance
 }
 
 fn status(env: &StateMachine, index_id: CanisterId) -> Status {
@@ -279,23 +285,41 @@ fn approve(
 fn get_account_identifier_transactions(
     env: &StateMachine,
     index_id: CanisterId,
-    accountidentifier: AccountIdentifier,
+    account: Account,
     start: Option<u64>,
     max_results: u64,
 ) -> GetAccountIdentifierTransactionsResponse {
+    let req = GetAccountTransactionsArgs {
+        start: start.map(Nat::from),
+        max_results: Nat::from(max_results),
+        account,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetAccountTransactionsArgs");
+    let res = env
+        .execute_ingress(index_id, "get_account_transactions", req)
+        .expect("Failed to get_account_transactions")
+        .bytes();
+    let account_txs = Decode!(&res, GetAccountIdentifierTransactionsResult)
+        .expect("Failed to decode GetAccountIdentifierTransactionsArgs")
+        .expect("Failed to perform GetAccountIdentifierTransactionsArgs");
+
     let req = GetAccountIdentifierTransactionsArgs {
         start,
         max_results,
-        account_identifier: accountidentifier,
+        account_identifier: account.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetAccountIdentifierTransactionsArgs");
     let res = env
         .execute_ingress(index_id, "get_account_identifier_transactions", req)
         .expect("Failed to get_account_identifier_transactions")
         .bytes();
-    Decode!(&res, GetAccountIdentifierTransactionsResult)
+    let accountidentifier_txs = Decode!(&res, GetAccountIdentifierTransactionsResult)
         .expect("Failed to decode GetAccountIdentifierTransactionsArgs")
-        .expect("Failed to perform GetAccountIdentifierTransactionsArgs")
+        .expect("Failed to perform GetAccountIdentifierTransactionsArgs");
+    assert_eq!(accountidentifier_txs.balance, account_txs.balance);
+    assert_eq!(accountidentifier_txs.oldest_tx_id, account_txs.oldest_tx_id);
+    assert_eq!(accountidentifier_txs.transactions, account_txs.transactions);
+    accountidentifier_txs
 }
 
 // Helper function that calls tick on env until either
@@ -516,13 +540,13 @@ fn test_get_account_identifier_transactions() {
 
     // account (1, 0) has one mint
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx0.clone()]);
 
     // account (2, 0) has no transactions
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(2, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(2, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![]);
 
@@ -533,24 +557,20 @@ fn test_get_account_identifier_transactions() {
 
     // account (1, 0) has one transfer and one mint
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx1.clone(), tx0.clone()]);
 
     // account (2, 0) has one transfer only
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(2, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(2, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx1.clone()]);
 
     // account (3, 0), (1, 1) and (2, 1) have no transactions
-    for account_identifier in [
-        account(3, 0).into(),
-        account(1, 1).into(),
-        account(2, 1).into(),
-    ] {
+    for account in [account(3, 0), account(1, 1), account(2, 1)] {
         let actual_txs =
-            get_account_identifier_transactions(env, index_id, account_identifier, None, u64::MAX)
+            get_account_identifier_transactions(env, index_id, account, None, u64::MAX)
                 .transactions;
         assert_txs_with_id_eq(actual_txs, vec![]);
     }
@@ -564,20 +584,20 @@ fn test_get_account_identifier_transactions() {
 
     // account (1, 0) has two transfers and one mint
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, u64::MAX)
             .transactions;
     let expected_txs = vec![tx2.clone(), tx1.clone(), tx0];
     assert_txs_with_id_eq(actual_txs, expected_txs);
 
     // account (2, 0) has three transfers
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(2, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(2, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx3.clone(), tx2, tx1]);
 
     // account (1, 1) has one transfer
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 1).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 1), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx3]);
 
@@ -592,12 +612,11 @@ fn test_get_account_identifier_transactions() {
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, 1)
-            .transactions;
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, 1).transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx4.clone()]);
 
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(4, 4).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(4, 4), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx4]);
 }
@@ -642,8 +661,7 @@ fn test_get_account_transactions_start_length() {
     // get the most n recent transaction with start set to none
     for n in 1..10 {
         let actual_txs =
-            get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, n)
-                .transactions;
+            get_account_identifier_transactions(env, index_id, account(1, 0), None, n).transactions;
         let expected_txs: Vec<_> = (0..10)
             .rev()
             .take(n as usize)
@@ -660,14 +678,9 @@ fn test_get_account_transactions_start_length() {
                 .take(n as usize)
                 .map(|i| expected_txs[i as usize].clone())
                 .collect();
-            let actual_txs = get_account_identifier_transactions(
-                env,
-                index_id,
-                account(1, 0).into(),
-                Some(start),
-                n,
-            )
-            .transactions;
+            let actual_txs =
+                get_account_identifier_transactions(env, index_id, account(1, 0), Some(start), n)
+                    .transactions;
             assert_txs_with_id_eq(actual_txs, expected_txs);
         }
     }
@@ -704,13 +717,8 @@ fn test_get_account_identifier_transactions_pagination() {
     // if start == Some(0) then we can stop as there is no index that is smaller
     // than 0.
     while start != Some(0) {
-        let res = get_account_identifier_transactions(
-            env,
-            index_id,
-            account(1, 0).into(),
-            start,
-            u64::MAX,
-        );
+        let res =
+            get_account_identifier_transactions(env, index_id, account(1, 0), start, u64::MAX);
 
         // if the batch is empty then get_account_transactions
         // didn't return the expected batch for the given start
@@ -784,11 +792,11 @@ fn test_icp_balance_of() {
     // Test Mint operations
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test burn operations
@@ -806,7 +814,7 @@ fn test_icp_balance_of() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
 
     // Test transfer operations
@@ -815,22 +823,22 @@ fn test_icp_balance_of() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
     transfer(env, ledger_id, account(2, 0), account(3, 0), 10_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(3, 0)),
-        index_balance_of(env, index_id, account(3, 0).into())
+        index_balance_of(env, index_id, account(3, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test approve operations
@@ -844,11 +852,11 @@ fn test_icp_balance_of() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 }
 
@@ -894,11 +902,11 @@ fn test_approve_args() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test approve operations with expected_allowance set
@@ -913,11 +921,11 @@ fn test_approve_args() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test approve operations with memo set
@@ -931,11 +939,11 @@ fn test_approve_args() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test approve operations with fee set
@@ -949,11 +957,11 @@ fn test_approve_args() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test approve operations with fee created_at_time set
@@ -972,10 +980,10 @@ fn test_approve_args() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 }
