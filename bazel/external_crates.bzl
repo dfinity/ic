@@ -219,7 +219,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.3.4",
             ),
             "bytes": crate.spec(
-                version = "^1.0.1",
+                version = "^1.5.0",
             ),
             "cached": crate.spec(
                 version = "^0.41",
@@ -1122,7 +1122,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.2.0",
             ),
             "tokio-metrics": crate.spec(
-                version = "^0.2.2",
+                version = "^0.3.0",
             ),
             "tokio-openssl": crate.spec(
                 version = "^0.6.1",

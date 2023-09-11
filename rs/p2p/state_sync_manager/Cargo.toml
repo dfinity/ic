@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 axum = "0.6.12"
 base64 = "0.11.0"
-bytes = "1.0.1"
+bytes = "1.5.0"
 futures = "0.3.10"
 ic-async-utils = { path = "../../async_utils" }
 ic-interfaces = { path = "../../interfaces" }
@@ -25,7 +25,7 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 strum = "0.23.0"
 strum_macros = "0.23.0"
 tokio = { version = "1.32.0", features = ["full"] }
-tokio-metrics = "0.2.2"
+tokio-metrics = "0.3.0"
 
 [dev-dependencies]
 ic-memory-transport = { path = "../memory_transport" }
