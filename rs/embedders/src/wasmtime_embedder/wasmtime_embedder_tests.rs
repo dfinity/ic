@@ -137,3 +137,85 @@ fn test_wasmtime_system_api() {
         .call(&mut store, &[], &mut [])
         .expect("call failed");
 }
+
+#[test]
+fn test_initial_wasmtime_config() {
+    // let config = WasmtimeEmbedder::initial_wasmtime_config(&EmbeddersConfig::default());
+
+    // The following proposals should be disabled: tail_call, simd, relaxed_simd,
+    // threads, multi_memory, exceptions, memory64, extended_const, component_model,
+    // function_references, memory_control, gc
+    for (proposal, _url, wat, expected_err_msg) in [
+        (
+            "tail_call",
+            "https://github.com/WebAssembly/tail-call/",
+            "(module (func $f1 return_call $f2) (func $f2))",
+            "tail calls support is not enabled",
+        ),
+        (
+            "simd",
+            "https://github.com/WebAssembly/relaxed-simd/",
+            "(module (func $f (drop (v128.const i64x2 0 0))))",
+            "SIMD support is not enabled",
+        ),
+        (
+            "threads",
+            "https://github.com/WebAssembly/threads/",
+            r#"(module (import "env" "memory" (memory 1 1 shared)))"#,
+            "threads must be enabled",
+        ),
+        (
+            "multi_memory",
+            "https://github.com/WebAssembly/multi-memory/",
+            "(module (memory $m1 1 1) (memory $m2 1 1))",
+            "failed with multiple memories",
+        ),
+        // Exceptions
+        (
+            "memory64",
+            "https://github.com/WebAssembly/memory64/",
+            "(module (memory $m i64 1 1))",
+            "memory64 must be enabled",
+        ),
+        (
+            "extended_const",
+            "https://github.com/WebAssembly/extended-const/",
+            "(module (global i32 (i32.add (i32.const 0) (i32.const 0))))",
+            "constant expression required",
+        ),
+        (
+            "component_model",
+            "https://github.com/WebAssembly/component-model/",
+            "(component (core module (func $f)))",
+            "component model feature is not enabled",
+        ),
+        (
+            "function_references",
+            "https://github.com/WebAssembly/function-references/",
+            "(module (type $t (func (param i32))) (func $fn (param $f (ref $t))))",
+            "function references required",
+        ),
+        // Memory control
+        // GC
+    ] {
+        let wasm_binary = BinaryEncodedWasm::new(
+            wat::parse_str(wat)
+                .unwrap_or_else(|_| panic!("Error parsing proposal `{proposal}` code snippet")),
+        );
+        let err = validate_and_instrument_for_testing(
+            &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+            &wasm_binary,
+        )
+        .err()
+        .unwrap_or_else(|| {
+            panic!("Error having `{proposal}` proposal enabled in the `wasmtime` config.")
+        });
+        // Format error message with cause using '{:?}'
+        let err_msg = format!("{:?}", err);
+        // Make sure the error is because of the feature being disabled.
+        assert!(
+            err_msg.contains(expected_err_msg),
+            "Error expecting `{expected_err_msg}`, but got `{err_msg}`"
+        );
+    }
+}
