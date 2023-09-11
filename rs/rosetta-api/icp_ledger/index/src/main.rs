@@ -6,9 +6,10 @@ use ic_cdk_timers::TimerId;
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, InitArg, Log, LogEntry, Priority, Status,
-    TransactionWithId,
+    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
+    Priority, Status, TransactionWithId,
 };
+use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -20,6 +21,8 @@ use icp_ledger::{
     AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
     GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
+use icrc_ledger_types::icrc1::account::Account;
+use num_traits::cast::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -617,6 +620,23 @@ fn get_account_identifier_transactions(
     })
 }
 
+#[query]
+#[candid_method(query)]
+fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
+    get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
+        account_identifier: arg.account.into(),
+        max_results: arg
+            .max_results
+            .0
+            .to_u64()
+            .unwrap_or_else(|| ic_cdk::trap("Conversion from candid Nat to u64 failed")),
+        start: arg.start.map(|s| {
+            s.0.to_u64()
+                .unwrap_or_else(|| ic_cdk::trap("Conversion from candid Nat to u64 failed"))
+        }),
+    })
+}
+
 #[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
@@ -668,6 +688,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 #[candid_method(query)]
 fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 {
     get_balance(account_identifier)
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc1_balance_of(account: Account) -> u64 {
+    get_balance(account.into())
 }
 
 #[query]

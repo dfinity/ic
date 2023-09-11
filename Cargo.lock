@@ -7552,6 +7552,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-icp-index",
  "ic-icrc1",
+ "ic-icrc1-index-ng",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-metrics-encoder",

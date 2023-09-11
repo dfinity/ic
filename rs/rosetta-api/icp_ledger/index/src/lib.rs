@@ -49,6 +49,7 @@ pub struct GetAccountIdentifierTransactionsError {
 
 pub type GetAccountIdentifierTransactionsResult =
     Result<GetAccountIdentifierTransactionsResponse, GetAccountIdentifierTransactionsError>;
+pub type GetAccountTransactionsResult = GetAccountIdentifierTransactionsResult;
 
 #[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct Status {
