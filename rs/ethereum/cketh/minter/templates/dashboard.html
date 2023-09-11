@@ -140,6 +140,35 @@
                 </tbody>
             </table>
 
+
+            {% if !events_to_mint.is_empty() %}
+            <h3>Events to mint</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Txn Hash</th>
+                    <th>Log Index</th>
+                    <th>From</th>
+                    <th>Value (wei)</th>
+                    <th>Beneficiary</th>
+                    <th>Block</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for event in events_to_mint %}
+                <tr>
+                    <td>{% call etherscan_tx_link(event.transaction_hash.to_string()) %}</td>
+                    <td class="numeric">{{ event.log_index }}</td>
+                    <td>{% call etherscan_address_link(event.from_address.to_string()) %}</td>
+                    <td class="numeric">{{ event.value }}</td>
+                    <td><code>{{ event.principal }}</code></td>
+                    <td class="numeric">{% call etherscan_block_link(event.block_number) %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
             {% if !minted_events.is_empty() %}
             <h3>Minted events</h3>
             <table>

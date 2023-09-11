@@ -2,7 +2,7 @@ use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::RetrieveEthStatus;
-use ic_cketh_minter::eth_logs::{EventSource, EventSourceError};
+use ic_cketh_minter::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc::{BlockNumber, Hash};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
@@ -38,6 +38,7 @@ pub struct DashboardTemplate {
     pub last_finalized_block: Option<BlockNumber>,
     pub ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
+    pub events_to_mint: Vec<ReceivedEthEvent>,
     pub rejected_deposits: BTreeMap<EventSource, EventSourceError>,
     pub withdrawal_requests: Vec<EthWithdrawalRequest>,
     pub pending_transaction: Option<DashboardPendingTransaction>,
@@ -48,6 +49,8 @@ impl DashboardTemplate {
     pub fn from_state(state: &State) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| Reverse(event.mint_block_index));
+        let mut events_to_mint: Vec<_> = state.events_to_mint.iter().cloned().collect();
+        events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
 
         let mut withdrawal_requests: Vec<_> = state
             .eth_transactions
@@ -85,6 +88,7 @@ impl DashboardTemplate {
             last_synced_block: state.last_scraped_block_number,
             last_finalized_block: state.last_finalized_block_number,
             minted_events,
+            events_to_mint,
             rejected_deposits: state.invalid_events.clone(),
             withdrawal_requests,
             pending_transaction: state.eth_transactions.pending_tx_info().map(
