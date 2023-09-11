@@ -35,3 +35,5 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-icp-index = { path = "./" }
+serde_bytes = "0.11"
+
