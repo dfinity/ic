@@ -99,7 +99,7 @@ where
         })?;
         let mut hash =
             Sha256::new_with_context(&DomainSeparationContext::new(KEY_ID_DOMAIN.to_string()));
-        hash.write(&[alg_id.as_u8()]);
+        hash.write(&[u8::from(alg_id)]);
         hash.write(&bytes_size.to_be_bytes());
         hash.write(bytes);
         Ok(KeyId::from(hash.finish()))
