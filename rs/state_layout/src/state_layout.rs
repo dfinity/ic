@@ -226,7 +226,8 @@ struct CheckpointRefData {
 /// │      │       ├── queues.pbuf
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
-/// │      │       └── vmemory_0.bin
+/// │      │       ├── vmemory_0.bin
+/// │      │       └── wasm_chunk_store.bin
 /// │      ├── ingress_history.pbuf
 /// │      ├── split_from.pbuf
 /// │      ├── subnet_queues.pbuf
@@ -1362,6 +1363,10 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 
     pub fn stable_memory_blob(&self) -> PathBuf {
         self.canister_root.join("stable_memory.bin")
+    }
+
+    pub fn wasm_chunk_store(&self) -> PathBuf {
+        self.canister_root.join("wasm_chunk_store.bin")
     }
 }
 

@@ -482,6 +482,18 @@ fn serialize_canister_to_tip(
             None
         }
     };
+
+    // Remove the wasm_chunk_store file in case we have rolled back after creating it.
+    if canister_layout.wasm_chunk_store().exists() {
+        std::fs::remove_file(canister_layout.wasm_chunk_store()).map_err(|io_err| {
+            CheckpointError::IoError {
+                path: canister_layout.wasm_chunk_store().to_path_buf(),
+                message: "failed to delete existing Wasm chunk store file".to_string(),
+                io_err: io_err.to_string(),
+            }
+        })?;
+    }
+
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
     canister_layout.canister().serialize(
