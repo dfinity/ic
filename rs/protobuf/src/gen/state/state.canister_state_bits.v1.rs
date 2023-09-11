@@ -487,7 +487,7 @@ pub struct CanisterStateBits {
     #[prost(bytes = "vec", tag = "20")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "21")]
-    pub interruped_during_execution: u64,
+    pub interrupted_during_execution: u64,
     #[prost(message, optional, tag = "22")]
     pub consumed_cycles_since_replica_started:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,

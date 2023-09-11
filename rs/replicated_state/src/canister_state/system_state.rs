@@ -129,7 +129,7 @@ pub struct CanisterMetrics {
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
-    pub interruped_during_execution: u64,
+    pub interrupted_during_execution: u64,
     pub consumed_cycles_since_replica_started: NominalCycles,
     consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
@@ -139,7 +139,7 @@ impl CanisterMetrics {
         scheduled_as_first: u64,
         skipped_round_due_to_no_messages: u64,
         executed: u64,
-        interruped_during_execution: u64,
+        interrupted_during_execution: u64,
         consumed_cycles_since_replica_started: NominalCycles,
         consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     ) -> Self {
@@ -147,7 +147,7 @@ impl CanisterMetrics {
             scheduled_as_first,
             skipped_round_due_to_no_messages,
             executed,
-            interruped_during_execution,
+            interrupted_during_execution,
             consumed_cycles_since_replica_started,
             consumed_cycles_since_replica_started_by_use_cases,
         }

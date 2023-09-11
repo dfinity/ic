@@ -1689,7 +1689,7 @@ impl IngressHistoryState {
             if state.is_terminal() {
                 let timeout = time + MAX_INGRESS_TTL;
 
-                // Reset `self.next_terminal_time` in case it is after the current timout
+                // Reset `self.next_terminal_time` in case it is after the current timeout
                 // and the entry is completed or failed.
                 if self.next_terminal_time > timeout && state.is_terminal_with_payload() {
                     self.next_terminal_time = timeout;

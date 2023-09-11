@@ -122,7 +122,7 @@ pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
     )
 }
 
-/// loads the node state heighted with `height` using the specified
+/// Loads the node state heighted with `height` using the specified
 /// directory layout.
 pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     checkpoint_layout: &CheckpointLayout<P>,
@@ -344,7 +344,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.scheduled_as_first,
         canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
-        canister_state_bits.interruped_during_execution,
+        canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles_since_replica_started,
         canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
     );

@@ -1093,14 +1093,14 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
     // we just inserted above.
     ingress_history.forget_terminal_statuses(status_size);
 
-    let expected_fogotten = ingress_history.get(&message_test_id(11)).unwrap();
+    let expected_forgotten = ingress_history.get(&message_test_id(11)).unwrap();
 
     if let IngressStatus::Known {
         receiver,
         user_id,
         time,
         state: IngressState::Done,
-    } = expected_fogotten
+    } = expected_forgotten
     {
         assert_eq!(receiver, &canister_test_id(11).get());
         assert_eq!(user_id, &user_test_id(11));

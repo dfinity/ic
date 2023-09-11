@@ -1796,7 +1796,7 @@ fn execute_canisters_on_thread(
                 canister
                     .system_state
                     .canister_metrics
-                    .interruped_during_execution += 1;
+                    .interrupted_during_execution += 1;
                 break;
             }
             let measurement_scope = MeasurementScope::nested(

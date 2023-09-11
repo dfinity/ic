@@ -377,7 +377,7 @@ impl PageMap {
     }
 
     /// Modifies this page map by adding the given dirty pages to it.
-    /// Returns a list of dirty page indicies and an indication of whether the
+    /// Returns a list of dirty page indices and an indication of whether the
     /// page allocator was created or not, which is used for synchronization
     /// with the sandbox process.
     pub fn update(&mut self, pages: &[(PageIndex, &PageBytes)]) -> Vec<PageIndex> {

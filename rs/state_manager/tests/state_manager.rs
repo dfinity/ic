@@ -2946,7 +2946,7 @@ fn can_commit_below_state_sync() {
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(2));
             assert_eq!(dst_state_manager.latest_state_height(), height(2));
-            // state 1 should be removeable
+            // state 1 should be removable
             dst_state_manager.remove_states_below(height(2));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             assert_error_counters(dst_metrics);
@@ -3006,7 +3006,7 @@ fn can_state_sync_below_commit() {
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
             assert_eq!(dst_state_manager.latest_state_height(), height(3));
-            // state 1 should be removeable
+            // state 1 should be removable
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);

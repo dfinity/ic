@@ -1629,7 +1629,7 @@ fn induct_stream_slices_sender_subnet_mismatch() {
     });
 }
 
-/// Tests that a message adressed to a canister that is not currently hosted by
+/// Tests that a message addressed to a canister that is not currently hosted by
 /// this subnet; and is not being migrated on a path containing both this subnet
 /// and its known host; is dropped, incrementing the respective critical error
 /// count.
