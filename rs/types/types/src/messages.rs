@@ -210,7 +210,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         "StopCanisterContext::Ingress::sender",
                     )?)?,
                     message_id: MessageId::try_from(message_id.as_slice())?,
-                    call_id: call_id.map(|id| StopCanisterCallId::from(id)),
+                    call_id: call_id.map(StopCanisterCallId::from),
                 },
                 pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
@@ -243,7 +243,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                             "StopCanisterContext::Canister::sender",
                         )?,
                         reply_callback: CallbackId::from(reply_callback),
-                        call_id: call_id.map(|id| StopCanisterCallId::from(id)),
+                        call_id: call_id.map(StopCanisterCallId::from),
                         cycles,
                     }
                 }

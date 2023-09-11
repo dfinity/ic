@@ -65,3 +65,4 @@ maplit = "1.0.2"
 
 [dev-dependencies]
 proptest = "1.0"
+ic-crypto-tecdsa = { path = "../crypto/tecdsa" }

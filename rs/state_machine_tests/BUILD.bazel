@@ -104,6 +104,7 @@ rust_test(
         "@crate_index//:serde_derive",
     ],
     deps = [
+        "//rs/crypto/tecdsa",
         "@crate_index//:ciborium",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -114,6 +115,7 @@ rust_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
     deps = [
+        "//rs/crypto/tecdsa",
         "@crate_index//:proptest",
     ],
 )
