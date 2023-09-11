@@ -1,5 +1,5 @@
 {
-  "checksum": "06444fd6fd1ae60830a8457a6c6a1ac499142dff1a34b9b8f54f74575589235b",
+  "checksum": "2bb66a1afe9f5fce8982a4d414dec17cb426082fa4c43169813fd8d24f16c263",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13634,6 +13634,10 @@
             {
               "id": "prometheus 0.13.3",
               "target": "prometheus"
+            },
+            {
+              "id": "prometheus-http-query 0.6.6",
+              "target": "prometheus_http_query"
             },
             {
               "id": "proptest 1.2.0",
@@ -36550,6 +36554,67 @@
         ]
       },
       "license": "Apache-2.0"
+    },
+    "prometheus-http-query 0.6.6": {
+      "name": "prometheus-http-query",
+      "version": "0.6.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/prometheus-http-query/0.6.6/download",
+          "sha256": "7970fd6e91b5cb87e9a093657572a896d133879ced7752d2c7635beae29eaba0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prometheus_http_query",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "prometheus_http_query",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "reqwest 0.11.18",
+              "target": "reqwest"
+            },
+            {
+              "id": "serde 1.0.171",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.103",
+              "target": "serde_json"
+            },
+            {
+              "id": "time 0.3.23",
+              "target": "time"
+            },
+            {
+              "id": "url 2.4.0",
+              "target": "url"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.6"
+      },
+      "license": "MIT"
     },
     "proptest 1.2.0": {
       "name": "proptest",
