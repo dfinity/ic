@@ -559,6 +559,7 @@ impl TryFrom<pb::FinalizationShare> for FinalizationShare {
 /// which is the previous random beacon, the height, and the replica version
 /// used to create the random beacon.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomBeaconContent {
     pub version: ReplicaVersion,
     pub height: Height,
