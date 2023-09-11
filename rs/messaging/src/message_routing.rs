@@ -1003,7 +1003,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
                     user_id: ingress.sender(),
                     time,
                     state: ic_types::ingress::IngressState::Completed(
-                        // The byte content mimicks a good reply for the counter example
+                        // The byte content mimics a good reply for the counter example
                         ic_types::ingress::WasmResult::Reply(vec![68, 73, 68, 76, 0, 0]),
                     ),
                 },

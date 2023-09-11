@@ -880,7 +880,7 @@ fn induct_and_observe_until_stale(
 /// if a response is consumed successfully or else responses that are routed to streams found on
 /// `new_subnets_proxy` due to the change in the routing tables.
 /// The sequence of events is therefore as follows:
-/// - After the inital situation as depicted above, the XNet canisters stop generating requests.
+/// - After the initial situation as depicted above, the XNet canisters stop generating requests.
 /// - Bidirectional inductions are done on `old_subnets_proxy` until they stop triggering changes.
 /// - Bidirectional inductions are done on `new_subnets_proxy` until they stop triggering changes.
 ///

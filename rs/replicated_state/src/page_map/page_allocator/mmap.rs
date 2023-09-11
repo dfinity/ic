@@ -131,7 +131,7 @@ impl PageInner {
 ///   there is sufficient number of dropped pages.
 /// - all virtual memory is freed at once the page allocator itself is dropped.
 /// This approach works well with the checkpoints and allows us to avoid all
-/// the complexity and inefficiency of maintaing a thread-safe free-list.
+/// the complexity and inefficiency of maintaining a thread-safe free-list.
 ///
 /// It is exported publicly for benchmarking.
 #[derive(Debug)]
@@ -394,13 +394,13 @@ enum BackingFileOwner {
 }
 
 /// The actual allocator implementation. It starts with an empty file, an
-/// emty set of memory-mapped `Chunk`s, and an empty allocation area.
+/// empty set of memory-mapped `Chunk`s, and an empty allocation area.
 /// Allocation has two paths: slow and fast.
 ///
 /// The slow path is taken when the bump-pointer allocation area is empty. In
 /// that case the file grows by N pages. Those new pages are memory-mapped into
 /// a new `Chunk`. The allocation area is set to the whole extent of the new
-/// `Chunk`. The number of new pages N is not constant. It grows proportionaly
+/// `Chunk`. The number of new pages N is not constant. It grows proportionally
 /// to the number of already allocated pages to ensure that the number of
 /// expensive `mmap` operations remains low - O(log(allocated_pages)).
 ///

@@ -702,7 +702,7 @@ fn split() {
     expected.canister_states.remove(&CANISTER_2);
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
-    // Otherwise, the state shold be the same.
+    // Otherwise, the state should be the same.
     assert_eq!(expected, state_a);
 
     //
@@ -720,7 +720,7 @@ fn split() {
     expected.canister_states.insert(CANISTER_1, canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
-    // Everything else shold be the same as in phase 1.
+    // Everything else should be the same as in phase 1.
     assert_eq!(expected, state_a);
 
     //
@@ -743,7 +743,7 @@ fn split() {
     expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
-    // Otherwise, the state shold be the same.
+    // Otherwise, the state should be the same.
     assert_eq!(expected, state_b);
 
     //
@@ -761,7 +761,7 @@ fn split() {
     expected.canister_states.insert(CANISTER_2, canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
-    // Everything else shold be the same as in phase 1.
+    // Everything else should be the same as in phase 1.
     assert_eq!(expected, state_b);
 }
 

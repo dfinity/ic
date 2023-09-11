@@ -178,7 +178,7 @@ struct TestRecords<'a, const N: usize> {
     ni_dkg_transcripts: [Integrity<Option<&'a NiDkgTranscript>>; N],
     nns_subnet_id: Integrity<SubnetId>,
     // EcdsaKeyId is used to make a key for the record. An empty `BTreeMap` therefore means no
-    // recrods in the registry and wrapping it in `Integrity` would be redundant.
+    // records in the registry and wrapping it in `Integrity` would be redundant.
     ecdsa_signing_subnets: &'a BTreeMap<EcdsaKeyId, Integrity<Vec<SubnetId>>>,
     provisional_whitelist: Integrity<&'a ProvisionalWhitelist>,
     routing_table: Integrity<&'a RoutingTable>,
@@ -525,7 +525,7 @@ fn try_to_read_registry(
 ///
 /// Two subnets are used for this, one considered the 'own subnet'.
 /// The subnet records are fully specified for 'own subnet' only, whereas the other subnet uses
-/// default values whereever possible. This setup ensures records are parsed correctly and also
+/// default values wherever possible. This setup ensures records are parsed correctly and also
 /// that different records are returned for different subnets.
 ///
 /// Finally `BatchProcessorImpl::process_batch()` is called directly to check the

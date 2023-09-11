@@ -1413,7 +1413,7 @@ fn test_garbage_collect() {
     assert_eq!(CanisterQueues::default(), queues);
 }
 
-/// Tests that even when `garbage_collect()` would otherwis be a no-op, fields
+/// Tests that even when `garbage_collect()` would otherwise be a no-op, fields
 /// are always reset to default.
 #[test]
 fn test_garbage_collect_restores_defaults() {

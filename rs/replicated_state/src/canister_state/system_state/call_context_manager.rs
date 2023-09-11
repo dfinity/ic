@@ -40,7 +40,7 @@ pub struct CallContext {
     available_cycles: Cycles,
 
     /// Point in time at which the `CallContext` was created. This field is only
-    /// optional to accomodate contexts that were created before this field was
+    /// optional to accommodate contexts that were created before this field was
     /// added.
     time: Option<Time>,
 }

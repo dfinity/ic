@@ -300,7 +300,7 @@ message CanisterStateBits {
   reserved 19;
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;
-  uint64 interruped_during_execution = 21;
+  uint64 interrupted_during_execution = 21;
   types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
   uint64 freeze_threshold = 23;
   reserved 24;

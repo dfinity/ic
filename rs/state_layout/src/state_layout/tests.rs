@@ -36,7 +36,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         scheduled_as_first: 0,
         skipped_round_due_to_no_messages: 0,
         executed: 0,
-        interruped_during_execution: 0,
+        interrupted_during_execution: 0,
         certified_data: vec![],
         consumed_cycles_since_replica_started: NominalCycles::from(0),
         stable_memory_size: NumWasmPages::from(0),

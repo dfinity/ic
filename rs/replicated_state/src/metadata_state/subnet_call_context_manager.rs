@@ -57,7 +57,7 @@ pub type InstallCodeCallId = Id<InstallCodeCallIdTag, u64>;
 /// Collection of install code call messages whose execution is paused at the
 /// end of the round.
 ///
-/// During a subnet split, these messages will be autmatically rejected if
+/// During a subnet split, these messages will be automatically rejected if
 /// the targeted canister has moved to a new subnet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct InstallCodeCallManager {
@@ -102,7 +102,7 @@ impl InstallCodeCallManager {
 /// Collection of stop canister messages whose execution is paused at the
 /// end of the round.
 ///
-/// During a subnet split, these messages will be autmatically rejected if
+/// During a subnet split, these messages will be automatically rejected if
 /// the target canister has moved to a new subnet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct StopCanisterCallManager {

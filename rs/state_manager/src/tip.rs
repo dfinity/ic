@@ -508,10 +508,10 @@ fn serialize_canister_to_tip(
                 .canister_metrics
                 .skipped_round_due_to_no_messages,
             executed: canister_state.system_state.canister_metrics.executed,
-            interruped_during_execution: canister_state
+            interrupted_during_execution: canister_state
                 .system_state
                 .canister_metrics
-                .interruped_during_execution,
+                .interrupted_during_execution,
             certified_data: canister_state.system_state.certified_data.clone(),
             consumed_cycles_since_replica_started: canister_state
                 .system_state
@@ -564,7 +564,7 @@ fn serialize_canister_to_tip(
 /// file had a lot of writes in the past but is mostly being read now.
 ///
 /// The current defragmentation strategy is to pseudorandomly choose a
-/// chunk of size max_size among the eligble files, read it to memory,
+/// chunk of size max_size among the eligible files, read it to memory,
 /// and write it back to the file. The effect is that this chunk is
 /// definitely unique to the tip at the end of defragmentation.
 pub fn defrag_tip(

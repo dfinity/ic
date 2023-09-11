@@ -236,7 +236,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
         let canister_metrics = &canister.system_state.canister_metrics;
         assert_eq!(canister_metrics.skipped_round_due_to_no_messages, 0);
         assert_eq!(canister_metrics.executed, 1);
-        assert_eq!(canister_metrics.interruped_during_execution, 0);
+        assert_eq!(canister_metrics.interrupted_during_execution, 0);
     }
 
     assert_eq!(
@@ -1337,7 +1337,10 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             0
         );
         assert_eq!(system_state.canister_metrics.executed, 0);
-        assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+        assert_eq!(
+            system_state.canister_metrics.interrupted_during_execution,
+            0
+        );
     }
 }
 
@@ -1486,7 +1489,10 @@ fn can_execute_messages_with_just_enough_instructions() {
             0
         );
         assert_eq!(system_state.canister_metrics.executed, 1);
-        assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+        assert_eq!(
+            system_state.canister_metrics.interrupted_during_execution,
+            0
+        );
     }
 
     assert_eq!(
@@ -1553,7 +1559,10 @@ fn execute_only_canisters_with_messages() {
         0
     );
     assert_eq!(active.system_state.canister_metrics.executed, 1);
-    assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+    assert_eq!(
+        system_state.canister_metrics.interrupted_during_execution,
+        0
+    );
 
     assert_eq!(
         test.state()
@@ -1601,7 +1610,10 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
             0
         );
         assert_eq!(system_state.canister_metrics.executed, 1);
-        assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+        assert_eq!(
+            system_state.canister_metrics.interrupted_during_execution,
+            0
+        );
     }
 
     assert_eq!(
@@ -1757,7 +1769,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             canister
                 .system_state
                 .canister_metrics
-                .interruped_during_execution,
+                .interrupted_during_execution,
             0
         );
         assert_eq!(
