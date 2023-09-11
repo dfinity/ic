@@ -18,6 +18,7 @@ use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError}
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
+use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
@@ -31,6 +32,43 @@ const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
 // Metadata-related constants
 const TOKEN_NAME: &str = "Test Token";
 const TOKEN_SYMBOL: &str = "XTST";
+
+#[derive(Clone, Debug)]
+struct ApproveTestArgs(pub ApproveArgs);
+impl ApproveTestArgs {
+    fn new(from: Account, spender: Account, amount: u64) -> Self {
+        Self(ApproveArgs {
+            from_subaccount: from.subaccount,
+            spender,
+            amount: amount.into(),
+            created_at_time: None,
+            fee: None,
+            memo: None,
+            expected_allowance: None,
+            expires_at: None,
+        })
+    }
+    fn created_at_time(&mut self, created_at_time: Option<u64>) -> Self {
+        self.0.created_at_time = created_at_time;
+        self.clone()
+    }
+    fn fee(&mut self, fee: Option<Nat>) -> Self {
+        self.0.fee = fee;
+        self.clone()
+    }
+    fn memo(&mut self, memo: Option<Vec<u8>>) -> Self {
+        self.0.memo = memo.map(|b| icrc_ledger_types::icrc1::transfer::Memo(ByteBuf::from(b)));
+        self.clone()
+    }
+    fn expected_allowance(&mut self, expected_allowance: Option<Nat>) -> Self {
+        self.0.expected_allowance = expected_allowance;
+        self.clone()
+    }
+    fn expires_at(&mut self, expires_at: Option<u64>) -> Self {
+        self.0.expires_at = expires_at;
+        self.clone()
+    }
+}
 
 fn index_wasm() -> Vec<u8> {
     println!("Getting Index Wasm");
@@ -225,25 +263,12 @@ fn transfer(
 fn approve(
     env: &StateMachine,
     ledger_id: CanisterId,
-    from: Account,
-    spender: Account,
-    amount: u64,
-    expires_at: Option<u64>,
+    sender: Account,
+    args: ApproveTestArgs,
 ) -> BlockIndex {
-    let Account { owner, subaccount } = from;
-    let req = ApproveArgs {
-        from_subaccount: subaccount,
-        spender,
-        amount: amount.into(),
-        created_at_time: None,
-        fee: None,
-        memo: None,
-        expected_allowance: None,
-        expires_at,
-    };
-    let req = Encode!(&req).expect("Failed to encode ApproveArgs");
+    let req = Encode!(&args.0).expect("Failed to encode ApproveArgs");
     let res = env
-        .execute_ingress_as(owner.into(), ledger_id, "icrc2_approve", req)
+        .execute_ingress_as(sender.owner.into(), ledger_id, "icrc2_approve", req)
         .expect("Failed to create an approval")
         .bytes();
     Decode!(&res, Result<BlockIndex, ApproveError>)
@@ -562,9 +587,7 @@ fn test_get_account_identifier_transactions() {
         env,
         ledger_id,
         account(1, 0),
-        account(4, 4),
-        1_000_000,
-        Some(expires_at),
+        ApproveTestArgs::new(account(1, 0), account(4, 4), 1_000_000).expires_at(Some(expires_at)),
     );
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -811,7 +834,140 @@ fn test_icp_balance_of() {
     );
 
     // Test approve operations
-    approve(env, ledger_id, account(1, 0), account(2, 0), 100_000, None);
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0).into())
+    );
+}
+
+#[test]
+fn test_approve_args() {
+    let initial_balances = HashMap::new();
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+    for i in 0..10 {
+        transfer(
+            env,
+            ledger_id,
+            Account {
+                owner: MINTER_PRINCIPAL.into(),
+                subaccount: None,
+            },
+            account(1, 0),
+            i * 10_000,
+        );
+
+        transfer(
+            env,
+            ledger_id,
+            Account {
+                owner: MINTER_PRINCIPAL.into(),
+                subaccount: None,
+            },
+            account(2, 0),
+            i * 10_000,
+        );
+    }
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Test approve operations with default args
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0).into())
+    );
+
+    // Test approve operations with expected_allowance set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000)
+            .expected_allowance(Some(100_000.into())),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0).into())
+    );
+
+    // Test approve operations with memo set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000).memo(Some(b"memo".to_vec())),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0).into())
+    );
+
+    // Test approve operations with fee set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000).fee(Some(FEE.into())),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0).into())
+    );
+
+    // Test approve operations with fee created_at_time set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000).created_at_time(Some(
+            env.time()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        )),
+    );
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     assert_eq!(

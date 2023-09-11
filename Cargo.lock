@@ -7562,6 +7562,7 @@ dependencies = [
  "num-traits",
  "scopeguard",
  "serde",
+ "serde_bytes",
  "serde_json",
 ]
 

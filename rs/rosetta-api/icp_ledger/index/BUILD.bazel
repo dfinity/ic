@@ -30,6 +30,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:proptest",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
