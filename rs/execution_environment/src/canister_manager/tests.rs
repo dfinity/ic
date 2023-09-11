@@ -6404,3 +6404,124 @@ fn install_respects_reserved_cycles_limit_on_memory_grow() {
         .description()
         .contains("due to its reserved cycles limit"));
 }
+
+#[test]
+fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Set the memory allocation to exceed the reserved cycles limit.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(1_000_000)
+        .with_reserved_cycles_limit(1)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister).unwrap();
+
+    let err_msg = match result {
+        WasmResult::Reply(_) => unreachable!("Unexpected reply, expected reject"),
+        WasmResult::Reject(err_msg) => err_msg,
+    };
+
+    assert!(err_msg.contains("Cannot increase memory allocation"));
+    assert!(err_msg.contains("due to its reserved cycles limit"));
+}
+
+#[test]
+fn create_canister_can_set_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Since we are not setting the memory allocation and the memory usage of an
+    // empty canister is zero, setting the reserved cycles limit should succeed.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_reserved_cycles_limit(1)
+        .build();
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: None,
+    };
+
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    let canister_id = Decode!(reply.as_slice(), CanisterIdRecord)
+        .unwrap()
+        .get_canister_id();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance_limit(),
+        Some(Cycles::new(1))
+    );
+}
+
+#[test]
+fn update_settings_can_set_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    test.canister_update_reserved_cycles_limit(canister_id, Cycles::new(1))
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance_limit(),
+        Some(Cycles::new(1))
+    );
+}

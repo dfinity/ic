@@ -1404,12 +1404,12 @@ impl<'a> Arbitrary<'a> for UpdateSettingsArgs {
     fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
         Ok(UpdateSettingsArgs::new(
             CanisterId::from(u64::arbitrary(u)?),
-            CanisterSettingsArgs::new(
-                Some(<Vec<PrincipalId>>::arbitrary(u)?),
-                Some(u64::arbitrary(u)?),
-                Some(u64::arbitrary(u)?),
-                Some(u64::arbitrary(u)?),
-            ),
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(<Vec<PrincipalId>>::arbitrary(u)?)
+                .with_compute_allocation(u64::arbitrary(u)?)
+                .with_memory_allocation(u64::arbitrary(u)?)
+                .with_freezing_threshold(u64::arbitrary(u)?)
+                .build(),
         ))
     }
 }
@@ -1470,6 +1470,7 @@ pub struct CanisterSettingsArgs {
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
+    pub reserved_cycles_limit: Option<candid::Nat>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -1480,6 +1481,7 @@ impl CanisterSettingsArgs {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
         freezing_threshold: Option<u64>,
+        reserved_cycles_limit: Option<u128>,
     ) -> Self {
         Self {
             controller: None,
@@ -1487,6 +1489,7 @@ impl CanisterSettingsArgs {
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
             freezing_threshold: freezing_threshold.map(candid::Nat::from),
+            reserved_cycles_limit: reserved_cycles_limit.map(candid::Nat::from),
         }
     }
 
@@ -1502,6 +1505,7 @@ pub struct CanisterSettingsArgsBuilder {
     compute_allocation: Option<candid::Nat>,
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
+    reserved_cycles_limit: Option<candid::Nat>,
 }
 
 #[allow(dead_code)]
@@ -1517,6 +1521,7 @@ impl CanisterSettingsArgsBuilder {
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
+            reserved_cycles_limit: self.reserved_cycles_limit,
         }
     }
 
@@ -1543,6 +1548,14 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
+    /// Optionally sets the compute allocation in percent.
+    pub fn with_maybe_compute_allocation(self, compute_allocation: Option<u64>) -> Self {
+        match compute_allocation {
+            Some(compute_allocation) => self.with_compute_allocation(compute_allocation),
+            None => self,
+        }
+    }
+
     /// Sets the memory allocation in bytes. For more details see
     /// the description of this field in the IC specification.
     pub fn with_memory_allocation(self, memory_allocation: u64) -> Self {
@@ -1552,11 +1565,27 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
+    /// Optionally sets the memory allocation in percent.
+    pub fn with_maybe_memory_allocation(self, memory_allocation: Option<u64>) -> Self {
+        match memory_allocation {
+            Some(memory_allocation) => self.with_memory_allocation(memory_allocation),
+            None => self,
+        }
+    }
+
     /// Sets the freezing threshold in seconds. For more details see
     /// the description of this field in the IC specification.
     pub fn with_freezing_threshold(self, freezing_threshold: u64) -> Self {
         Self {
             freezing_threshold: Some(candid::Nat::from(freezing_threshold)),
+            ..self
+        }
+    }
+
+    /// Sets the reserved cycles limit in cycles.
+    pub fn with_reserved_cycles_limit(self, reserved_cycles_limit: u128) -> Self {
+        Self {
+            reserved_cycles_limit: Some(candid::Nat::from(reserved_cycles_limit)),
             ..self
         }
     }
@@ -1620,12 +1649,11 @@ fn test_create_canister_args_decode_controllers_count() {
     for i in TEST_START..=TEST_END {
         // Arrange.
         let args = CreateCanisterArgs {
-            settings: Some(CanisterSettingsArgs::new(
-                Some(vec![PrincipalId::new_anonymous(); i]),
-                None,
-                None,
-                None,
-            )),
+            settings: Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![PrincipalId::new_anonymous(); i])
+                    .build(),
+            ),
             sender_canister_version: None,
         };
 

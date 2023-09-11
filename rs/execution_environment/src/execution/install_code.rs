@@ -406,6 +406,7 @@ impl InstallCodeHelper {
                 compute_allocation: original.requested_compute_allocation,
                 memory_allocation: original.requested_memory_allocation,
                 freezing_threshold: None,
+                reserved_cycles_limit: None,
             },
             self.canister.memory_usage(),
             self.canister.memory_allocation(),
