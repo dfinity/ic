@@ -137,9 +137,9 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
 
 pub fn update_calls_test(env: TestEnv) {
     let rps_min = 50;
-    let rps_max = 400;
+    let rps_max = 450;
     let rps_step = 50;
-    let workload_per_step_duration = Duration::from_secs(100);
+    let workload_per_step_duration = Duration::from_secs(60 * 4);
     let log: slog::Logger = env.logger();
     let subnet_app = env
         .topology_snapshot()
@@ -160,9 +160,13 @@ pub fn update_calls_test(env: TestEnv) {
         boundary_node.build_default_agent()
     };
     let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
-    for rps in (rps_min..=rps_max).step_by(rps_step) {
+    for rps in (rps_min..=rps_max).rev().step_by(rps_step) {
         let agent = bn_agent.clone();
-        info!(log, "Starting the workload with rps={rps}");
+        info!(
+            log,
+            "Starting workload with rps={rps} for {} sec",
+            workload_per_step_duration.as_secs()
+        );
         let handle_workload = {
             let requests = vec![GenericRequest::new(
                 canister_app,
@@ -180,8 +184,17 @@ pub fn update_calls_test(env: TestEnv) {
                 vec![],
             )
         };
-        let _load_metrics_nns = handle_workload.join().expect("Workload execution failed.");
-        info!(log, "Workload execution finished");
+        let metrics = handle_workload.join().expect("Workload execution failed.");
+        info!(&log, "Workload metrics for rps={rps}: {metrics}");
+        info!(
+            log,
+            "Failed/successful requests count {}/{}",
+            metrics.failure_calls(),
+            metrics.success_calls()
+        );
+        let expected_requests_count = rps * workload_per_step_duration.as_secs() as usize;
+        assert_eq!(metrics.success_calls(), expected_requests_count);
+        assert_eq!(metrics.failure_calls(), 0);
     }
 }
 
@@ -190,9 +203,9 @@ pub fn update_calls_test(env: TestEnv) {
 
 pub fn query_calls_test(env: TestEnv) {
     let rps_min = 500;
-    let rps_max = 9000;
+    let rps_max = 6500;
     let rps_step = 500;
-    let workload_per_step_duration = Duration::from_secs(100);
+    let workload_per_step_duration = Duration::from_secs(60 * 4);
     let log: slog::Logger = env.logger();
     let subnet_app = env
         .topology_snapshot()
@@ -213,9 +226,13 @@ pub fn query_calls_test(env: TestEnv) {
         boundary_node.build_default_agent()
     };
     let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
-    for rps in (rps_min..=rps_max).step_by(rps_step) {
+    for rps in (rps_min..=rps_max).rev().step_by(rps_step) {
         let agent = bn_agent.clone();
-        info!(log, "Starting the workload with rps={rps}");
+        info!(
+            log,
+            "Starting workload with rps={rps} for {} sec",
+            workload_per_step_duration.as_secs()
+        );
         let handle_workload = {
             let requests = vec![GenericRequest::new(
                 canister_app,
@@ -233,7 +250,16 @@ pub fn query_calls_test(env: TestEnv) {
                 vec![],
             )
         };
-        let _load_metrics_nns = handle_workload.join().expect("Workload execution failed.");
-        info!(log, "Workload execution finished");
+        let metrics = handle_workload.join().expect("Workload execution failed.");
+        info!(&log, "Workload metrics for rps={rps}: {metrics}");
+        info!(
+            log,
+            "Failed/successful requests count {}/{}",
+            metrics.failure_calls(),
+            metrics.success_calls()
+        );
+        let expected_requests_count = rps * workload_per_step_duration.as_secs() as usize;
+        assert_eq!(metrics.success_calls(), rps * expected_requests_count);
+        assert_eq!(metrics.failure_calls(), 0);
     }
 }
