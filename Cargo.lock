@@ -13009,6 +13009,29 @@ name = "nns-ui-canister"
 version = "0.8.0"
 
 [[package]]
+name = "node_status_updater"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.2",
+ "crossbeam",
+ "crossbeam-channel",
+ "futures-util",
+ "humantime 2.1.0",
+ "ic-agent",
+ "ic-async-utils",
+ "ic-metrics",
+ "obs-canister-clients",
+ "prometheus-http-query",
+ "service-discovery",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "nom"
 version = "5.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13207,6 +13230,18 @@ dependencies = [
  "hashbrown 0.13.2",
  "indexmap 1.9.2",
  "memchr",
+]
+
+[[package]]
+name = "obs-canister-clients"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-agent",
+ "rand 0.8.5",
+ "serde",
+ "slog",
+ "url",
 ]
 
 [[package]]
@@ -14325,6 +14360,19 @@ dependencies = [
  "parking_lot 0.12.1",
  "protobuf",
  "thiserror",
+]
+
+[[package]]
+name = "prometheus-http-query"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7970fd6e91b5cb87e9a093657572a896d133879ced7752d2c7635beae29eaba0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "time 0.3.22",
+ "url",
 ]
 
 [[package]]

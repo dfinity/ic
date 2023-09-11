@@ -2718,6 +2718,7 @@ dependencies = [
  "proc-macro2 1.0.66",
  "procfs 0.9.1",
  "prometheus",
+ "prometheus-http-query",
  "proptest",
  "proptest-derive",
  "prost",
@@ -7088,6 +7089,19 @@ dependencies = [
  "procfs 0.14.2",
  "protobuf",
  "thiserror",
+]
+
+[[package]]
+name = "prometheus-http-query"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7970fd6e91b5cb87e9a093657572a896d133879ced7752d2c7635beae29eaba0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "time 0.3.23",
+ "url",
 ]
 
 [[package]]
