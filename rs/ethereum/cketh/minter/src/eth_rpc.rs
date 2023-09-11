@@ -418,7 +418,7 @@ impl HttpResponsePayload for FeeHistory {
 
 impl HttpResponsePayload for Wei {}
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct BlockNumber(pub Quantity);
 
@@ -449,6 +449,12 @@ impl Add<u128> for BlockNumber {
 impl From<BlockNumber> for candid::Nat {
     fn from(value: BlockNumber) -> Self {
         into_nat(value.0)
+    }
+}
+
+impl fmt::Debug for BlockNumber {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

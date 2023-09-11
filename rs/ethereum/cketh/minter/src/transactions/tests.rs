@@ -124,6 +124,18 @@ mod eth_transactions {
     }
 }
 
+mod eth_withdrawal_request {
+    use crate::numeric::LedgerBurnIndex;
+    use crate::transactions::tests::withdrawal_request_with_index;
+
+    #[test]
+    fn should_have_readable_debug_representation() {
+        let request = withdrawal_request_with_index(LedgerBurnIndex::new(131));
+        let expected_debug = "EthWithdrawalRequest { withdrawal_amount: Wei(1_100_000_000_000_000), destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, ledger_burn_index: 131 }";
+        assert_eq!(format!("{:?}", request), expected_debug);
+    }
+}
+
 fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expected_message: &str) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
     let panic_message = *result.unwrap_err().downcast_ref::<&str>().unwrap();

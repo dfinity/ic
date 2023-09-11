@@ -269,7 +269,7 @@ async fn create_transaction() -> Result<(), String> {
         };
     log!(
         DEBUG,
-        "[process_retrieve_eth_requests]: processing withdrawal request: {withdrawal_request:?}",
+        "[process_retrieve_eth_requests]: processing {withdrawal_request:?}",
     );
     let transaction_price = estimate_transaction_price(&eth_fee_history().await);
     let max_transaction_fee = transaction_price.max_transaction_fee();

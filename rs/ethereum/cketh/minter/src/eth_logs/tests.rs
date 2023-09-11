@@ -100,6 +100,19 @@ mod mint_transaction {
         assert_eq!(state.invalid_events[&event.source()], error);
     }
 
+    #[test]
+    fn should_have_readable_debug_representation() {
+        let expected = "ReceivedEthEvent { \
+          transaction_hash: 0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2, \
+          block_number: 3960623, \
+          log_index: 29, \
+          from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
+          value: Wei(10_000_000_000_000_000), \
+          principal: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae \
+        }";
+        assert_eq!(format!("{:?}", received_eth_event()), expected);
+    }
+
     fn dummy_state() -> State {
         use candid::Principal;
         State::try_from(InitArg {
