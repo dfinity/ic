@@ -6255,3 +6255,100 @@ fn resource_saturation_scaling_works_in_regular_execution() {
 
     assert!(balance_before - balance_after > reserved_cycles);
 }
+
+#[test]
+fn wasm_memory_grow_respects_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CAPACITY: u64 = 1_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_threshold(0)
+        .with_subnet_memory_reservation(0)
+        .build();
+
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+            (func $update
+                ;; 7500 Wasm pages is close to 500MB.
+                (if (i32.eq (memory.grow (i32.const 7500)) (i32.const -1))
+                  (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory $memory 1)
+            (export "canister_update update" (func $update))
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
+
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        .unwrap();
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_reserved_balance_limit(Cycles::new(1));
+
+    let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+
+    assert_eq!(
+        err.code(),
+        ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+    );
+    assert!(err.description().contains("Canister cannot grow memory by"));
+    assert!(err
+        .description()
+        .contains("due to its reserved cycles limit"));
+}
+
+#[test]
+fn stable_memory_grow_respects_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+    const CAPACITY: u64 = 1_000_000_000;
+    // The threshold should be large enough to allow the universal canister to
+    // allocate Wasm memory before it starts allocating the stable memory.
+    const THRESHOLD: u64 = 10_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_memory_reservation(0)
+        .build();
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        .unwrap();
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_reserved_balance_limit(Cycles::new(1));
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm()
+                .stable64_grow(7_500)
+                .push_bytes(&[])
+                .append_and_reply()
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err.code(),
+        ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+    );
+    assert!(err.description().contains("Canister cannot grow memory by"));
+    assert!(err
+        .description()
+        .contains("due to its reserved cycles limit"));
+}

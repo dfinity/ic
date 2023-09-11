@@ -530,6 +530,7 @@ pub struct SandboxSafeSystemState {
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
+    reserved_balance_limit: Option<Cycles>,
     call_context_balances: BTreeMap<CallContextId, Cycles>,
     cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
@@ -556,6 +557,7 @@ impl SandboxSafeSystemState {
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
+        reserved_balance_limit: Option<Cycles>,
         call_context_balances: BTreeMap<CallContextId, Cycles>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
@@ -580,6 +582,7 @@ impl SandboxSafeSystemState {
             system_state_changes: SystemStateChanges::default(),
             initial_cycles_balance,
             initial_reserved_balance,
+            reserved_balance_limit,
             call_context_balances,
             cycles_account_manager,
             next_callback_id,
@@ -639,6 +642,7 @@ impl SandboxSafeSystemState {
             compute_allocation,
             system_state.balance(),
             system_state.reserved_balance(),
+            system_state.reserved_balance_limit(),
             call_context_balances,
             cycles_account_manager,
             system_state
@@ -1023,6 +1027,16 @@ impl SandboxSafeSystemState {
                     subnet_memory_saturation,
                     self.subnet_size,
                 );
+
+                if let Some(limit) = self.reserved_balance_limit {
+                    if self.reserved_balance() + cycles_to_reserve > limit {
+                        return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
+                            bytes: allocated_bytes,
+                            requested: self.reserved_balance() + cycles_to_reserve,
+                            limit,
+                        });
+                    }
+                }
 
                 let old_balance = self.cycles_balance();
                 if old_balance < cycles_to_reserve {

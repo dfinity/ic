@@ -414,6 +414,7 @@ impl CanisterManager {
             &self.cycles_account_manager,
             subnet_size,
             Cycles::zero(),
+            None,
         )
     }
 
@@ -500,6 +501,7 @@ impl CanisterManager {
             &self.cycles_account_manager,
             subnet_size,
             canister.system_state.reserved_balance(),
+            canister.system_state.reserved_balance_limit(),
         )?;
 
         let is_controllers_change =
@@ -1423,6 +1425,16 @@ pub(crate) enum CanisterManagerError {
         available: Cycles,
         threshold: Cycles,
     },
+    ReservedCyclesLimitExceededInMemoryAllocation {
+        memory_allocation: MemoryAllocation,
+        requested: Cycles,
+        limit: Cycles,
+    },
+    ReservedCyclesLimitExceededInMemoryGrow {
+        bytes: NumBytes,
+        requested: Cycles,
+        limit: Cycles,
+    },
 }
 
 impl From<CanisterManagerError> for UserError {
@@ -1620,6 +1632,29 @@ impl From<CanisterManagerError> for UserError {
                          At least {} additional cycles are required.",
                          bytes,
                          threshold - available)
+                )
+            }
+            ReservedCyclesLimitExceededInMemoryAllocation { memory_allocation, requested, limit} =>
+            {
+                Self::new(
+                    ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation,
+                    format!(
+                        "Cannot increase memory allocation to {} due to its reserved cycles limit. \
+                         The current limit ({}) would be exceeded by {}.",
+                        memory_allocation, limit, requested - limit,
+                    ),
+                )
+
+            }
+            ReservedCyclesLimitExceededInMemoryGrow { bytes, requested, limit} =>
+            {
+                Self::new(
+                    ErrorCode::ReservedCyclesLimitExceededInMemoryGrow,
+                    format!(
+                        "Canister cannot grow memory by {} bytes due to its reserved cycles limit. \
+                         The current limit ({}) would exceeded by {}.",
+                        bytes, limit, requested - limit,
+                    ),
                 )
             }
         }

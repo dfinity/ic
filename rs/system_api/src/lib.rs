@@ -2301,6 +2301,10 @@ impl SystemApi for SystemApiImpl {
                     // Return an out-of-cycles error instead of out-of-memory.
                     Err(err)
                 }
+                Err(err @ HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. }) => {
+                    // Return a reservation error instead of out-of-memory.
+                    Err(err)
+                }
                 Err(_err) => Err(HypervisorError::OutOfMemory),
             }
         };
@@ -2349,6 +2353,12 @@ impl SystemApi for SystemApiImpl {
                 // Trap instead of returning -1 in order to give the developer
                 // more actionable error message. Otherwise, they cannot
                 // distinguish between out-of-memory and out-of-cycles.
+                Err(err)
+            }
+            Err(err @ HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. }) => {
+                // Trap instead of returning -1 in order to give the developer
+                // more actionable error message. Otherwise, they cannot
+                // distinguish between out-of-memory and cycle reservation errors.
                 Err(err)
             }
             Err(_) => Ok(StableGrowOutcome::Failure),

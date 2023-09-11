@@ -11,6 +11,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
+use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
@@ -232,10 +233,22 @@ impl InstallCodeHelper {
             {
                 Ok(()) => {}
                 Err(err) => {
-                    let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                        bytes,
-                        available: err.available,
-                        threshold: err.requested,
+                    let err = match err {
+                        ReservationError::InsufficientCycles {
+                            requested,
+                            available,
+                        } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                            bytes,
+                            available,
+                            threshold: requested,
+                        },
+                        ReservationError::ReservedLimitExceed { requested, limit } => {
+                            CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
+                                bytes,
+                                requested,
+                                limit,
+                            }
+                        }
                     };
                     return finish_err(
                         clean_canister,
@@ -407,6 +420,7 @@ impl InstallCodeHelper {
             round.cycles_account_manager,
             original.subnet_size,
             self.canister.system_state.reserved_balance(),
+            self.canister.system_state.reserved_balance_limit(),
         )?;
 
         match original.mode {

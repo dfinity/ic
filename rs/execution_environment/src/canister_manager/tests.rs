@@ -6289,3 +6289,118 @@ fn resource_saturation_scaling_works_in_install_code() {
         reserved_cycles,
     );
 }
+
+#[test]
+fn update_settings_respects_reserved_cycles_limit_on_memory_allocation() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+    const USAGE: u64 = 10_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_reserved_balance_limit(Cycles::new(1));
+
+    let err = test
+        .canister_update_allocations_settings(canister_id, None, Some(USAGE))
+        .unwrap_err();
+
+    assert_eq!(
+        err.code(),
+        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+    );
+    assert!(err
+        .description()
+        .contains("Cannot increase memory allocation"));
+    assert!(err
+        .description()
+        .contains("due to its reserved cycles limit"));
+}
+
+#[test]
+fn install_respects_reserved_cycles_limit_on_memory_allocation() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+    const USAGE: u64 = 10_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_reserved_balance_limit(Cycles::new(1));
+
+    let err = test
+        .install_canister_with_allocation(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.into(),
+            None,
+            Some(USAGE),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err.code(),
+        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+    );
+    assert!(err
+        .description()
+        .contains("Cannot increase memory allocation"));
+    assert!(err
+        .description()
+        .contains("due to its reserved cycles limit"));
+}
+
+#[test]
+fn install_respects_reserved_cycles_limit_on_memory_grow() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (func (export "canister_init")
+                (if (i64.eq (call $stable64_grow (i64.const 150000)) (i64.const -1))
+                  (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+
+    let wasm_binary = wat::parse_str(wat).unwrap();
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_reserved_balance_limit(Cycles::new(1));
+
+    let err = test.install_canister(canister_id, wasm_binary).unwrap_err();
+
+    assert_eq!(
+        err.code(),
+        ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+    );
+    assert!(err.description().contains("Canister cannot grow memory by"));
+    assert!(err
+        .description()
+        .contains("due to its reserved cycles limit"));
+}
