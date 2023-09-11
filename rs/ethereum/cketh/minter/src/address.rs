@@ -8,7 +8,7 @@ use std::str::FromStr;
 mod tests;
 
 /// An Ethereum account address.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Address(#[serde(with = "crate::serde_data")] [u8; 20]);
 
@@ -75,6 +75,12 @@ impl FromStr for Address {
         hex::decode_to_slice(&s[2..], &mut bytes)
             .map_err(|e| format!("address is not hex: {}", e))?;
         Ok(Self(bytes))
+    }
+}
+
+impl fmt::Debug for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 

@@ -12,7 +12,7 @@ use std::fmt;
 
 /// Wei is the smallest denomination of ether.
 /// 1 wei == 10^(-18) ether
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
 pub struct Wei(ethnum::u256);
 
@@ -99,6 +99,13 @@ impl From<Wei> for candid::Nat {
     }
 }
 
+impl fmt::Debug for Wei {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use thousands::Separable;
+        write!(f, "Wei({})", self.0.separate_with_underscores())
+    }
+}
+
 impl fmt::Display for Wei {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use thousands::Separable;
@@ -111,7 +118,7 @@ impl fmt::Display for Wei {
 /// If that's not the case, the transaction is rejected
 /// (if the nonce was already seen in another transaction from the same sender)
 /// or kept in the node's transaction pool while waiting for the missing nonce.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
 pub struct TransactionNonce(ethnum::u256);
 
@@ -137,6 +144,12 @@ impl TryFrom<Nat> for TransactionNonce {
             Ok(value_u256) => Ok(TransactionNonce(value_u256)),
             Err(error) => Err(error),
         }
+    }
+}
+
+impl fmt::Debug for TransactionNonce {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

@@ -13,14 +13,13 @@ use hex_literal::hex;
 use ic_canister_log::log;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::fmt::{Display, Formatter};
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
 pub enum EthLogIndexTag {}
 pub type LogIndex = phantom_newtype::Id<EthLogIndexTag, u256>;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReceivedEthEvent {
     pub transaction_hash: Hash,
     pub block_number: BlockNumber,
@@ -28,6 +27,19 @@ pub struct ReceivedEthEvent {
     pub from_address: Address,
     pub value: Wei,
     pub principal: Principal,
+}
+
+impl fmt::Debug for ReceivedEthEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReceivedEthEvent")
+            .field("transaction_hash", &self.transaction_hash)
+            .field("block_number", &self.block_number)
+            .field("log_index", &self.log_index)
+            .field("from_address", &self.from_address)
+            .field("value", &self.value)
+            .field("principal", &format_args!("{}", self.principal))
+            .finish()
+    }
 }
 
 /// A unique identifier of the event source: the source transaction hash and the log
@@ -129,8 +141,8 @@ pub enum EventSourceError {
     InvalidEvent(String),
 }
 
-impl Display for EventSourceError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl fmt::Display for EventSourceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EventSourceError::InvalidPrincipal { invalid_principal } => {
                 write!(f, "invalid principal: {}", invalid_principal)
