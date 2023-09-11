@@ -81,11 +81,18 @@ impl Neuron {
 
     // Returns all principal ids with special permissions..
     pub fn principal_ids_with_special_permissions(&self) -> Vec<PrincipalId> {
-        self.hot_keys
+        let mut principal_ids: Vec<_> = self
+            .hot_keys
             .iter()
             .chain(self.controller.iter())
             .copied()
-            .collect()
+            .collect();
+        // The number of entries is bounded so Vec->HashSet->Vec won't have a clear advantage. Also,
+        // although the order isn't needed by this method and expected use cases, having a stable
+        // ordering (instead of being determined by hash) is usually good for debugging.
+        principal_ids.sort();
+        principal_ids.dedup();
+        principal_ids
     }
 
     pub fn topic_followee_pairs(&self) -> BTreeSet<(Topic, NeuronId)> {
