@@ -377,7 +377,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 let url = match self.recovery.registry_helper.latest_registry_version() {
                     Ok(registry_version) => {
                         format!(
-                            "https://grafana.mainnet.dfinity.network/d/cB-qtJX4k/subnet-splitting-pre-flight?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
+                            "https://grafana.mainnet.dfinity.network/d/subnet-splitting-preflight?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
                             self.params.destination_subnet_id, registry_version
                         )
                     }
@@ -387,7 +387,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                             "Failed to get the latest registry version: {}", err
                         );
                         format!(
-                            "https://grafana.mainnet.dfinity.network/d/cB-qtJX4k/subnet-splitting-pre-flight?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
+                            "https://grafana.mainnet.dfinity.network/d/subnet-splitting-preflight?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
                             self.params.destination_subnet_id
                         )
                     }
@@ -441,7 +441,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 let url = match self.recovery.registry_helper.latest_registry_version() {
                     Ok(registry_version) => {
                         format!(
-                            "https://grafana.mainnet.dfinity.network/d/K08U69_4k/subnet-splitting?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
+                            "https://grafana.mainnet.dfinity.network/d/subnet-splitting?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
                             self.params.source_subnet_id, registry_version
                         )
                     }
@@ -451,7 +451,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                             "Failed to get the latest registry version: {}", err
                         );
                         format!(
-                            "https://grafana.mainnet.dfinity.network/d/K08U69_4k/subnet-splitting?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
+                            "https://grafana.mainnet.dfinity.network/d/subnet-splitting?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
                             self.params.source_subnet_id,
                         )
                     }
