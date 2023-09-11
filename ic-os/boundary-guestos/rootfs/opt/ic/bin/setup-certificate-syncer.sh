@@ -18,9 +18,15 @@ function copy_files() {
 
 function generate_config() {
     mkdir -p $(dirname "${ENV_FILE}")
-    cat >"${ENV_FILE}" <<EOF
-RAW_DOMAINS_PATH=${RAW_DOMAINS:+"${CFG_DIR}/raw_domains.txt"}
+    if [ -f "${RAW_DOMAINS}" ]; then
+        cat >"${ENV_FILE}" <<EOF
+RAW_DOMAINS_PATH=${CFG_DIR}/raw_domains.txt
 EOF
+    else
+        cat >"${ENV_FILE}" <<EOF
+RAW_DOMAINS_PATH=
+EOF
+    fi
 }
 
 function main() {
@@ -33,6 +39,7 @@ function main() {
     if [ -f "${RAW_DOMAINS}" ]; then
         copy_files
     fi
+
     generate_config
 }
 
