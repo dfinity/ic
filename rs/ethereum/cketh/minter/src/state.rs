@@ -221,7 +221,7 @@ impl State {
             self.ethereum_contract_address = Some(ethereum_contract_address);
         }
         if let Some(block_height) = ethereum_block_height {
-            self.ethereum_block_height = block_height;
+            self.ethereum_block_height = block_height.into();
         }
         self.validate_config()
     }

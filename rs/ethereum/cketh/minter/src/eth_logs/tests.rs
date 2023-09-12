@@ -1,6 +1,6 @@
 mod mint_transaction {
     use crate::eth_logs::{EventSourceError, LogIndex, ReceivedEthEvent};
-    use crate::eth_rpc::{BlockNumber, BlockTag};
+    use crate::eth_rpc::BlockNumber;
     use crate::lifecycle::init::InitArg;
     use crate::numeric::{LedgerMintIndex, Wei};
     use crate::state::{MintedEvent, State};
@@ -121,7 +121,7 @@ mod mint_transaction {
             ethereum_contract_address: None,
             ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                 .expect("BUG: invalid principal"),
-            ethereum_block_height: BlockTag::Finalized,
+            ethereum_block_height: Default::default(),
             minimum_withdrawal_amount: Wei::from_milliether(10).into(),
             next_transaction_nonce: Default::default(),
         })

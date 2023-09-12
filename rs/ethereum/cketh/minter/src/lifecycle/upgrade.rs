@@ -1,4 +1,4 @@
-use crate::eth_rpc::BlockTag;
+use crate::endpoints::CandidBlockTag;
 use crate::logs::INFO;
 use crate::state::mutate_state;
 use crate::state::STATE;
@@ -11,7 +11,7 @@ pub struct UpgradeArg {
     pub next_transaction_nonce: Option<Nat>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_contract_address: Option<String>,
-    pub ethereum_block_height: Option<BlockTag>,
+    pub ethereum_block_height: Option<CandidBlockTag>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {

@@ -2,6 +2,7 @@
 //! interface.
 
 use crate::address::Address;
+use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{TransactionNonce, Wei};
@@ -229,7 +230,7 @@ impl HttpResponsePayload for Transaction {
 
 /// Block tags.
 /// See https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block
-#[derive(CandidType, Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BlockTag {
     /// The latest mined block.
@@ -243,6 +244,16 @@ pub enum BlockTag {
     /// See
     /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
     Finalized,
+}
+
+impl From<CandidBlockTag> for BlockTag {
+    fn from(block_tag: CandidBlockTag) -> BlockTag {
+        match block_tag {
+            CandidBlockTag::Latest => BlockTag::Latest,
+            CandidBlockTag::Safe => BlockTag::Safe,
+            CandidBlockTag::Finalized => BlockTag::Finalized,
+        }
+    }
 }
 
 /// The block specification indicating which block to query.
