@@ -75,7 +75,6 @@ impl ChunkableArtifact for FileTreeSyncArtifact {
         if chunk_id.get() == CHUNKID_MANIFEST_CHUNK {
             return Some(ArtifactChunk {
                 chunk_id,
-                witness: Default::default(),
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
                     serialize(&count).expect("Binary serialization failed"),
                 ),
@@ -93,7 +92,6 @@ impl ChunkableArtifact for FileTreeSyncArtifact {
 
         Some(ArtifactChunk {
             chunk_id,
-            witness: Default::default(),
             artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
                 serialize(&chunk_id).expect("Binary serialization failed"),
             ),

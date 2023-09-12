@@ -1637,7 +1637,6 @@ pub mod tests {
         let payload = Artifact::DkgMessage(receive_check_test_create_message(number));
         let artifact_chunk = ArtifactChunk {
             chunk_id,
-            witness: Vec::with_capacity(0),
             artifact_chunk_data: ArtifactChunkData::UnitChunkData(payload),
         };
 

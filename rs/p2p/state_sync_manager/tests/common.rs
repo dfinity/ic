@@ -223,7 +223,6 @@ impl StateSyncClient for FakeStateSync {
         if is_manifest_chunk(chunk_id) {
             return Some(ArtifactChunk {
                 chunk_id,
-                witness: vec![],
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(vec![0; 100]),
             });
         }
@@ -232,7 +231,6 @@ impl StateSyncClient for FakeStateSync {
             .chunk(chunk_id)
             .map(|chunk| ArtifactChunk {
                 chunk_id,
-                witness: vec![],
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(chunk),
             })
     }
@@ -487,7 +485,6 @@ pub fn create_node(
 pub fn empty_artifact_chunk(chunk_id: ChunkId) -> ArtifactChunk {
     ArtifactChunk {
         chunk_id,
-        witness: vec![],
         artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(Vec::new()),
     }
 }

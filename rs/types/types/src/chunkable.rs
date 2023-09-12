@@ -11,8 +11,8 @@
 //!
 //! For more context please check `<https://youtu.be/WaNJINjGleg>`
 //!
-use crate::{artifact::Artifact, crypto::CryptoHash};
-use bincode::{deserialize, serialize};
+use crate::artifact::Artifact;
+use bincode::serialize;
 use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
@@ -43,8 +43,6 @@ pub enum ArtifactChunkData {
 pub struct ArtifactChunk {
     // Chunk number/id for this chunk
     pub chunk_id: ChunkId,
-    // Sibling hashes to be used for Merkle proof verification of this chunk
-    pub witness: Vec<CryptoHash>,
     // Payload for the chunk
     pub artifact_chunk_data: ArtifactChunkData,
 }
@@ -74,14 +72,7 @@ impl From<ArtifactChunk> for pb::ArtifactChunk {
                 pb::artifact_chunk::Data::Chunk(chunk_data)
             }
         };
-        Self {
-            witnesses: chunk
-                .witness
-                .iter()
-                .map(|w| serialize(&w).unwrap())
-                .collect(),
-            data: Some(data),
-        }
+        Self { data: Some(data) }
     }
 }
 
@@ -89,15 +80,6 @@ impl TryFrom<pb::ArtifactChunk> for ArtifactChunk {
     type Error = ProxyDecodeError;
 
     fn try_from(chunk: pb::ArtifactChunk) -> Result<Self, Self::Error> {
-        let witness = chunk.witnesses.iter().map(|w| deserialize(w)).collect();
-        let witness = match witness {
-            Ok(witness) => witness,
-            Err(_) => {
-                return Err(ProxyDecodeError::Other(
-                    "unable to deserialize CryptoHash".to_string(),
-                ))
-            }
-        };
         let artifact_chunk_data = match chunk.data {
             None => {
                 return Err(ProxyDecodeError::Other(
@@ -114,7 +96,6 @@ impl TryFrom<pb::ArtifactChunk> for ArtifactChunk {
         Ok(Self {
             // On the wire chunk_id is passed in GossipChunk.
             chunk_id: ChunkId::from(CHUNKID_UNIT_CHUNK),
-            witness,
             artifact_chunk_data,
         })
     }

@@ -81,10 +81,9 @@ message Artifact {
 }
 
 message ArtifactChunk {
-  repeated bytes witnesses = 1;
   oneof data {
     bytes chunk = 3;
     Artifact artifact = 4;
   }
-  reserved 2;
+  reserved 1, 2;
 }

@@ -113,7 +113,6 @@ pub(crate) fn parse_chunk_handler_response(
 
             let chunk = ArtifactChunk {
                 chunk_id,
-                witness: Vec::new(),
                 artifact_chunk_data:
                     ic_types::chunkable::ArtifactChunkData::SemiStructuredChunkData(pb.data),
             };
