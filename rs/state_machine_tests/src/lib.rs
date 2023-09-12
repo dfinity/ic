@@ -880,9 +880,19 @@ impl StateMachine {
             time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
             consensus_responses: payload.consensus_responses,
         };
+
         self.message_routing
             .process_batch(batch)
             .expect("Could not process batch");
+
+        self.state_manager.remove_states_below(batch_number);
+        assert_eq!(
+            self.state_manager
+                .latest_state_certification_hash()
+                .unwrap()
+                .0,
+            batch_number
+        );
     }
 
     pub fn execute_block_with_xnet_payload(&self, xnet_payload: XNetPayload) {
