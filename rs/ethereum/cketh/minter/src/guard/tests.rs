@@ -1,5 +1,3 @@
-use crate::eth_rpc::BlockTag;
-
 mod retrieve_eth_guard {
     use crate::guard::tests::init_state;
     use crate::guard::{retrieve_eth_guard, GuardError, MAX_CONCURRENT};
@@ -108,7 +106,7 @@ fn init_state() {
                 ethereum_contract_address: None,
                 ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                     .expect("BUG: invalid principal"),
-                ethereum_block_height: BlockTag::Finalized,
+                ethereum_block_height: Default::default(),
                 minimum_withdrawal_amount: Wei::from_milliether(10).into(),
                 next_transaction_nonce: Default::default(),
             })

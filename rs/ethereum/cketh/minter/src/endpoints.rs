@@ -34,6 +34,21 @@ pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
+#[derive(CandidType, Debug, Default, Serialize, Deserialize, Clone)]
+pub enum CandidBlockTag {
+    /// The latest mined block.
+    #[default]
+    Latest,
+    /// The latest safe head block.
+    /// See
+    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    Safe,
+    /// The latest finalized block.
+    /// See
+    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    Finalized,
+}
+
 impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     fn from(value: EthWithdrawalRequest) -> Self {
         Self {
