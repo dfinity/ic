@@ -259,7 +259,7 @@ pub fn query_calls_test(env: TestEnv) {
             metrics.success_calls()
         );
         let expected_requests_count = rps * workload_per_step_duration.as_secs() as usize;
-        assert_eq!(metrics.success_calls(), rps * expected_requests_count);
+        assert_eq!(metrics.success_calls(), expected_requests_count);
         assert_eq!(metrics.failure_calls(), 0);
     }
 }
