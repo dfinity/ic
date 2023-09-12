@@ -127,10 +127,10 @@
             <h3>Block sync</h3>
             <table>
                 <tbody>
-                    {% if last_finalized_block.is_some() %}
+                    {% if last_observed_block.is_some() %}
                     <tr>
-                        <th>Last finalized block number</th>
-                        <td>{% call etherscan_block_link(last_finalized_block.unwrap()) %}</td>
+                        <th>Last observed block number</th>
+                        <td>{% call etherscan_block_link(last_observed_block.unwrap()) %}</td>
                     </tr>
                     {% endif %}
                     <tr>

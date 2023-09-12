@@ -229,11 +229,9 @@ impl HttpResponsePayload for Transaction {
 
 /// Block tags.
 /// See https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(CandidType, Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BlockTag {
-    /// The earliest/genesis block.
-    Earliest,
     /// The latest mined block.
     #[default]
     Latest,
@@ -245,8 +243,6 @@ pub enum BlockTag {
     /// See
     /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
     Finalized,
-    /// The pending state.
-    Pending,
 }
 
 /// The block specification indicating which block to query.
@@ -275,11 +271,9 @@ impl std::str::FromStr for BlockSpec {
             return Ok(BlockSpec::Number(quantity));
         }
         Ok(BlockSpec::Tag(match s {
-            "earliest" => BlockTag::Earliest,
             "latest" => BlockTag::Latest,
             "safe" => BlockTag::Safe,
             "finalized" => BlockTag::Finalized,
-            "pending" => BlockTag::Pending,
             _ => return Err(format!("unknown block tag '{s}'")),
         }))
     }

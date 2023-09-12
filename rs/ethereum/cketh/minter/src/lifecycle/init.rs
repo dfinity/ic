@@ -1,5 +1,5 @@
 use crate::address::Address;
-use crate::eth_rpc::BlockNumber;
+use crate::eth_rpc::{BlockNumber, BlockTag};
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{TransactionNonce, Wei};
 use crate::state::{InvalidStateError, State};
@@ -14,6 +14,7 @@ pub struct InitArg {
     pub ecdsa_key_name: String,
     pub ethereum_contract_address: Option<String>,
     pub ledger_id: Principal,
+    pub ethereum_block_height: BlockTag,
     pub minimum_withdrawal_amount: Nat,
     pub next_transaction_nonce: Nat,
 }
@@ -26,6 +27,7 @@ impl TryFrom<InitArg> for State {
             ecdsa_key_name,
             ethereum_contract_address,
             ledger_id,
+            ethereum_block_height,
             minimum_withdrawal_amount,
             next_transaction_nonce,
         }: InitArg,
@@ -52,12 +54,13 @@ impl TryFrom<InitArg> for State {
             eth_transactions: EthTransactions::new(initial_nonce),
             ledger_id,
             minimum_withdrawal_amount,
+            ethereum_block_height,
             // Note that the default block to start from for logs scrapping
             // depends on the chain we are using:
             // Ethereum and Sepolia have for example different block heights at a given time.
             // https://sepolia.etherscan.io/block/3938798
             last_scraped_block_number: BlockNumber::new(3_956_206),
-            last_finalized_block_number: None,
+            last_observed_block_number: None,
             events_to_mint: Default::default(),
             minted_events: Default::default(),
             ecdsa_public_key: None,

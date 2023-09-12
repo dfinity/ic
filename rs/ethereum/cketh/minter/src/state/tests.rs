@@ -1,3 +1,4 @@
+use crate::eth_rpc::BlockTag;
 use crate::lifecycle::init::InitArg;
 use crate::numeric::Wei;
 use crate::state::State;
@@ -33,6 +34,7 @@ fn a_state() -> State {
         ethereum_contract_address: None,
         ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
+        ethereum_block_height: BlockTag::Finalized,
         minimum_withdrawal_amount: Wei::from_milliether(10).into(),
         next_transaction_nonce: Default::default(),
     })
