@@ -218,13 +218,33 @@ fn skipping_flushing_is_invisible_for_state() {
             recv_wait.recv().unwrap();
             recv_nop.recv().unwrap();
         }
+
+        let wait = || {
+            let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
+            env.state_manager
+                .test_only_send_wait_to_tip_channel(send_wait);
+            recv_wait.recv().unwrap();
+        };
+
         let skips_before = skips(&env);
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
         env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
         env.execute_ingress(canister_id2, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
 
         // Second inc on canister_id0 to trigger overwriting a previously written page.
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
 
         let skips_after = skips(&env);
         if block_tip {
