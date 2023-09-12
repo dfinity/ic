@@ -711,6 +711,7 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 0u128,
+                0u128,
             )
         );
 
@@ -761,6 +762,7 @@ fn can_get_canister_information() {
                     ComputeAllocation::default().as_percent(),
                     None,
                     259200,
+                    0u128,
                     0u128,
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),

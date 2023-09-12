@@ -21,9 +21,9 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder, CanisterStatusType,
-    CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload, SkipPreUpgrade,
-    UpdateSettingsArgs,
+    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2, CanisterStatusType, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
+    Method, Payload, SkipPreUpgrade, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -6524,4 +6524,41 @@ fn update_settings_can_set_reserved_cycles_limit() {
             .reserved_balance_limit(),
         Some(Cycles::new(1))
     );
+}
+
+#[test]
+fn canister_status_contains_reserved_cycles() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(0)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(CYCLES, None, Some(1_000_000))
+        .unwrap();
+    let result = test.canister_status(canister_id);
+    let reply = get_reply(result);
+    let status = Decode!(reply.as_slice(), CanisterStatusResultV2).unwrap();
+    assert_eq!(
+        status.reserved_cycles(),
+        test.cycles_account_manager()
+            .storage_reservation_cycles(
+                NumBytes::new(1_000_000),
+                &ResourceSaturation::new(0, 0, CAPACITY),
+                test.subnet_size()
+            )
+            .get()
+    );
+    assert_eq!(
+        status.reserved_cycles(),
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance()
+            .get()
+    );
+    assert!(status.reserved_cycles() > 0);
 }
