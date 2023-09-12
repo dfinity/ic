@@ -308,6 +308,7 @@ impl Swap {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
+            current_neurons_fund_contribution_e8s: None,
         };
         if init.is_swap_init_for_one_proposal_flow() {
             // Automatically fill out the fields that the (legacy) open request
@@ -3143,6 +3144,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             cf_participants,
             buyers,
             neuron_recipes,
+            current_neurons_fund_contribution_e8s,
         } = self.swap;
 
         formatter
@@ -3183,6 +3185,10 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             )
             .field("buyers", &format!("<len={}>", buyers.len()))
             .field("neuron_recipes", &format!("<len={}>", neuron_recipes.len()))
+            .field(
+                "current_neurons_fund_contribution_e8s",
+                current_neurons_fund_contribution_e8s,
+            )
             .finish()
     }
 }
@@ -3878,6 +3884,7 @@ mod tests {
                 purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
                 already_tried_to_auto_finalize: Some(false),
                 auto_finalize_swap_response: None,
+                current_neurons_fund_contribution_e8s: None,
             };
             let mut ticket_ids = HashSet::new();
             for pid in pids {
@@ -4183,6 +4190,7 @@ mod tests {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
+            current_neurons_fund_contribution_e8s: None,
         };
 
         let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {

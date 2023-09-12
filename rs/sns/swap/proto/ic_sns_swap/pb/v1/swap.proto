@@ -262,6 +262,10 @@ message Swap {
   // Set when auto-finalization finishes. Calling finalize manually has no effect
   // on this parameter.
   optional FinalizeSwapResponse auto_finalize_swap_response = 18;
+
+  // Amount of contributions from the Neurons' Fund committed to this SNS so far.
+  // TODO[NNS1-2570]: Update this field with the current value.
+  optional uint64 current_neurons_fund_contribution_e8s = 19;
 }
 
 // The initialisation data of the canister. Always specified on

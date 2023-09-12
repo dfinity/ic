@@ -203,6 +203,7 @@ type Swap = record {
   init : opt Init;
   already_tried_to_auto_finalize : opt bool;
   purge_old_tickets_last_completion_timestamp_nanoseconds : opt nat64;
+  current_neurons_fund_contribution_e8s : opt nat64;
   lifecycle : int32;
   purge_old_tickets_next_principal : opt vec nat8;
   buyers : vec record { text; BuyerState };

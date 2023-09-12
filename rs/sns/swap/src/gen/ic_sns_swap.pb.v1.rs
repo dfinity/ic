@@ -221,6 +221,10 @@ pub struct Swap {
     /// on this parameter.
     #[prost(message, optional, tag = "18")]
     pub auto_finalize_swap_response: ::core::option::Option<FinalizeSwapResponse>,
+    /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
+    /// TODO\[NNS1-2570\]: Update this field with the current value.
+    #[prost(uint64, optional, tag = "19")]
+    pub current_neurons_fund_contribution_e8s: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
