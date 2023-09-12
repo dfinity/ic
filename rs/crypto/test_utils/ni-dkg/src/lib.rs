@@ -26,7 +26,9 @@ use std::sync::Arc;
 
 mod initial_config;
 
-pub use initial_config::{initial_dkg_transcript, InitialNiDkgConfig};
+pub use initial_config::{
+    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message, InitialNiDkgConfig,
+};
 
 pub fn create_transcript<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
