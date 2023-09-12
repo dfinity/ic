@@ -1,4 +1,5 @@
 mod init {
+    use crate::eth_rpc::BlockTag;
     use crate::lifecycle::init::InitArg;
     use crate::numeric::{TransactionNonce, Wei};
     use crate::state::{InvalidStateError, State};
@@ -82,6 +83,7 @@ mod init {
             ethereum_contract_address: None,
             ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                 .expect("BUG: invalid principal"),
+            ethereum_block_height: BlockTag::Finalized,
             minimum_withdrawal_amount: Wei::TWO.into(),
             next_transaction_nonce: TransactionNonce::ZERO.into(),
         }
@@ -90,6 +92,7 @@ mod init {
 
 mod upgrade {
     use crate::address::Address;
+    use crate::eth_rpc::BlockTag;
     use crate::lifecycle::upgrade::UpgradeArg;
     use crate::numeric::{TransactionNonce, Wei};
     use crate::state::{InvalidStateError, State};
@@ -150,6 +153,7 @@ mod upgrade {
             ethereum_contract_address: Some(
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
             ),
+            ethereum_block_height: Some(BlockTag::Safe),
         };
 
         state.upgrade(upgrade_arg).expect("valid upgrade args");
@@ -160,6 +164,7 @@ mod upgrade {
             state.ethereum_contract_address,
             Some(Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
+        assert_eq!(state.ethereum_block_height, BlockTag::Safe);
     }
 
     fn initial_state() -> State {
@@ -171,6 +176,7 @@ mod upgrade {
             ethereum_contract_address: None,
             ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                 .expect("BUG: invalid principal"),
+            ethereum_block_height: BlockTag::Finalized,
             minimum_withdrawal_amount: Wei::from_milliether(10).into(),
             next_transaction_nonce: Default::default(),
         })

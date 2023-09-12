@@ -1,8 +1,8 @@
 use crate::eth_rpc;
 use crate::eth_rpc::{
-    Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult,
-    HttpResponsePayload, JsonRpcResult, LogEntry, ResponseSizeEstimate, SendRawTransactionResult,
-    Transaction,
+    Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError,
+    HttpOutcallResult, HttpResponsePayload, JsonRpcResult, LogEntry, ResponseSizeEstimate,
+    SendRawTransactionResult, Transaction,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::lifecycle::EthereumNetwork;
@@ -19,13 +19,13 @@ mod providers;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EthRpcClient {
     chain: EthereumNetwork,
 }
 
 impl EthRpcClient {
-    pub const fn new(chain: EthereumNetwork) -> Self {
+    const fn new(chain: EthereumNetwork) -> Self {
         Self { chain }
     }
 
@@ -130,14 +130,17 @@ impl EthRpcClient {
         results.reduce_with_equality()
     }
 
-    pub async fn eth_get_last_finalized_block(&self) -> Result<Block, MultiCallError<Block>> {
-        use crate::eth_rpc::{BlockSpec, BlockTag, GetBlockByNumberParams};
+    pub async fn eth_get_block_by_number(
+        &self,
+        block: BlockSpec,
+    ) -> Result<Block, MultiCallError<Block>> {
+        use crate::eth_rpc::GetBlockByNumberParams;
 
         let results: MultiCallResults<Block> = self
             .parallel_call(
                 "eth_getBlockByNumber",
                 GetBlockByNumberParams {
-                    block: BlockSpec::Tag(BlockTag::Finalized),
+                    block,
                     include_full_transactions: false,
                 },
                 ResponseSizeEstimate::new(6 * 1024),

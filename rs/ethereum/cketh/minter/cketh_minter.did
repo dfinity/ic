@@ -5,6 +5,17 @@ type EthereumNetwork = variant {
     Sepolia;
 };
 
+type BlockTag = variant {
+    /// The latest mined block.
+    Latest;
+
+    /// The latest safe head block.
+    Safe;
+
+    /// The latest finalized block.
+    Finalized;
+};
+
 // The initialization parameters of the minter canister.
 type InitArg = record {
     // The minter will interact with this Ethereum network.
@@ -22,6 +33,9 @@ type InitArg = record {
     // the minting account of the ledger.
     ledger_id : principal;
 
+    // Determine ethereum block height observed by minter.
+    ethereum_block_height: BlockTag;
+
     // Minimum amount in Wei that can be withdrawn.
     minimum_withdrawal_amount : nat;
 
@@ -37,7 +51,10 @@ type UpgradeArg = record {
     minimum_withdrawal_amount : opt nat;
 
     // Change the helper smart contract address.
-    ethereum_contract_address : opt text
+    ethereum_contract_address : opt text;
+
+    // Change the ethereum block height observed by the minter.
+    ethereum_block_height : opt BlockTag;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };

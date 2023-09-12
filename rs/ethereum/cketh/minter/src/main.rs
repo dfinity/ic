@@ -85,7 +85,7 @@ async fn scrap_eth_logs() {
         }
     };
     let mut last_scraped_block_number = read_state(|s| s.last_scraped_block_number);
-    let last_queried_block_number = update_last_finalized_block_number().await;
+    let last_queried_block_number = update_last_observed_block_number().await;
     while last_scraped_block_number < last_queried_block_number {
         last_scraped_block_number = scrap_eth_logs_between(
             contract_address,
@@ -156,14 +156,15 @@ async fn scrap_eth_logs_between(
     }
 }
 
-async fn update_last_finalized_block_number() -> BlockNumber {
-    use eth_rpc::Block;
+async fn update_last_observed_block_number() -> BlockNumber {
+    use eth_rpc::{Block, BlockSpec};
+
     let finalized_block: Block = read_state(EthRpcClient::from_state)
-        .eth_get_last_finalized_block()
+        .eth_get_block_by_number(BlockSpec::Tag(read_state(State::ethereum_block_height)))
         .await
         .expect("HTTP call failed");
     let block_number = finalized_block.number;
-    mutate_state(|s| s.last_finalized_block_number = Some(block_number));
+    mutate_state(|s| s.last_observed_block_number = Some(block_number));
     block_number
 }
 
@@ -566,11 +567,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     )?;
 
                 w.encode_gauge(
-                    "cketh_minter_last_finalized_block",
-                    s.last_finalized_block_number
+                    "cketh_minter_last_observed_block",
+                    s.last_observed_block_number
                         .map(|n| n.as_f64())
                         .unwrap_or(0.0),
-                    "The last finalized Ethereum block the ckETH minter observed.",
+                    "The last Ethereum block the ckETH minter observed.",
                 )?;
 
                 w.encode_gauge(

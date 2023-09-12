@@ -1,6 +1,6 @@
 use crate::address::Address;
 use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
-use crate::eth_rpc::BlockNumber;
+use crate::eth_rpc::{BlockNumber, BlockTag};
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
@@ -42,8 +42,9 @@ pub struct State {
     pub ethereum_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub minimum_withdrawal_amount: Wei,
+    pub ethereum_block_height: BlockTag,
     pub last_scraped_block_number: BlockNumber,
-    pub last_finalized_block_number: Option<BlockNumber>,
+    pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeSet<ReceivedEthEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, EventSourceError>,
@@ -188,6 +189,10 @@ impl State {
         self.ethereum_network
     }
 
+    pub const fn ethereum_block_height(&self) -> BlockTag {
+        self.ethereum_block_height
+    }
+
     pub fn upgrade(&mut self, upgrade_args: UpgradeArg) -> Result<(), InvalidStateError> {
         use std::str::FromStr;
 
@@ -195,6 +200,7 @@ impl State {
             next_transaction_nonce,
             minimum_withdrawal_amount,
             ethereum_contract_address,
+            ethereum_block_height,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -213,6 +219,9 @@ impl State {
                 InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
             })?;
             self.ethereum_contract_address = Some(ethereum_contract_address);
+        }
+        if let Some(block_height) = ethereum_block_height {
+            self.ethereum_block_height = block_height;
         }
         self.validate_config()
     }

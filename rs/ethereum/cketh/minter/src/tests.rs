@@ -9,17 +9,18 @@ fn deserialize_block_spec() {
         BlockSpec::Number(Quantity::new(0xffff)),
         serde_json::from_str("\"0xffff\"").unwrap()
     );
+
     assert_eq!(
-        BlockSpec::Tag(BlockTag::Earliest),
-        serde_json::from_str("\"earliest\"").unwrap()
+        BlockSpec::Tag(BlockTag::Latest),
+        serde_json::from_str("\"latest\"").unwrap()
+    );
+    assert_eq!(
+        BlockSpec::Tag(BlockTag::Safe),
+        serde_json::from_str("\"safe\"").unwrap()
     );
     assert_eq!(
         BlockSpec::Tag(BlockTag::Finalized),
         serde_json::from_str("\"finalized\"").unwrap()
-    );
-    assert_eq!(
-        BlockSpec::Tag(BlockTag::Pending),
-        serde_json::from_str("\"pending\"").unwrap()
     );
 }
 
