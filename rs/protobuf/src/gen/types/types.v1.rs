@@ -1348,8 +1348,6 @@ pub mod artifact {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactChunk {
-    #[prost(bytes = "vec", repeated, tag = "1")]
-    pub witnesses: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(oneof = "artifact_chunk::Data", tags = "3, 4")]
     pub data: ::core::option::Option<artifact_chunk::Data>,
 }

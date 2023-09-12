@@ -169,7 +169,6 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
                     let artifact_chunk: ArtifactChunk = c.try_into()?;
                     Ok(ArtifactChunk {
                         chunk_id,
-                        witness: artifact_chunk.witness,
                         artifact_chunk_data: artifact_chunk.artifact_chunk_data,
                     })
                 }

@@ -511,7 +511,6 @@ impl ChunkableArtifact for StateSyncMessage {
 
             Some(ArtifactChunk {
                 chunk_id,
-                witness: Vec::new(),
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
             })
         }
