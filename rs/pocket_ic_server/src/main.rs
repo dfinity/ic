@@ -1,10 +1,11 @@
 use axum::{
+    body::HttpBody,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::StatusCode,
     middleware::{self, Next},
     response::Response,
-    routing::{delete, get, post},
+    routing::{delete, get, post, MethodRouter},
     Router, Server,
 };
 use clap::Parser;
@@ -71,6 +72,25 @@ impl axum::extract::FromRef<AppState> for Arc<RwLock<HashMap<String, Arc<TempDir
     }
 }
 
+trait RouterExt<S, B>
+where
+    B: HttpBody + Send + 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self;
+}
+
+impl<S, B> RouterExt<S, B> for Router<S, B>
+where
+    B: HttpBody + Send + 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self {
+        self.route(path, method_router.clone())
+            .route(&format!("{path}/"), method_router)
+    }
+}
+
 // Command line arguments to PocketIC server.
 #[derive(Parser)]
 struct Args {
@@ -118,33 +138,33 @@ async fn start(runtime: Arc<Runtime>) {
     let app = Router::new()
         //
         // Get health of service.
-        .route("/status", get(status))
+        .directory_route("/status", get(status))
         //
         // List all IC instances.
-        .route("/instances", get(list_instances))
+        .directory_route("/instances", get(list_instances))
         //
         // Create a new IC instance. Returns an InstanceId.
         // Body can contain a checkpoint name to restore from a checkpoint, or can be left empty to create a new instance.
-        .route("/instances", post(create_instance))
+        .directory_route("/instances", post(create_instance))
         //
         // Call the specified IC instance.
         // Body contains a Request.
         // Returns the IC's Response.
-        .route("/instances/:id", post(call_instance))
+        .directory_route("/instances/:id", post(call_instance))
+        //
+        // Deletes an instance.
+        .directory_route("/instances/:id", delete(delete_instance))
         //
         // Save this instance to a checkpoint with the given name.
         // Takes a name:String in the request body.
         // TODO: Add a function that separates those two.
-        .route(
+        .directory_route(
             "/instances/:id/tick_and_create_checkpoint",
             post(tick_and_create_checkpoint),
         )
         //
         // List all checkpoints.
-        .route("/checkpoints", get(list_checkpoints))
-        //
-        // Deletes an instance.
-        .route("/instances/:id/delete", delete(delete_instance))
+        .directory_route("/checkpoints", get(list_checkpoints))
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -265,11 +285,11 @@ async fn create_instance(
         instances_sequence_counter: counter,
         runtime,
     }): State<AppState>,
-    body: Option<axum::extract::Json<String>>,
+    body: Option<axum::extract::Json<HashMap<String, String>>>,
 ) -> (StatusCode, String) {
     match body {
         Some(body) => {
-            let checkpoint_name = body.0;
+            let checkpoint_name = body.get("checkpoint_name").unwrap().clone();
             let checkpoints = checkpoints.read().await;
             if !checkpoints.contains_key(&checkpoint_name) {
                 return (
@@ -345,10 +365,13 @@ async fn tick_and_create_checkpoint(
         ..
     }): State<AppState>,
     Path(id): Path<InstanceId>,
-    axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
+    axum::extract::Json(payload): axum::extract::Json<HashMap<String, String>>,
 ) -> (StatusCode, String) {
+    let checkpoint_name = payload
+        .get("checkpoint_name")
+        .expect("Missing checkpoint_name field");
     let mut checkpoints = checkpoints.write().await;
-    if checkpoints.contains_key(&checkpoint_name) {
+    if checkpoints.contains_key(checkpoint_name) {
         return (
             StatusCode::CONFLICT,
             format!("Checkpoint {} already exists.", checkpoint_name),
@@ -365,7 +388,7 @@ async fn tick_and_create_checkpoint(
         let checkpoint_dir = TempDir::new().expect("Failed to create tempdir");
         copy_dir(guard_sm.state_dir.path(), checkpoint_dir.path())
             .expect("Failed to copy state directory");
-        checkpoints.insert(checkpoint_name, Arc::new(checkpoint_dir));
+        checkpoints.insert(checkpoint_name.clone(), Arc::new(checkpoint_dir));
         (StatusCode::OK, "Success".to_string())
     } else {
         // id not found in map; return error
