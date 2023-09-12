@@ -106,7 +106,7 @@ thread_local! {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct State {
-    // Equals to `true` while the [build_index] task runs.
+    /// Equals to `true` while the [build_index] task runs.
     is_build_index_running: bool,
 
     /// The principal of the ledger canister that is indexed by this index.
@@ -115,11 +115,14 @@ struct State {
     /// The maximum number of transactions returned by [get_blocks].
     max_blocks_per_response: u64,
 
-    // Last wait time in nanoseconds.
+    /// Last wait time in nanoseconds.
     pub last_wait_time: Duration,
 
-    // The fees collectors with the ranges of blocks for which they collected the fee.
+    /// The fees collectors with the ranges of blocks for which they collected the fee.
     fee_collectors: HashMap<Account, Vec<Range<BlockIndex64>>>,
+
+    /// This fee is used if no fee nor effetive_fee is found in Approve blocks.
+    pub last_fee: Option<Tokens>,
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -132,6 +135,7 @@ impl Default for State {
             max_blocks_per_response: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
             last_wait_time: Duration::from_secs(0),
             fee_collectors: Default::default(),
+            last_fee: None,
         }
     }
 }
@@ -527,6 +531,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                         block_index
                     ))
                 });
+                mutate_state(|s| s.last_fee = Some(fee));
                 debit(
                     block_index,
                     from,
@@ -542,12 +547,23 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 }
             }
             Operation::Approve { from, fee, .. } => {
-                let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                    ic_cdk::trap(&format!(
-                        "Block {} is of type Approve but has no fee or effective fee!",
-                        block_index
-                    ))
-                });
+                let fee = match fee.or(block.effective_fee) {
+                    Some(fee) => fee,
+                    // NB. There was a bug in the ledger which would create
+                    // approve blocks with the fee fields unset. The bug was
+                    // quickly fixed, but there are a few blocks on the mainnet
+                    // that don't have their fee fields populated.
+                    None => match with_state(|state| state.last_fee) {
+                        Some(last_fee) => {
+                            log!(
+                                P1,
+                                "fee and effective_fee aren't set in block {block_index}, using last transfer fee {last_fee}"
+                            );
+                            last_fee
+                        }
+                        None => ic_cdk::trap(&format!("bug: index is stucked because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
+                    }
+                };
                 debit(block_index, from, fee);
             }
         },
