@@ -1002,6 +1002,7 @@ impl CanisterManager {
                     subnet_size,
                 )
                 .get(),
+            canister.system_state.reserved_balance().get(),
         ))
     }
 
