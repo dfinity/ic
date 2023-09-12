@@ -1697,6 +1697,18 @@ impl StateManagerImpl {
         Some((state, certification, hash_tree))
     }
 
+    /// Returns the state hash of the latest state, irrespective of whether that state was
+    /// certified or not. Primarily used for testing.
+    pub fn latest_state_certification_hash(&self) -> Option<(Height, CryptoHash)> {
+        let states = self.states.read();
+
+        states
+            .certifications_metadata
+            .iter()
+            .next_back()
+            .map(|(h, m)| (*h, m.certified_state_hash.clone()))
+    }
+
     /// Returns the manifest of the latest checkpoint on disk with its
     /// checkpoint layout.
     fn latest_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
@@ -2853,7 +2865,7 @@ impl StateManager for StateManagerImpl {
     /// ```text
     ///   removed_states(H) := (0, min(LSH, H))
     ///                        \ { ch | ch ∈ CHS ∧ ch >= OCK }
-    ///                        \ { x | x = max(CH)}
+    ///                        \ { max(CHS) }
     ///  ```
     ///
     /// # Rationale
