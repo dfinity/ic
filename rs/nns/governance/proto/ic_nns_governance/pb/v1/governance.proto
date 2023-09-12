@@ -2072,6 +2072,11 @@ message SettleCommunityFundParticipation {
     // This is where the minted ICP will be sent. In principal, this could be
     // fetched using the swap canister's get_state method.
     ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 1;
+    // Total amount of contributions from direct swap participants.
+    optional uint64 total_direct_contribution_e8s = 2;
+    // Total amount of contributions from the Neuron's Fund.
+    // TODO[NNS1-2570]: Ensure this field is set.
+    optional uint64 total_neurons_fund_contribution_e8s = 3;
   }
 
   // When this happens, maturity needs to be restored to CF neurons. The amounts

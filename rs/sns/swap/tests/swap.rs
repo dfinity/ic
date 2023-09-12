@@ -1462,6 +1462,8 @@ async fn test_finalize_swap_ok() {
                     open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: Some(SNS_GOVERNANCE_CANISTER_ID.into()),
+                        total_direct_contribution_e8s: Some(100 * E8),
+                        total_neurons_fund_contribution_e8s: None,
                     })),
                 }
             )]

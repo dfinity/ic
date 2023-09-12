@@ -95,7 +95,11 @@ type Command_2 = variant {
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
 };
-type Committed = record { sns_governance_canister_id : opt principal };
+type Committed = record {
+  total_direct_contribution_e8s : opt nat64;
+  total_neurons_fund_contribution_e8s : opt nat64;
+  sns_governance_canister_id : opt principal;
+};
 type Configure = record { operation : opt Operation };
 type Countries = record { iso_codes : vec text };
 type CreateServiceNervousSystem = record {
