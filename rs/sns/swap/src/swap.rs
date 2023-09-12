@@ -2101,6 +2101,8 @@ impl Swap {
         let result = if self.lifecycle() == Lifecycle::Committed {
             Result::Committed(Committed {
                 sns_governance_canister_id: Some(sns_governance.get()),
+                total_direct_contribution_e8s: Some(self.direct_investor_total_icp_e8s()),
+                total_neurons_fund_contribution_e8s: self.current_neurons_fund_contribution_e8s,
             })
         } else {
             Result::Aborted(Aborted {})

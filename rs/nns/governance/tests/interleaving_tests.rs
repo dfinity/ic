@@ -207,6 +207,8 @@ fn test_cant_interleave_calls_to_settle_community_fund() {
         result: Some(settle_community_fund_participation::Result::Committed(
             Committed {
                 sns_governance_canister_id: Some(sns_governance_canister_id),
+                total_direct_contribution_e8s: None,
+                total_neurons_fund_contribution_e8s: None,
             },
         )),
     };

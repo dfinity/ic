@@ -1435,6 +1435,13 @@ pub mod settle_community_fund_participation {
         /// fetched using the swap canister's get_state method.
         #[prost(message, optional, tag = "1")]
         pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// Total amount of contributions from direct swap participants.
+        #[prost(uint64, optional, tag = "2")]
+        pub total_direct_contribution_e8s: ::core::option::Option<u64>,
+        /// Total amount of contributions from the Neuron's Fund.
+        /// TODO\[NNS1-2570\]: Ensure this field is set.
+        #[prost(uint64, optional, tag = "3")]
+        pub total_neurons_fund_contribution_e8s: ::core::option::Option<u64>,
     }
     /// When this happens, maturity needs to be restored to Neurons' Fund neurons.
     /// The amounts to be refunded can be found in the ProposalData's

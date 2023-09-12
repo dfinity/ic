@@ -11790,6 +11790,8 @@ async fn test_settle_community_fund_is_idempotent() {
                 open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    total_direct_contribution_e8s: None,
+                    total_neurons_fund_contribution_e8s: None,
                 })),
             },
         )
@@ -11828,6 +11830,8 @@ async fn test_settle_community_fund_is_idempotent() {
                 open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    total_direct_contribution_e8s: None,
+                    total_neurons_fund_contribution_e8s: None,
                 })),
             },
         )
@@ -11951,6 +11955,8 @@ async fn test_settle_community_fund_participation_restores_lifecycle_on_failure(
                 open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    total_direct_contribution_e8s: None,
+                    total_neurons_fund_contribution_e8s: None,
                 })),
             },
         )
@@ -12120,6 +12126,8 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
                 open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    total_direct_contribution_e8s: None,
+                    total_neurons_fund_contribution_e8s: None,
                 })),
             },
         )
@@ -12476,6 +12484,8 @@ async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_sys
                 open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    total_direct_contribution_e8s: None,
+                    total_neurons_fund_contribution_e8s: None,
                 })),
             },
         )
@@ -12514,6 +12524,8 @@ async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_sys
                 open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    total_direct_contribution_e8s: None,
+                    total_neurons_fund_contribution_e8s: None,
                 })),
             },
         )
