@@ -1,5 +1,8 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript::Groth20_Bls12_381;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_temp_crypto::{CryptoComponentRng, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::NiDkgAlgorithm;
@@ -118,6 +121,68 @@ pub fn initial_dkg_transcript<R: rand::Rng + rand::CryptoRng>(
         .build();
 
     transcript_with_single_dealing(dkg_config, dealer_crypto, dealer_id)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SecretKeyBytes {
+    val: [u8; 32],
+}
+
+impl AsRef<[u8]> for SecretKeyBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.val
+    }
+}
+
+/// Return a fake transcript and the master secret associated with it
+///
+/// The transcript is not valid and cannot be used by NIDKG
+pub fn initial_dkg_transcript_and_master_key<R: rand::Rng + rand::CryptoRng>(
+    initial_dkg_config: InitialNiDkgConfig,
+    receiver_keys: &BTreeMap<NodeId, PublicKeyProto>,
+    rng: &mut R,
+) -> (NiDkgTranscript, SecretKeyBytes) {
+    let mut transcript = initial_dkg_transcript(initial_dkg_config, receiver_keys, rng);
+
+    let master_secret = Scalar::random(rng);
+
+    let public_key_bytes = G2Affine::from(G2Affine::generator() * &master_secret).serialize();
+
+    let master_secret_bytes = SecretKeyBytes {
+        val: master_secret.serialize(),
+    };
+
+    transcript.internal_csp_transcript = match transcript.internal_csp_transcript {
+        Groth20_Bls12_381(transcript) => {
+            let mut mod_transcript = transcript.clone();
+            mod_transcript.public_coefficients.coefficients[0] = PublicKeyBytes(public_key_bytes);
+            Groth20_Bls12_381(mod_transcript)
+        }
+    };
+
+    (transcript, master_secret_bytes)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CombinedSignatureBytes {
+    val: [u8; 48],
+}
+
+impl AsRef<[u8]> for CombinedSignatureBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.val
+    }
+}
+
+pub fn sign_message(message: &[u8], secret_key: &SecretKeyBytes) -> CombinedSignatureBytes {
+    let dst = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+    let secret = Scalar::deserialize(&secret_key.val).expect("Invalid SecretKeyBytes");
+    let message = G1Affine::hash(dst, message);
+    let signature = message * secret;
+
+    CombinedSignatureBytes {
+        val: signature.serialize(),
+    }
 }
 
 fn number_of_nodes_from_usize(count: usize) -> NumberOfNodes {
