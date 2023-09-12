@@ -8,6 +8,8 @@ use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+use serde_json::json;
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -19,22 +21,20 @@ type InstanceId = String;
 // ======================================================================================================
 // Code borrowed from https://github.com/dfinity/test-state-machine-client/blob/main/src/lib.rs
 // The StateMachine struct is renamed to `PocketIc` and given new interface.
-pub struct PocketIcServer {
+pub struct PocketIc {
     pub instance_id: InstanceId,
-    // The PocketIC server's base address.
-    server_url: Url,
-    // The PocketIC server's base address plus "/instances/<instance_id>".
+    // The PocketIC server's base address plus "/instances/<instance_id>/".
     // All communication with this IC instance goes through this endpoint.
     instance_url: Url,
     reqwest_client: reqwest::blocking::Client,
 }
 
-impl PocketIcServer {
+impl PocketIc {
     pub fn new() -> Self {
-        let server_url = Self::get_server_url();
+        let server_url = Self::start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
         let instance_id = reqwest_client
-            .post(server_url.join("instances").unwrap())
+            .post(server_url.join("instances/").unwrap())
             .send()
             .expect("Failed to get result")
             .text()
@@ -42,24 +42,26 @@ impl PocketIcServer {
         let instance_url = server_url
             .join("instances/")
             .unwrap()
-            .join(&instance_id)
+            .join(&format!("{instance_id}/"))
             .unwrap();
 
         Self {
             instance_id,
-            server_url,
             instance_url,
             reqwest_client,
         }
     }
 
-    pub fn new_from_snapshot<S: AsRef<str> + std::fmt::Display>(name: S) -> Result<Self, String> {
-        let server_url = Self::get_server_url();
+    pub fn new_from_snapshot<S: AsRef<str> + std::fmt::Display + serde::Serialize + Copy>(
+        name: S,
+    ) -> Result<Self, String> {
+        let server_url = Self::start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
+        let mut map = HashMap::new();
+        map.insert("checkpoint_name", name);
         let response = reqwest_client
-            .post(server_url.join("instances").unwrap())
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(format!("\"{}\"", name))
+            .post(server_url.join("instances/").unwrap())
+            .json(&json!(map))
             .send()
             .expect("Failed to get result");
         let status = response.status();
@@ -69,12 +71,11 @@ impl PocketIcServer {
                 let instance_url = server_url
                     .join("instances/")
                     .unwrap()
-                    .join(&instance_id)
+                    .join(&format!("{instance_id}/"))
                     .unwrap();
 
                 Ok(Self {
                     instance_id,
-                    server_url,
                     instance_url,
                     reqwest_client,
                 })
@@ -90,8 +91,8 @@ impl PocketIcServer {
         }
     }
 
-    fn get_server_url() -> Url {
-        // Attempt to start new PocketIC server if it's not already running.
+    /// Attempt to start a new PocketIC server if it's not already running.
+    fn start_or_reuse_server() -> Url {
         // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
         let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
         let parent_pid = std::os::unix::process::parent_id();
@@ -120,8 +121,8 @@ impl PocketIcServer {
         }
     }
 
-    pub fn list_instances(&self) -> Vec<InstanceId> {
-        let url = self.server_url.join("instances").unwrap();
+    pub fn list_instances() -> Vec<InstanceId> {
+        let url = Self::start_or_reuse_server().join("instances/").unwrap();
         let response = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -143,14 +144,15 @@ impl PocketIcServer {
 
     // TODO: Add a function that separates those two
     pub fn tick_and_create_checkpoint(&self, name: &str) -> String {
+        let url = self
+            .instance_url
+            .join("tick_and_create_checkpoint/")
+            .unwrap();
+        let mut map = HashMap::new();
+        map.insert("checkpoint_name", name);
         self.reqwest_client
-            .post(
-                self.server_url
-                    .join(&format!("{}/tick_and_create_checkpoint", self.instance_url))
-                    .unwrap(),
-            )
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(format!("\"{}\"", name))
+            .post(url)
+            .json(&json!(map))
             .send()
             .expect("Failed to get result")
             .text()
@@ -399,9 +401,19 @@ impl PocketIcServer {
     }
 }
 
-impl Default for PocketIcServer {
+impl Default for PocketIc {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Drop for PocketIc {
+    fn drop(&mut self) {
+        let _result = self
+            .reqwest_client
+            .delete(self.instance_url.clone())
+            .send()
+            .expect("Failed to delete instance on server");
     }
 }
 
@@ -485,7 +497,7 @@ pub struct CanisterCall {
 
 /// Call a canister candid query method, anonymous.
 pub fn query_candid<Input, Output>(
-    env: &PocketIcServer,
+    env: &PocketIc,
     canister_id: Principal,
     method: &str,
     input: Input,
@@ -499,7 +511,7 @@ where
 
 /// Call a canister candid query method, authenticated.
 pub fn query_candid_as<Input, Output>(
-    env: &PocketIcServer,
+    env: &PocketIc,
     canister_id: Principal,
     sender: Principal,
     method: &str,
@@ -517,7 +529,7 @@ where
 /// Call a canister candid method, authenticated.
 /// The state machine executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid_as<Input, Output>(
-    env: &PocketIcServer,
+    env: &PocketIc,
     canister_id: Principal,
     sender: Principal,
     method: &str,
@@ -535,7 +547,7 @@ where
 /// Call a canister candid method, anonymous.
 /// The state machine executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid<Input, Output>(
-    env: &PocketIcServer,
+    env: &PocketIc,
     canister_id: Principal,
     method: &str,
     input: Input,
