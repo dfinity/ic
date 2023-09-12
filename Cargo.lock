@@ -5787,6 +5787,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-consensus-manager"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "crossbeam-channel",
+ "ic-artifact-pool",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-quic-transport",
+ "ic-types",
+ "tokio",
+]
+
+[[package]]
 name = "ic-consensus-mocks"
 version = "0.8.0"
 dependencies = [

@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = [
+    "//rs/p2p/consensus_manager:__subpackages__",
     "//rs/p2p/memory_transport:__subpackages__",
     "//rs/p2p/quic_transport:__subpackages__",
     "//rs/p2p/state_sync_manager:__subpackages__",

@@ -1,0 +1,18 @@
+[package]
+name = "ic-consensus-manager"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.6.12"
+bytes = "1.0.1"
+crossbeam-channel = "0.5.5"
+ic-artifact-pool = { path = "../../artifact_pool" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-quic-transport = { path = "../quic_transport" }
+ic-types = { path = "../../types/types" }
+tokio = { version = "1.28.0", features = ["full"] }
