@@ -326,7 +326,6 @@ fn canister_post_upgrade() {
 
 #[export_name = "canister_update add_wasm"]
 fn add_wasm() {
-    println!("{}add_wasm", LOG_PREFIX);
     over(candid_one, add_wasm_)
 }
 
@@ -343,7 +342,6 @@ fn add_wasm_(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
 
 #[export_name = "canister_update insert_upgrade_path_entries"]
 fn insert_upgrade_path_entries() {
-    println!("{}insert_upgrade_path_entries", LOG_PREFIX);
     over(candid_one, insert_upgrade_path_entries_)
 }
 
@@ -364,7 +362,6 @@ fn insert_upgrade_path_entries_(
 
 #[export_name = "canister_query list_upgrade_steps"]
 fn list_upgrade_steps() {
-    println!("{}list_upgrade_steps", LOG_PREFIX);
     over(candid_one, list_upgrade_steps_)
 }
 
@@ -375,7 +372,6 @@ fn list_upgrade_steps_(payload: ListUpgradeStepsRequest) -> ListUpgradeStepsResp
 
 #[export_name = "canister_query get_wasm"]
 fn get_wasm() {
-    println!("{}get_wasm", LOG_PREFIX);
     over(candid_one, get_wasm_)
 }
 
@@ -386,7 +382,6 @@ fn get_wasm_(get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
 
 #[export_name = "canister_query get_next_sns_version"]
 fn get_next_sns_version() {
-    println!("{}get_next_sns_version", LOG_PREFIX);
     over(candid_one, get_next_sns_version_)
 }
 
@@ -397,7 +392,6 @@ fn get_next_sns_version_(request: GetNextSnsVersionRequest) -> GetNextSnsVersion
 
 #[export_name = "canister_query get_latest_sns_version_pretty"]
 fn get_latest_sns_version_pretty() {
-    println!("{}get_latest_sns_version_pretty", LOG_PREFIX);
     over(candid_one, get_latest_sns_version_pretty_)
 }
 
@@ -408,7 +402,6 @@ fn get_latest_sns_version_pretty_(_: ()) -> HashMap<String, String> {
 
 #[export_name = "canister_update deploy_new_sns"]
 fn deploy_new_sns() {
-    println!("{}deploy_new_sns", LOG_PREFIX);
     over_async(candid_one, deploy_new_sns_)
 }
 
@@ -426,7 +419,6 @@ async fn deploy_new_sns_(deploy_new_sns: DeployNewSnsRequest) -> DeployNewSnsRes
 
 #[export_name = "canister_query list_deployed_snses"]
 fn list_deployed_snses() {
-    println!("{}list_deployed_snses", LOG_PREFIX);
     over(candid_one, list_deployed_snses_)
 }
 
@@ -437,7 +429,6 @@ fn list_deployed_snses_(request: ListDeployedSnsesRequest) -> ListDeployedSnsesR
 
 #[export_name = "canister_update update_allowed_principals"]
 fn update_allowed_principals() {
-    println!("{}update_allowed_principals", LOG_PREFIX);
     over(candid_one, update_allowed_principals_)
 }
 
@@ -454,7 +445,6 @@ fn update_allowed_principals_(
 
 #[export_name = "canister_query get_allowed_principals"]
 fn get_allowed_principals() {
-    println!("{}get_allowed_principals", LOG_PREFIX);
     over(candid_one, get_allowed_principals_)
 }
 
@@ -466,7 +456,6 @@ fn get_allowed_principals_(_request: GetAllowedPrincipalsRequest) -> GetAllowedP
 /// Add or remove SNS subnet IDs from the list of subnet IDs that SNS instances will be deployed to
 #[export_name = "canister_update update_sns_subnet_list"]
 fn update_sns_subnet_list() {
-    println!("{}update_sns_subnet_list", LOG_PREFIX);
     over(candid_one, update_sns_subnet_list_)
 }
 
@@ -484,7 +473,6 @@ fn update_sns_subnet_list_(request: UpdateSnsSubnetListRequest) -> UpdateSnsSubn
 /// Return the list of SNS subnet IDs that SNS-WASM will deploy SNS instances to
 #[export_name = "canister_query get_sns_subnet_ids"]
 fn get_sns_subnet_ids() {
-    println!("{}get_sns_subnet_ids", LOG_PREFIX);
     over(candid_one, get_sns_subnet_ids_)
 }
 
