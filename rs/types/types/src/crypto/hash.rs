@@ -72,6 +72,11 @@ const DOMAIN_MESSAGEID: &str = "messageid_domain";
 // TODO: remove once NET-1501 is done
 const _DOMAIN_IC_ONCHAIN_OBSERVABILITY_REPORT: &str = "ic-onchain-observability-report-domain";
 
+/// The domain separator to be used when calculating the signature for a
+/// query response from a replica.
+/// [interface specification](https://sdk.dfinity.org/docs/interface-spec/index.html).
+pub(crate) const DOMAIN_QUERY_RESPONSE: &str = "ic-response";
+
 pub(crate) const DOMAIN_RANDOM_TAPE_CONTENT: &str = "random_tape_content_domain";
 const DOMAIN_RANDOM_TAPE: &str = "random_tape_domain";
 const DOMAIN_RANDOM_TAPE_SHARE: &str = "random_tape_share_domain";

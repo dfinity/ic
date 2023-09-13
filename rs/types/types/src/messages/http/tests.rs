@@ -552,13 +552,18 @@ mod try_from {
 }
 
 mod cbor_serialization {
-
-    use crate::messages::http::btreemap;
-    use crate::messages::{
-        Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
-        ReplicaHealthStatus, SignedDelegation,
+    use crate::{
+        messages::{
+            http::{btreemap, HttpSignedQueryResponse, NodeSignature},
+            Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
+            ReplicaHealthStatus, SignedDelegation,
+        },
+        time::UNIX_EPOCH,
+        AmountOf, Time,
     };
-    use crate::{time::UNIX_EPOCH, AmountOf};
+
+    use candid::Principal;
+    use ic_base_types::{NodeId, PrincipalId};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_cbor::Value;
@@ -585,36 +590,85 @@ mod cbor_serialization {
         Value::Bytes(bs.to_vec())
     }
 
+    fn vec<const N: usize>(values: [Value; N]) -> Value {
+        Value::Array(Vec::from(values))
+    }
+
+    /// Returns a [`NodeId`] and its underlying byte array representation.
+    pub fn node_id_and_bytes_repr() -> (NodeId, [u8; 8]) {
+        let node_id_bytes: [u8; 8] = [15, 0, 0, 0, 0, 0, 0, 0];
+        let principal_id = PrincipalId(Principal::from_slice(&node_id_bytes));
+
+        let node_id = NodeId::from(principal_id);
+
+        (node_id, node_id_bytes)
+    }
+
     #[test]
     fn encoding_read_query_response() {
+        let (node_id, node_id_bytes) = node_id_and_bytes_repr();
+
+        let time = 2614;
         assert_cbor_ser_equal(
-            &HttpQueryResponse::Replied {
-                reply: HttpQueryResponseReply {
-                    arg: Blob(b"some_bytes".to_vec()),
+            &HttpSignedQueryResponse {
+                response: HttpQueryResponse::Replied {
+                    reply: HttpQueryResponseReply {
+                        arg: Blob(b"some_bytes".to_vec()),
+                    },
+                },
+                node_signature: NodeSignature {
+                    timestamp: Time::from_nanos_since_unix_epoch(time),
+                    signature: Blob(b"Some node signature bytes.".to_vec()),
+                    identity: node_id,
                 },
             },
             Value::Map(btreemap! {
                 text("status") => text("replied"),
                 text("reply") => Value::Map(btreemap!{
                     text("arg") => bytes(b"some_bytes")
-                })
+                }),
+                text("signatures") => vec([
+                    Value::Map(btreemap!{
+                        text("timestamp") => int(time),
+                        text("signature") => bytes(b"Some node signature bytes."),
+                        text("identity") => bytes(&node_id_bytes),
+                    })
+                ]),
             }),
         );
     }
 
     #[test]
     fn encoding_read_query_reject() {
+        let (node_id, node_id_bytes) = node_id_and_bytes_repr();
+
+        let time = 2614;
+
         assert_cbor_ser_equal(
-            &HttpQueryResponse::Rejected {
-                reject_code: 1,
-                reject_message: "system error".to_string(),
-                error_code: "IC500".to_string(),
+            &HttpSignedQueryResponse {
+                response: HttpQueryResponse::Rejected {
+                    reject_code: 1,
+                    reject_message: "system error".to_string(),
+                    error_code: "IC500".to_string(),
+                },
+                node_signature: NodeSignature {
+                    timestamp: Time::from_nanos_since_unix_epoch(time),
+                    signature: Blob(b"Some node signature bytes.".to_vec()),
+                    identity: node_id,
+                },
             },
             Value::Map(btreemap! {
                 text("status") => text("rejected"),
                 text("reject_code") => int(1),
                 text("reject_message") => text("system error"),
                 text("error_code") => text("IC500"),
+                text("signatures") => vec([
+                    Value::Map(btreemap!{
+                        text("timestamp") => int(time),
+                        text("signature") => bytes(b"Some node signature bytes."),
+                        text("identity") => bytes(&node_id_bytes),
+                    })
+                ]),
             }),
         );
     }

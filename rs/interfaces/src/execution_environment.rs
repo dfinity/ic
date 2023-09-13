@@ -350,7 +350,8 @@ pub enum QueryExecutionError {
 }
 
 /// The response type to a `call()` request in [`QueryExecutionService`].
-pub type QueryExecutionResponse = Result<HttpQueryResponse, QueryExecutionError>;
+/// An Ok response contains the response from the canister and the batch time at the time of execution.
+pub type QueryExecutionResponse = Result<(HttpQueryResponse, Time), QueryExecutionError>;
 
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =

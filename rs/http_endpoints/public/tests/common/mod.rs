@@ -38,7 +38,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
     consensus::MockConsensusCache,
-    crypto::temp_crypto_component_with_fake_registry,
+    crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
     mock_time,
     state::ReplicatedStateBuilder,
     types::ids::{node_test_id, subnet_test_id},
@@ -60,7 +60,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{CertificateDelegation, SignedIngress, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
-    CryptoHashOfPartialState, Height, RegistryVersion,
+    CryptoHashOfPartialState, Height, RegistryVersion, Time,
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
@@ -114,7 +114,7 @@ fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
         move |request: (ProvisionalWhitelist, SignedIngressContent)| {
             let mut service_clone = service.clone();
             async move {
-                Ok::<Result<(), UserError>, std::convert::Infallible>({
+                Ok::<Result<(), UserError>, Infallible>({
                     service_clone
                         .ready()
                         .await
@@ -240,6 +240,10 @@ pub fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_certified_state_reader);
 
     mock_state_manager
+}
+
+pub fn dummy_timestamp() -> Time {
+    Time::from_nanos_since_unix_epoch(1_690_000_000_000_000_000)
 }
 
 // Basic mock consensus pool cache at height 1.
@@ -414,6 +418,8 @@ pub fn start_http_endpoint(
 
     let tls_handshake = Arc::new(MockTlsHandshake::new());
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
+    let crypto = Arc::new(CryptoReturningOk::default());
+
     let time_source = Arc::new(SysTimeSource::new());
     let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
     let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
@@ -430,6 +436,7 @@ pub fn start_http_endpoint(
         ingress_tx,
         time_source,
         state_manager,
+        crypto as Arc<_>,
         registry_client,
         tls_handshake,
         sig_verifier,

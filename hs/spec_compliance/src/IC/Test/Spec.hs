@@ -60,8 +60,8 @@ import Test.Tasty.HUnit
 
 icTests :: TestSubnetConfig -> TestSubnetConfig -> AgentConfig -> TestTree
 icTests my_sub other_sub =
-  let (my_subnet_id_as_entity, my_type, _, ((ecid_as_word64, last_canister_id_as_word64) : _), _) = my_sub
-   in let (other_subnet_id_as_entity, _, _, ((other_ecid_as_word64, _) : _), _) = other_sub
+  let (my_subnet_id_as_entity, my_type, my_nodes, ((ecid_as_word64, last_canister_id_as_word64) : _), _) = my_sub
+   in let (other_subnet_id_as_entity, _, other_nodes, ((other_ecid_as_word64, _) : _), _) = other_sub
        in let my_subnet_id = rawEntityId my_subnet_id_as_entity
            in let other_subnet_id = rawEntityId other_subnet_id_as_entity
                in let my_is_root = isRootTestSubnet my_sub
@@ -342,7 +342,7 @@ icTests my_sub other_sub =
                                                                          call' cid reply >>= isReject [5]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [5]
+                                                                         query' cid reply >>= isQueryReject ecid [5]
 
                                                                          step "Upgrade"
                                                                          upgrade cid $ setGlobal (i2b getStatus)
@@ -407,7 +407,7 @@ icTests my_sub other_sub =
                                                                          call' cid reply >>= isReject [5]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [5]
+                                                                         query' cid reply >>= isQueryReject ecid [5]
 
                                                                          step "Release the held message"
                                                                          release
@@ -425,7 +425,7 @@ icTests my_sub other_sub =
                                                                          call' cid reply >>= isReject [5]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [5],
+                                                                         query' cid reply >>= isQueryReject ecid [5],
                                                                        testCaseSteps "starting a stopping canister" $ \step -> do
                                                                          cid <- install ecid noop
 
@@ -502,7 +502,7 @@ icTests my_sub other_sub =
                                                                            >>= isReject [3]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [3]
+                                                                         query' cid reply >>= isQueryReject ecid [3]
 
                                                                          step "Cannot query canister_status"
                                                                          ic_canister_status'' defaultUser cid >>= isErrOrReject [3, 5]
@@ -595,31 +595,32 @@ icTests my_sub other_sub =
                                                                                >>= isErrOrReject [3],
                                                                            simpleTestCase "Call no non-existant query method" ecid $ \cid ->
                                                                              do
-                                                                               queryCBOR cid $
-                                                                                 rec
-                                                                                   [ "request_type" =: GText "query",
-                                                                                     "sender" =: GBlob defaultUser,
-                                                                                     "canister_id" =: GBlob cid,
-                                                                                     "method_name" =: GText "no_such_update",
-                                                                                     "arg" =: GBlob ""
-                                                                                   ]
-                                                                               >>= queryResponse
-                                                                               >>= isReject [3],
+                                                                               let cbor =
+                                                                                     rec
+                                                                                       [ "request_type" =: GText "query",
+                                                                                         "sender" =: GBlob defaultUser,
+                                                                                         "canister_id" =: GBlob cid,
+                                                                                         "method_name" =: GText "no_such_update",
+                                                                                         "arg" =: GBlob ""
+                                                                                       ]
+                                                                               (rid, res) <- queryCBOR cid cbor
+                                                                               res <- queryResponse res
+                                                                               isQueryReject ecid [3] (rid, res),
                                                                            simpleTestCase "reject" ecid $ \cid ->
                                                                              call' cid (reject "ABCD") >>= isReject [4],
                                                                            simpleTestCase "reject (query)" ecid $ \cid ->
-                                                                             query' cid (reject "ABCD") >>= isReject [4],
+                                                                             query' cid (reject "ABCD") >>= isQueryReject ecid [4],
                                                                            simpleTestCase "No response" ecid $ \cid ->
                                                                              call' cid noop >>= isReject [5],
                                                                            simpleTestCase "No response does not rollback" ecid $ \cid -> do
                                                                              call'' cid (setGlobal "FOO") >>= isErrOrReject [5]
                                                                              query cid (replyData getGlobal) >>= is "FOO",
                                                                            simpleTestCase "No response (query)" ecid $ \cid ->
-                                                                             query' cid noop >>= isReject [5],
+                                                                             query' cid noop >>= isQueryReject ecid [5],
                                                                            simpleTestCase "Double reply" ecid $ \cid ->
                                                                              call' cid (reply >>> reply) >>= isReject [5],
                                                                            simpleTestCase "Double reply (query)" ecid $ \cid ->
-                                                                             query' cid (reply >>> reply) >>= isReject [5],
+                                                                             query' cid (reply >>> reply) >>= isQueryReject ecid [5],
                                                                            simpleTestCase "Reply data append after reply" ecid $ \cid ->
                                                                              call' cid (reply >>> replyDataAppend "foo") >>= isReject [5],
                                                                            simpleTestCase "Reply data append after reject" ecid $ \cid ->
@@ -799,17 +800,17 @@ icTests my_sub other_sub =
                                                                                >>= is anonymousUser,
                                                                            simpleTestCase "query, sender explicit" ecid $ \cid ->
                                                                              do
-                                                                               queryCBOR cid $
-                                                                                 rec
-                                                                                   [ "request_type" =: GText "query",
-                                                                                     "canister_id" =: GBlob cid,
-                                                                                     "sender" =: GBlob anonymousUser,
-                                                                                     "method_name" =: GText "query",
-                                                                                     "arg" =: GBlob (run (replyData caller))
-                                                                                   ]
-                                                                               >>= queryResponse
-                                                                               >>= isReply
-                                                                               >>= is anonymousUser
+                                                                               let cbor =
+                                                                                     rec
+                                                                                       [ "request_type" =: GText "query",
+                                                                                         "canister_id" =: GBlob cid,
+                                                                                         "sender" =: GBlob anonymousUser,
+                                                                                         "method_name" =: GText "query",
+                                                                                         "arg" =: GBlob (run (replyData caller))
+                                                                                       ]
+                                                                               (rid, res) <- queryCBOR cid cbor
+                                                                               res <- queryResponse res
+                                                                               isQueryReply ecid (rid, res) >>= is anonymousUser
                                                                          ],
                                                                        testGroup
                                                                          "state"
@@ -884,7 +885,7 @@ icTests my_sub other_sub =
                                                                                        ),
                                                                                    "Q"
                                                                                      =: twoContexts
-                                                                                       ( reqResponse
+                                                                                       ( queryResponse
                                                                                            ( \prog -> do
                                                                                                cid <- install ecid noop
                                                                                                query' cid (prog >>> reply)
@@ -959,6 +960,7 @@ icTests my_sub other_sub =
                                                                              -- context builder helpers
                                                                              httpResponse act = (act >=> is2xx >=> void . isReply, act >=> isErrOrReject [5])
                                                                              reqResponse act = (act >=> void . isReply, act >=> isReject [5])
+                                                                             queryResponse act = (act >=> void . isQueryReply ecid, act >=> isQueryReject ecid [5])
                                                                              boolTest act = (act >=> is True, act >=> is False)
                                                                              twoContexts (aNT1, aT1) (aNT2, aT2) = (\p -> aNT1 p >> aNT2 p, \p -> aT1 p >> aT2 p)
 
@@ -1212,7 +1214,7 @@ icTests my_sub other_sub =
                                                                            simpleTestCase "Call from query method traps (in update call)" ecid $ \cid ->
                                                                              callToQuery'' cid (inter_query cid defArgs) >>= is2xx >>= isReject [5],
                                                                            simpleTestCase "Call from query method traps (in query call)" ecid $ \cid ->
-                                                                             query' cid (inter_query cid defArgs) >>= isReject [5],
+                                                                             query' cid (inter_query cid defArgs) >>= isQueryReject ecid [5],
                                                                            simpleTestCase "Call from query method traps (in inter-canister-call)" ecid $ \cid ->
                                                                              do
                                                                                call cid $
@@ -1354,7 +1356,7 @@ icTests my_sub other_sub =
                                                                          step "Writing stable memory (failing)"
                                                                          call' cid (stableWrite (int 0) "FOO") >>= isReject [5]
                                                                          step "Set stable mem (failing, query)"
-                                                                         query' cid (stableWrite (int 0) "FOO") >>= isReject [5]
+                                                                         query' cid (stableWrite (int 0) "FOO") >>= isQueryReject ecid [5]
 
                                                                          step "Growing stable memory"
                                                                          call cid (replyData (i2b (stableGrow (int 1)))) >>= is "\x0\x0\x0\x0"
@@ -1389,7 +1391,7 @@ icTests my_sub other_sub =
                                                                          call' cid (stable64Write (int64 0) "FOO") >>= isReject [5]
 
                                                                          step "Set stable mem (failing, query)"
-                                                                         query' cid (stable64Write (int64 0) "FOO") >>= isReject [5]
+                                                                         query' cid (stable64Write (int64 0) "FOO") >>= isQueryReject ecid [5]
 
                                                                          step "Growing stable memory"
                                                                          call cid (replyData (i64tob (stable64Grow (int64 1)))) >>= is "\x0\x0\x0\x0\x0\x0\x0\x0"
@@ -1425,10 +1427,10 @@ icTests my_sub other_sub =
                                                                          query cid (replyData (i64tob stable64Size)) >>= is "\x01\x00\x01\x00\x0\x0\x0\x0"
 
                                                                          step "Using 32 bit API with large stable memory"
-                                                                         query' cid (ignore stableSize) >>= isReject [5]
-                                                                         query' cid (ignore $ stableGrow (int 1)) >>= isReject [5]
-                                                                         query' cid (stableWrite (int 0) "BAZ") >>= isReject [5]
-                                                                         query' cid (ignore $ stableRead (int 0) (int 3)) >>= isReject [5]
+                                                                         query' cid (ignore stableSize) >>= isQueryReject ecid [5]
+                                                                         query' cid (ignore $ stableGrow (int 1)) >>= isQueryReject ecid [5]
+                                                                         query' cid (stableWrite (int 0) "BAZ") >>= isQueryReject ecid [5]
+                                                                         query' cid (ignore $ stableRead (int 0) (int 3)) >>= isQueryReject ecid [5]
 
                                                                          step "Using 64 bit API with large stable memory"
                                                                          call cid (replyData (i64tob (stable64Grow (int64 1)))) >>= is "\x01\x00\x01\x00\x0\x0\x0\x0"
@@ -1470,7 +1472,7 @@ icTests my_sub other_sub =
                                                                              res <- query cid (replyData $ i2b $ isController (bytes $ BS.replicate 29 0)) >>= asWord32
                                                                              res @?= 0,
                                                                            simpleTestCase "argument is not a valid principal" ecid $ \cid -> do
-                                                                             query' cid (replyData $ i2b $ isController (bytes $ BS.replicate 30 0)) >>= isReject [5]
+                                                                             query' cid (replyData $ i2b $ isController (bytes $ BS.replicate 30 0)) >>= isQueryReject ecid [5]
                                                                          ],
                                                                        testGroup "upgrades" $
                                                                          let installForUpgrade on_pre_upgrade =
@@ -1642,7 +1644,7 @@ icTests my_sub other_sub =
                                                                              ic_uninstall ic00 cid
                                                                              -- should be http error, due to inspection
                                                                              call'' cid (replyData "Hi") >>= isNoErrReject [3]
-                                                                             query' cid (replyData "Hi") >>= isReject [3],
+                                                                             query' cid (replyData "Hi") >>= isQueryReject ecid [3],
                                                                            testCaseSteps "open call contexts are rejected" $ \step -> do
                                                                              cid <- install ecid noop
 
@@ -1769,7 +1771,7 @@ icTests my_sub other_sub =
                                                                            simpleTestCase "Explicit trap" ecid $ \cid ->
                                                                              call' cid (trap "trapping") >>= isReject [5],
                                                                            simpleTestCase "Explicit trap (query)" ecid $ \cid -> do
-                                                                             query' cid (trap "trapping") >>= isReject [5]
+                                                                             query' cid (trap "trapping") >>= isQueryReject ecid [5]
                                                                          ],
                                                                        testCase "caller (in init)" $ do
                                                                          cid <- install ecid $ setGlobal caller
@@ -1782,7 +1784,7 @@ icTests my_sub other_sub =
                                                                                cid <- create ecid
                                                                                install' cid pgm >>= isReject [5]
                                                                                -- canister does not exist
-                                                                               query' cid noop >>= isReject [3]
+                                                                               query' cid noop >>= isQueryReject ecid [3]
                                                                           in [ testCase "explicit trap" $ failInInit $ trap "trapping in install",
                                                                                testCase "call" $ failInInit $ inter_query "dummy" defArgs,
                                                                                testCase "reply" $ failInInit reply,
@@ -1799,7 +1801,7 @@ icTests my_sub other_sub =
                                                                            simpleTestCase "non-existing (deleted) canister" ecid $ \cid -> do
                                                                              ic_stop_canister ic00 cid
                                                                              ic_delete_canister ic00 cid
-                                                                             query' cid reply >>= isReject [3],
+                                                                             query' cid reply >>= isQueryReject ecid [3],
                                                                            simpleTestCase "does not commit" ecid $ \cid -> do
                                                                              call_ cid (setGlobal "FOO" >>> reply)
                                                                              query cid (setGlobal "BAR" >>> replyData getGlobal) >>= is "BAR"
@@ -1867,6 +1869,16 @@ icTests my_sub other_sub =
                                                                                  cid <- create ecid
                                                                                  cert <- getStateCert defaultUser cid [["time"]]
                                                                                  void $ certValue @Natural cert ["time"],
+                                                                               testCase "can ask for /subnet" $ do
+                                                                                 cert <- getStateCert defaultUser ecid [["subnet"]]
+                                                                                 void $ certValue @Blob cert ["subnet", my_subnet_id, "public_key"]
+                                                                                 void $ certValue @Blob cert ["subnet", my_subnet_id, "canister_ranges"]
+                                                                                 void $ certValue @Blob cert ["subnet", other_subnet_id, "public_key"]
+                                                                                 void $ certValue @Blob cert ["subnet", other_subnet_id, "canister_ranges"]
+                                                                                 void $ forM my_nodes $ \nid -> do
+                                                                                   void $ certValue @Blob cert ["subnet", my_subnet_id, "node", rawEntityId nid, "public_key"]
+                                                                                 void $ forM other_nodes $ \nid -> do
+                                                                                   certValueAbsent cert ["subnet", other_subnet_id, "node", rawEntityId nid, "public_key"],
                                                                                testCase "controller of empty canister" $ do
                                                                                  cid <- create ecid
                                                                                  cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
@@ -2116,7 +2128,7 @@ icTests my_sub other_sub =
                                                                                      cid <- create noop
                                                                                      let large = 2 ^ (65 :: Int)
                                                                                      ic_top_up ic00 cid large
-                                                                                     query' cid replyBalance >>= isReject [5]
+                                                                                     query' cid replyBalance >>= isQueryReject ecid [5]
                                                                                      queryBalance128 cid >>= isRoughly (large + fromIntegral def_cycles)
                                                                                  ],
                                                                                testGroup "can use balance API" $
@@ -2631,17 +2643,17 @@ icTests my_sub other_sub =
                                                                                ]
                                                                                $ \(name, user, env) ->
                                                                                  [ simpleTestCase (name ++ " in query") ecid $ \cid -> do
-                                                                                     req <-
-                                                                                       addExpiry $
-                                                                                         rec
-                                                                                           [ "request_type" =: GText "query",
-                                                                                             "sender" =: GBlob user,
-                                                                                             "canister_id" =: GBlob cid,
-                                                                                             "method_name" =: GText "query",
-                                                                                             "arg" =: GBlob (run reply)
-                                                                                           ]
+                                                                                     let cbor =
+                                                                                           rec
+                                                                                             [ "request_type" =: GText "query",
+                                                                                               "sender" =: GBlob user,
+                                                                                               "canister_id" =: GBlob cid,
+                                                                                               "method_name" =: GText "query",
+                                                                                               "arg" =: GBlob (run reply)
+                                                                                             ]
+                                                                                     req <- addExpiry cbor
                                                                                      signed_req <- env req
-                                                                                     postQueryCBOR cid signed_req >>= okCBOR >>= queryResponse >>= isReply >>= is "",
+                                                                                     postQueryCBOR cid signed_req >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "",
                                                                                    simpleTestCase (name ++ " in update") ecid $ \cid -> do
                                                                                      req <-
                                                                                        addExpiry $
@@ -2669,25 +2681,27 @@ icTests my_sub other_sub =
                                                                              testGroup
                                                                                name
                                                                                [ simpleTestCase "in query" ecid $ \cid -> do
-                                                                                   good_req <-
-                                                                                     addNonce >=> addExpiry $
-                                                                                       rec
-                                                                                         [ "request_type" =: GText "query",
-                                                                                           "sender" =: GBlob defaultUser,
-                                                                                           "canister_id" =: GBlob cid,
-                                                                                           "method_name" =: GText "query",
-                                                                                           "arg" =: GBlob (run ((debugPrint $ i2b $ int 0) >>> reply))
-                                                                                         ]
-                                                                                   bad_req <-
-                                                                                     addNonce >=> addExpiry $
-                                                                                       rec
-                                                                                         [ "request_type" =: GText "query",
-                                                                                           "sender" =: GBlob defaultUser,
-                                                                                           "canister_id" =: GBlob cid,
-                                                                                           "method_name" =: GText "query",
-                                                                                           "arg" =: GBlob (run ((debugPrint $ i2b $ int 1) >>> reply))
-                                                                                         ]
-                                                                                   queryCBOR cid good_req >>= queryResponse >>= isReply >>= is ""
+                                                                                   let good_cbor =
+                                                                                         rec
+                                                                                           [ "request_type" =: GText "query",
+                                                                                             "sender" =: GBlob defaultUser,
+                                                                                             "canister_id" =: GBlob cid,
+                                                                                             "method_name" =: GText "query",
+                                                                                             "arg" =: GBlob (run ((debugPrint $ i2b $ int 0) >>> reply))
+                                                                                           ]
+                                                                                   let bad_cbor =
+                                                                                         rec
+                                                                                           [ "request_type" =: GText "query",
+                                                                                             "sender" =: GBlob defaultUser,
+                                                                                             "canister_id" =: GBlob cid,
+                                                                                             "method_name" =: GText "query",
+                                                                                             "arg" =: GBlob (run ((debugPrint $ i2b $ int 1) >>> reply))
+                                                                                           ]
+                                                                                   good_req <- addNonce >=> addExpiry $ good_cbor
+                                                                                   bad_req <- addNonce >=> addExpiry $ bad_cbor
+                                                                                   (rid, res) <- queryCBOR cid good_req
+                                                                                   res <- queryResponse res
+                                                                                   isQueryReply ecid (rid, res) >>= is ""
                                                                                    env (mod_req bad_req) >>= postQueryCBOR cid >>= code4xx,
                                                                                  simpleTestCase "in empty read state request" ecid $ \cid -> do
                                                                                    good_req <- addNonce >=> addExpiry $ readStateEmpty
@@ -2759,13 +2773,13 @@ icTests my_sub other_sub =
                                                                                  req <- exampleQuery cid userKey
                                                                                  sig <- genSig cid "Hello!" $ "\x0Aic-request" <> requestId req
                                                                                  let env = simpleEnv userKey sig req []
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!",
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!",
                                                                                simpleTestCase "direct signature (empty seed)" ecid $ \cid -> do
                                                                                  let userKey = genId cid ""
                                                                                  req <- exampleQuery cid userKey
                                                                                  sig <- genSig cid "" $ "\x0Aic-request" <> requestId req
                                                                                  let env = simpleEnv userKey sig req []
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!",
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!",
                                                                                simpleTestCase "direct signature (wrong seed)" ecid $ \cid -> do
                                                                                  let userKey = genId cid "Hello"
                                                                                  req <- exampleQuery cid userKey
@@ -2825,7 +2839,7 @@ icTests my_sub other_sub =
                                                                                  req <- exampleQuery cid userKey
                                                                                  sig <- sign "ic-request" otherSK (requestId req)
                                                                                  let env = simpleEnv userKey sig req [signed_delegation]
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!",
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!",
                                                                                simpleTestCase "delegation from Ed25519" ecid $ \cid -> do
                                                                                  let userKey = genId cid "Hello!"
 
@@ -2850,7 +2864,7 @@ icTests my_sub other_sub =
                                                                                        ]
                                                                                  sig <- genSig cid "Hello!" $ "\x0Aic-request" <> requestId req
                                                                                  let env = simpleEnv (toPublicKey otherSK) sig req [signed_delegation]
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!"
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!"
                                                                              ]
                                                                      ]
                                                                ]

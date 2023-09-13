@@ -311,20 +311,23 @@ incrementCount :: IO Word32
 incrementCount =
   atomicModifyIORef' counterRef (\count -> (count + 1, count + 1))
 
-query' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
+query' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO (Blob, QueryResponse)
 query' cid prog = do
   ctr <- incrementCount
-  queryCBOR cid >=> queryResponse $
-    rec
-      [ "request_type" =: GText "query",
-        "sender" =: GBlob defaultUser,
-        "canister_id" =: GBlob cid,
-        "method_name" =: GText "query",
-        "arg" =: GBlob (run ((debugPrint $ i2b $ int ctr) >>> prog))
-      ]
+  let cbor =
+        rec
+          [ "request_type" =: GText "query",
+            "sender" =: GBlob defaultUser,
+            "canister_id" =: GBlob cid,
+            "method_name" =: GText "query",
+            "arg" =: GBlob (run ((debugPrint $ i2b $ int ctr) >>> prog))
+          ]
+  (rid, res) <- queryCBOR cid cbor
+  res <- queryResponse res
+  return (rid, res)
 
 query :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO Blob
-query cid prog = query' cid prog >>= isReply
+query cid prog = query' cid prog >>= isQueryReply cid
 
 query_ :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 query_ cid prog = query cid prog >>= is ""
