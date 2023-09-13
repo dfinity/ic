@@ -296,6 +296,7 @@ pub fn construct_ic_stack(
         ingress_tx.clone(),
         time_source,
         Arc::clone(&state_manager) as Arc<_>,
+        Arc::clone(&crypto) as Arc<_>,
         registry,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,

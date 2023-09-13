@@ -5,8 +5,8 @@ pub mod common;
 
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
-    create_conn_and_send_request, get_free_localhost_socket_addr, start_http_endpoint,
-    wait_for_status_healthy,
+    create_conn_and_send_request, dummy_timestamp, get_free_localhost_socket_addr,
+    start_http_endpoint, wait_for_status_healthy,
 };
 use hyper::{Body, Client, Method, Request, StatusCode};
 use ic_agent::{
@@ -241,11 +241,14 @@ fn test_unauthorized_query() {
     rt.spawn(async move {
         loop {
             let (_, resp) = query_handler.next_request().await.unwrap();
-            resp.send_response(Ok(HttpQueryResponse::Replied {
-                reply: HttpQueryResponseReply {
-                    arg: Blob("success".into()),
+            resp.send_response(Ok((
+                HttpQueryResponse::Replied {
+                    reply: HttpQueryResponseReply {
+                        arg: Blob("success".into()),
+                    },
                 },
-            }))
+                dummy_timestamp(),
+            )))
         }
     });
 
@@ -467,11 +470,14 @@ fn test_request_timeout() {
         loop {
             let (_, resp) = query_handler.next_request().await.unwrap();
             sleep(Duration::from_secs(request_timeout_seconds + 1)).await;
-            resp.send_response(Ok(HttpQueryResponse::Replied {
-                reply: HttpQueryResponseReply {
-                    arg: Blob("success".into()),
+            resp.send_response(Ok((
+                HttpQueryResponse::Replied {
+                    reply: HttpQueryResponseReply {
+                        arg: Blob("success".into()),
+                    },
                 },
-            }))
+                dummy_timestamp(),
+            )))
         }
     });
 

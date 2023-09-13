@@ -288,9 +288,10 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                     query.receiver,
                 ) {
                     Some((state, cert)) => {
+                        let time = state.metadata.batch_time;
                         let result = internal.query(query, state, cert);
 
-                        let http_query_response = match result {
+                        let response = match result {
                             Ok(res) => match res {
                                 WasmResult::Reply(vec) => HttpQueryResponse::Replied {
                                     reply: HttpQueryResponseReply { arg: Blob(vec) },
@@ -309,7 +310,7 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                             },
                         };
 
-                        Ok(http_query_response)
+                        Ok((response, time))
                     }
                     None => Err(QueryExecutionError::CertifiedStateUnavailable),
                 };

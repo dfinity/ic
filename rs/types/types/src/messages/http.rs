@@ -12,12 +12,12 @@ use crate::{
     Height, Time, UserId,
 };
 use derive_more::Display;
-use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};
+use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeTuple, Deserialize, Serialize};
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt};
 
 #[cfg(test)]
@@ -568,8 +568,7 @@ pub enum HttpReply {
     Empty {},
 }
 
-/// The response to `/api/v2/canister/_/{read_state|query}` with `request_type`
-/// set to `query`.
+/// The response for a query call from the execution service.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "status")]
@@ -582,6 +581,95 @@ pub enum HttpQueryResponse {
         reject_code: u64,
         reject_message: String,
     },
+}
+
+/// Wraps the hash of a query response as described
+/// in the [IC interface-spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-query).
+pub struct QueryResponseHash([u8; 32]);
+
+impl QueryResponseHash {
+    /// Creates a [`QueryResponseHash`] from a given query response, request and timestamp.
+    pub fn new(response: &HttpQueryResponse, request: &UserQuery, timestamp: Time) -> Self {
+        use RawHttpRequestVal::*;
+
+        let self_map_representation = match response {
+            HttpQueryResponse::Replied { reply } => {
+                btreemap! {
+                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
+                    "status".to_string() => String("replied".to_string()),
+                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reply".to_string() => Bytes(reply.arg.0.clone()),
+                }
+            }
+            HttpQueryResponse::Rejected {
+                error_code,
+                reject_code,
+                reject_message,
+            } => {
+                btreemap! {
+                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
+                    "status".to_string() => String("rejected".to_string()),
+                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reject_code".to_string() => U64(*reject_code),
+                    "reject_message".to_string() => String(reject_message.to_string()),
+                    "error_code".to_string() => String(error_code.to_string()),
+
+                }
+            }
+        };
+
+        let hash = hash_of_map(&self_map_representation);
+
+        Self(hash)
+    }
+}
+
+impl SignedBytesWithoutDomainSeparator for QueryResponseHash {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
+/// The response to `/api/v2/canister/_/query`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct HttpSignedQueryResponse {
+    #[serde(flatten)]
+    pub response: HttpQueryResponse,
+
+    /// The signature of this replica node for the query response.
+    ///
+    /// Note:
+    /// To follow the IC specification for signed query responses,
+    /// the serializer will during serialization:
+    /// - rename the field: `node_signature` -> `signatures`.
+    /// - Convert the signature to a 1-tuple containing only this signature.
+    #[serde(serialize_with = "serialize_node_signature_to_1_tuple")]
+    #[serde(rename = "signatures")]
+    pub node_signature: NodeSignature,
+}
+
+/// Serializes a `NodeSignature` to a 1-tuple containing only that one signature.
+fn serialize_node_signature_to_1_tuple<S>(
+    signature: &NodeSignature,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut tup = serializer.serialize_tuple(1)?;
+    tup.serialize_element(signature)?;
+    tup.end()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NodeSignature {
+    /// The time of creation of the signature (or the batch time).
+    pub timestamp: Time,
+    /// The actual signature.
+    pub signature: Blob,
+    /// The node id of the node that created this signature.
+    pub identity: NodeId,
 }
 
 /// The body of the `QueryResponse`

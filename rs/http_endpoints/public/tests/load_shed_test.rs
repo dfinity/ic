@@ -3,8 +3,8 @@ pub mod common;
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, start_http_endpoint,
-    wait_for_status_healthy,
+    default_read_certified_state, dummy_timestamp, get_free_localhost_socket_addr,
+    start_http_endpoint, wait_for_status_healthy,
 };
 use async_trait::async_trait;
 use hyper::{Body, Client, Method, Request, StatusCode};
@@ -96,11 +96,14 @@ fn test_load_shedding_query() {
         query_exec_running.notify_one();
         load_shedder_returned.notified().await;
 
-        resp.send_response(Ok(HttpQueryResponse::Replied {
-            reply: HttpQueryResponseReply {
-                arg: Blob("success".into()),
+        resp.send_response(Ok((
+            HttpQueryResponse::Replied {
+                reply: HttpQueryResponseReply {
+                    arg: Blob("success".into()),
+                },
             },
-        }))
+            dummy_timestamp(),
+        )))
     });
 
     rt.block_on(async {

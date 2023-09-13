@@ -56,6 +56,7 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::ConsensusPoolCache,
+    crypto::BasicSigner,
     execution_environment::{IngressFilterService, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
     time_source::TimeSource,
@@ -75,7 +76,8 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus, SignedIngress,
+        HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
+        SignedIngress,
     },
     time::expiry_time_from_now,
     CanisterId, NodeId, SubnetId,
@@ -243,6 +245,7 @@ pub fn start_server(
     ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
@@ -296,6 +299,8 @@ pub fn start_server(
         config.clone(),
         log.clone(),
         metrics.clone(),
+        query_signer,
+        node_id,
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
         ValidatorExecutor::new(

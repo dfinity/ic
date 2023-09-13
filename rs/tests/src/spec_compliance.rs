@@ -196,14 +196,18 @@ pub fn test_subnet(
 
 fn subnet_config(subnet: &SubnetSnapshot) -> String {
     format!(
-        "(\"{}\",{},{},[{}],[{}])",
+        "(\"{}\",{},[{}],[{}],[{}])",
         subnet.subnet_id,
         match subnet.subnet_type() {
             SubnetType::VerifiedApplication => "verified_application",
             SubnetType::Application => "application",
             SubnetType::System => "system",
         },
-        REPLICATION_FACTOR,
+        subnet
+            .nodes()
+            .map(|n| format!("\"{}\"", n.node_id))
+            .collect::<Vec<String>>()
+            .join(","),
         subnet
             .subnet_canister_ranges()
             .iter()

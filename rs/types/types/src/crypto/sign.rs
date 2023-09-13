@@ -13,11 +13,11 @@ use crate::crypto::hash::{
     DOMAIN_BLOCK_METADATA, DOMAIN_CATCH_UP_CONTENT, DOMAIN_CERTIFICATION_CONTENT,
     DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA, DOMAIN_DEALING_CONTENT,
     DOMAIN_ECDSA_COMPLAINT_CONTENT, DOMAIN_ECDSA_OPENING_CONTENT, DOMAIN_FINALIZATION_CONTENT,
-    DOMAIN_IDKG_DEALING, DOMAIN_NOTARIZATION_CONTENT, DOMAIN_RANDOM_BEACON_CONTENT,
-    DOMAIN_RANDOM_TAPE_CONTENT, DOMAIN_SIGNED_IDKG_DEALING,
+    DOMAIN_IDKG_DEALING, DOMAIN_NOTARIZATION_CONTENT, DOMAIN_QUERY_RESPONSE,
+    DOMAIN_RANDOM_BEACON_CONTENT, DOMAIN_RANDOM_TAPE_CONTENT, DOMAIN_SIGNED_IDKG_DEALING,
 };
 use crate::crypto::SignedBytesWithoutDomainSeparator;
-use crate::messages::{Delegation, MessageId, WebAuthnEnvelope};
+use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
 use std::convert::TryFrom;
 
 const SIG_DOMAIN_IC_REQUEST_AUTH_DELEGATION: &str = "ic-request-auth-delegation";
@@ -54,7 +54,10 @@ pub trait SignatureDomain: private::SignatureDomainSeal {
 
 mod private {
     use super::*;
-    use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
+    use crate::{
+        crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+        messages::QueryResponseHash,
+    };
 
     pub trait SignatureDomainSeal {}
 
@@ -77,6 +80,7 @@ mod private {
     impl SignatureDomainSeal for RandomBeaconContent {}
     impl SignatureDomainSeal for RandomTapeContent {}
     impl SignatureDomainSeal for SignableMock {}
+    impl SignatureDomainSeal for QueryResponseHash {}
 }
 
 impl SignatureDomain for CanisterHttpResponseMetadata {
@@ -189,6 +193,12 @@ impl SignatureDomain for RandomBeaconContent {
 impl SignatureDomain for RandomTapeContent {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DOMAIN_RANDOM_TAPE_CONTENT)
+    }
+}
+
+impl SignatureDomain for QueryResponseHash {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DOMAIN_QUERY_RESPONSE)
     }
 }
 

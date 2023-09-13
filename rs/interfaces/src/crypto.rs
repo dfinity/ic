@@ -28,8 +28,10 @@ use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
-use ic_types::messages::{MessageId, WebAuthnEnvelope};
+use ic_types::{
+    crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+    messages::{MessageId, QueryResponseHash, WebAuthnEnvelope},
+};
 
 /// The functionality offered by the crypto component
 pub trait Crypto:
@@ -72,6 +74,8 @@ pub trait Crypto:
     // CanisterHttpResponse
     + BasicSigner<CanisterHttpResponseMetadata>
     + BasicSigVerifier<CanisterHttpResponseMetadata>
+    // Signed Queries
+    + BasicSigner<QueryResponseHash>
     // RequestId/WebAuthn
     + BasicSigVerifierByPublicKey<MessageId>
     + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
@@ -131,6 +135,7 @@ impl<T> Crypto for T where
         + BasicSigVerifier<EcdsaOpeningContent>
         + BasicSigner<CanisterHttpResponseMetadata>
         + BasicSigVerifier<CanisterHttpResponseMetadata>
+        + BasicSigner<QueryResponseHash>
         + IDkgProtocol
         + ThresholdEcdsaSigner
         + ThresholdEcdsaSigVerifier
