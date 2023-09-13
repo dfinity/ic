@@ -18,7 +18,7 @@ use crate::{Channel, Command};
 /// How long should the transaction manager hold on to a transaction.
 const TX_CACHE_TIMEOUT_PERIOD_SECS: u64 = 10 * 60; // 10 minutes
 
-/// Maxmimum number of transaction to advertise.
+/// Maximum number of transaction to advertise.
 // https://developer.bitcoin.org/reference/p2p_networking.html#inv
 const MAXIMUM_TRANSACTION_PER_INV: usize = 50_000;
 
@@ -325,7 +325,7 @@ mod test {
     /// 1. Add transaction to manager.
     /// 2. Advertise that transaction and create requests from peer.
     /// 3. Check that this transaction does not get advertised again during manager tick.
-    /// 3. Check transaction advertisment is correctly tracked.
+    /// 3. Check transaction advertisement is correctly tracked.
     #[test]
     fn test_adapter_dont_readvertise() {
         let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
@@ -374,7 +374,7 @@ mod test {
         );
     }
 
-    /// This function tests that we advertise to muliple peers and don't readvertise after
+    /// This function tests that we advertise to multiple peers and don't readvertise after
     /// first adverisment.
     /// Test Steps:
     /// 1. Add transaction to manager.
@@ -392,7 +392,7 @@ mod test {
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
         manager.advertise_txids(&mut channel);
-        // Transaction advertisment to both peers.
+        // Transaction advertisement to both peers.
         assert_eq!(channel.command_count(), 2);
         channel.pop_front().unwrap();
         channel.pop_front().unwrap();
@@ -420,7 +420,7 @@ mod test {
     /// 2. Advertise that transaction and request it.
     /// 3. Check that this transaction does not get readvertised to peer 1.
     /// 4. Add new peer to available connections.
-    /// 5. Check that new peer get advertisment.
+    /// 5. Check that new peer get advertisement.
     #[test]
     fn test_adapter_advertise_new_peer() {
         let address1 = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");

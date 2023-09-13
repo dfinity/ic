@@ -567,7 +567,7 @@ mod test {
     use ic_types::Time;
 
     #[test]
-    fn test_wasm_result_to_query_response_refunds_correclty() {
+    fn test_wasm_result_to_query_response_refunds_correctly() {
         let scheduler_state = SchedulerState::default();
         let system_state = SystemState::new_running(
             CanisterId::from_u64(42),

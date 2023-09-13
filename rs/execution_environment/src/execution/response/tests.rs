@@ -890,7 +890,7 @@ fn dts_abort_works_in_response_callback() {
         original_system_state.call_context_manager()
     );
 
-    // Execute the response callback again and it should succeeed.
+    // Execute the response callback again and it should succeed.
     test.execute_message(a_id);
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
@@ -1783,7 +1783,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
                 )
                 .on_cleanup(
                     // In cleanup callback exhaust reserved instructions and write to the stable memory
-                    // to make sure that cleanup callback was executed fully and succesfully.
+                    // to make sure that cleanup callback was executed fully and successfully.
                     wasm()
                         .instruction_counter_is_at_least(
                             cleanup_instructions_reserved - stable_grow_and_write_instructions,
@@ -1810,7 +1810,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
 
     // Canister A:
     // - executes a response callback which fails with exceeding instructions limit
-    // - executes a cleanup callback wich exhausts all the instructions and writes to stable memory
+    // - executes a cleanup callback which exhausts all the instructions and writes to stable memory
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);

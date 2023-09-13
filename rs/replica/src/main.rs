@@ -162,7 +162,7 @@ fn main() -> io::Result<()> {
         .as_ref()
         .map(|c| CatchUpPackage::try_from(c).expect("deserializing CUP failed"));
 
-    // Set the replica verison and report as metric
+    // Set the replica version and report as metric
     setup::set_replica_version(&replica_args, &logger);
     {
         let g = metrics_registry.int_gauge_vec(

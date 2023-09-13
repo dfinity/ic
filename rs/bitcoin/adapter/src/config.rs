@@ -11,7 +11,7 @@ pub enum IncomingSource {
     /// We use systemd's created socket.
     #[default]
     Systemd,
-    /// We use the corresponing path as socket.
+    /// We use the corresponding path as socket.
     Path(PathBuf),
 }
 

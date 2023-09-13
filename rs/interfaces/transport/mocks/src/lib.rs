@@ -18,7 +18,7 @@ mock! {
             &self,
             peer_id: &NodeId,
             peer_addr: SocketAddr,
-            lastest_registry_version: RegistryVersion,
+            latest_registry_version: RegistryVersion,
             earliest_registry_version: RegistryVersion,
         );
 
@@ -42,5 +42,5 @@ mock! {
 }
 
 mock! {
-    pub TranportEventHandler {}
+    pub TransportEventHandler {}
 }

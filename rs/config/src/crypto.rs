@@ -214,7 +214,7 @@ mod tests {
     fn should_set_correct_path_permissions() {
         CryptoConfig::run_with_temp_config(|config| {
             CryptoConfig::check_dir_has_required_permissions(&config.crypto_root)
-                .expect("Wrong direcotry permissions");
+                .expect("Wrong directory permissions");
         })
     }
 

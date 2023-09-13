@@ -40,7 +40,7 @@ pub enum MintMemo<'a> {
     /// The minter minted accumulated KYT fees to the KYT provider.
     Kyt,
     #[n(2)]
-    /// The minter failed to check retireve btc destination address
+    /// The minter failed to check retrieve btc destination address
     /// or the destination address is tainted.
     KytFail {
         #[n(0)]

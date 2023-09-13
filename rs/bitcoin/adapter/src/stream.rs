@@ -27,7 +27,7 @@ const CONNECTION_TIMEOUT_SECS: u64 = 5;
 /// from the Bitcoin node.
 const STREAM_BUFFER_SIZE: usize = 64 * 1024;
 
-/// This constant represents the maxiumum raw network message size we accept.
+/// This constant represents the maximum raw network message size we accept.
 const MAX_RAW_MESSAGE_SIZE: usize = 40 * 1024 * 1024;
 
 /// This enum is used to represent the possible errors that could occur while a stream

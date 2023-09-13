@@ -178,7 +178,7 @@ pub trait MultiSigVerifier<T: Signable> {
     ///   `registry_version`.
     /// * `CryptoError::PublicKeyNotFound`: if the public key cannot be found at
     ///   the given `registry_version`.
-    /// * `CryptoError::MalformedSignature`: if the mutli-signature is
+    /// * `CryptoError::MalformedSignature`: if the multi-signature is
     ///   malformed.
     /// * `CryptoError::MalformedPublicKey`: if the public key obtained from the
     ///   registry is malformed.
@@ -212,7 +212,7 @@ pub trait MultiSigVerifier<T: Signable> {
     ///   `registry_version`.
     /// * `CryptoError::PublicKeyNotFound`: if any of the public keys for the
     ///   signatures cannot be found at the given `registry_version`.
-    /// * `CryptoError::MalformedSignature`: if any of the mutli-signatures is
+    /// * `CryptoError::MalformedSignature`: if any of the multi-signatures is
     ///   malformed.
     /// * `CryptoError::MalformedPublicKey`: if any of the public keys obtained
     ///   from the registry is malformed.

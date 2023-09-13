@@ -228,7 +228,7 @@ fn test_min_change_amount() {
         &[
             tx::TxOut {
                 address: out1_addr,
-                value: 100_000 - fee_share - 1, // Substract the remainder
+                value: 100_000 - fee_share - 1, // Subtract the remainder
             },
             tx::TxOut {
                 address: out2_addr,

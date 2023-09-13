@@ -17,7 +17,7 @@ pub struct PastPayload<'a> {
     pub time: Time,
     /// The hash of the block, in which this payload is included.
     ///
-    /// This can be used to differenciate between multiple blocks of the same
+    /// This can be used to differentiate between multiple blocks of the same
     /// height, e.g. when the payload builder wants to maintain an internal cache
     /// of past payloads.
     pub block_hash: CryptoHashOf<BlockPayload>,

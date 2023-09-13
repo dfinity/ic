@@ -84,7 +84,7 @@ pub(crate) fn check_endpoint_invariants(
         // validated separately)
         for (endpoint, tolerate_unspecified_ip) in endpoints_to_check {
             let valid_endpoint = validate_endpoint(&endpoint, tolerate_unspecified_ip, strict)?;
-            // Multiple nodes may have unspecified addresses, so duplicates should be avioded only for specified endpoints
+            // Multiple nodes may have unspecified addresses, so duplicates should be avoided only for specified endpoints
             if !valid_endpoint.0.is_unspecified() && !new_valid_endpoints.insert(valid_endpoint) {
                 let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
                     msg: format!(

@@ -111,7 +111,7 @@ pub trait ProcessEvent {
     ) -> Result<(), ProcessBitcoinNetworkMessageError>;
 }
 
-/// This trait provides an interface for processing messages comming from
+/// This trait provides an interface for processing messages coming from
 /// bitcoin peers.
 /// [StreamEvent](crate::stream::StreamEvent).
 pub trait ProcessBitcoinNetworkMessage {
@@ -160,8 +160,8 @@ pub struct AdapterState {
     /// to unnecessary download bitcoin data.
     /// In a previous iteration we set this value to at least 'idle_seconds' in the past on startup.
     /// This way the adapter would always be in idle when starting since 'elapsed()' is greater than 'idle_seconds'.
-    /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when substracting
-    /// 'idle_seconds' we encountered an underflow and paniced.
+    /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when subtracting
+    /// 'idle_seconds' we encountered an underflow and panicked.
     last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,

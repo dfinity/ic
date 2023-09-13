@@ -39,7 +39,7 @@ pub trait DkgPool: Send + Sync {
     fn validated_contains(&self, msg: &dkg::Message) -> bool;
 }
 
-/// Various actions that can be perfomed in DKG.
+/// Various actions that can be performed in DKG.
 #[derive(Debug)]
 pub enum ChangeAction {
     AddToValidated(dkg::Message),

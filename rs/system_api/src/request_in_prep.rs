@@ -14,7 +14,7 @@ use std::convert::TryFrom;
 /// The main differences from a `Request` are:
 ///
 /// 1. The `callee` is stored as a `PrincipalId` instead of a `CanisterId`. If
-/// the request is targetted to the management canister, then converting to
+/// the request is targeted to the management canister, then converting to
 /// `CanisterId` requires the entire payload to be present which we are only
 /// guaranteed to have available when `ic0_call_perform` is invoked.
 ///

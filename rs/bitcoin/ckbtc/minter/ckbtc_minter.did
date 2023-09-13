@@ -67,7 +67,7 @@ type UtxoStatus = variant {
     // the KYT fees. This state is final, retrying [update_balance] call will
     // have no effect on this UTXO.
     ValueTooSmall : Utxo;
-    // The KYT provider considered this UTXO to be tained. This UTXO state is
+    // The KYT provider considered this UTXO to be tainted. This UTXO state is
     // final, retrying [update_balance] call will have no effect on this UTXO.
     Tainted : Utxo;
     // The UTXO passed the KYT check, but the minter failed to mint ckBTC

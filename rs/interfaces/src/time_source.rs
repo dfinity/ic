@@ -5,7 +5,7 @@ use std::time::SystemTime;
 
 /// A interface that represent the source of time.
 pub trait TimeSource: Send + Sync {
-    /// Return the releative time since origin. The definition of origin depends
+    /// Return the relative time since origin. The definition of origin depends
     /// on the actual implementation. For [SysTimeSource] it is the UNIX
     /// epoch.
     fn get_relative_time(&self) -> Time;

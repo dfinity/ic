@@ -56,7 +56,7 @@ thread_local! {
 #[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetrieveBtcRequest {
     /// The amount to convert to BTC.
-    /// The minter withdraws BTC tranfer fees from this amount.
+    /// The minter withdraws BTC transfer fees from this amount.
     pub amount: u64,
     /// The destination BTC address.
     pub address: BitcoinAddress,
@@ -791,7 +791,7 @@ impl CkBtcMinterState {
         Some(last)
     }
 
-    /// Removes a pending retrive_btc request with the specified block index.
+    /// Removes a pending retrieve_btc request with the specified block index.
     fn remove_pending_request(&mut self, block_index: u64) -> Option<RetrieveBtcRequest> {
         match self
             .pending_retrieve_btc_requests

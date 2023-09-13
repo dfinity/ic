@@ -4424,7 +4424,7 @@ async fn main() {
                     }
 
                     let archive_version = read_to_string(version_file)
-                        .expect("Could not read version in extracted verison file");
+                        .expect("Could not read version in extracted version file");
                     let archive_version = archive_version.trim();
 
                     if archive_version == get_replica_version_cmd.replica_version_id {

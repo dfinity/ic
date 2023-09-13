@@ -80,7 +80,7 @@ pub enum CanisterHttpTransientValidationError {
     RegistryUnavailable(RegistryClientError),
     /// The state was not available at the time of validation
     StateUnavailable,
-    /// The consensus registry version could not be retreived from the summary
+    /// The consensus registry version could not be retrieved from the summary
     ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled
     Disabled,

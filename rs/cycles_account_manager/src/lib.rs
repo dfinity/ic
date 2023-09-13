@@ -830,7 +830,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::NonConsumed => system_state.balance(),
         };
 
-        self.verify_cycles_balance_with_treshold(
+        self.verify_cycles_balance_with_threshold(
             system_state.canister_id,
             effective_cycles_balance,
             cycles,
@@ -842,7 +842,7 @@ impl CyclesAccountManager {
         Ok(())
     }
 
-    fn verify_cycles_balance_with_treshold(
+    fn verify_cycles_balance_with_threshold(
         &self,
         canister_id: CanisterId,
         cycles_balance: Cycles,
@@ -882,7 +882,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         threshold: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        self.verify_cycles_balance_with_treshold(canister_id, *cycles_balance, cycles, threshold)?;
+        self.verify_cycles_balance_with_threshold(canister_id, *cycles_balance, cycles, threshold)?;
 
         *cycles_balance -= cycles;
         Ok(())
@@ -1105,7 +1105,7 @@ mod tests {
     }
 
     #[test]
-    fn http_requets_fee_scale() {
+    fn http_requests_fee_scale() {
         let subnet_size: u64 = 34;
         let reference_subnet_size: u64 = 13;
         let request_size = NumBytes::from(17);

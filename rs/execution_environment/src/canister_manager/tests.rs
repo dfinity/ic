@@ -4389,7 +4389,7 @@ fn unfreezing_of_frozen_canister() {
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
         .unwrap();
 
-    // Set the freezing theshold high to freeze the canister.
+    // Set the freezing threshold high to freeze the canister.
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()

@@ -37,7 +37,7 @@ use super::query_call_graph::evaluate_query_call_graph;
 
 /// The response of a query. If the query originated from a user, then it
 /// contains either `UserResponse` or `UserError`. If the query originated from
-/// a canister, then it containts `CanisterResponse`.
+/// a canister, then it contains `CanisterResponse`.
 pub(super) enum QueryResponse {
     UserResponse(WasmResult),
     UserError(UserError),
@@ -859,7 +859,7 @@ impl<'a> QueryContext<'a> {
         self.query_context_time_start.elapsed() >= self.query_context_time_limit
     }
 
-    /// Returns a synthetic reject reponse for the case when a query call
+    /// Returns a synthetic reject response for the case when a query call
     /// context did not produce any response.
     pub fn empty_response(
         &self,

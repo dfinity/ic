@@ -194,7 +194,7 @@ const TEST_CANISTER: &str = r#"
     (export "canister_update grow_mem" (func $grow_mem))
 )"#;
 
-const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS: u64 = 0;
+const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS: u64 = 0;
 
 /// This is an empty canister that only exposes canister_heartbeat method.
 const TEST_HEARTBEAT_CANISTER: &str = r#"
@@ -427,7 +427,7 @@ fn simulate_sign_with_ecdsa_cost(
     let canister_id =
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
-    // SignWithECDSA is payed with cycles attached to the request.
+    // SignWithECDSA is paid with cycles attached to the request.
     let payment_before = Cycles::new((2 * B).into()) * subnet_size;
     let sign_with_ecdsa = wasm()
         .call_with_cycles(
@@ -480,7 +480,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
     let canister_id =
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
-    // HttpRequest is payed with cycles attached to the request.
+    // HttpRequest is paid with cycles attached to the request.
     let payment_before = Cycles::new((20 * B).into()) * subnet_size;
     let http_request = wasm()
         .call_with_cycles(
@@ -1162,7 +1162,7 @@ fn test_subnet_size_execute_heartbeat_cost() {
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS),
+        NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS),
         reference_subnet_size,
     );
 

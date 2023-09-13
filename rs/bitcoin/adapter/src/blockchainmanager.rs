@@ -152,7 +152,7 @@ pub struct BlockchainManager {
 
     /// Records outstanding getHeader requests. Used for:
     /// - Check if a header response is solicited.
-    /// - Check if peer is not responding to GetHeader reuqest. In that case remove peer after timeout.
+    /// - Check if peer is not responding to GetHeader request. In that case remove peer after timeout.
     getheaders_requests: HashMap<SocketAddr, GetHeadersRequest>,
 
     /// A flag that is set for each peer when we receive a `inv` message while we have an outstanding `getheaders` request to the same peer.  
@@ -287,7 +287,7 @@ impl BlockchainManager {
         };
 
         if let Some(locators) = maybe_locators {
-            // An entry in `getheaders_requets` indicates that we have an outstanding request. If this is
+            // An entry in `getheaders_requests` indicates that we have an outstanding request. If this is
             // the case we set the catch-up flag to indicate that we need missed some `inv` from this peer.
             if self.getheaders_requests.contains_key(addr) {
                 self.catchup_headers.insert(*addr);
@@ -621,7 +621,7 @@ impl BlockchainManager {
     }
 
     /// This function is called by the adapter when a new event takes place.
-    /// The event could be receiving "getheaders", "getdata", "inv" messages from bitcion peers.
+    /// The event could be receiving "getheaders", "getdata", "inv" messages from bitcoin peers.
     /// The event could be change in connection status with a bitcoin peer.
     pub async fn process_bitcoin_network_message(
         &mut self,
@@ -1605,7 +1605,7 @@ pub mod test {
                 .last()
                 .expect("next_hashes should contain 1 block hash")
         );
-        // Block 5 shoul still be in the cache.
+        // Block 5 should still be in the cache.
         assert!(blockchain_manager
             .blockchain
             .lock()
