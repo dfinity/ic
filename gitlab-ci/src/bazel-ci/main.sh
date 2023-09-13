@@ -21,8 +21,9 @@ fi
 # Many actions seem to be using much more resources than bazel expects.
 # Running too many of them in parallel causes some tests that expect to get some resources within limited time to fail.
 # TODO(IDX-2225): reconsider limit when we will use Remute Execution.
-if [ "$(nproc)" -gt 32 ]; then
-    BAZEL_EXTRA_ARGS="--jobs=32 ${BAZEL_EXTRA_ARGS}"
+MAX_CPU=64
+if [ "$(nproc)" -gt "${MAX_CPU}" ]; then
+    BAZEL_EXTRA_ARGS="--jobs=${MAX_CPU} ${BAZEL_EXTRA_ARGS}"
 fi
 
 # shellcheck disable=SC2086
