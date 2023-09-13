@@ -10,8 +10,8 @@ use tokio::sync::{mpsc::Sender, Mutex};
 use tonic::{Code, Status};
 
 use crate::{
-    blockchainstate::CachedHeader, common::BlockHeight, config::Config,
-    metrics::GetSuccessorMetrics, BlockchainManagerRequest, BlockchainState,
+    common::BlockHeight, config::Config, metrics::GetSuccessorMetrics, BlockchainManagerRequest,
+    BlockchainState,
 };
 
 // Max size of the `GetSuccessorsResponse` message.
@@ -188,16 +188,15 @@ fn get_successor_blocks(
     let mut successor_blocks = vec![];
     // Block hashes that should be looked at in subsequent breadth-first searches.
     let mut response_block_size: usize = 0;
-    let mut queue: VecDeque<CachedHeader> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.lock().clone())
+        .map(|c| c.children.clone())
         .unwrap_or_default()
         .into_iter()
         .collect();
 
     // Compute the blocks by starting a breadth-first search.
-    while let Some(cached_header) = queue.pop_front() {
-        let block_hash = cached_header.header.block_hash();
+    while let Some(block_hash) = queue.pop_front() {
         if !seen.contains(&block_hash) {
             // Retrieve the block from the cache.
             match state.get_block(&block_hash) {
@@ -222,7 +221,12 @@ fn get_successor_blocks(
             }
         }
 
-        queue.extend(cached_header.children.lock().clone());
+        queue.extend(
+            state
+                .get_cached_header(&block_hash)
+                .map(|header| header.children.clone())
+                .unwrap_or_default(),
+        );
     }
 
     successor_blocks
@@ -240,23 +244,24 @@ fn get_next_headers(
         .copied()
         .chain(blocks.iter().map(|b| b.block_hash()))
         .collect();
-    let mut queue: VecDeque<CachedHeader> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.lock().clone())
+        .map(|c| c.children.clone())
         .unwrap_or_default()
         .into_iter()
         .collect();
     let mut next_headers = vec![];
-    while let Some(cached_header) = queue.pop_front() {
+    while let Some(block_hash) = queue.pop_front() {
         if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
             break;
         }
 
-        let block_hash = cached_header.header.block_hash();
-        if !seen.contains(&block_hash) {
-            next_headers.push(cached_header.header);
+        if let Some(header_node) = state.get_cached_header(&block_hash) {
+            if !seen.contains(&block_hash) {
+                next_headers.push(header_node.header);
+            }
+            queue.extend(header_node.children.clone());
         }
-        queue.extend(cached_header.children.lock().clone());
     }
     next_headers
 }
