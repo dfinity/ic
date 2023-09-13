@@ -8,8 +8,6 @@ use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
-use serde_json::json;
-use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -57,16 +55,17 @@ impl PocketIc {
     ) -> Result<Self, String> {
         let server_url = Self::start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
-        let mut map = HashMap::new();
-        map.insert("checkpoint_name", name);
+        let cp = Checkpoint {
+            checkpoint_name: name.to_string(),
+        };
         let response = reqwest_client
             .post(server_url.join("instances/").unwrap())
-            .json(&json!(map))
+            .json(&cp)
             .send()
             .expect("Failed to get result");
         let status = response.status();
         match status {
-            reqwest::StatusCode::OK => {
+            reqwest::StatusCode::CREATED => {
                 let instance_id = response.text().expect("Failed to get text");
                 let instance_url = server_url
                     .join("instances/")
@@ -80,7 +79,7 @@ impl PocketIc {
                     reqwest_client,
                 })
             }
-            reqwest::StatusCode::NOT_FOUND => {
+            reqwest::StatusCode::BAD_REQUEST => {
                 Err(format!("Could not find snapshot named '{name}'."))
             }
             _ => Err(format!(
@@ -148,11 +147,12 @@ impl PocketIc {
             .instance_url
             .join("tick_and_create_checkpoint/")
             .unwrap();
-        let mut map = HashMap::new();
-        map.insert("checkpoint_name", name);
+        let cp = Checkpoint {
+            checkpoint_name: name.to_string(),
+        };
         self.reqwest_client
             .post(url)
-            .json(&json!(map))
+            .json(&cp)
             .send()
             .expect("Failed to get result")
             .text()
@@ -493,6 +493,11 @@ pub struct CanisterCall {
     pub method: String,
     #[serde(with = "base64")]
     pub arg: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Checkpoint {
+    pub checkpoint_name: String,
 }
 
 /// Call a canister candid query method, anonymous.

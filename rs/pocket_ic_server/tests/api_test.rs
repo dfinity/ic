@@ -1,35 +1,139 @@
-use candid::Principal;
-use candid::{decode_args, encode_args};
+use candid::{decode_args, encode_args, Principal};
 use ic_cdk::api::management_canister::main::{CanisterIdRecord, CreateCanisterArgument};
-use pocket_ic::CallError;
-use pocket_ic::CanisterCall;
-use pocket_ic::RawCanisterId;
-use pocket_ic::Request;
-use pocket_ic::WasmResult;
-use reqwest::Url;
+use pocket_ic::{CallError, CanisterCall, Checkpoint, RawCanisterId, Request, WasmResult};
+use reqwest::{StatusCode, Url};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const LOCALHOST: &str = "127.0.0.1";
 
-// TODO: use asserts. best achieved with a uniform reponse type from the rest-api.
 #[test]
-fn save_and_load_checkpoint() {
+fn test_instances_route_with_and_without_backslash_exists() {
     let url = start_server();
     let client = reqwest::blocking::Client::new();
 
-    println!("Create instance 1");
-    let instance_id = client
-        .post(url.join("instances").unwrap())
-        .send()
-        .expect("Failed to get result")
-        .text()
-        .expect("Failed to get text");
-    println!("instance_id: {}", instance_id);
+    let response = client.get(url.join("instances/").unwrap()).send().unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = client.get(url.join("instances").unwrap()).send().unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
 
-    println!("Change state of instance 1 by creating a canister");
+#[test]
+fn test_status() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+
+    let response = client.get(url.join("status/").unwrap()).send().unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[test]
+fn test_creation_of_instance() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+    let response = client.post(url.join("instances/").unwrap()).send().unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert!(!response.text().unwrap().is_empty());
+}
+
+#[test]
+fn test_invalid_json_during_instance_creation_is_ignored() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+    let mut payload = HashMap::new();
+    payload.insert("this_field_does_not_exist", "foo bar");
+
+    let response = client
+        .post(url.join("instances/").unwrap())
+        .json(&payload)
+        .send()
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let text = response.text().unwrap();
+    assert!(!text.is_empty());
+    assert!(!text.to_lowercase().contains("foo bar"));
+}
+
+#[test]
+fn test_call_nonexistent_instance() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .post(url.join("instances/this_instance_does_not_exist").unwrap())
+        .json("Time")
+        .send()
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(response
+        .text()
+        .unwrap()
+        .to_lowercase()
+        .contains("not found"));
+}
+
+#[test]
+fn test_checkpoint_nonexistent_instance() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+    let cp = Checkpoint {
+        checkpoint_name: "my_checkpoint".into(),
+    };
+    let response = client
+        .post(
+            url.join("instances/this_instance_does_not_exist/tick_and_create_checkpoint")
+                .unwrap(),
+        )
+        .json(&cp)
+        .send()
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(response
+        .text()
+        .unwrap()
+        .to_lowercase()
+        .contains("not found"));
+}
+
+#[test]
+fn test_restore_from_invalid_checkpoint() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+    let cp = Checkpoint {
+        checkpoint_name: "foo bar".into(),
+    };
+
+    let response = client
+        .post(url.join("instances/").unwrap())
+        .json(&cp)
+        .send()
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(response
+        .text()
+        .unwrap()
+        .to_lowercase()
+        .contains("does not exist"));
+}
+
+#[test]
+fn test_saving_and_loading_checkpoint() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+
+    // Create instance A.
+    let response = client.post(url.join("instances/").unwrap()).send().unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let instance_id = response.text().unwrap();
+    assert!(!instance_id.is_empty());
+
+    // Change state of instance A by creating a canister.
     let call = Request::CanisterUpdateCall(CanisterCall {
         sender: Principal::anonymous().as_slice().to_vec(),
         canister_id: Principal::management_canister().as_slice().to_vec(),
@@ -37,75 +141,105 @@ fn save_and_load_checkpoint() {
         arg: encode_args((CreateCanisterArgument { settings: None },))
             .expect("failed to encode args"),
     });
-    let res = client
-        .post(url.join(&format!("instances/{}", instance_id)).unwrap())
+    let response = client
+        .post(url.join(&format!("instances/{}/", instance_id)).unwrap())
         .json(&call)
         .send()
-        .expect("Failed to get result")
+        .unwrap()
         .text()
-        .expect("Failed to get text");
-    println!("Created canister: {}", res);
-    let res: Result<WasmResult, CallError> =
-        serde_json::from_str(&res).expect("Failed to decode json");
-    let canister_id = if let Ok(WasmResult::Reply(bytes)) = res {
+        .unwrap();
+
+    let response: Result<WasmResult, CallError> =
+        serde_json::from_str(&response).expect("Failed to decode json");
+    let canister_id = if let Ok(WasmResult::Reply(bytes)) = response {
         let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
         canister_id
     } else {
         panic!("failed to get canister_id")
     };
-    println!("canister_id: {}", canister_id);
 
-    // save a checkpoint from the first instance
-    println!("Save a checkpoint from instance 1");
-    let res = client
+    // Save a checkpoint of instance A.
+    let cp = Checkpoint {
+        checkpoint_name: "my_cp".into(),
+    };
+    let response = client
         .post(
-            url.join(&format!("instances/{}/save_checkpoint", instance_id))
+            url.join(&format!(
+                "instances/{}/tick_and_create_checkpoint/",
+                instance_id
+            ))
+            .unwrap(),
+        )
+        .json(&cp)
+        .send()
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // List checkpoints.
+    let response = client
+        .get(url.join("checkpoints/").unwrap())
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let checkpoint_name = response.text().unwrap();
+    assert!(checkpoint_name.contains("my_cp"));
+
+    // Create new instance B from the checkpoint.
+    let response = client
+        .post(url.join("instances/").unwrap())
+        .json(&cp)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let second_instance_id = response.text().unwrap();
+    assert!(!second_instance_id.is_empty());
+
+    // List instances.
+    let response = client.get(url.join("instances/").unwrap()).send().unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let instances = response.text().unwrap();
+    assert!(instances.contains(&second_instance_id));
+
+    // Check instance B state: does the canister exist on the new instance?
+    let call = Request::CanisterExists(RawCanisterId::from(canister_id));
+    let response = client
+        .post(
+            url.join(&format!("instances/{}/", second_instance_id))
                 .unwrap(),
         )
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body("\"cp1\"") //TODO: use json instead of body and remove header
-        .send()
-        .expect("Failed to get result")
-        .text()
-        .expect("Failed to get text");
-    println!("checkpointing: {}", res);
-
-    // list checkpoints
-    println!("List checkpoints");
-    let res = client
-        .get(url.join("checkpoints").unwrap())
-        .send()
-        .expect("Failed to get result")
-        .text()
-        .expect("Failed to get text");
-    println!("checkpoints: {}", res);
-
-    // create new instance from the checkpoint
-    println!("Create a new instance 2 from checkpoint");
-    let res = client
-        .post(url.join("checkpoints/load").unwrap())
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body("\"cp1\"")
-        .send()
-        .expect("Failed to get result")
-        .text()
-        .expect("Failed to get text");
-    let second_inst_id = res.clone();
-    println!("instance loaded from checkpoint: {}", res);
-
-    println!(
-        "Check instance 2 state: does the canister with id {} exist on instance {}?",
-        &canister_id, &second_inst_id,
-    );
-    let call = Request::CanisterExists(RawCanisterId::from(canister_id));
-    let res = client
-        .post(url.join(&format!("instances/{}", second_inst_id)).unwrap())
         .json(&call)
         .send()
-        .expect("Failed to get result")
-        .text()
-        .expect("Failed to get text");
-    println!("canister exists on instance 2: {}", res);
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let text = response.text().unwrap();
+
+    assert_eq!(text, "true");
+}
+
+#[test]
+fn test_deletion_of_instance() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+
+    // Create instance.
+    let response = client.post(url.join("instances/").unwrap()).send().unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let instance_id = response.text().unwrap();
+    assert!(!instance_id.is_empty());
+
+    // Delete instance that was created.
+    let response = client
+        .delete(url.join(&format!("instances/{}/", instance_id)).unwrap())
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // List instances and verify the instance is gone.
+    let response = client.get(url.join("instances/").unwrap()).send().unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let instances = response.text().unwrap();
+    assert!(!instances.contains(&instance_id));
 }
 
 fn start_server() -> Url {
@@ -125,9 +259,7 @@ fn start_server() -> Url {
                 let port_string = std::fs::read_to_string(port_file_path)
                     .expect("Failed to read port from port file");
                 let port: u16 = port_string.parse().expect("Failed to parse port to number");
-                let server_url = Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
-                println!("Found PocketIC running at {}", server_url);
-                return server_url;
+                return Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
             _ => std::thread::sleep(Duration::from_millis(20)),
         }
