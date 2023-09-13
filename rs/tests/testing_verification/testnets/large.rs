@@ -49,10 +49,10 @@ use ic_tests::driver::{
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy,
-        NnsCustomizations,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy},
+};
+use ic_tests::nns_dapp::{
+    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
@@ -94,8 +94,9 @@ pub fn setup(env: TestEnv) {
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        NnsCustomizations::default(),
+        nns_dapp_customizations(),
     );
+    set_authorized_subnets(&env);
     for i in 0..NUM_BN {
         let bn_name = format!("boundary-node-{}", i);
         BoundaryNode::new(bn_name)
@@ -110,5 +111,8 @@ pub fn setup(env: TestEnv) {
     for i in 0..NUM_BN {
         let bn_name = format!("boundary-node-{}", i);
         await_boundary_node_healthy(&env, &bn_name);
+        if i == 0 {
+            install_ii_and_nns_dapp(&env, &bn_name, None);
+        }
     }
 }
