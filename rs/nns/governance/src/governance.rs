@@ -4556,6 +4556,8 @@ impl Governance {
         // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
         let request = DeployNewSnsRequest {
             sns_init_payload: Some(sns_init_payload),
+            // TODO[NNS1-2591]: Provide the Neuron's Fund participation constraints
+            // (once DeployNewSnsRequest is extended with the required fields).
         };
         let request = match Encode!(&request) {
             Ok(ok) => ok,
@@ -8274,6 +8276,7 @@ fn is_information_about_swap_from_different_sources_consistent(
                 nns_proposal_id: _,
                 neurons_fund_participants: _,
                 should_auto_finalize: _,
+                neurons_fund_participation_constraints: _,
             } = swap_init;
 
             (

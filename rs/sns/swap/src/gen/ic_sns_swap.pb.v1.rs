@@ -357,6 +357,72 @@ pub struct Init {
     /// (regardless of the value of this field).
     #[prost(bool, optional, tag = "28")]
     pub should_auto_finalize: ::core::option::Option<bool>,
+    /// Constraints for the Neurons' Fund participation in this swap.
+    /// TODO\[NNS1-2570\]: Use this data to compute current_neurons_fund_contribution_e8s.
+    #[prost(message, optional, tag = "29")]
+    pub neurons_fund_participation_constraints:
+        ::core::option::Option<NeuronsFundParticipationConstraints>,
+}
+/// Constraints for the Neurons' Fund participation in an SNS swap.
+/// All amounts are in ICP e8s.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronsFundParticipationConstraints {
+    /// The Neurons' Fund will not participate in this swap unless the direct
+    /// contributions reach this threshold.
+    #[prost(uint64, tag = "1")]
+    pub min_direct_participation_threashold_e8s: u64,
+    /// Maximum amount of contributions from the Neurons' Fund to this swap.
+    #[prost(uint64, tag = "2")]
+    pub max_neurons_fund_participation_e8s: u64,
+    /// List of intervals in which the given linear coefficients apply for scaling the
+    /// ideal Neurons' Fund participation amount (down) to the effective Neurons' Fund
+    /// participation amount.
+    #[prost(message, repeated, tag = "3")]
+    pub coefficient_intervals: ::prost::alloc::vec::Vec<LinearScalingCoefficient>,
+}
+/// This structure represents the coefficients of a linear transformation used for
+/// mapping the Neurons' Fund ideal-participation to effective-participation on a given
+/// linear (semi-open) interval. Say we have the following function for matching direct
+/// participants' contributions: `f: ICP e8s -> ICP e8s`; then the *ideal* Neuron's Fund
+/// participation amount corresponding to the direct participatio of `x` ICP e8s is
+/// `f(x)`, while the Neuron's Fund *effective* participation amount is:
+/// ```
+/// g(x) = c.slope * f(x) + c.intercept
+/// ```
+/// where `c: LinearScalingCoefficient` with
+/// `c.from_direct_participation_e8s <= x < c.to_direct_participation_e8s`.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct LinearScalingCoefficient {
+    /// (Included) lower bound on the amount of direct participation (in ICP e8s) at which
+    /// these coefficients apply.
+    #[prost(uint64, tag = "1")]
+    pub from_direct_participation_e8s: u64,
+    /// (Excluded) upper bound on the amount of direct participation (in ICP e8s) at which
+    /// these coefficients apply.
+    #[prost(uint64, tag = "2")]
+    pub to_direct_participation_e8s: u64,
+    /// Slope of the linear transformation.
+    #[prost(double, tag = "3")]
+    pub slope: f64,
+    /// Intercept of the linear transformation.
+    #[prost(double, tag = "4")]
+    pub intercept: f64,
 }
 /// Represents multiple Neurons' Fund participants.
 #[derive(
