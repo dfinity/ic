@@ -501,9 +501,9 @@ impl ConsensusPoolImpl {
         }
     }
 
-    // Checks if the artifacts to be backed up contain a new finalization, and if it is the case, we simply traverse the blockchain starting from the hash
-    // of the new finalization back to the previous finalization and add to the list of artifacts
-    // all block proposals that are now provably belong to the finalized chain.
+    // Persists consensus artifacts required for backup validation. If the provided artifacts contain a new finalization,
+    // the function traverses the blockchain backwards to the last available finalization and additionally persists all
+    // block proposals with their notarizations that are now provably belong to the finalized chain.
     fn backup_artifacts(
         &self,
         backup: &Backup,
@@ -535,18 +535,28 @@ impl ConsensusPoolImpl {
             })
         });
 
-        if let Some(proposal) = finalized_proposal {
-            artifacts_for_backup.extend(
-                self.as_cache()
-                    .chain_iterator(self, proposal.content.into_inner())
-                    .take_while(|block| block.height > latest_finalization_height)
-                    .filter_map(|block| {
-                        find_proposal_by(block.height, &|proposal: &BlockProposal| {
-                            proposal.content.as_ref() == &block
-                        })
+        if let Some(finalized_proposal) = finalized_proposal {
+            for proposal in self
+                .as_cache()
+                .chain_iterator(self, finalized_proposal.content.into_inner())
+                .take_while(|block| block.height > latest_finalization_height)
+                .filter_map(|block| {
+                    find_proposal_by(block.height, &|proposal: &BlockProposal| {
+                        proposal.content.as_ref() == &block
                     })
-                    .map(ConsensusMessage::BlockProposal),
-            );
+                })
+            {
+                if let Some(notarization) = self
+                    .validated()
+                    .notarization()
+                    .get_by_height(proposal.content.height())
+                    .find(|notarization| proposal.content.get_hash() == &notarization.content.block)
+                {
+                    artifacts_for_backup.push(ConsensusMessage::Notarization(notarization))
+                }
+
+                artifacts_for_backup.push(ConsensusMessage::BlockProposal(proposal));
+            }
         }
 
         backup.store(time_source, artifacts_for_backup);
@@ -652,9 +662,9 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
             .filter_map(|op| match op {
                 PoolSectionOp::Insert(artifact)
                     // When we prepare a list of artifacts for a backup, we first remove all
-                    // block proposals. We need to do this to avoid "polluting" the backup partition with non-
-                    // finalized blocks, which are the largest artifacts. 
-                    if !matches!(&artifact.msg, &ConsensusMessage::BlockProposal(_)) =>
+                    // block proposals and notarizations. We need to do this to avoid "polluting" the backup
+                    // partition with non-finalized blocks, which are the largest artifacts.
+                    if !matches!(&artifact.msg, &ConsensusMessage::BlockProposal(_)) && !matches!(&artifact.msg, &ConsensusMessage::Notarization(_)) =>
                 {
                     Some(artifact.msg.clone())
                 }
@@ -1373,6 +1383,10 @@ mod tests {
                 },
             );
             let proposal3_final = BlockProposal::fake(block.clone(), node_test_id(333));
+            let notarization3 = Notarization::fake(NotarizationContent::new(
+                Height::from(3),
+                ic_types::crypto::crypto_hash(&block),
+            ));
 
             let block = Block::new(
                 ic_types::crypto::crypto_hash(&block),
@@ -1430,6 +1444,7 @@ mod tests {
                 proposal.clone().into_message(),
                 proposal_non_final.clone().into_message(),
                 proposal3.clone().into_message(),
+                notarization3.clone().into_message(),
                 proposal3_final.clone().into_message(),
                 cup.clone().into_message(),
             ]
@@ -1497,14 +1512,13 @@ mod tests {
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
             );
-            assert!(
-                notarization_path.exists(),
-                "notarization at height 2 was backed up"
-            );
+            // notarization at height 2 was not backed up becasue this is height is not
+            // finalized
+            assert!(!notarization_path.exists());
             assert_eq!(
                 fs::read_dir(path.join("2")).unwrap().count(),
-                2,
-                "only two artifacts for height 2 were backed up"
+                1,
+                "only one artifact for height 2 was backed up"
             );
             let mut file = fs::File::open(path.join("2").join("random_tape.bin")).unwrap();
             let mut buffer = Vec::new();
@@ -1515,17 +1529,6 @@ mod tests {
                 random_tape, restored,
                 "restored random tape is identical with the original one"
             );
-            let mut file = fs::File::open(notarization_path).unwrap();
-            let mut buffer = Vec::new();
-            file.read_to_end(&mut buffer).unwrap();
-            let restored =
-                Notarization::try_from(pb::Notarization::decode(buffer.as_slice()).unwrap())
-                    .unwrap();
-            assert_eq!(
-                notarization, restored,
-                "restored notarization is identical with the original one"
-            );
-
             // Check backup for height 3
             let finalization_path = path.join("3").join(format!(
                 "finalization_{}_{}.bin",
@@ -1538,8 +1541,8 @@ mod tests {
             );
             assert_eq!(
                 fs::read_dir(path.join("3")).unwrap().count(),
-                2,
-                "only two artifact for height 3 was backed up"
+                3,
+                "only three artifact for height 3 were backed up"
             );
             let mut file = fs::File::open(path.join("3").join(finalization_path)).unwrap();
             let mut buffer = Vec::new();
@@ -1567,6 +1570,26 @@ mod tests {
                 bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal3_final)),
             ));
             assert!(proposal_path.exists(), "final proposal was backed up");
+
+            let notarization_path = path.join("3").join(format!(
+                "notarization_{}_{}.bin",
+                bytes_to_hex_str(&notarization3.content.block),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&notarization3)),
+            ));
+            assert!(
+                notarization_path.exists(),
+                "notarization at height 3 was backed up",
+            );
+            let mut file = fs::File::open(notarization_path).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                Notarization::try_from(pb::Notarization::decode(buffer.as_slice()).unwrap())
+                    .unwrap();
+            assert_eq!(
+                notarization3, restored,
+                "restored notarization is identical with the original one"
+            );
 
             // Check backup for height 4
             assert!(
@@ -1713,6 +1736,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
             ));
             let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
+            let random_tape3 = RandomTape::fake(RandomTapeContent::new(Height::from(3)));
             let notarization = Notarization::fake(NotarizationContent::new(
                 Height::from(3),
                 CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
@@ -1763,6 +1787,7 @@ mod tests {
             // Now add new artifacts
             let changeset = vec![
                 notarization.into_message(),
+                random_tape3.into_message(),
                 proposal.into_message(),
                 finalization.into_message(),
             ]
