@@ -97,7 +97,7 @@
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -177,7 +177,7 @@
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -870,7 +870,7 @@ bazel-build-fuzzers:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: build
@@ -943,7 +943,7 @@ bazel-build-fuzzers-afl:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: build
@@ -1015,7 +1015,7 @@ bazel-build-fuzzers-archives:
       ./build-all-fuzzers.sh --zip
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -1087,7 +1087,7 @@ bazel-build-fuzzers-weekly:
       gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -1232,7 +1232,7 @@ bazel-config-check-all-rebuild:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: build
@@ -1308,7 +1308,7 @@ bazel-system-test-hotfix:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -1377,7 +1377,7 @@ bazel-system-test-hourly:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   timeout: 120 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -1454,7 +1454,7 @@ bazel-system-test-nightly:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   timeout: 7h 30m
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -1532,7 +1532,7 @@ bazel-system-test-staging:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -1605,7 +1605,7 @@ bazel-test-all:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   timeout: 80 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -1675,7 +1675,7 @@ bazel-test-all-allow-to-fail:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: test
@@ -1744,7 +1744,7 @@ bazel-test-all-rebuild:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   timeout: 2h
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -4082,7 +4082,7 @@ linux-openssl-static-binaries:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - zh
+    - bazel
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: build
