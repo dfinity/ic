@@ -5792,14 +5792,20 @@ name = "ic-consensus-manager"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "backoff 0.3.0",
+ "bincode",
  "bytes",
  "crossbeam-channel",
+ "futures",
  "ic-artifact-pool",
+ "ic-async-utils",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
  "ic-quic-transport",
  "ic-types",
+ "serde",
+ "slog",
  "tokio",
 ]
 
