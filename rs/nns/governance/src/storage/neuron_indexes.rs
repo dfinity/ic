@@ -12,12 +12,16 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{add_neuron_followees, remove_neuron_followees, StableNeuronFollowingIndex},
     neuron_principal::{
-        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, StableNeuronPrincipalIndex,
+        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, NeuronPrincipalIndex,
+        StableNeuronPrincipalIndex,
     },
 };
 use ic_stable_structures::VectorMemory;
 use icp_ledger::Subaccount;
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt::{Display, Formatter},
+};
 
 type NeuronId = u64;
 type Topic = Signed32;
@@ -131,6 +135,17 @@ trait NeuronIndex {
     /// The second time the exact same neuron gets removed should have no effect (other than
     /// returning an error).
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect>;
+
+    /// Updates a neuron in the indexes given both of old/new versions. Their neuron ids must be the
+    /// same, and it must be checked before calling this method. When it fails, it can return up to
+    /// 2 defect entries - one for removing old values and one for adding new values. Encountering
+    /// one does not stop performing the other, because there is no good way of recovering from such
+    /// errors.
+    fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>>;
 }
 
 impl<Memory> NeuronIndex for NeuronSubaccountIndex<Memory>
@@ -138,107 +153,192 @@ where
     Memory: ic_stable_structures::Memory,
 {
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
-        // StableNeuronIndexes::add_neuron checks neuron id before calling this method.
-        new_neuron
-            .subaccount()
-            .and_then(|subaccount| {
-                self.add_neuron_subaccount(
-                    new_neuron.id.expect("Neuron must have an id"),
-                    &subaccount,
-                )
-            })
+        // StableNeuronIndexes::add_neuron calls validate_neuron which make sure id and subaccount
+        // are valid.
+        let neuron_id = new_neuron.id.unwrap();
+        let subaccount = new_neuron.subaccount().unwrap();
+
+        self.add_neuron_subaccount(neuron_id, &subaccount)
             .map_err(|error| NeuronIndexDefect::Subaccount {
                 reason: error.error_message,
             })
     }
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
-        existing_neuron
-            .subaccount()
-            .and_then(|subaccount| {
-                // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
-                self.remove_neuron_subaccount(
-                    existing_neuron.id.expect("Neuron must have an id"),
-                    &subaccount,
-                )
-            })
+        // StableNeuronIndexes::remove_neuron calls validate_neuron which make sure id is valid.
+        let neuron_id = existing_neuron.id.unwrap();
+        let subaccount = existing_neuron.subaccount().unwrap();
+
+        self.remove_neuron_subaccount(neuron_id, &subaccount)
             .map_err(|error| NeuronIndexDefect::Subaccount {
                 reason: error.error_message,
             })
     }
+
+    fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>> {
+        // StableNeuronIndexes::update_neuron checks that the subaccount should not be modified. No
+        // need to do anything here.
+        Ok(())
+    }
 }
 
-impl<Memory> NeuronIndex for StableNeuronPrincipalIndex<u64, Memory>
+fn already_present_principal_ids_to_result(
+    already_present_principal_ids: Vec<PrincipalId>,
+    neuron_id: NeuronId,
+) -> Result<(), NeuronIndexDefect> {
+    if already_present_principal_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(NeuronIndexDefect::Principal {
+            reason: format!(
+                "Principals {:?} already present for neuron {}",
+                already_present_principal_ids, neuron_id
+            ),
+        })
+    }
+}
+
+fn already_absent_principal_ids_to_result(
+    already_absent_principal_ids: Vec<PrincipalId>,
+    neuron_id: NeuronId,
+) -> Result<(), NeuronIndexDefect> {
+    if already_absent_principal_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(NeuronIndexDefect::Principal {
+            reason: format!(
+                "Principals {:?} already absent for neuron {}",
+                already_absent_principal_ids, neuron_id
+            ),
+        })
+    }
+}
+
+impl<Memory> NeuronIndex for StableNeuronPrincipalIndex<NeuronId, Memory>
 where
     Memory: ic_stable_structures::Memory,
 {
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
-        // StableNeuronIndexes::add_neuron checks neuron id before calling this method.
-        let neuron_id = new_neuron.id.expect("Neuron must have an id").id;
-        let existing_principal_ids = add_neuron_id_principal_ids(
+        // StableNeuronIndexes::add_neuron calls validate_neuron which make sure id is valid.
+        let neuron_id = new_neuron.id.unwrap().id;
+
+        let already_present_principal_ids = add_neuron_id_principal_ids(
             self,
             &neuron_id,
             new_neuron.principal_ids_with_special_permissions(),
         );
-        if existing_principal_ids.is_empty() {
-            Ok(())
-        } else {
-            Err(NeuronIndexDefect::Principal {
-                reason: format!(
-                    "Principals {:?} already exists for neuron {}",
-                    existing_principal_ids, neuron_id
-                ),
-            })
-        }
+        already_present_principal_ids_to_result(already_present_principal_ids, neuron_id)
     }
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
-        // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
-        let neuron_id = existing_neuron.id.expect("Neuron must have an id").id;
+        // StableNeuronIndexes::remove_neuron calls validate_neuron which make sure id is valid.
+        let neuron_id = existing_neuron.id.unwrap().id;
+
         let already_absent_principal_ids = remove_neuron_id_principal_ids(
             self,
             &neuron_id,
             existing_neuron.principal_ids_with_special_permissions(),
         );
-        if already_absent_principal_ids.is_empty() {
-            Ok(())
-        } else {
-            Err(NeuronIndexDefect::Principal {
-                reason: format!(
-                    "Principals {:?} already absent for neuron {}",
-                    already_absent_principal_ids, neuron_id
-                ),
-            })
-        }
+        already_absent_principal_ids_to_result(already_absent_principal_ids, neuron_id)
+    }
+
+    fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>> {
+        // StableNeuronIndexes::update_neuron calls validate_neuron which make sure id is valid.
+        let neuron_id = old_neuron.id.unwrap().id;
+
+        let old_principal_ids = old_neuron
+            .principal_ids_with_special_permissions()
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let new_principal_ids = new_neuron
+            .principal_ids_with_special_permissions()
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        // Set differences are used for preventing excessive stable storage writes, which are expensive especially when they are scattered.
+        let principal_ids_to_remove = old_principal_ids
+            .difference(&new_principal_ids)
+            .cloned()
+            .collect::<Vec<_>>();
+        let already_absent_principal_ids =
+            remove_neuron_id_principal_ids(self, &neuron_id, principal_ids_to_remove);
+
+        let principal_ids_to_add = new_principal_ids
+            .difference(&old_principal_ids)
+            .cloned()
+            .collect::<Vec<_>>();
+        let already_present_principal_ids =
+            add_neuron_id_principal_ids(self, &neuron_id, principal_ids_to_add);
+
+        let defect_remove =
+            already_absent_principal_ids_to_result(already_absent_principal_ids, neuron_id);
+        let defect_add =
+            already_present_principal_ids_to_result(already_present_principal_ids, neuron_id);
+
+        combine_index_defects(defect_remove, defect_add)
     }
 }
 
-impl<Memory> NeuronIndex for StableNeuronFollowingIndex<u64, Signed32, Memory>
+fn already_present_topic_followee_pairs_to_result(
+    already_present_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+    neuron_id: NeuronId,
+) -> Result<(), NeuronIndexDefect> {
+    if already_present_topic_followee_pairs.is_empty() {
+        Ok(())
+    } else {
+        Err(NeuronIndexDefect::Following {
+            reason: format!(
+                "Topic-followee pairs {:?} already exists for neuron {}",
+                already_present_topic_followee_pairs, neuron_id
+            ),
+        })
+    }
+}
+
+fn already_absent_topic_followee_pairs_to_result(
+    already_absent_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+    neuron_id: NeuronId,
+) -> Result<(), NeuronIndexDefect> {
+    if already_absent_topic_followee_pairs.is_empty() {
+        Ok(())
+    } else {
+        Err(NeuronIndexDefect::Following {
+            reason: format!(
+                "Topic-followee pairs {:?} already absent for neuron {}",
+                already_absent_topic_followee_pairs, neuron_id
+            ),
+        })
+    }
+}
+
+impl<Memory> NeuronIndex for StableNeuronFollowingIndex<NeuronId, Topic, Memory>
 where
     Memory: ic_stable_structures::Memory,
 {
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::add_neuron checks neuron id before calling this method.
         let neuron_id = new_neuron.id.expect("Neuron must have an id").id;
-        let existing_topic_followee_pairs = add_neuron_followees(
+        let already_present_topic_followee_pairs = add_neuron_followees(
             self,
             &neuron_id,
             new_neuron
                 .topic_followee_pairs()
                 .iter()
-                .map(|(topic, followee)| (Signed32::from(*topic as i32), followee.id))
+                .map(|(topic, followee)| (Topic::from(*topic as i32), followee.id))
                 .collect(),
         );
-        if existing_topic_followee_pairs.is_empty() {
-            Ok(())
-        } else {
-            Err(NeuronIndexDefect::Following {
-                reason: format!(
-                    "Topic-followee pairs {:?} already exists for neuron {}",
-                    existing_topic_followee_pairs, neuron_id
-                ),
-            })
-        }
+        already_present_topic_followee_pairs_to_result(
+            already_present_topic_followee_pairs,
+            neuron_id,
+        )
     }
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
@@ -250,19 +350,52 @@ where
             existing_neuron
                 .topic_followee_pairs()
                 .iter()
-                .map(|(topic, followee)| (Signed32::from(*topic as i32), followee.id))
+                .map(|(topic, followee)| (Topic::from(*topic as i32), followee.id))
                 .collect(),
         );
-        if already_absent_topic_followee_pairs.is_empty() {
-            Ok(())
-        } else {
-            Err(NeuronIndexDefect::Following {
-                reason: format!(
-                    "Topic-followee pairs {:?} already absent for neuron {}",
-                    already_absent_topic_followee_pairs, neuron_id
-                ),
-            })
-        }
+        already_absent_topic_followee_pairs_to_result(
+            already_absent_topic_followee_pairs,
+            neuron_id,
+        )
+    }
+
+    fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>> {
+        // StableNeuronIndexes::update_neuron calls validate_neuron which make sure id is valid.
+        let neuron_id = old_neuron.id.unwrap().id;
+        let old_topic_followee_pairs = old_neuron.topic_followee_pairs();
+        let new_topic_followee_pairs = new_neuron.topic_followee_pairs();
+
+        // Set differences are used for preventing excessive stable storage writes, which are expensive especially when they are scattered.
+        let topic_followee_pairs_to_remove = old_topic_followee_pairs
+            .difference(&new_topic_followee_pairs)
+            .cloned()
+            .map(|(topic, followee)| (Topic::from(topic as i32), followee.id))
+            .collect::<BTreeSet<_>>();
+        let topic_followee_pairs_to_add = new_topic_followee_pairs
+            .difference(&old_topic_followee_pairs)
+            .cloned()
+            .map(|(topic, followee)| (Topic::from(topic as i32), followee.id))
+            .collect::<BTreeSet<_>>();
+
+        let already_absent_topic_followee_pairs =
+            remove_neuron_followees(self, &neuron_id, topic_followee_pairs_to_remove);
+        let already_present_topic_followee_pairs =
+            add_neuron_followees(self, &neuron_id, topic_followee_pairs_to_add);
+
+        let defect_remove = already_absent_topic_followee_pairs_to_result(
+            already_absent_topic_followee_pairs,
+            neuron_id,
+        );
+        let defect_add = already_present_topic_followee_pairs_to_result(
+            already_present_topic_followee_pairs,
+            neuron_id,
+        );
+
+        combine_index_defects(defect_remove, defect_add)
     }
 }
 
@@ -330,6 +463,49 @@ where
             }
         }
     }
+
+    fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>> {
+        let old_known_neuron_name = old_neuron
+            .known_neuron_data
+            .as_ref()
+            .map(|known_neuron_data| &known_neuron_data.name);
+        let new_known_neuron_name = new_neuron
+            .known_neuron_data
+            .as_ref()
+            .map(|known_neuron_data| &known_neuron_data.name);
+
+        // The comparison can catch 3 cases: adding/removing/updating a known neuron name.
+        if old_known_neuron_name == new_known_neuron_name {
+            return Ok(());
+        }
+
+        // When any update is needed, we can simply remove and add.
+        let defect_remove = self.remove_neuron(old_neuron);
+        let defect_add = self.add_neuron(new_neuron);
+
+        combine_index_defects(defect_remove, defect_add)
+    }
+}
+
+// Combine 2 Result<(), NeuronIndexDefect> into Result<(), Vec<NeuronIndexDefect>>. Returns Ok(()) when both are Ok(()).
+fn combine_index_defects(
+    defect1: Result<(), NeuronIndexDefect>,
+    defect2: Result<(), NeuronIndexDefect>,
+) -> Result<(), Vec<NeuronIndexDefect>> {
+    let defects: Vec<_> = defect1
+        .err()
+        .into_iter()
+        .chain(defect2.err().into_iter())
+        .collect();
+    if defects.is_empty() {
+        Ok(())
+    } else {
+        Err(defects)
+    }
 }
 
 impl<Memory> StableNeuronIndexes<Memory>
@@ -342,7 +518,7 @@ where
     /// a good way to recover from the errors, and the correctness of the indexes need to depend on the
     /// NeuronStore to call them correctly.
     pub fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronStoreError> {
-        let neuron_id = new_neuron.id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
+        validate_neuron(new_neuron)?;
         let mut defects = vec![];
 
         for index in self.indexes_mut() {
@@ -355,7 +531,7 @@ where
         } else {
             Err(NeuronStoreError::CorruptedNeuronIndexes(
                 CorruptedNeuronIndexes {
-                    neuron_id: neuron_id.id,
+                    neuron_id: new_neuron.id.unwrap().id, // We can unwrap because of validate_neuron.
                     indexes: defects,
                 },
             ))
@@ -368,7 +544,7 @@ where
     /// the errors, and the correctness of the indexes need to depend on the NeuronStore to call
     /// them correctly.
     pub fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronStoreError> {
-        let neuron_id = existing_neuron.id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
+        validate_neuron(existing_neuron)?;
         let mut defects = vec![];
 
         for index in self.indexes_mut() {
@@ -381,7 +557,65 @@ where
         } else {
             Err(NeuronStoreError::CorruptedNeuronIndexes(
                 CorruptedNeuronIndexes {
-                    neuron_id: neuron_id.id,
+                    neuron_id: existing_neuron.id.unwrap().id, // We can unwrap because of validate_neuron.
+                    indexes: defects,
+                },
+            ))
+        }
+    }
+
+    /// Updates a neuron from old_neuron to new_neuron. The old/new versions must be valid (has id
+    /// and valid subaccount), and they should have the same ids. Even when we have error for some
+    /// indexes, we will keep updating other indexes since there is not a good way to recover from
+    /// the errors, and the correctness of the indexes need to depend on the NeuronStore to call
+    /// them correctly.
+    pub fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), NeuronStoreError> {
+        validate_neuron(old_neuron)?;
+        validate_neuron(new_neuron)?;
+
+        // We can unwrap because of validate_neuron validates that ids exist.
+        let old_neuron_id = old_neuron.id.unwrap();
+        let new_neuron_id = new_neuron.id.unwrap();
+        if old_neuron_id != new_neuron_id {
+            return Err(NeuronStoreError::neuron_id_modified(
+                old_neuron_id,
+                new_neuron_id,
+            ));
+        }
+
+        // We can unwrap because of validate_neuron validates that ids exist.
+        let old_subaccount = old_neuron.subaccount().unwrap();
+        let new_subaccount = new_neuron.subaccount().unwrap();
+        // Although it is specific to the subaccount index, since each index update only produces
+        // defect and does not stop other indexes, we need to stop any index update since account
+        // update is invalid, before any index update happens.
+        if old_subaccount != new_subaccount {
+            return Err(NeuronStoreError::subaccount_modified(
+                old_subaccount,
+                new_subaccount,
+            ));
+        }
+
+        let mut defects = vec![];
+
+        for index in self.indexes_mut() {
+            let defect = index
+                .update_neuron(old_neuron, new_neuron)
+                .err()
+                .unwrap_or_default();
+            defects.extend(defect);
+        }
+
+        if defects.is_empty() {
+            Ok(())
+        } else {
+            Err(NeuronStoreError::CorruptedNeuronIndexes(
+                CorruptedNeuronIndexes {
+                    neuron_id: old_neuron.id.unwrap().id, // We can unwrap because of validate_neuron.
                     indexes: defects,
                 },
             ))
@@ -402,17 +636,29 @@ where
         &self.subaccount
     }
 
-    pub fn principal(&self) -> &StableNeuronPrincipalIndex<u64, Memory> {
+    pub fn principal(&self) -> &StableNeuronPrincipalIndex<NeuronId, Memory> {
         &self.principal
     }
 
-    pub fn following(&self) -> &StableNeuronFollowingIndex<u64, Signed32, Memory> {
+    pub fn following(&self) -> &StableNeuronFollowingIndex<NeuronId, Topic, Memory> {
         &self.following
     }
 
     pub fn known_neuron(&self) -> &KnownNeuronIndex<Memory> {
         &self.known_neuron
     }
+}
+
+// To update neuron indexes we need to ensure that the neurons involved have id and valid
+// subaccount. At this time the prost-generated Neuron type cannot ensure the above are satisfied,
+// so we validate before performing any index update, and assume those are true when updating each
+// index.
+fn validate_neuron(neuron: &Neuron) -> Result<(), NeuronStoreError> {
+    let neuron_id = neuron.id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
+    neuron
+        .subaccount()
+        .map_err(|_| NeuronStoreError::invalid_subaccount(neuron_id, neuron.account.clone()))?;
+    Ok(())
 }
 
 pub(crate) fn new_heap_based() -> StableNeuronIndexes<VectorMemory> {
