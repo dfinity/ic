@@ -94,7 +94,7 @@ class JiraFindingDataSource(FindingDataSource):
     def __finding_to_jira_vulnerabilities(vulnerabilities: List[Vulnerability]) -> str:
         vuln_table: str = "||*id*||*name*||*description*||*score*||*risk*||\n"
         for vuln in vulnerabilities:
-            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ')}|\n"
+            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ', True)}|\n"
         return vuln_table
 
     @staticmethod
@@ -113,17 +113,55 @@ class JiraFindingDataSource(FindingDataSource):
             return None
 
         for row in vuln_table[1:-1]:
-            parts: List[str] = row.split("|")
+            # each row is parsed char by char
+            # "|" is treated as column separator unless it appears within square brackets,
+            # because in that case it is a link: [link text | http://www.example.com]
+            # nested square brackets or more than one pipe within 2 square brackets is not supported
+            parts: List[str] = []
+            is_link = pipe_seen_in_link = False
+            parsed = ''
+            for c in row:
+                if c == '[':
+                    if is_link:
+                        # nested links are not supported
+                        return None
+                    else:
+                        is_link = True
+                        parsed += c
+                elif c == ']':
+                    is_link = pipe_seen_in_link = False
+                    parsed += c
+                elif c == '|':
+                    if is_link:
+                        if pipe_seen_in_link:
+                            # more than one pipe in link
+                            return None
+                        pipe_seen_in_link = True
+                        parsed += c
+                    else:
+                        parts.append(parsed)
+                        parsed = ''
+                else:
+                    parsed += c
+            parts.append(parsed)
+
+            if len(parts) > 1 and parts[1].startswith('[') and parts[1].endswith(']'):
+                # jira has changed the vulnerability id to a wiki markup link, e.g.
+                # [https://avd.aquasec.com/nvd/cve-2023-35823|https://avd.aquasec.com/nvd/cve-2023-35823]
+                # change it back to https://avd.aquasec.com/nvd/cve-2023-35823
+                vuln_id_parts = parts[1].split("|")
+                if len(vuln_id_parts) != 2:
+                    # unexpected format
+                    return None
+                parts[1] = vuln_id_parts[0][1:]
+
             if len(parts) == 5:
                 # backwards compatibility for entries that don't have risk column
                 res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL))
             elif len(parts) == 6:
                 res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=parts[5]))
-            elif len(parts) == 7:
-                # temporary fix to handle markdown rendering of id as [url | url]
-                # Ex: |[https://avd.aquasec.com/nvd/cve-2023-35823|https://avd.aquasec.com/nvd/cve-2023-35823]|CVE-2023-35823|race condition ()|7|Low
-                res.append(Vulnerability(id=parts[1].lstrip("["), name=parts[3], description=parts[4], score=int(parts[5]), risk_note=parts[6]))
             else:
+                # unexpected format
                 return None
         return res
 
@@ -308,10 +346,10 @@ class JiraFindingDataSource(FindingDataSource):
         return int(datetime.timestamp(datetime.strptime(due_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)))
 
     @staticmethod
-    def __finding_to_jira_escape_wiki_renderer_chars(text: str) -> str:
+    def __finding_to_jira_escape_wiki_renderer_chars(text: str, pipe_allowed: bool = False) -> str:
         res = ""
         for i in range(len(text)):
-            if text[i] == "|":
+            if text[i] == "|" and not pipe_allowed:
                 res += ":"
             elif text[i] == "{" and (i == 0 or text[i - 1] != "\\"):
                 res += "\\{"
