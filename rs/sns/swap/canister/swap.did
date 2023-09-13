@@ -94,6 +94,7 @@ type Init = record {
   transaction_fee_e8s : opt nat64;
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
+  neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
   neurons_fund_participants : opt NeuronsFundParticipants;
   should_auto_finalize : opt bool;
   max_participant_icp_e8s : opt nat64;
@@ -108,6 +109,12 @@ type InvalidUserAmount = record {
 type Investor = variant {
   CommunityFund : CfInvestment;
   Direct : DirectInvestment;
+};
+type LinearScalingCoefficient = record {
+  intercept : float64;
+  slope : float64;
+  from_direct_participation_e8s : nat64;
+  to_direct_participation_e8s : nat64;
 };
 type ListCommunityFundParticipantsRequest = record {
   offset : opt nat64;
@@ -136,6 +143,11 @@ type NeuronBasketConstructionParameters = record {
 };
 type NeuronId = record { id : vec nat8 };
 type NeuronsFundParticipants = record { cf_participants : vec CfParticipant };
+type NeuronsFundParticipationConstraints = record {
+  coefficient_intervals : vec LinearScalingCoefficient;
+  max_neurons_fund_participation_e8s : nat64;
+  min_direct_participation_threashold_e8s : nat64;
+};
 type NewSaleTicketRequest = record {
   subaccount : opt vec nat8;
   amount_icp_e8s : nat64;

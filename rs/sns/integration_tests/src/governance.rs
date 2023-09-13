@@ -20,6 +20,7 @@ fn test_sns_initialization_parameters_are_set() {
                     swap: PrincipalId::new_user_test_id(4),
                     index: PrincipalId::new_user_test_id(5),
                 },
+                None, // TODO[NNS1-2558]
                 None,
                 false,
             )

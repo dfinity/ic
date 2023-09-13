@@ -24,7 +24,9 @@ use ic_sns_governance::{
     types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
-use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
+use ic_sns_swap::pb::v1::{
+    Init as SwapInit, NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
+};
 use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
 use isocountry::CountryCode;
 use lazy_static::lazy_static;
@@ -330,6 +332,7 @@ impl SnsInitPayload {
     pub fn build_canister_payloads(
         &self,
         sns_canister_ids: &SnsCanisterIds,
+        neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
         deployed_version: Option<Version>,
         testflight: bool,
     ) -> Result<SnsCanisterInitPayloads, String> {
@@ -342,7 +345,7 @@ impl SnsInitPayload {
             governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids, testflight),
-            swap: self.swap_init_args(sns_canister_ids)?,
+            swap: self.swap_init_args(sns_canister_ids, neurons_fund_participation_constraints)?,
             index: self.index_init_args(sns_canister_ids),
         })
     }
@@ -484,7 +487,11 @@ impl SnsInitPayload {
     /// Precondition: At least one of [`Self::validate_legacy_init`],
     /// [`Self::validate_pre_execution`], or [`Self::validate_post_execution`] must
     /// be `Ok(())`.
-    fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Result<SwapInit, String> {
+    fn swap_init_args(
+        &self,
+        sns_canister_ids: &SnsCanisterIds,
+        neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
+    ) -> Result<SwapInit, String> {
         let neurons_fund_participants = self
             .neurons_fund_participants
             .clone()
@@ -532,6 +539,7 @@ impl SnsInitPayload {
             nns_proposal_id: self.nns_proposal_id,
             neurons_fund_participants,
             should_auto_finalize: Some(true),
+            neurons_fund_participation_constraints,
         })
     }
 
@@ -1971,7 +1979,8 @@ mod test {
         let sns_canister_ids = create_canister_ids();
 
         // Build all SNS canister's initialization payloads and verify the payload was.
-        let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false);
+        let build_result =
+            sns_init_payload.build_canister_payloads(&sns_canister_ids, None, None, false);
         let sns_canisters_init_payloads = match build_result {
             Ok(payloads) => payloads,
             Err(e) => panic!("Could not build canister init payloads: {}", e),
@@ -2034,7 +2043,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
@@ -2067,7 +2076,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
@@ -2100,7 +2109,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
@@ -2137,7 +2146,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
@@ -2169,7 +2178,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Root
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let root = canister_payloads.root;
@@ -2198,7 +2207,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Root
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let root = canister_payloads.root;
@@ -2227,7 +2236,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Swap
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let swap = canister_payloads.swap;
@@ -2257,8 +2266,9 @@ mod test {
         let sns_canister_ids = create_canister_ids();
 
         // Build the SnsCanisterInitPayloads including SNS Swap
+        // TODO[NNS1-2558]: Test the validation of a non-trivial neurons_fund_participation_constraints field.
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let swap = canister_payloads.swap;
@@ -2281,7 +2291,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
+                .build_canister_payloads(&sns_canister_ids, None, None, false)
                 .unwrap();
         }
         // Test that some non-trivial value of `confirmation_text` validates.
@@ -2291,7 +2301,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
+                .build_canister_payloads(&sns_canister_ids, None, None, false)
                 .unwrap();
         }
         // Test that `confirmation_text` set to an empty string is rejected.
@@ -2301,7 +2311,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
+                .build_canister_payloads(&sns_canister_ids, None, None, false)
                 .is_err());
         }
         // Test that `confirmation_text` set to a very long string is rejected.
@@ -2315,7 +2325,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
+                .build_canister_payloads(&sns_canister_ids, None, None, false)
                 .is_err());
         }
     }
@@ -2331,7 +2341,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
+                .build_canister_payloads(&sns_canister_ids, None, None, false)
                 .unwrap();
         }
         // Test that some non-trivial value of `restricted_countries` validates.
@@ -2343,7 +2353,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
+                .build_canister_payloads(&sns_canister_ids, None, None, false)
                 .unwrap();
         }
         // Test that multiple countries can be validated.
@@ -2357,7 +2367,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
+                .build_canister_payloads(&sns_canister_ids, None, None, false)
                 .unwrap();
         }
         // Check that item count is checked before duplicate analysis.
@@ -2370,7 +2380,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert_error(
-                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, None, false),
                 RestrictedCountriesValidationError::TooManyItems(num_items),
             );
         }
@@ -2381,7 +2391,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert_error(
-                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, None, false),
                 RestrictedCountriesValidationError::EmptyList,
             );
         }
@@ -2395,7 +2405,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert_error(
-                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, None, false),
                 RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
@@ -2409,7 +2419,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert_error(
-                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, None, false),
                 RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
@@ -2423,7 +2433,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert_error(
-                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, None, false),
                 RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
@@ -2437,7 +2447,7 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert_error(
-                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, None, false),
                 RestrictedCountriesValidationError::ContainsDuplicates(item),
             );
         }
@@ -2578,7 +2588,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Ledger
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         // Assert that the Ledger canister would accept this init payload
@@ -2624,7 +2634,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Ledger
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         // Assert that the Ledger canister would accept this init payload
@@ -2806,7 +2816,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None, false)
+            .build_canister_payloads(&sns_canister_ids, None, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;

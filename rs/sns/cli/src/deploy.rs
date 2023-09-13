@@ -415,8 +415,9 @@ impl DirectSnsDeployerForTests {
             args.initial_cycles_per_canister,
         );
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
+        // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.
         let sns_canister_payloads =
-            match sns_init_payload.build_canister_payloads(&sns_canisters, None, false) {
+            match sns_init_payload.build_canister_payloads(&sns_canisters, None, None, false) {
                 Ok(payload) => payload,
                 Err(e) => panic!("Could not build canister init payloads: {}", e),
             };
@@ -443,8 +444,9 @@ impl DirectSnsDeployerForTests {
             Some(args.initial_cycles_per_canister),
         );
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
+        // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.
         let sns_canister_payloads =
-            match sns_init_payload.build_canister_payloads(&sns_canisters, None, true) {
+            match sns_init_payload.build_canister_payloads(&sns_canisters, None, None, true) {
                 Ok(payload) => payload,
                 Err(e) => panic!("Could not build canister init payloads: {}", e),
             };

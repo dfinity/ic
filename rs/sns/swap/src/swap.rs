@@ -3240,6 +3240,7 @@ mod tests {
             nns_proposal_id: None,                       // TODO[NNS1-2339]
             neurons_fund_participants: None,             // TODO[NNS1-2339]
             should_auto_finalize: Some(true),
+            neurons_fund_participation_constraints: None,
         });
     }
 
@@ -3860,6 +3861,7 @@ mod tests {
                     nns_proposal_id: None, // TODO[NNS1-2339]
                     neurons_fund_participants: None, // TODO[NNS1-2339]
                     should_auto_finalize: Some(true),
+                    neurons_fund_participation_constraints: None,
                 }),
                 params: Some(Params {
                     min_participants: 1,
@@ -4166,6 +4168,7 @@ mod tests {
                 nns_proposal_id: None,                       // TODO[NNS1-2339]
                 neurons_fund_participants: None,             // TODO[NNS1-2339]
                 should_auto_finalize: Some(true),
+                neurons_fund_participation_constraints: None,
             }),
             params: Some(Params {
                 min_participants: 0,
