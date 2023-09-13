@@ -35,9 +35,15 @@ fn test_snapshot() {
 
     let reply = call_counter_can(&pic, can_id, "write");
     assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
-    pic.tick_and_create_checkpoint("my_ckpnt");
+    pic.tick_and_create_checkpoint("my_cp");
 
-    let other_ic = PocketIc::new_from_snapshot("my_ckpnt").unwrap();
+    let fail = PocketIc::new_from_snapshot("does not exist").err().unwrap();
+    assert!(fail
+        .to_string()
+        .to_lowercase()
+        .contains("could not find snapshot"));
+
+    let other_ic = PocketIc::new_from_snapshot("my_cp").unwrap();
     let reply = call_counter_can(&other_ic, can_id, "write");
     assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
 }

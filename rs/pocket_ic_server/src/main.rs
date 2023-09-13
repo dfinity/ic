@@ -19,7 +19,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use itertools::Itertools;
-use pocket_ic::{CanisterCall, RawCanisterId, Request, Request::*};
+use pocket_ic::{CanisterCall, Checkpoint, RawCanisterId, Request, Request::*};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
@@ -285,19 +285,18 @@ async fn create_instance(
         instances_sequence_counter: counter,
         runtime,
     }): State<AppState>,
-    body: Option<axum::extract::Json<HashMap<String, String>>>,
+    body: Option<axum::extract::Json<Checkpoint>>,
 ) -> (StatusCode, String) {
     match body {
         Some(body) => {
-            let checkpoint_name = body.get("checkpoint_name").unwrap().clone();
             let checkpoints = checkpoints.read().await;
-            if !checkpoints.contains_key(&checkpoint_name) {
+            if !checkpoints.contains_key(&body.checkpoint_name) {
                 return (
-                    StatusCode::NOT_FOUND,
-                    format!("Checkpoint {} does not exist.", checkpoint_name),
+                    StatusCode::BAD_REQUEST,
+                    format!("Checkpoint '{}' does not exist.", body.checkpoint_name),
                 );
             }
-            let proto_dir = checkpoints.get(&checkpoint_name).unwrap();
+            let proto_dir = checkpoints.get(&body.checkpoint_name).unwrap();
             let new_instance_dir = TempDir::new().expect("Failed to create tempdir");
             copy_dir(proto_dir.path(), new_instance_dir.path())
                 .expect("Failed to copy state directory");
@@ -311,7 +310,7 @@ async fn create_instance(
             let mut instance_map = instance_map.write().await;
             let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
             instance_map.insert(instance_id.clone(), RwLock::new(sm));
-            (StatusCode::OK, instance_id)
+            (StatusCode::CREATED, instance_id)
         }
         None => {
             let sm = tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
@@ -320,7 +319,7 @@ async fn create_instance(
             let mut guard = instance_map.write().await;
             let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
             guard.insert(instance_id.clone(), RwLock::new(sm));
-            (StatusCode::OK, instance_id)
+            (StatusCode::CREATED, instance_id)
         }
     }
 }
@@ -365,16 +364,13 @@ async fn tick_and_create_checkpoint(
         ..
     }): State<AppState>,
     Path(id): Path<InstanceId>,
-    axum::extract::Json(payload): axum::extract::Json<HashMap<String, String>>,
+    axum::extract::Json(payload): axum::extract::Json<Checkpoint>,
 ) -> (StatusCode, String) {
-    let checkpoint_name = payload
-        .get("checkpoint_name")
-        .expect("Missing checkpoint_name field");
     let mut checkpoints = checkpoints.write().await;
-    if checkpoints.contains_key(checkpoint_name) {
+    if checkpoints.contains_key(&payload.checkpoint_name) {
         return (
             StatusCode::CONFLICT,
-            format!("Checkpoint {} already exists.", checkpoint_name),
+            format!("Checkpoint {} already exists.", payload.checkpoint_name),
         );
     }
     let guard_map = instance_map.read().await;
@@ -384,12 +380,12 @@ async fn tick_and_create_checkpoint(
         guard_sm.set_checkpoints_enabled(true);
         guard_sm.tick();
         guard_sm.set_checkpoints_enabled(false);
-        // copy state directory to named location
+        // Copy state directory to named location.
         let checkpoint_dir = TempDir::new().expect("Failed to create tempdir");
         copy_dir(guard_sm.state_dir.path(), checkpoint_dir.path())
             .expect("Failed to copy state directory");
-        checkpoints.insert(checkpoint_name.clone(), Arc::new(checkpoint_dir));
-        (StatusCode::OK, "Success".to_string())
+        checkpoints.insert(payload.checkpoint_name, Arc::new(checkpoint_dir));
+        (StatusCode::CREATED, "Checkpoint created.".to_string())
     } else {
         // id not found in map; return error
         // TODO: Result Type for this call
