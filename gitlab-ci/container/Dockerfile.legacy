@@ -77,12 +77,10 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
 # Install AFLplusplus
-ARG AFL_RELEASE_VERSION=4.07c
+ARG AFL_RELEASE_VERSION=v4.08c
 RUN cd /afl && \
     git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
-    sed -i 's/(cc_par_cnt + argc >= 1024)/(cc_par_cnt + argc >= 2048)/g' src/afl-cc.c && \
-    sed -i 's/ck_alloc(1024/ck_alloc(2048/g' src/afl-cc.c && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make install && \
     mv afl-fuzz /afl && \
