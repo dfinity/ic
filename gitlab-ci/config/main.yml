@@ -180,9 +180,7 @@ bazel-build-fuzzers-archives:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
   tags:
     - dfinity-ic
-    # Run in ZH since BuildFarm is in ZH
-    # TODO(IDX-2570): Run in any cluster when bazel infrastructure will be ready.
-    - zh
+    - bazel
   artifacts:
     when: always
     paths:
