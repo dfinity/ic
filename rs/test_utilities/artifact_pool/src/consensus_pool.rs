@@ -18,8 +18,8 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
-use ic_types::batch::ValidationContext;
 use ic_types::signature::*;
+use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
 use ic_types::{
     artifact_kind::ConsensusArtifact,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -714,6 +714,10 @@ impl ConsensusPool for TestConsensusPool {
 impl MutablePool<ConsensusArtifact, ChangeSet> for TestConsensusPool {
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
+    }
+
+    fn remove(&mut self, id: &ConsensusMessageId) {
+        self.pool.remove(id)
     }
 
     fn apply_changes(

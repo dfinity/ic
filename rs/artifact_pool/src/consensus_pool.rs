@@ -578,6 +578,12 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
+    fn remove(&mut self, id: &ConsensusMessageId) {
+        let mut ops = PoolSectionOps::new();
+        ops.remove(id.clone());
+        self.apply_changes_unvalidated(ops);
+    }
+
     fn apply_changes(
         &mut self,
         time_source: &dyn TimeSource,
@@ -1108,6 +1114,36 @@ mod tests {
             assert!(result.purged.contains(&random_beacon_share_3.get_id()));
             assert!(result.changed);
         })
+    }
+
+    #[test]
+    fn test_insert_remove() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let id = random_beacon.get_id();
+
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::RandomBeacon(random_beacon),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            assert!(pool.contains(&id));
+
+            pool.remove(&id);
+            assert!(!pool.contains(&id));
+        });
     }
 
     #[test]
