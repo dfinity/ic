@@ -18,7 +18,7 @@ function download_backup_binary() {
     BACKUP_EXE_GZ="${BACKUP_EXE}.gz"
 
     echo -e "${YELLOW}Downloading: ${DOWNLOAD_URL} to ${BACKUP_EXE_GZ}${ENDCOLOR}"
-    curl -L ${DOWNLOAD_URL} --output ${BACKUP_EXE_GZ}
+    curl -L ${DOWNLOAD_URL} --output ${BACKUP_EXE_GZ} --fail
     if [ -f "${BACKUP_EXE_GZ}" ]; then
         gunzip ${BACKUP_EXE_GZ}
         chmod +x ${BACKUP_EXE}
