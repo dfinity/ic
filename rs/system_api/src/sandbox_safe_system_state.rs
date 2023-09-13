@@ -6,7 +6,7 @@ use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CreateCanisterArgs, InstallCodeArgs, Method as Ic00Method, Payload,
+    CreateCanisterArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, UninstallCodeArgs,
     UpdateSettingsArgs, IC_00,
 };
@@ -193,9 +193,8 @@ impl SystemStateChanges {
         let method = Ic00Method::from_str(&msg.method_name);
         let payload = msg.method_payload();
         match method {
-            Ok(Ic00Method::InstallCode) => {
-                InstallCodeArgs::decode(payload).map(|record| record.get_sender_canister_version())
-            }
+            Ok(Ic00Method::InstallCode) => InstallCodeArgsV2::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::CreateCanister) => CreateCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UpdateSettings) => UpdateSettingsArgs::decode(payload)
