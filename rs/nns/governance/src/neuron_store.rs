@@ -25,6 +25,18 @@ pub enum NeuronStoreError {
     NeuronNotFound(NeuronNotFound),
     CorruptedNeuronIndexes(CorruptedNeuronIndexes),
     NeuronIdIsNone,
+    InvalidSubaccount {
+        neuron_id: NeuronId,
+        subaccount_bytes: Vec<u8>,
+    },
+    NeuronIdModified {
+        old_neuron_id: NeuronId,
+        new_neuron_id: NeuronId,
+    },
+    SubaccountModified {
+        old_subaccount: Subaccount,
+        new_subaccount: Subaccount,
+    },
 }
 
 impl NeuronStoreError {
@@ -32,6 +44,27 @@ impl NeuronStoreError {
         NeuronStoreError::NeuronNotFound(NeuronNotFound {
             neuron_id: *neuron_id,
         })
+    }
+
+    pub fn invalid_subaccount(neuron_id: NeuronId, subaccount_bytes: Vec<u8>) -> Self {
+        NeuronStoreError::InvalidSubaccount {
+            neuron_id,
+            subaccount_bytes,
+        }
+    }
+
+    pub fn neuron_id_modified(old_neuron_id: NeuronId, new_neuron_id: NeuronId) -> Self {
+        NeuronStoreError::NeuronIdModified {
+            old_neuron_id,
+            new_neuron_id,
+        }
+    }
+
+    pub fn subaccount_modified(old_subaccount: Subaccount, new_subaccount: Subaccount) -> Self {
+        NeuronStoreError::SubaccountModified {
+            old_subaccount,
+            new_subaccount,
+        }
     }
 }
 
@@ -61,6 +94,36 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::NeuronIdIsNone => GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Neuron id is none",
+            ),
+            NeuronStoreError::InvalidSubaccount {
+                neuron_id,
+                subaccount_bytes,
+            } => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Neuron {:?} has an invalid subaccount {:?}",
+                    neuron_id, subaccount_bytes
+                ),
+            ),
+            NeuronStoreError::NeuronIdModified {
+                old_neuron_id,
+                new_neuron_id,
+            } => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Attempting to modify neuron id from {} to {}",
+                    old_neuron_id.id, new_neuron_id.id
+                ),
+            ),
+            NeuronStoreError::SubaccountModified {
+                old_subaccount,
+                new_subaccount,
+            } => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Attempting to modify neuron subaccount from {:?} to {:?}",
+                    old_subaccount, new_subaccount
+                ),
             ),
         }
     }
