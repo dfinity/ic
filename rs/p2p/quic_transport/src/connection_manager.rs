@@ -253,12 +253,25 @@ pub(crate) fn start_connection_manager(
             // around 2Gb/s.
             // Bandwidth-Delay Product
             // 2Gb/s * 100ms ~ 200M bits = 25MB
+            // To this only on to avoid unecessary error in dfx on MacOS
+            #[cfg(target_os = "linux")]
             if let Err(e) = socket2.set_recv_buffer_size(25_000_000) {
-                error!(log, "Failed to set receive udp buffer. {}", e)
+                info!(log, "Failed to set receive udp buffer. {}", e)
             }
+            #[cfg(target_os = "linux")]
             if let Err(e) = socket2.set_send_buffer_size(25_000_000) {
-                error!(log, "Failed to set send udp buffer. {}", e)
+                info!(log, "Failed to set send udp buffer. {}", e)
             }
+            info!(
+                log,
+                "Udp receive buffer size: {:?}",
+                socket2.recv_buffer_size()
+            );
+            info!(
+                log,
+                "Udp send buffer size: {:?}",
+                socket2.send_buffer_size()
+            );
             socket2
                 .bind(&SockAddr::from(addr))
                 .expect("Failed to bind to UDP socket");
