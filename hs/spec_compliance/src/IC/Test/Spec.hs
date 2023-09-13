@@ -582,7 +582,7 @@ icTests my_sub other_sub =
                                                                              call cid (replyData "ABCD") >>= is "ABCD",
                                                                            simpleTestCase "Call (query)" ecid $ \cid -> do
                                                                              query cid (replyData "ABCD") >>= is "ABCD",
-                                                                           simpleTestCase "Call no non-existant update method" ecid $ \cid ->
+                                                                           simpleTestCase "Call no non-existent update method" ecid $ \cid ->
                                                                              do
                                                                                awaitCall' cid $
                                                                                  rec
@@ -593,7 +593,7 @@ icTests my_sub other_sub =
                                                                                      "arg" =: GBlob ""
                                                                                    ]
                                                                                >>= isErrOrReject [3],
-                                                                           simpleTestCase "Call no non-existant query method" ecid $ \cid ->
+                                                                           simpleTestCase "Call no non-existent query method" ecid $ \cid ->
                                                                              do
                                                                                let cbor =
                                                                                      rec
@@ -1093,7 +1093,7 @@ icTests my_sub other_sub =
                                                                              getStateCert' defaultUser cid2 [["canisters", cid, "controllers"]] >>= isErr4xx,
                                                                            -- read_state tested in read_state group
                                                                            --
-                                                                           simpleTestCase "in mangement call" ecid $ \cid1 -> do
+                                                                           simpleTestCase "in management call" ecid $ \cid1 -> do
                                                                              cid2 <- create ecid
                                                                              let req =
                                                                                    rec
@@ -1114,7 +1114,7 @@ icTests my_sub other_sub =
                                                                                        "arg" =: GBlob (run reply)
                                                                                      ]
                                                                              addNonceExpiryEnv req >>= postCallCBOR "foobar" >>= code4xx,
-                                                                           simpleTestCase "invalid textual represenation" ecid $ \cid1 -> do
+                                                                           simpleTestCase "invalid textual representation" ecid $ \cid1 -> do
                                                                              let req =
                                                                                    rec
                                                                                      [ "request_type" =: GText "call",
@@ -1205,11 +1205,11 @@ icTests my_sub other_sub =
                                                                                        >>> reply
                                                                                    >>= isReject [5]
                                                                              ],
-                                                                           simpleTestCase "to nonexistant canister" ecid $ \cid ->
+                                                                           simpleTestCase "to nonexistent canister" ecid $ \cid ->
                                                                              call cid (inter_call "foo" "bar" defArgs) >>= isRelay >>= isReject [3],
-                                                                           simpleTestCase "to nonexistant canister (user id)" ecid $ \cid ->
+                                                                           simpleTestCase "to nonexistent canister (user id)" ecid $ \cid ->
                                                                              call cid (inter_call defaultUser "bar" defArgs) >>= isRelay >>= isReject [3],
-                                                                           simpleTestCase "to nonexistant method" ecid $ \cid ->
+                                                                           simpleTestCase "to nonexistent method" ecid $ \cid ->
                                                                              call cid (inter_call cid "bar" defArgs) >>= isRelay >>= isReject [3],
                                                                            simpleTestCase "Call from query method traps (in update call)" ecid $ \cid ->
                                                                              callToQuery'' cid (inter_query cid defArgs) >>= is2xx >>= isReject [5],
@@ -1283,7 +1283,7 @@ icTests my_sub other_sub =
                                                                                >>= is "First reply"
 
                                                                              -- now check that the callback trapped and did not actual change the global
-                                                                             -- to make this test reliabe, stop and start the canister, this will
+                                                                             -- to make this test reliable, stop and start the canister, this will
                                                                              -- ensure all outstanding callbacks are handled
                                                                              barrier [cid]
 
@@ -1795,7 +1795,7 @@ icTests my_sub other_sub =
                                                                          [ testGroup "required fields" $ do
                                                                              -- TODO: Begin with a succeeding request to a real canister, to rule
                                                                              -- out other causes of failure than missing fields
-                                                                             omitFields queryToNonExistant $ \req -> do
+                                                                             omitFields queryToNonExistent $ \req -> do
                                                                                cid <- create ecid
                                                                                addExpiry req >>= envelope defaultSK >>= postQueryCBOR cid >>= code4xx,
                                                                            simpleTestCase "non-existing (deleted) canister" ecid $ \cid -> do
@@ -2100,7 +2100,7 @@ icTests my_sub other_sub =
                                                                              -- The system burns cycles at unspecified rates. To cater for such behaviour,
                                                                              -- we make the assumption that no test burns more than the following epsilon.
                                                                              --
-                                                                             -- The biggest fee we currenlty deal with is the system deducing 1T
+                                                                             -- The biggest fee we currently deal with is the system deducing 1T
                                                                              -- upon canister creation. So our epsilon needs to allow that and then
                                                                              -- some more.
                                                                              eps = 3_000_000_000_000 :: Integer

@@ -5,21 +5,21 @@ Utilities for building IC replica and canisters.
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
-_COMPRESS_CONCURENCY = 16
+_COMPRESS_CONCURRENCY = 16
 
 def _compress_resources(_os, _input_size):
     """ The function returns resource hints to bazel so it can properly schedule actions.
 
     Check https://bazel.build/rules/lib/actions#run for `resource_set` parameter to find documentation of the function, possible arguments and expected return value.
     """
-    return {"cpu": _COMPRESS_CONCURENCY}
+    return {"cpu": _COMPRESS_CONCURRENCY}
 
 def _gzip_compress(ctx):
     """GZip-compresses source files.
     """
     out = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run_shell(
-        command = "{pigz} --processes {concurency} --no-name {srcs} --stdout > {out}".format(pigz = ctx.file._pigz.path, concurency = _COMPRESS_CONCURENCY, srcs = " ".join([s.path for s in ctx.files.srcs]), out = out.path),
+        command = "{pigz} --processes {concurrency} --no-name {srcs} --stdout > {out}".format(pigz = ctx.file._pigz.path, concurrency = _COMPRESS_CONCURRENCY, srcs = " ".join([s.path for s in ctx.files.srcs]), out = out.path),
         inputs = ctx.files.srcs,
         outputs = [out],
         tools = [ctx.file._pigz],
@@ -40,13 +40,13 @@ def _zstd_compress(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
-    # TODO: install zstd as depedency.
+    # TODO: install zstd as dependency.
     ctx.actions.run(
         executable = "zstd",
         arguments = ["--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
-        env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURENCY)},
+        env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
         resource_set = _compress_resources,
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -97,7 +97,7 @@ def sha256sum2url(name, src, tags = [], **kwargs):
     Args:
         name:     the name of the rule
         src:      the label that returns the file with sha256 checksum of requested artifact.
-        tags:     additinal tags.
+        tags:     additional tags.
         **kwargs: the rest of arguments to be passed to the underlying rule.
     """
     _sha256sum2url(

@@ -273,7 +273,7 @@ impl<'a> Drop for MmapFile<'a> {
 // helpers
 
 // TODO: either use Vec here or make PAGE_SIZE a const that could be used here instead of 4096.
-// This would require cusotm build.rs and runtime check to make sure the value is correct.
+// This would require custom build.rs and runtime check to make sure the value is correct.
 fn get_page(addr: *mut u8) -> [u8; 4096] {
     assert_eq!(*PAGE_SIZE, 4096);
     unsafe {

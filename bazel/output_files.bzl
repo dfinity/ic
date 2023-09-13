@@ -9,7 +9,7 @@ def _output_files(ctx):
     for b in ctx.attr.basenames:
         files_found = _find_basename_in_files_list(files_list, b)
         if len(files_found) == 0:
-            fail("%s file not found withing the DefaultInfo of %s" % (b, ctx.attr.target))
+            fail("%s file not found within the DefaultInfo of %s" % (b, ctx.attr.target))
         files.extend(files_found)
     return [DefaultInfo(
         files = depset(direct = files),

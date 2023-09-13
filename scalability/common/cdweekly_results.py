@@ -41,7 +41,7 @@ HOVERTEMPLATE = """
 %{text}
 """
 
-# Exclude the following experiments from plotting (e.g. for outliers or failed benchmakrs)
+# Exclude the following experiments from plotting (e.g. for outliers or failed benchmarks)
 BLACKLIST = [
     ("0b2e60bb5af556c401c4253e763c13d23e2947be", "1639340737"),
     ("7424ea8c83b86cd7867c0686eaeb2c0285450b12", "1649055686"),
@@ -63,13 +63,13 @@ BLACKLIST = [
 
 
 def convert_date(ts: int):
-    """Conver the given data to a format plotly understands."""
+    """Convert the given data to a format plotly understands."""
     # Also works in plotly: https://plotly.com/javascript/time-series/
     return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def ensure_report_generated(githash, timestamp):
-    """Atempt to generate report for the given githash and timestamp if not already done."""
+    """Attempt to generate report for the given githash and timestamp if not already done."""
     try:
         target_dir = (
             os.path.join(FLAGS.asset_root, githash, timestamp)

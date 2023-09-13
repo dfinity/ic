@@ -41,7 +41,7 @@ in the link:SELinux-Build{outfilesuffix}[SELinux build process] page.
 
 In the implementation, the security policy consists of:
 
-* the basline _reference policy_ (maintained by upstream SELinux project, and partially Debian/Ubuntu)
+* the baseline _reference policy_ (maintained by upstream SELinux project, and partially Debian/Ubuntu)
 
 * local fixes / adaptations to the reference policy
 

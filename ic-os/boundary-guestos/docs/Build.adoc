@@ -39,7 +39,7 @@ system:
 * `etc`
 * `opt`
 * `boot`
-* `vat` (temporary - wil be made obsolete)
+* `vat` (temporary - will be made obsolete)
 
 Additional files can be deployed by dropping them into the appropriate target
 location before the build. All IC binaries are installed into `/opt/ic/bin`.

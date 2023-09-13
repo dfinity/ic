@@ -11,7 +11,7 @@ ASK is the AMD SEV Signing Key (ASK), which is signed by the AMD root signing ke
 
 
 === VCEK
-VCEK is the Versioned Chip Endorsement Key (VCEK). It is specific to the firmware of the secure processor of the plattform and the chip_id. It is signed by the ASK of the plattform
+VCEK is the Versioned Chip Endorsement Key (VCEK). It is specific to the firmware of the secure processor of the platform and the chip_id. It is signed by the ASK of the platform
 
 
 == References

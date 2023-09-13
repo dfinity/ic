@@ -1,5 +1,5 @@
 title = "Exchange rate canister benchmark"
-description = "Stress the exchange rate canister from a varity of other canisters via canister calls"
+description = "Stress the exchange rate canister from a variety of other canisters via canister calls"
 
 # The xrc canister only needs to be installed. It is not directly stressed, but via the xrc_demo canister.
 install_canisters = ["xrc"]

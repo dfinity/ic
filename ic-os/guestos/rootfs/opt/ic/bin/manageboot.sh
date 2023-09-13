@@ -110,7 +110,7 @@ Usage:
       boot of newly installed upgrade to prevent bootloader falling back
       to previous installation). This simply does nothing if the system
       has been confirmed previously already (safe to call as many times
-      as you like, will not iniate I/O if nothing to be written).
+      as you like, will not initiate I/O if nothing to be written).
 
     current
       Output currently booted system (A or B) on stdout and exit.

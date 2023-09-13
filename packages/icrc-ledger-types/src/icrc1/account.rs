@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn test_account_from_str_err_def_subaccout_should_be_ommitted() {
+    fn test_account_from_str_err_def_subaccout_should_be_omitted() {
         let str = "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae-q6bn32y.";
         assert_eq!(
             Account::from_str(str),

@@ -10,7 +10,7 @@ from util.print import assert_with_trace, eprint
 from .es_doc import EsDoc
 from .event import (
     ConsensusFinalizedEvent,
-    ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent,
+    ControlPlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent,
     CupShareProposedEvent,
     DeliverBatchEvent,
     Event,
@@ -146,7 +146,7 @@ class PreProcessor:
             if not self._ever_flushed:
                 fout.write(
                     "["
-                )  # the entire output should respresent a syntactically correct python object, e.g., a list
+                )  # the entire output should represent a syntactically correct python object, e.g., a list
                 self._ever_flushed = True
             fout.writelines(self._buf)
             self._buf = []
@@ -314,7 +314,7 @@ class DeclarativePreProcessor(PreProcessor):
             "need_global_infra": False,
         },
         "ControlPlane__spawn_accept_task__tls_server_handshake_failed": {
-            "type": ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent,
+            "type": ControlPlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent,
             "is_preamble": False,
             "is_dbg_level": False,
             "need_global_infra": False,
@@ -433,7 +433,7 @@ class DeclarativePreProcessor(PreProcessor):
 
 
 class UniversalPreProcessor(DeclarativePreProcessor):
-    """Pre-processor that requires only the events needed for specifiec policies"""
+    """Pre-processor that requires only the events needed for specific policies"""
 
     PolicySpec = TypedDict(
         "PolicySpec",

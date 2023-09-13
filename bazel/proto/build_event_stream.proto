@@ -1171,7 +1171,7 @@ message WorkflowConfigured {
   // Bazel commands invoked by the workflow action.
   repeated InvocationMetadata invocation = 5;
 
-  // The repo that was pushed in order to trigger the worflow.
+  // The repo that was pushed in order to trigger the workflow.
   // Ex: "https://github.com/some-user/acme"
   string pushed_repo_url = 6;
 

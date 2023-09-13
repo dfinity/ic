@@ -384,7 +384,7 @@ parameter assigns a node to a physical host.
 
 `subnet_index` is extracted from the group name since some tests expect the
 group name in a form of `subnet_X` where `X` is the `subnet_index`.  If
-provided explicity as well for node, the `subnet_index` extracted from the
+provided explicitly as well for node, the `subnet_index` extracted from the
 group name and the node name must match. If not, an error will be thrown.
 
 `node_index` is extracted from the node name, IFF the name has the format

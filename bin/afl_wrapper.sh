@@ -15,7 +15,7 @@ echo "A dummy corpus file to make AFL work" >$INPUT_DIR/seed_corpus.txt
 OUTPUT_DIR=$(mktemp -d)
 
 ASAN_OPTIONS="abort_on_error=1:\
-            alloc_dealloc_mismach=0:\
+            alloc_dealloc_mismatch=0:\
             allocator_may_return_null=1:\
             allocator_release_to_os_interval_ms=500:\
             allow_user_segv_handler=0:\

@@ -65,8 +65,8 @@ trivialWasmModule = "\0asm\1\0\0\0"
 
 -- * Some test data related to standard requests
 
-queryToNonExistant :: GenR
-queryToNonExistant =
+queryToNonExistent :: GenR
+queryToNonExistent =
   rec
     [ "request_type" =: GText "query",
       "sender" =: GBlob anonymousUser,

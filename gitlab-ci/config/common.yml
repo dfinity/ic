@@ -124,7 +124,7 @@ after_script:
   artifacts:
     expire_in: 3 days
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:1438e57710a4d446630d8b6d471d17c8586b440ddb2644bc8077ddb0d9fc0ac8"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:4f2f17cf3622948424b0aeb6c0b57c82112d7a3e7174250d25181fe8a4d66334"
   tags:
     - dfinity-ic
   variables:
@@ -133,7 +133,7 @@ after_script:
 .ic-build-legacy-image:
   extends: .ic-build-image
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:1438e57710a4d446630d8b6d471d17c8586b440ddb2644bc8077ddb0d9fc0ac8"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4f2f17cf3622948424b0aeb6c0b57c82112d7a3e7174250d25181fe8a4d66334"
 
 .cargo-rules:
   rules:
@@ -174,7 +174,7 @@ after_script:
       allow_failure: true
 
 #  If on the RC branch, whether "hotfix" is in the commit message or not,
-#  always perfrom automatic execution of the prod hotfix tests. This means that, hotfix
+#  always perform automatic execution of the prod hotfix tests. This means that, hotfix
 #  tests are not only exercised on hotfix pipelines, but are also exercised on nightly
 #  release qualification pipelines to ensure the hotfix tests are always working.
 .rules-prod-hotfix-pipeline:

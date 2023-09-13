@@ -6,7 +6,7 @@
 }:
 pkgs.lib.mkCheckedScript "deployment-test" ./deployment_test.sh {
   buildInputs = [
-    pkgs.runtimeShellPackage # the ic-workload-genertor uses `sh -c ulimit -n`.
+    pkgs.runtimeShellPackage # the ic-workload-generator uses `sh -c ulimit -n`.
     rs.ic-workload-generator # we use the ic-workload-generator to e2e test the subnet.
     pkgs.ansible
     pkgs.jq

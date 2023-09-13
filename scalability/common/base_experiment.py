@@ -48,7 +48,7 @@ gflags.DEFINE_string(
 gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
-gflags.DEFINE_string("targets", "", "Set load target IP adresses from this comma-separated list directly.")
+gflags.DEFINE_string("targets", "", "Set load target IP addresses from this comma-separated list directly.")
 gflags.DEFINE_string("top_level_out_dir", "", "Set the top-level output directory. Default is the git commit id.")
 gflags.DEFINE_string(
     "second_level_out_dir",
@@ -308,7 +308,7 @@ class BaseExperiment:
         """
         Get the current topology from the registry.
 
-        A different NNS can be choosen by setting nns_url. This is useful, for example
+        A different NNS can be chosen by setting nns_url. This is useful, for example
         when multiple testnets are used, one for workload generators, and one for
         target machines.
         """
@@ -339,7 +339,7 @@ class BaseExperiment:
         """
         Get info for the given node from the registry.
 
-        A different NNS can be choosen by setting nns_url. This is useful, for example
+        A different NNS can be chosen by setting nns_url. This is useful, for example
         when multiple testnets are used, one for workload generators, and one for
         target machines.
         """
@@ -614,7 +614,7 @@ class BaseExperiment:
         """
         Build dictionary to be used to build the summary file.
 
-        This is overriden by workload experiment, so visibility needs to be _ not __.
+        This is overridden by workload experiment, so visibility needs to be _ not __.
         """
         return {}
 

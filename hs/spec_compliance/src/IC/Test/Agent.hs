@@ -19,7 +19,7 @@
 -- This module contains function to interact with an Internet Computer instance.
 --
 -- The primary customer here is IC.Test.Spec, i.e the test suite. Therefore, the
--- functions here give access to varoius levels of abstractions, and gives more control
+-- functions here give access to various levels of abstractions, and gives more control
 -- than a “normal” agent library would do.
 --
 -- Also, because of the focus on testing, failures are repoted directly with HUnit’s 'assertFailure'.
@@ -240,7 +240,7 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
   request <- parseRequest $ ep ++ "/api/v2/status"
   putStrLn $ "Fetching endpoint status from " ++ show ep ++ "..."
   s <-
-    (httpLbs request manager >>= okCBOR >>= statusResonse)
+    (httpLbs request manager >>= okCBOR >>= statusResponse)
       `catch` (\(HUnitFailure _ r) -> putStrLn r >> exitFailure)
 
   putStrLn $ "Spec version tested:  " ++ T.unpack specVersion
@@ -753,7 +753,7 @@ isPendingOrProcessing Processing = return ()
 isPendingOrProcessing r = assertFailure $ "Expected pending or processing, got " <> show r
 
 pollDelay :: IO ()
-pollDelay = threadDelay $ 10 * 1000 -- 10 milliseonds
+pollDelay = threadDelay $ 10 * 1000 -- 10 milliseconds
 
 -- How long to wait before checking if a request that should _not_ show up on
 -- the system indeed did not show up
@@ -986,8 +986,8 @@ data StatusResponse = StatusResponse
     status_root_key :: Blob
   }
 
-statusResonse :: (HasCallStack) => GenR -> IO StatusResponse
-statusResonse =
+statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
+statusResponse =
   asExceptT . record do
     v <- field text "ic_api_version"
     _ <- optionalField text "impl_source"

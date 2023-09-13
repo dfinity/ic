@@ -109,7 +109,7 @@ RUN systemctl enable \
 ## With `podman --timestamp=0` each file gets written with timestamp of the Unix epoch. 
 ## When systemd-sysusers writes the shadow entry for these users, the 2nd field in the row (# days since the epoch) is set to (today - unix epoch). 
 ## This is not reproducible. 
-## Reset the passwords to the locked password ("!!"). `usermod` honors SOURCE_DATE_EPOCH (set in the base dockerfile). This removes the passord timestamp.
+## Reset the passwords to the locked password ("!!"). `usermod` honors SOURCE_DATE_EPOCH (set in the base dockerfile). This removes the password timestamp.
 ## Why not use `faketime`? Doesn't work with `podman --timestamp=0`.
 RUN systemd-sysusers && \
     usermod -p '!!' systemd-timesync && \

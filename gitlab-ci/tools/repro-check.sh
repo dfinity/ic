@@ -175,7 +175,7 @@ sudo apt-get update -y
 log "Install needed dependencies"
 sudo apt-get install git curl jq podman -y
 
-# if no options have been choosen we assume to check the latest commit of the
+# if no options have been chosen we assume to check the latest commit of the
 # branch we are on.
 if [ "$OPTIND" -eq 1 ]; then
     check_git_repo
@@ -279,7 +279,7 @@ popd
 log "Check the shasum that was set in the proposal matches the one we download from CDN"
 if [ -n "$proposal_id" ]; then
     if [ "$proposal_package_sha256_hex" != "$ci_package_sha256_hex" ]; then
-        error "The sha256 sum from the proposal does not match the one from the CDN storage for udpate-img.tar.gz. The sha256 sum from the proposal: $proposal_package_sha256_hex The sha256 sum from the CDN storage: $ci_package_sha256_hex."
+        error "The sha256 sum from the proposal does not match the one from the CDN storage for update-img.tar.gz. The sha256 sum from the proposal: $proposal_package_sha256_hex The sha256 sum from the CDN storage: $ci_package_sha256_hex."
     else
         log_success "The shasum from the proposal and CDN match"
     fi

@@ -71,7 +71,7 @@ op :: (Op a) => Word8 -> a
 op x = mkOp x mempty
 
 -- Now, all the op codes defined by the universal canister.
--- Most can be simply be defined by specifiying their type and using the 'op'
+-- Most can be simply be defined by specifying their type and using the 'op'
 -- combinator
 
 noop :: Prog

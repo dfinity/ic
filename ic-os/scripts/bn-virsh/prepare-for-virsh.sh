@@ -42,4 +42,4 @@ ln ./config.img "$TMP_DIR"/config.img
 echo "\$ virsh create ./bn_sev_vm.xml # to create"
 echo "\$ virsh console boundary_nodes_sev_snp-$USER # for login prompt as root:root"
 echo "control-] to exit"
-echo "\$ virsh destoy boundary_nodes_sev_snp-$USER # to destroy"
+echo "\$ virsh destroy boundary_nodes_sev_snp-$USER # to destroy"

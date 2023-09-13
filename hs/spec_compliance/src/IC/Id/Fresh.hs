@@ -5,7 +5,7 @@ import Data.Word
 import IC.Id.Forms hiding (Blob)
 import IC.Types
 
--- Not particulary efficent, but this is a reference implementation, right?
+-- Not particularly efficient, but this is a reference implementation, right?
 freshId :: [(Word64, Word64)] -> [EntityId] -> Maybe EntityId
 freshId ranges ids =
   case filter (`notElem` ids) $ map wordToId $ concatMap (\(a, b) -> [a .. b]) ranges of

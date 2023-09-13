@@ -549,7 +549,7 @@ pub trait CowMemoryManager {
     /// get_map returns a MappedState representing "current" mapped state
     /// of the canister (heap and globals for time being). This state can be
     /// used for example during canister execution and can be freely mutated.
-    /// "current_state" can be updated with mutations by calling "soft_commmit".
+    /// "current_state" can be updated with mutations by calling "soft_commit".
     fn get_map(&self) -> MappedStateImpl;
 
     /// get_map_for_snapshot returns a MappedState representing in memory mapped
@@ -1075,7 +1075,7 @@ impl CowMemoryManager for CowMemoryManagerCommon<ReadWrite> {
             }
         }
 
-        // Reset the accounting to initial value as we are begining afresh
+        // Reset the accounting to initial value as we are beginning afresh
         // and start accounting for all new writes
         self.written_so_far
             .store(INITIAL_WRITTEN_SIZE, Ordering::Relaxed);
@@ -1212,7 +1212,7 @@ fn cow_test_write_max_rounds() {
         cow_mem_mgr.create_snapshot(i as u64);
     }
 
-    // Verifiy that all are persisted correctly and can be retrieved
+    // Verify that all are persisted correctly and can be retrieved
     for i in 1..MAX_ROUNDS + 1 {
         let random_bytes: Vec<u8> = (0..(HEAP_LEN * PAGE_SIZE)).map(|_| i as u8).collect();
         let mapped_state = cow_mem_mgr.get_map_for_snapshot(i as u64).unwrap();

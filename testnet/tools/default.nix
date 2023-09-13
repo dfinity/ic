@@ -12,7 +12,7 @@ let
     pkgs.zstd # and unzip more IC tarballs.
     pkgs.jq # To parse the ansible inventory.
     pkgs.openssh # Ansible uses ssh to connect to the nodes.
-    pkgs.runtimeShellPackage # the ic-workload-genertor uses `sh -c ulimit -n`.
+    pkgs.runtimeShellPackage # the ic-workload-generator uses `sh -c ulimit -n`.
   ];
 in
 rec {
