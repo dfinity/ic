@@ -59,7 +59,7 @@ pub(crate) struct InstallCodeResult {
 ///   canister state with all the changes done during execution.
 /// * If execution has failed, then the result contains the old canister state
 ///   with some changes such charging of execution cycles.
-/// * If exection did not complete, then the result contains the old canister state,
+/// * If execution did not complete, then the result contains the old canister state,
 ///   with some changes such reservation of execution cycles and a continuation.
 #[derive(Debug)]
 pub(crate) enum DtsInstallCodeResult {

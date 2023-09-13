@@ -975,7 +975,7 @@ fn ic0_canister_version_returns_correct_value() {
     );
 
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Update increases the `canister_version` ony AFTER the execution,
+    // Update increases the `canister_version` only AFTER the execution,
     // so the result is plus 0, as no update has been finished yet.
     let expected_ctr: u64 = 1;
     assert_eq!(
@@ -3292,7 +3292,7 @@ fn canister_anonymous_query_transform_http_response() {
             (import "ic0" "msg_reply_data_append"
                 (func $ic0_msg_reply_data_append (param i32) (param i32)))
             (func $transform
-                ;; Replies with the provided http_reponse argument without any modifcations.
+                ;; Replies with the provided http_response argument without any modifications.
                 (call $ic0_msg_arg_data_copy
                     (i32.const 0) ;; dst
                     (i32.const 0) ;; offset
@@ -5104,7 +5104,7 @@ fn grow_memory_and_write_to_new_pages() {
     test.ingress(canister_id, "write_byte", make_payload(1, 7))
         .unwrap();
 
-    #[rustfmt::skip] // rustfmt breaks the explanatory comment at the bottom of thi assert
+    #[rustfmt::skip] // rustfmt breaks the explanatory comment at the bottom of this assert.
     assert_eq!(
         display_page_map(
             test.execution_state(canister_id).wasm_memory.page_map.clone(),
@@ -5939,7 +5939,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
 }
 
 #[test]
-fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_afer_pre_upgrade() {
+fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module

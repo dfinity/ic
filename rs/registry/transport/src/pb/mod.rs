@@ -9,7 +9,7 @@ use v1::registry_mutation::Type;
 impl v1::RegistryMutation {
     /// Returns a string representation of the key, lossily.
     ///
-    /// Despite the API specifiying keys to be &[u8], many parts of the IC
+    /// Despite the API specifying keys to be &[u8], many parts of the IC
     /// assume that they are strings, so the "lossy" should never actually
     /// kick in.
     pub fn key_as_string(&self) -> std::borrow::Cow<'_, str> {

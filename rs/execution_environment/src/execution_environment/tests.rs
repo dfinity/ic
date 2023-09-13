@@ -2587,7 +2587,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transfered_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000u128);
 
     let b_callback = wasm().message_payload().append_and_reply().build();
 
@@ -2596,7 +2596,7 @@ fn replicated_query_refunds_all_sent_cycles() {
             b_id.get(),
             "query",
             call_args().other_side(b_callback.clone()),
-            transfered_cycles,
+            transferred_cycles,
         )
         .build();
 
@@ -2620,7 +2620,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     if let RequestOrResponse::Response(msg) = message {
         assert_eq!(msg.originator, a_id);
         assert_eq!(msg.respondent, b_id);
-        assert_eq!(msg.refund, transfered_cycles);
+        assert_eq!(msg.refund, transferred_cycles);
         assert!(matches!(msg.response_payload, Payload::Data(..)));
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -2662,13 +2662,13 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transfered_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000u128);
 
     // Even though canister B is trying to accept cycles
     // it will not accept it since the IC does not allow
     // accepting cycles in replicated queries.
     let b_callback = wasm()
-        .accept_cycles(transfered_cycles)
+        .accept_cycles(transferred_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -2678,7 +2678,7 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
             b_id.get(),
             "query",
             call_args().other_side(b_callback.clone()),
-            transfered_cycles,
+            transferred_cycles,
         )
         .build();
 
@@ -2702,7 +2702,7 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
     let response_payload = if let RequestOrResponse::Response(msg) = message {
         assert_eq!(msg.originator, a_id);
         assert_eq!(msg.respondent, b_id);
-        assert_eq!(msg.refund, transfered_cycles);
+        assert_eq!(msg.refund, transferred_cycles);
         if let Payload::Reject(context) = msg.response_payload.clone() {
             context
         } else {

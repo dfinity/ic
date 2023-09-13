@@ -610,7 +610,7 @@ fn test_the_governance_canister_can_remove_a_version() {
 }
 
 #[test]
-fn test_cannot_remove_nonexistant_version() {
+fn test_cannot_remove_nonexistent_version() {
     local_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
@@ -635,7 +635,7 @@ fn test_cannot_remove_nonexistant_version() {
             hostos_versions_to_unelect: vec![hostos_version_id.clone()],
         };
 
-        // Trying to remove a nonexistant version should fail.
+        // Trying to remove a nonexistent version should fail.
         assert!(
             !forward_call_via_universal_canister(
                 &governance_canister,

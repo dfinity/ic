@@ -479,7 +479,7 @@ mod execution_tests {
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
             PathBuf::new(),
-            // Without the '\x00asm' prefix, the check for wasm code lengt will fail.
+            // Without the '\x00asm' prefix, the check for wasm code length will fail.
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]

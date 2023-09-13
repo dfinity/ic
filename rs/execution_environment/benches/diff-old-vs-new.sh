@@ -277,7 +277,7 @@ calculate_average_speedup() {
             count++;
             printf "| %-42s | %8s | %8s | %+6d% |", $2, $3, $4, speedup;
         }
-        # Print round time ony for throughput
+        # Print round time only for throughput
         # Throughput must be >= 100 elem/s, time must be < 100 s
         if (new < 100) {
             printf "\n";    # skip round time for time table

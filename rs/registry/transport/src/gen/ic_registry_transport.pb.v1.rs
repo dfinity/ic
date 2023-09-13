@@ -27,7 +27,7 @@ pub mod registry_error {
         /// The 'key' specified on the request was already present.
         KeyAlreadyPresent = 2,
         /// The 'version' specified in a precondition for a mutation
-        /// was not the lastest version.
+        /// was not the latest version.
         VersionNotLatest = 3,
         /// The 'version' specified in a precondition for a mutation
         /// is beyond the latest version in the registry.

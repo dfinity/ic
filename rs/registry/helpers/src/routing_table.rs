@@ -7,7 +7,7 @@ use ic_types::{registry::RegistryClientError::DecodeError, RegistryVersion, Subn
 use std::convert::TryFrom;
 
 /// A trait that allows access to `RoutingTable`.  The expectation for the
-/// forseeable future is that the `RoutingTable` will remain small enough so
+/// foreseeable future is that the `RoutingTable` will remain small enough so
 /// that we can simply return the entire struct here.
 pub trait RoutingTableRegistry {
     fn get_routing_table(&self, version: RegistryVersion) -> RegistryClientResult<RoutingTable>;

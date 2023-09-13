@@ -35,7 +35,7 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(450 * GIB);
 const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
 
 /// This is the upper limit on how much memory can be used by the ingress
-/// history on a given subnet. It is lower than the subnet messsage memory
+/// history on a given subnet. It is lower than the subnet message memory
 /// capacity because here we count actual memory consumption as opposed to
 /// memory plus reservations.
 const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GIB);
@@ -182,7 +182,7 @@ pub struct Config {
     /// The maximum number of instructions allowed for a query call graph.
     pub max_query_call_graph_instructions: NumInstructions,
 
-    /// The maxmimum time a query call in non-replicated mode is allowed to run.
+    /// The maximum time a query call in non-replicated mode is allowed to run.
     /// In replicated code we cannot rely on the walltime, since that is not
     /// deterministic.
     pub max_query_call_walltime: Duration,

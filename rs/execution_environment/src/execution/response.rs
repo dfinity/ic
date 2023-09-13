@@ -539,7 +539,7 @@ impl ResponseHelper {
         }
     }
 
-    /// Completes execution of the respose and cleanup callbacks without
+    /// Completes execution of the response and cleanup callbacks without
     /// consuming any instructions and without producing any heap delta.
     fn early_finish(
         self,

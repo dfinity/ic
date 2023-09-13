@@ -949,7 +949,7 @@ fn http_request() {
 // works.
 //
 // We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unecessary
+// the .wasm; using `candid::export_service` here would involve unnecessary
 // runtime computation
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]

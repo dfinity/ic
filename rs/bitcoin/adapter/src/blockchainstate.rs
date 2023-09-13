@@ -1,4 +1,4 @@
-//! The module is reponsible for keeping track of the blockchain state.
+//! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
 use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader, Network};
@@ -143,7 +143,7 @@ pub struct BlockchainState {
     /// The starting point of the blockchain
     genesis_block_header: BlockHeader,
 
-    /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
+    /// This field stores all the Bitcoin headers using a HashMap containing BlockHash and the corresponding header.
     header_cache: HeaderCache,
 
     /// This field stores a hashmap containing BlockHash and the corresponding Block.

@@ -483,7 +483,7 @@ pub enum SevFeatureStatus {
     /// in the loss of all data as the KEK is not passed to the new Guest.
     ///
     /// Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_ENABLED
-    /// will resut in loss of all data.
+    /// will result in loss of all data.
     SecureNoUpgradeEnabled = 3,
     /// The SEV-SNP feature is enabled in secure mode with disk integrity protection.
     ///

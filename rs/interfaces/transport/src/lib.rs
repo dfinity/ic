@@ -29,7 +29,7 @@ pub trait Transport: Send + Sync {
     ///        is established. Then the client can pull the receiver(s) to consume messages.
     ///        Using a pull model leads to:
     ///             a) can't have custom logic like filtering, load shedding, queueing,
-    ///                rate-limitting, etc. before messages are deliver to the client
+    ///                rate-limiting, etc. before messages are deliver to the client
     ///             b) complicated concurrent processing, because messages are fanned in into
     ///                a single channel that the client uses to receive them
     ///                (channel receivers require exclusive access to receive a message).
