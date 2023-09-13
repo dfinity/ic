@@ -127,6 +127,9 @@ diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true
 # TODO(IDX-2542)
 sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' -e '/system-tests/d' -e'/prod-test-driver/d' -e'/sns-test-dapp-canister/d' $SHA256SUMS0 $SHA256SUMS1
 
+# ignore *.wasm.did files
+sed -i -e '/.wasm.did/d' $SHA256SUMS0 $SHA256SUMS1
+
 # Most of the time, we only want to check update images so we strip out any
 # disk images. When checking SetupOS, do the opposite.
 SETUPOS_FLAG="${SETUPOS_FLAG:=}"

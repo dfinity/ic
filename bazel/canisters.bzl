@@ -85,6 +85,11 @@ def rust_canister(name, service_file, **kwargs):
         """.format(input_wasm = name + ".raw", service_file = service_file),
     )
 
+    native.alias(
+        name = name + ".didfile",
+        actual = service_file,
+    )
+
     inject_version_into_wasm(
         name = name,
         src_wasm = name + ".opt",
@@ -109,6 +114,11 @@ def motoko_canister(name, entry, deps):
         idl_out = raw_did,
         wasm_out = raw_wasm,
         deps = deps,
+    )
+
+    native.alias(
+        name = name + ".didfile",
+        actual = raw_did,
     )
 
     inject_version_into_wasm(
