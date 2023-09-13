@@ -3781,8 +3781,8 @@ gitlab-ci-config-validation:
     - |
       set -xeuo pipefail
       cd gitlab-ci
-      python3 src/gitlab_config/main.py --cfg-validate-job-name
-      python3 src/gitlab_config/main.py --cfg-bash-linter
+      python3 src/gitlab_config/main.py --cfg-validate-job-name --cfg-file config/zz-generated-gitlab-ci.yaml
+      python3 src/gitlab_config/main.py --cfg-bash-linter --cfg-file config/zz-generated-gitlab-ci.yaml
       python3 src/gitlab_config/main.py --cfg-gitlab-linter --cfg-file config/zz-generated-gitlab-ci.yaml
   tags:
     - dfinity-ic

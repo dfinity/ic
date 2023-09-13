@@ -345,6 +345,17 @@ class DfinityGitLabConfig:
         shellcheck(path)
         os.unlink(path)
 
+    @staticmethod
+    def _handle_nested_list(nested_list):
+        new_list = []
+        for el in nested_list:
+            if isinstance(el, list):
+                for sub_el in el:
+                    new_list.append(sub_el)
+            else:
+                new_list.append(el)
+        return new_list
+
     def ci_job_script(self, job_name: str):
         """Dump the script generated for the provided job_name."""
         job = self.ci_cfg_expanded[job_name]
@@ -354,9 +365,11 @@ class DfinityGitLabConfig:
             before_script = "\n".join(before_script)
         script = job.get("script", [])
         if isinstance(script, list):
+            script = self._handle_nested_list(script)
             script = "\n".join(script)
         after_script = job.get("after_script", [])
         if isinstance(after_script, list):
+            after_script = self._handle_nested_list(after_script)
             after_script = "\n".join(after_script)
         vars = "\n".join([f'export {k}="{escape_yaml(v)}"' for k, v in job.get("variables", {}).items()])
         return """\
@@ -432,6 +445,7 @@ exit 0
     def _bash_lint_job(self, job_name: str):
         try:
             self._bash_linter(job_name, self.ci_job_script(job_name))
+            logging.info("Successfully linted job '%s'", job_name)
         except Exception as e:
             logging.error("Failed to lint job '%s'", job_name)
             raise e
