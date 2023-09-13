@@ -69,7 +69,7 @@ class DummyAlertService(AlertService):
         with_logging=True,
     ) -> None:
 
-        # we're printing to STDOUT; no need to pring anything into STDERR as well
+        # we're printing to STDOUT; no need to print anything into STDERR as well
         del with_logging
 
         message = self._form_message(text, level, url)

@@ -23,7 +23,7 @@ import common.prometheus as prometheus  # noqa
 
 FLAGS = gflags.FLAGS
 
-# Has to be large enough to accomodate requested load.
+# Has to be large enough to accommodate requested load.
 gflags.DEFINE_integer("num_canisters_per_subnet", 5, "Number of canisters per subnetwork")
 
 # Configuration for load

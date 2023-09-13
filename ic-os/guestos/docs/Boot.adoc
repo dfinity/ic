@@ -101,7 +101,7 @@ data might leak to it). This is facilitated in the following way:
   serves as a template defining initial structure of /var).
 
 * The unit file triggering this script is dynamically generated through
-  +/etc/systemd/system-generators/mount-generator+: The generater will
+  +/etc/systemd/system-generators/mount-generator+: The generator will
   check which partition is the correct one to use and synthesize a proper
   unit file.
 

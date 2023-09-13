@@ -38,7 +38,7 @@ for test_idx, test_case in enumerate(output):
         os.path.join("experiments", f"run_test_{test_idx}.py")
     ), "Experiment run file was not generated"
     if is_max_capacity_run == "y":
-        # Max capacity benchmarks need a seperate file
+        # Max capacity benchmarks need a separate file
         assert os.path.isfile(
             os.path.join("experiments", f"max_capacity_test_{test_idx}.py")
         ), "Experiment max capacity file was not generated"

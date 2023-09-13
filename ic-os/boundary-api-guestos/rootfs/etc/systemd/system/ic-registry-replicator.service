@@ -1,5 +1,5 @@
 [Unit]
-Description=IC Regsitry Replicator
+Description=IC Registry Replicator
 After=network-online.target
 Wants=network-online.target
 After=setup-ic-registry-replicator.service

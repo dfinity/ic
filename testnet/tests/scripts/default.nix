@@ -29,7 +29,7 @@ pkgs.mkCiShell {
     pkgs.procps # Needed for GNU ps to kill processes
     pkgs.rsync
     pkgs.rclone
-    pkgs.runtimeShellPackage # the ic-workload-genertor uses `sh -c ulimit -n`.
+    pkgs.runtimeShellPackage # the ic-workload-generator uses `sh -c ulimit -n`.
     pkgs.sed
     pkgs.which
 

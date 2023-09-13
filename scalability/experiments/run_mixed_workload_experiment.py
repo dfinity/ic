@@ -2,7 +2,7 @@
 """
 Purpose: Measure IC performance give a complex workload.
 
-The workload configuration to use is being read from a seperate workload description file.
+The workload configuration to use is being read from a separate workload description file.
 """
 import math
 import os

@@ -7,7 +7,7 @@
 -- .git available) and outside nix, according to this logic:
 --
 --  * If `git` works, use `git describe`
---  * Else, if $out is set (so this is a nix build), extract an identifer from the out hash
+--  * Else, if $out is set (so this is a nix build), extract an identifier from the out hash
 --  * Else, it says something like unidentified build.
 --
 -- This is an early experiment. If successful, this logic ought to move into a
@@ -45,6 +45,6 @@ id =
                | ["", "nix", "store", base] <- splitOn "/" path,
                  let hash = takeWhile (/= '-') base ->
                    return $ intercalate "-" (chunksOf 8 hash)
-             Just path -> fail $ "SouceId: unparsable $out=" ++ path
+             Just path -> fail $ "SourceId: unparsable $out=" ++ path
              Nothing -> return "unidentified"
    )

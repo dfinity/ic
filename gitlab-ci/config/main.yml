@@ -855,7 +855,7 @@ notify-gitlab-success:
     # TODO(IDX-2856): Disable when alerts will be send from superset.
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
       when: on_success
-    # Send a slack notification on rc--* pipeline succees.
+    # Send a slack notification on rc--* pipeline succeeds.
     # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
     # scheduled pipelines that developers may create off the rc branch.
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
@@ -864,7 +864,7 @@ notify-gitlab-success:
   dependencies: []  # don't copy artifacts from other jobs
   script:
     - |
-      # TODO(IDX-2856): remove this top level "if" whe we will not need to run the job for shedule pipelines.
+      # TODO(IDX-2856): remove this top level "if" when we will not need to run the job for schedule pipelines.
       if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
         if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
             MESSAGE="✔ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🫑🫑🫑"
@@ -949,5 +949,5 @@ zz-generated-gitlab:
           git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
           git push --set-upstream origin HEAD:"$CI_COMMIT_REF_NAME"
       else
-          echo "git working tree clean - no changes to be commited"
+          echo "git working tree clean - no changes to be committed"
       fi

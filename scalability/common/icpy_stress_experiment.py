@@ -31,7 +31,7 @@ gflags.DEFINE_integer("num_identities", 10, "Number of identities to issue load 
 CALL_TIMEOUT_SEC = 1
 POLL_TIMEOUT_SEC = 60
 
-# Offset in miliseconds before issuing the first call
+# Offset in milliseconds before issuing the first call
 # If the offset is too small, the first few calls will be sent in a burst
 START_OFFSET_MS = 500
 

@@ -24,12 +24,12 @@ impl fmt::Display for CowError {
             Self::SlotDbError { op, round, err } => match op {
                 SlotDbOp::OpenDb => write!(
                     f,
-                    "Error openning the round database. round {} err {}",
+                    "Error opening the round database. round {} err {}",
                     round, err
                 ),
                 SlotDbOp::OpenCursor => write!(
                     f,
-                    "Error openning ro cursor for the round. round {} err {}",
+                    "Error opening ro cursor for the round. round {} err {}",
                     round, err
                 ),
             },

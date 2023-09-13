@@ -1,6 +1,6 @@
 # Boundary API GuestOS - Main Docker Image
 #
-# Build step for exmaple:
+# Build step for example:
 # - `docker build --pull -t dfinity/boundary-api-guestosos --build-arg BUILD_TYPE=dev \ `
 #   `--build-arg BASE_IMAGE=docker.io/dfinity/boundary-api-guestos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
 #

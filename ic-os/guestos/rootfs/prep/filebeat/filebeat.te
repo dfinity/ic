@@ -43,7 +43,7 @@ init_daemon_domain(filebeat_t, filebeat_exec_t)
 systemd_read_journal_files(filebeat_t)
 
 # It wants to send the logs to remote host, allow unrestricted TCP for
-# this for now. Maybe this can be reasonably constrainted more tightly.
+# this for now. Maybe this can be reasonably constrained more tightly.
 allow filebeat_t self:tcp_socket create_stream_socket_perms;
 corenet_tcp_sendrecv_generic_if(filebeat_t)
 corenet_tcp_sendrecv_generic_node(filebeat_t)

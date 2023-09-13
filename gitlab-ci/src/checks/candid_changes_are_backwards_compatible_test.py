@@ -222,7 +222,7 @@ class CommandLineTest(unittest.TestCase):
         run_against("example.did", also_reverse=True)
 
     def test_override_also_reverse(self):
-        # Add a method to the servce.
+        # Add a method to the service.
         modify_file_contents(
             path="example.did", find="// Comment within service.", replacement="new_method : () -> ();"
         )

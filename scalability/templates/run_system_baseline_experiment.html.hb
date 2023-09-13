@@ -33,7 +33,7 @@ The system is considered healthy iff:
 <p>
   The result of this benchmark is the maximum capacity for <span class="w3-tag w3-light-grey exp_value">{{type}}</span> calls.
   It is calculated from the number of successful request in one benchmark iteration divided by the duration of that iteration.
-  An iteration is only considered for maximum capacity if the system is still healthy according to the defintion above.
+  An iteration is only considered for maximum capacity if the system is still healthy according to the definition above.
 </p>
 
 <div>

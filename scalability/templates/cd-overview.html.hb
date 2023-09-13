@@ -33,9 +33,9 @@
     <h1>CD performance results</h1>
 
     <p>
-      This page containes history data of our internal performance evaluation pipeline.
+      This page contains history data of our internal performance evaluation pipeline.
       We run our benchmarks on a dedicated testnet, which aims to accurately represent
-      performance of a mainnet subnet (hoever, in reality, though, testnets only have about half
+      performance of a mainnet subnet (however, in reality, though, testnets only have about half
       of the compute capacity as nodes on mainnet).<br />
       Data on this page is aggregated from individual benchmark runs.
     </p>
@@ -89,7 +89,7 @@
     </script>
 
     <p>
-      For query workloads the follwing plots show latency and failure rates. Each plot tracks the latency or failure rate over time.
+      For query workloads the following plots show latency and failure rates. Each plot tracks the latency or failure rate over time.
       As we have changed the requests rates that we are running in weekly benchmarks, some plots end and other ones start.
       The goal is for all of them to never increase over time.
     </p>
@@ -521,7 +521,7 @@
     }
 )'
       </pre><br />
-      The other 4 call <pre>check_response</pre> using with payload <pre>4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267</pre> whitch is:
+      The other 4 call <pre>check_response</pre> using with payload <pre>4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267</pre> which is:
       <pre>
 '( "https://www.example.com" )'
       </pre>

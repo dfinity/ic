@@ -327,7 +327,7 @@ encode_candid_args_in_file() {
     echo "$ENCODED_ARGS_FILE"
 }
 
-# Return the candid args when none are passsed.
+# Return the candid args when none are passed.
 # Usually returns empty string to say "no args passed", but
 # In cases where upgrade args are needed, even as a "None", a value must
 # be encoded

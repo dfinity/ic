@@ -1,6 +1,6 @@
 # BoundaryGuestOS - Main Docker Image
 #
-# Build step for exmaple:
+# Build step for example:
 # - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev --build-arg SW=true \ `
 #   `--build-arg BASE_IMAGE=docker.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
 #

@@ -243,7 +243,7 @@ create_manifests_() {
     #  - The builder is replaced with a bash function that calls `export >
     #   $out`, which effectively writes all the environment variables to $out.
     #   The variables can then be imported by sourcing this file.
-    #  - The readFile and readDir builtins are overriden to print their
+    #  - The readFile and readDir builtins are overridden to print their
     #   arguments whenever they are called (so that we can parse that and track
     #   those files)
     local shellnix;

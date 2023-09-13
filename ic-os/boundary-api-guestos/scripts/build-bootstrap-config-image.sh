@@ -94,7 +94,7 @@ EOF
 }
 
 # Arguments:
-# - $1 the comma seperated list of IPv4 addresses/prefixes
+# - $1 the comma separated list of IPv4 addresses/prefixes
 function check_ipv4_prefixes() {
     local ipv4_prefixes="$1"
     local fail=0
@@ -115,7 +115,7 @@ function check_ipv4_prefixes() {
 }
 
 # Arguments:
-# - $1 the comma seperated list of IPv6 addresses/prefixes
+# - $1 the comma separated list of IPv6 addresses/prefixes
 function check_ipv6_prefixes() {
     local ipv6_prefixes="$1"
     local fail=0

@@ -89,7 +89,7 @@ RUN cd /afl && \
     rm -rf AFLplusplus
 
 # Since we are cloning multiple NPM repos, we need to have multiple node versions installed
-# to switch between them for comptability.
+# to switch between them for compatibility.
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_agent_js_node_version=16
 ARG dependency_mgmt_nns_dapp_node_version=18

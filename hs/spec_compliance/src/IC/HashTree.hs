@@ -105,7 +105,7 @@ prune tree [] = Pruned (reconstruct tree)
 prune tree paths | [] `elem` paths = tree
 prune tree paths = go tree
   where
-    -- These labels are availbale
+    -- These labels are available
     present :: S.Set Label
     present = S.fromList [l | Labeled l _ <- flatten tree]
 

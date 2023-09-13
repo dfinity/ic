@@ -20,7 +20,7 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 80
     container:
-      image: dfinity/ic-build:1438e57710a4d446630d8b6d471d17c8586b440ddb2644bc8077ddb0d9fc0ac8
+      image: dfinity/ic-build:4f2f17cf3622948424b0aeb6c0b57c82112d7a3e7174250d25181fe8a4d66334
       options: --user ubuntu
     if: ${{ vars.RUN_CI == 'true' }}
     steps:

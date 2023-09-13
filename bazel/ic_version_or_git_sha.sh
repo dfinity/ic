@@ -26,7 +26,7 @@ while read -r k v; do
     esac
 done <"$1"
 
-# Set the version to "{git sha}-{build timestamp}" unconditionally unles it explicitly set (using --ic_version arg) to avoid conflicts with CI.
+# Set the version to "{git sha}-{build timestamp}" unconditionally unless it is explicitly set (using --ic_version arg) to avoid conflicts with CI.
 VERSION="${VERSION}-${BUILD_TIMESTAMP}"
 
 echo "${VERSION}" >"$2"

@@ -523,7 +523,7 @@ class FakeNPM:
         }
 
 
-def test_findings_helper_no_vulnerabilites(npm_test):
+def test_findings_helper_no_vulnerabilities(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(1)
