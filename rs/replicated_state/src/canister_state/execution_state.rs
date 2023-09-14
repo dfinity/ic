@@ -429,8 +429,7 @@ pub struct ExecutionState {
     /// properly when loading a state from checkpoint.
     pub wasm_binary: Arc<WasmBinary>,
 
-    /// The persistent heap of the module. The size of this memory is expected
-    /// to fit in a `u32`.
+    /// The persistent heap of the module, 64-bit address space.
     pub wasm_memory: Memory,
 
     /// The canister stable memory which is persisted across canister upgrades.

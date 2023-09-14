@@ -742,10 +742,8 @@ pub(super) fn replacement_functions(
                             },
                             Else,
                             LocalGet { local_index: DST },
-                            I32WrapI64,
                             LocalGet { local_index: SRC },
                             LocalGet { local_index: LEN },
-                            I32WrapI64,
                             MemoryCopy {
                                 dst_mem: 0,
                                 src_mem: stable_memory_index,
@@ -1224,9 +1222,7 @@ pub(super) fn replacement_functions(
                             // copy memory contents
                             LocalGet { local_index: DST },
                             LocalGet { local_index: SRC },
-                            I32WrapI64,
                             LocalGet { local_index: LEN },
-                            I32WrapI64,
                             MemoryCopy {
                                 dst_mem: stable_memory_index,
                                 src_mem: 0,
