@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::util::block_on;
 use slog::{error, info, Logger};
 use url::Url;
@@ -110,13 +112,16 @@ impl NotificationClient {
         self.push_metrics(message)
     }
 
-    pub fn push_metrics_disk_stats(&self, space: u32, inodes: u32) {
+    pub fn push_metrics_disk_stats(&self, dir: &Path, space: u32, inodes: u32) {
         let message = format!(
             "# TYPE backup_disk_usage gauge\n\
             # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
-            backup_disk_usage{{ic=\"{}\", resource=\"space\"}} {}\n\
-            backup_disk_usage{{ic=\"{}\", resource=\"inodes\"}} {}\n",
-            self.network_name, space, self.network_name, inodes
+            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\" resource=\"space\"}} {2}\n\
+            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\" resource=\"inodes\"}} {3}\n",
+            self.network_name,
+            dir.to_str().unwrap_or_default(),
+            space,
+            inodes
         );
         self.push_metrics(message)
     }
