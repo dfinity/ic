@@ -26,6 +26,7 @@ qemu-system-x86
 
 # Test
 rsync
+lcov
 
 # RUST
 gcc

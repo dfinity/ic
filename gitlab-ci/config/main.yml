@@ -218,6 +218,33 @@ bazel-build-fuzzers-archives:
       fi
     - !reference [after_script]
 
+
+bazel-test-coverage:
+  extends:
+    - .bazel-test-all
+    - .rules-post-master
+  timeout: 80 minutes
+  artifacts:
+    expire_in: 14 days
+    when: always
+    paths:
+      - cov_targets.txt
+      - cov_report.dat
+      - cov_html
+  variables:
+    BAZEL_COMMAND: "coverage"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --combined_report=lcov"
+  script:
+    - |
+      bazel query --universe_scope=//... \
+          "kind(test, //rs/...) except kind(test, allrdeps(attr('tags', 'canister', //rs/...)))" > cov_targets.txt
+      # shellcheck disable=SC2046,SC2086
+      bazel ${BAZEL_STARTUP_ARGS} coverage ${BAZEL_CI_CONFIG} ${BAZEL_EXTRA_ARGS} \
+          --combined_report=lcov $(<cov_targets.txt) || true
+      cp bazel-out/_coverage/_coverage_report.dat cov_report.dat
+      genhtml --output cov_html cov_report.dat
+
+
 bazel-test-all:
   extends:
     - .bazel-test-all
