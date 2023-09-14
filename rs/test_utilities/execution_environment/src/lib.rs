@@ -1965,6 +1965,7 @@ impl ExecutionTestBuilder {
             config.clone(),
             Arc::clone(&cycles_account_manager),
             self.resource_saturation_scaling,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let (query_stats_collector, _) = init_query_stats(self.log.clone());
 

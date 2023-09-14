@@ -40,15 +40,15 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::{system_state::CyclesUseCase, NextExecution};
-use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
+    canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
         EcdsaDealingsContext, InstallCodeCall, InstallCodeCallId, SetupInitialDkgContext,
         SignWithEcdsaContext, StopCanisterCall, SubnetCallContext,
     },
-    CanisterState, NetworkTopology, ReplicatedState,
+    page_map::PageAllocatorFileDescriptor,
+    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
@@ -289,6 +289,7 @@ impl ExecutionEnvironment {
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         resource_saturation_scaling: usize,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -313,6 +314,7 @@ impl ExecutionEnvironment {
             canister_manager_config,
             Arc::clone(&cycles_account_manager),
             Arc::clone(&ingress_history_writer),
+            fd_factory,
         );
         Self {
             log,

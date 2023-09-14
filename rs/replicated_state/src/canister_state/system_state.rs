@@ -1,10 +1,13 @@
 mod call_context_manager;
+pub mod wasm_chunk_store;
 
+use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
+use crate::page_map::PageAllocatorFileDescriptor;
+use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
@@ -319,6 +322,9 @@ pub struct SystemState {
 
     /// Canister history.
     canister_history: CanisterHistory,
+
+    /// Store of Wasm chunks to support installation of large Wasm modules.
+    pub wasm_chunk_store: WasmChunkStore,
 }
 
 /// A wrapper around the different canister statuses.
@@ -650,55 +656,25 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         freeze_threshold: NumSeconds,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
-        Self::new(
+        Self::new_internal(
             canister_id,
             controller,
             initial_cycles,
             freeze_threshold,
             CanisterStatus::new_running(),
+            WasmChunkStore::new(fd_factory),
         )
     }
 
-    pub fn new_stopping(
-        canister_id: CanisterId,
-        controller: PrincipalId,
-        initial_cycles: Cycles,
-        freeze_threshold: NumSeconds,
-    ) -> Self {
-        Self::new(
-            canister_id,
-            controller,
-            initial_cycles,
-            freeze_threshold,
-            CanisterStatus::Stopping {
-                call_context_manager: CallContextManager::default(),
-                stop_contexts: Vec::default(),
-            },
-        )
-    }
-
-    pub fn new_stopped(
-        canister_id: CanisterId,
-        controller: PrincipalId,
-        initial_cycles: Cycles,
-        freeze_threshold: NumSeconds,
-    ) -> Self {
-        Self::new(
-            canister_id,
-            controller,
-            initial_cycles,
-            freeze_threshold,
-            CanisterStatus::Stopped,
-        )
-    }
-
-    pub fn new(
+    fn new_internal(
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
+        wasm_chunk_store: WasmChunkStore,
     ) -> Self {
         Self {
             canister_id,
@@ -717,6 +693,7 @@ impl SystemState {
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
             canister_history: CanisterHistory::default(),
+            wasm_chunk_store,
         }
     }
 
@@ -725,14 +702,18 @@ impl SystemState {
     /// module is run. There is nothing interesting in the system state
     /// that can be accessed at that point in time, hence this
     /// "slightly" fake system state.
-    pub fn new_for_start(canister_id: CanisterId) -> Self {
+    pub fn new_for_start(
+        canister_id: CanisterId,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Self {
         let controller = *canister_id.get_ref();
-        Self::new(
+        Self::new_internal(
             canister_id,
             controller,
             Cycles::zero(),
             NumSeconds::from(0),
             CanisterStatus::Stopped,
+            WasmChunkStore::new(fd_factory),
         )
     }
 
@@ -754,6 +735,8 @@ impl SystemState {
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
+        wasm_chunk_store_data: PageMap,
+        wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     ) -> Self {
         Self {
             controllers,
@@ -772,7 +755,76 @@ impl SystemState {
             global_timer,
             canister_version,
             canister_history,
+            wasm_chunk_store: WasmChunkStore::from_checkpoint(
+                wasm_chunk_store_data,
+                wasm_chunk_store_metadata,
+            ),
         }
+    }
+
+    pub fn new_running_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+    ) -> Self {
+        Self::new_for_testing(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            CanisterStatus::new_running(),
+        )
+    }
+
+    pub fn new_stopping_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+    ) -> Self {
+        Self::new_for_testing(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            CanisterStatus::Stopping {
+                call_context_manager: CallContextManager::default(),
+                stop_contexts: Vec::default(),
+            },
+        )
+    }
+
+    pub fn new_stopped_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+    ) -> Self {
+        Self::new_for_testing(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            CanisterStatus::Stopped,
+        )
+    }
+
+    fn new_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+        status: CanisterStatus,
+    ) -> Self {
+        Self::new_internal(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            status,
+            WasmChunkStore::new_for_testing(),
+        )
     }
 
     pub fn canister_id(&self) -> CanisterId {

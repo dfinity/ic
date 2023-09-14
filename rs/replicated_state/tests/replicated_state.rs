@@ -92,7 +92,7 @@ impl ReplicatedStateFixture {
         let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
         for canister_id in canister_ids {
             let scheduler_state = SchedulerState::default();
-            let system_state = SystemState::new_running(
+            let system_state = SystemState::new_running_for_testing(
                 *canister_id,
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),

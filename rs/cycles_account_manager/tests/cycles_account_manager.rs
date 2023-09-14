@@ -89,7 +89,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
     let amount = Cycles::new(200);
     {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let mut system_state = SystemState::new_running(
+        let mut system_state = SystemState::new_running_for_testing(
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
@@ -124,7 +124,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
 
     {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let mut system_state = SystemState::new_running(
+        let mut system_state = SystemState::new_running_for_testing(
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
@@ -159,7 +159,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
 
     {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let mut system_state = SystemState::new_running(
+        let mut system_state = SystemState::new_running_for_testing(
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
@@ -196,7 +196,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
 
     {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let system_state = SystemState::new_running(
+        let system_state = SystemState::new_running_for_testing(
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
@@ -548,7 +548,7 @@ fn cycles_withdraw_for_execution() {
     let initial_cycles = Cycles::from(initial_amount);
     let freeze_threshold = NumSeconds::from(10);
     let canister_id = canister_test_id(1);
-    let mut system_state = SystemState::new_running(
+    let mut system_state = SystemState::new_running_for_testing(
         canister_id,
         canister_test_id(2).get(),
         initial_cycles,
@@ -842,7 +842,7 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
 #[test]
 fn withdraw_cycles_for_transfer_checks_reserved_balance() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let mut system_state = SystemState::new_running(
+    let mut system_state = SystemState::new_running_for_testing(
         canister_test_id(1),
         canister_test_id(2).get(),
         Cycles::new(2_000_000),

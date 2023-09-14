@@ -69,7 +69,7 @@ struct CanisterStateFixture {
 impl CanisterStateFixture {
     fn new() -> CanisterStateFixture {
         let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running(
+        let system_state = SystemState::new_running_for_testing(
             CANISTER_ID,
             user_test_id(24).get(),
             Cycles::new(1 << 36),

@@ -80,8 +80,11 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 /// Note that any queue files are missing as they would be empty.
 const SUBNET_A_FILES: &[&str] = &[
     "canister_states/00000000000000010101/canister.pbuf",
+    "canister_states/00000000000000010101/wasm_chunk_store.bin",
     "canister_states/00000000000000020101/canister.pbuf",
+    "canister_states/00000000000000020101/wasm_chunk_store.bin",
     "canister_states/00000000000000030101/canister.pbuf",
+    "canister_states/00000000000000030101/wasm_chunk_store.bin",
     INGRESS_HISTORY_FILE,
     SUBNET_QUEUES_FILE,
     SYSTEM_METADATA_FILE,
@@ -90,7 +93,9 @@ const SUBNET_A_FILES: &[&str] = &[
 /// Full list of files expected to be listed in the manifest of subnet A'.
 const SUBNET_A_PRIME_FILES: &[&str] = &[
     "canister_states/00000000000000010101/canister.pbuf",
+    "canister_states/00000000000000010101/wasm_chunk_store.bin",
     "canister_states/00000000000000030101/canister.pbuf",
+    "canister_states/00000000000000030101/wasm_chunk_store.bin",
     INGRESS_HISTORY_FILE,
     SPLIT_MARKER_FILE,
     SUBNET_QUEUES_FILE,
@@ -100,6 +105,7 @@ const SUBNET_A_PRIME_FILES: &[&str] = &[
 /// Full list of files expected to be listed in the manifest of subnet B.
 const SUBNET_B_FILES: &[&str] = &[
     "canister_states/00000000000000020101/canister.pbuf",
+    "canister_states/00000000000000020101/wasm_chunk_store.bin",
     INGRESS_HISTORY_FILE,
     SPLIT_MARKER_FILE,
     SYSTEM_METADATA_FILE,

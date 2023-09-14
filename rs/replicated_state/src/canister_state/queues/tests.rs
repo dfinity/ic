@@ -97,7 +97,7 @@ impl CanisterQueuesFixture {
         let local_canisters = maplit::btreemap! {
             self.this => {
                 let scheduler_state = SchedulerState::default();
-                let system_state = SystemState::new_running(
+                let system_state = SystemState::new_running_for_testing(
                     CanisterId::from_u64(42),
                     user_test_id(24).get(),
                     Cycles::new(1 << 36),
@@ -578,7 +578,8 @@ fn test_split_input_schedules() {
     assert_eq!(vec![other_4, other_5], queues.remote_schedule());
 
     // After the split we only have `other_1` (and `this`) on the subnet.
-    let system_state = SystemState::new_running(other_1, other_1.get(), Cycles::zero(), 0.into());
+    let system_state =
+        SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
     let scheduler_state = SchedulerState::new(mock_time());
     let local_canisters = btreemap! {
         other_1 => CanisterState::new(system_state, None, scheduler_state)
@@ -1818,7 +1819,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
     let local_canisters = maplit::btreemap! {
         local_canister_id => {
             let scheduler_state = SchedulerState::default();
-            let system_state = SystemState::new_running(
+            let system_state = SystemState::new_running_for_testing(
                 CanisterId::from_u64(42),
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),

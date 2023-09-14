@@ -261,19 +261,19 @@ impl CanisterStateBuilder {
 
     pub fn build(self) -> CanisterState {
         let mut system_state = match self.status {
-            CanisterStatusType::Running => SystemState::new_running(
+            CanisterStatusType::Running => SystemState::new_running_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
                 self.freeze_threshold,
             ),
-            CanisterStatusType::Stopping => SystemState::new_stopping(
+            CanisterStatusType::Stopping => SystemState::new_stopping_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
                 self.freeze_threshold,
             ),
-            CanisterStatusType::Stopped => SystemState::new_stopped(
+            CanisterStatusType::Stopped => SystemState::new_stopped_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
@@ -378,7 +378,7 @@ pub struct SystemStateBuilder {
 impl Default for SystemStateBuilder {
     fn default() -> Self {
         Self {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 canister_test_id(42),
                 user_test_id(24).get(),
                 INITIAL_CYCLES,
@@ -391,7 +391,7 @@ impl Default for SystemStateBuilder {
 impl SystemStateBuilder {
     pub fn new() -> Self {
         Self {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 canister_test_id(42),
                 user_test_id(24).get(),
                 INITIAL_CYCLES,
@@ -558,7 +558,7 @@ pub fn get_running_canister_with_args(
     initial_cycles: Cycles,
 ) -> CanisterState {
     CanisterState {
-        system_state: SystemState::new_running(
+        system_state: SystemState::new_running_for_testing(
             canister_id,
             controller,
             initial_cycles,
@@ -582,7 +582,7 @@ pub fn get_stopping_canister_with_controller(
     controller: PrincipalId,
 ) -> CanisterState {
     CanisterState {
-        system_state: SystemState::new_stopping(
+        system_state: SystemState::new_stopping_for_testing(
             canister_id,
             controller,
             INITIAL_CYCLES,
@@ -606,7 +606,7 @@ pub fn get_stopped_canister_with_controller(
     controller: PrincipalId,
 ) -> CanisterState {
     CanisterState {
-        system_state: SystemState::new_stopped(
+        system_state: SystemState::new_stopped_for_testing(
             canister_id,
             controller,
             INITIAL_CYCLES,
@@ -708,8 +708,12 @@ pub fn new_canister_state(
     freeze_threshold: NumSeconds,
 ) -> CanisterState {
     let scheduler_state = SchedulerState::default();
-    let system_state =
-        SystemState::new_running(canister_id, controller, initial_cycles, freeze_threshold);
+    let system_state = SystemState::new_running_for_testing(
+        canister_id,
+        controller,
+        initial_cycles,
+        freeze_threshold,
+    );
     CanisterState::new(system_state, None, scheduler_state)
 }
 

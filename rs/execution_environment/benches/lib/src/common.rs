@@ -274,6 +274,7 @@ where
         config,
         cycles_account_manager,
         SchedulerConfig::application_subnet().scheduler_cores,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

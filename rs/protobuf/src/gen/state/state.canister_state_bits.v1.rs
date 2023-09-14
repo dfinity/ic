@@ -464,6 +464,24 @@ pub struct CanisterHistory {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WasmChunkData {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub index: u64,
+    #[prost(uint64, tag = "3")]
+    pub length: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WasmChunkStoreMetadata {
+    #[prost(message, repeated, tag = "1")]
+    pub chunks: ::prost::alloc::vec::Vec<WasmChunkData>,
+    #[prost(uint64, tag = "2")]
+    pub size: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -535,6 +553,9 @@ pub struct CanisterStateBits {
     /// The user-specified upper limit on `reserved_balance`.
     #[prost(message, optional, tag = "39")]
     pub reserved_balance_limit: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// Maps tracking chunks in the Wasm chunk store.
+    #[prost(message, optional, tag = "40")]
+    pub wasm_chunk_store_metadata: ::core::option::Option<WasmChunkStoreMetadata>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

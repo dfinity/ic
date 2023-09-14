@@ -22,10 +22,12 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CallOrigin, CanisterState,
-    CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
+    canister_state::system_state::CyclesUseCase,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId,
+    page_map::PageAllocatorFileDescriptor, CallOrigin, CanisterState, CanisterStatus,
+    NetworkTopology, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::{
@@ -273,6 +275,7 @@ pub(crate) struct CanisterManager {
     config: CanisterMgrConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl CanisterManager {
@@ -282,6 +285,7 @@ impl CanisterManager {
         config: CanisterMgrConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         CanisterManager {
             hypervisor,
@@ -289,6 +293,7 @@ impl CanisterManager {
             config,
             cycles_account_manager,
             ingress_history_writer,
+            fd_factory,
         }
     }
 
@@ -798,12 +803,22 @@ impl CanisterManager {
         };
 
         match context.mode {
-            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
-                execute_install(context, canister, original, round.clone(), round_limits)
-            }
-            CanisterInstallModeV2::Upgrade(..) => {
-                execute_upgrade(context, canister, original, round.clone(), round_limits)
-            }
+            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => execute_install(
+                context,
+                canister,
+                original,
+                round.clone(),
+                round_limits,
+                Arc::clone(&self.fd_factory),
+            ),
+            CanisterInstallModeV2::Upgrade(..) => execute_upgrade(
+                context,
+                canister,
+                original,
+                round.clone(),
+                round_limits,
+                Arc::clone(&self.fd_factory),
+            ),
         }
     }
 
@@ -835,6 +850,7 @@ impl CanisterManager {
             canister,
             time,
             AddCanisterChangeToHistory::Yes(origin),
+            Arc::clone(&self.fd_factory),
         );
         crate::util::process_responses(
             rejects,
@@ -1241,6 +1257,7 @@ impl CanisterManager {
             sender,
             cycles,
             self.config.default_freeze_threshold,
+            Arc::clone(&self.fd_factory),
         );
 
         system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
@@ -1689,9 +1706,13 @@ pub fn uninstall_canister(
     canister: &mut CanisterState,
     time: Time,
     add_canister_change: AddCanisterChangeToHistory,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Vec<Response> {
     // Drop the canister's execution state.
     canister.execution_state = None;
+
+    // Clear the Wasm chunk store.
+    canister.system_state.wasm_chunk_store = WasmChunkStore::new(fd_factory);
 
     // Drop its certified data.
     canister.system_state.certified_data = Vec::new();
