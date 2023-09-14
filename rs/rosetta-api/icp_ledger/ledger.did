@@ -410,6 +410,9 @@ service: (LedgerCanisterPayload) -> {
     // Returns the amount of Tokens on the specified account.
     account_balance : (AccountBalanceArgs) -> (Tokens) query;
 
+    // Returns the account identifier for the given Principal and subaccount.
+    account_identifier : (Account) -> (AccountIdentifier) query;
+
     // Returns the current transfer_fee.
     transfer_fee : (TransferFeeArg) -> (TransferFee) query;
 

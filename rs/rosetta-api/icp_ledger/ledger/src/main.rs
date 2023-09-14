@@ -26,7 +26,7 @@ use ic_ledger_core::{
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use icp_ledger::{
-    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
+    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob, AccountIdentifier, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
     BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs,
     IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
@@ -1053,6 +1053,16 @@ fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
 #[export_name = "canister_query account_balance_dfx"]
 fn account_balance_dfx() {
     over(candid_one, account_balance_dfx_);
+}
+
+#[candid_method(query, rename = "account_identifier")]
+fn compute_account_identifier(arg: Account) -> AccountIdBlob {
+    AccountIdentifier::from(arg).to_address()
+}
+
+#[export_name = "canister_query account_identifier"]
+fn compute_account_identifier_candid() {
+    over(candid_one, compute_account_identifier)
 }
 
 #[export_name = "canister_query icrc1_balance_of"]
