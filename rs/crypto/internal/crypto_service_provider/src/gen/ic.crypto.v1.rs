@@ -1,3 +1,4 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SecretKeyV1 {
     /// CBOR serialization of `CspSecretKey`
@@ -8,6 +9,7 @@ pub struct SecretKeyV1 {
     pub scope: ::prost::alloc::string::String,
 }
 /// SecretKeyStore stores secret keys.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SecretKeyStore {
     /// Version of SecretKeyStore

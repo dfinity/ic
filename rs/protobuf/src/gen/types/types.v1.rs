@@ -28,9 +28,19 @@ pub mod canister_install_mode_v2 {
         Mode2(super::CanisterUpgradeOptions),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum CanisterInstallMode {
     Unspecified = 0,
@@ -49,6 +59,16 @@ impl CanisterInstallMode {
             CanisterInstallMode::Install => "CANISTER_INSTALL_MODE_INSTALL",
             CanisterInstallMode::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
             CanisterInstallMode::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CANISTER_INSTALL_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CANISTER_INSTALL_MODE_INSTALL" => Some(Self::Install),
+            "CANISTER_INSTALL_MODE_REINSTALL" => Some(Self::Reinstall),
+            "CANISTER_INSTALL_MODE_UPGRADE" => Some(Self::Upgrade),
+            _ => None,
         }
     }
 }
@@ -111,9 +131,19 @@ pub struct NominalCycles {
     pub low: u64,
 }
 /// A non-interactive distributed key generation (NI-DKG) tag.
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum NiDkgTag {
     Unspecified = 0,
@@ -130,6 +160,15 @@ impl NiDkgTag {
             NiDkgTag::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
             NiDkgTag::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
             NiDkgTag::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NI_DKG_TAG_UNSPECIFIED" => Some(Self::Unspecified),
+            "NI_DKG_TAG_LOW_THRESHOLD" => Some(Self::LowThreshold),
+            "NI_DKG_TAG_HIGH_THRESHOLD" => Some(Self::HighThreshold),
+            _ => None,
         }
     }
 }
@@ -674,9 +713,19 @@ pub struct IDkgDealingSupport {
     #[prost(message, optional, tag = "4")]
     pub sig_share: ::core::option::Option<BasicSignature>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum KeyTranscriptCreationState {
     BeginUnspecified = 0,
@@ -709,6 +758,26 @@ impl KeyTranscriptCreationState {
                 "KEY_TRANSCRIPT_CREATION_STATE_XNET_RESHARE_OF_UNMASKED_PARAMS"
             }
             KeyTranscriptCreationState::Created => "KEY_TRANSCRIPT_CREATION_STATE_CREATED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "KEY_TRANSCRIPT_CREATION_STATE_BEGIN_UNSPECIFIED" => Some(Self::BeginUnspecified),
+            "KEY_TRANSCRIPT_CREATION_STATE_RANDOM_TRANSCRIPT_PARAMS" => {
+                Some(Self::RandomTranscriptParams)
+            }
+            "KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_MASKED_PARAMS" => {
+                Some(Self::ReshareOfMaskedParams)
+            }
+            "KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_UNMASKED_PARAMS" => {
+                Some(Self::ReshareOfUnmaskedParams)
+            }
+            "KEY_TRANSCRIPT_CREATION_STATE_XNET_RESHARE_OF_UNMASKED_PARAMS" => {
+                Some(Self::XnetReshareOfUnmaskedParams)
+            }
+            "KEY_TRANSCRIPT_CREATION_STATE_CREATED" => Some(Self::Created),
+            _ => None,
         }
     }
 }
@@ -1364,9 +1433,19 @@ pub mod artifact_chunk {
         Artifact(super::Artifact),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum P2pError {
     Unspecified = 0,
@@ -1381,6 +1460,14 @@ impl P2pError {
         match self {
             P2pError::Unspecified => "P2P_ERROR_UNSPECIFIED",
             P2pError::NotFound => "P2P_ERROR_NOT_FOUND",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "P2P_ERROR_UNSPECIFIED" => Some(Self::Unspecified),
+            "P2P_ERROR_NOT_FOUND" => Some(Self::NotFound),
+            _ => None,
         }
     }
 }

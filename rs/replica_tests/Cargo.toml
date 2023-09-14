@@ -40,12 +40,15 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-base-types = { path = "../types/base_types" }
 rand = "0.8.4"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 slog-scope = "4.1.2"
 tempfile = "3.3.0"
-tonic = "0.8.2"
+tonic = { workspace = true }
 tokio = { version = "1.32.0", features = ["full"] }
-prometheus = { version = "0.12.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = ["process"] }
 prost = "0.11.0"
 wat = "1.0.52"
 

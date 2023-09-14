@@ -40,9 +40,20 @@ pub struct FirewallRuleSet {
     pub entries: ::prost::alloc::vec::Vec<FirewallRule>,
 }
 /// Available actions for firewall rules
-#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    candid::CandidType,
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum FirewallAction {
     Unspecified = 0,
@@ -66,10 +77,31 @@ impl FirewallAction {
             FirewallAction::Reject => "FIREWALL_ACTION_REJECT",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIREWALL_ACTION_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIREWALL_ACTION_ALLOW" => Some(Self::Allow),
+            "FIREWALL_ACTION_DENY" => Some(Self::Deny),
+            "FIREWALL_ACTION_REJECT" => Some(Self::Reject),
+            _ => None,
+        }
+    }
 }
-#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    candid::CandidType,
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum FirewallRuleDirection {
     Unspecified = 0,
@@ -86,6 +118,15 @@ impl FirewallRuleDirection {
             FirewallRuleDirection::Unspecified => "FIREWALL_RULE_DIRECTION_UNSPECIFIED",
             FirewallRuleDirection::Inbound => "FIREWALL_RULE_DIRECTION_INBOUND",
             FirewallRuleDirection::Outbound => "FIREWALL_RULE_DIRECTION_OUTBOUND",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FIREWALL_RULE_DIRECTION_UNSPECIFIED" => Some(Self::Unspecified),
+            "FIREWALL_RULE_DIRECTION_INBOUND" => Some(Self::Inbound),
+            "FIREWALL_RULE_DIRECTION_OUTBOUND" => Some(Self::Outbound),
+            _ => None,
         }
     }
 }

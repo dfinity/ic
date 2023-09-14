@@ -10,9 +10,19 @@ pub struct ProvisionalWhitelist {
 }
 /// Nested message and enum types in `ProvisionalWhitelist`.
 pub mod provisional_whitelist {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        serde::Serialize,
+        serde::Deserialize,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
     #[repr(i32)]
     pub enum ListType {
         Unspecified = 0,
@@ -29,6 +39,15 @@ pub mod provisional_whitelist {
                 ListType::Unspecified => "LIST_TYPE_UNSPECIFIED",
                 ListType::All => "LIST_TYPE_ALL",
                 ListType::Set => "LIST_TYPE_SET",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "LIST_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+                "LIST_TYPE_ALL" => Some(Self::All),
+                "LIST_TYPE_SET" => Some(Self::Set),
+                _ => None,
             }
         }
     }

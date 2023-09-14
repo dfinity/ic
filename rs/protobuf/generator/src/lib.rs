@@ -418,6 +418,5 @@ fn build_determinism_test_proto(def: &Path, out: &Path) {
 /// Compiles the given `proto_files`.
 fn compile_protos<P: AsRef<Path>>(mut config: Config, def: &Path, proto_files: &[P]) {
     // https://github.com/tokio-rs/prost/issues/661
-    config.type_attribute(".", "#[allow(clippy::derive_partial_eq_without_eq)]");
     config.compile_protos(proto_files, &[def]).unwrap();
 }

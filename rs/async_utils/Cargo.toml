@@ -11,11 +11,11 @@ futures = "0.3.13"
 futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }
 ic-types = { path = "../types/types" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = ["process"] }
 slog = "2.5.2"
 tokio = { version = "1.32.0", features = ["full"] }
-tonic = "0.8.2"
-tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
+tonic = { workspace = true }
+tower = { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
 
 [dev-dependencies]
 bytes = "1.5.0"
