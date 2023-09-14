@@ -1,6 +1,8 @@
 //! This module is responsible for instrumenting wasm binaries on the Internet
 //! Computer.
 //!
+//! Supports 64-bit main memory by using `wasm64`.
+//!
 //! It exports the function [`instrument`] which takes a Wasm binary and
 //! injects some instrumentation that allows to:
 //!  * Quantify the amount of execution every function of that module conducts.
@@ -25,7 +27,7 @@
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
-//! (import "__" "update_available_memory" (func (;1;) ((param i32 i32 i32) (result i32))))
+//! (import "__" "update_available_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
@@ -272,9 +274,10 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
     let ooi_type = Type::Func(FuncType::new([], []));
+
     let uam_type = Type::Func(FuncType::new(
-        [ValType::I32, ValType::I32, ValType::I32],
-        [ValType::I32],
+        [ValType::I64, ValType::I64, ValType::I32],
+        [ValType::I64],
     ));
 
     let ooi_type_idx = add_type(&mut module, ooi_type);
@@ -829,7 +832,7 @@ enum Scope {
 
 // Describes how to calculate the instruction cost at this injection point.
 // `StaticCost` injection points contain information about the cost of the
-// following basic block. `DynamicCost` injection points assume there is an i32
+// following basic block. `DynamicCost` injection points assume there is an i64
 // on the stack which should be decremented from the instruction counter.
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum InjectionPointCostDetail {
@@ -928,16 +931,9 @@ fn inject_metering(code: &mut Vec<Operator>, export_data_module: &SpecialIndices
                 }
             }
             InjectionPointCostDetail::DynamicCost => {
-                elems.extend_from_slice(&[
-                    I64ExtendI32U,
-                    Call {
-                        function_index: export_data_module.decr_instruction_counter_fn,
-                    },
-                    // decr_instruction_counter returns it's argument unchanged,
-                    // so we can convert back to I32 without worrying about
-                    // overflows.
-                    I32WrapI64,
-                ]);
+                elems.extend_from_slice(&[Call {
+                    function_index: export_data_module.decr_instruction_counter_fn,
+                }]);
             }
         }
         last_injection_position = point.position;
@@ -1181,7 +1177,7 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
         // the total number of locals.
         let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
         let memory_local_ix = func_type.params().len() as u32 + n_locals;
-        func_body.locals.push((1, ValType::I32));
+        func_body.locals.push((1, ValType::I64));
 
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
@@ -1285,6 +1281,7 @@ fn get_data(
                     offset_expr,
                 } => match offset_expr {
                     Operator::I32Const { value } => *value as usize,
+                    Operator::I64Const { value } => *value as usize,
                     _ => return Err(WasmInstrumentationError::WasmDeserializeError(WasmError::new(
                         "complex initialization expressions for data segments are not supported!".into()
                     ))),
@@ -1353,7 +1350,7 @@ fn update_memories(
 
     if write_barrier == FlagStatus::Enabled && !module.memories.is_empty() {
         module.memories.push(MemoryType {
-            memory64: false,
+            memory64: true,
             shared: false,
             initial: BYTEMAP_SIZE_IN_WASM_PAGES,
             maximum: Some(BYTEMAP_SIZE_IN_WASM_PAGES),

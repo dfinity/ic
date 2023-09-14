@@ -191,9 +191,8 @@ impl WasmtimeEmbedder {
         {
             config.wasm_multi_memory(true);
         }
-        if embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled {
-            config.wasm_memory64(true);
-        }
+        // Enable 64-bit main memory
+        config.wasm_memory64(true);
         config
             // The maximum size in bytes where a linear memory is considered
             // static. Setting this to maximum Wasm memory size will guarantee
