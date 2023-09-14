@@ -424,7 +424,6 @@ pub struct SplitFrom {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum HttpMethod {
@@ -444,6 +443,16 @@ impl HttpMethod {
             HttpMethod::Get => "HTTP_METHOD_GET",
             HttpMethod::Post => "HTTP_METHOD_POST",
             HttpMethod::Head => "HTTP_METHOD_HEAD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HTTP_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "HTTP_METHOD_GET" => Some(Self::Get),
+            "HTTP_METHOD_POST" => Some(Self::Post),
+            "HTTP_METHOD_HEAD" => Some(Self::Head),
+            _ => None,
         }
     }
 }

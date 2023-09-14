@@ -363,7 +363,6 @@ pub struct EcdsaConfig {
     #[prost(uint64, optional, tag = "6")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum IDkgTranscriptOperation {
@@ -393,11 +392,21 @@ impl IDkgTranscriptOperation {
             }
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED" => Some(Self::Unspecified),
+            "I_DKG_TRANSCRIPT_OPERATION_RANDOM" => Some(Self::Random),
+            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED" => Some(Self::ReshareOfMasked),
+            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED" => Some(Self::ReshareOfUnmasked),
+            "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED" => Some(Self::UnmaskedTimesMasked),
+            _ => None,
+        }
+    }
 }
 /// Represents the type of subnet. Subnets of different type might exhibit different
 /// behavior, e.g. being more restrictive in what operations are allowed or privileged
 /// compared to other subnet types.
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum SubnetType {
@@ -425,9 +434,18 @@ impl SubnetType {
             SubnetType::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SUBNET_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SUBNET_TYPE_APPLICATION" => Some(Self::Application),
+            "SUBNET_TYPE_SYSTEM" => Some(Self::System),
+            "SUBNET_TYPE_VERIFIED_APPLICATION" => Some(Self::VerifiedApplication),
+            _ => None,
+        }
+    }
 }
 /// These modes correspond to milestones in the SEV-SNP development plan.
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum SevFeatureStatus {
@@ -487,6 +505,17 @@ impl SevFeatureStatus {
                 "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED"
             }
             SevFeatureStatus::SecureEnabled => "SEV_FEATURE_STATUS_SECURE_ENABLED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SEV_FEATURE_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "SEV_FEATURE_STATUS_INSECURE_ENABLED" => Some(Self::InsecureEnabled),
+            "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED" => Some(Self::InsecureIntegrityEnabled),
+            "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED" => Some(Self::SecureNoUpgradeEnabled),
+            "SEV_FEATURE_STATUS_SECURE_ENABLED" => Some(Self::SecureEnabled),
+            _ => None,
         }
     }
 }

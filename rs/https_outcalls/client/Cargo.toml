@@ -21,10 +21,10 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = ["process"] }
 slog = "2.7.0"
 tokio = { version = "1.32.0", features = ["full"] }
-tonic = "0.8.2"
+tonic = { workspace = true }
 tower = { version = "0.4.8", features = ["util"] }
 
 [dev-dependencies]

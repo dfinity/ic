@@ -144,7 +144,6 @@ pub struct WasmMethod {
 }
 /// Nested message and enum types in `WasmMethod`.
 pub mod wasm_method {
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum SystemMethod {
@@ -174,6 +173,21 @@ pub mod wasm_method {
                 SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
                 SystemMethod::Empty => "SYSTEM_METHOD_EMPTY",
                 SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "SYSTEM_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+                "SYSTEM_METHOD_CANISTER_START" => Some(Self::CanisterStart),
+                "SYSTEM_METHOD_CANISTER_INIT" => Some(Self::CanisterInit),
+                "SYSTEM_METHOD_CANISTER_PRE_UPGRADE" => Some(Self::CanisterPreUpgrade),
+                "SYSTEM_METHOD_CANISTER_POST_UPGRADE" => Some(Self::CanisterPostUpgrade),
+                "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE" => Some(Self::CanisterInspectMessage),
+                "SYSTEM_METHOD_CANISTER_HEARTBEAT" => Some(Self::CanisterHeartbeat),
+                "SYSTEM_METHOD_EMPTY" => Some(Self::Empty),
+                "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER" => Some(Self::CanisterGlobalTimer),
+                _ => None,
             }
         }
     }
@@ -341,7 +355,6 @@ pub mod execution_task {
             Ingress(super::super::super::super::ingress::v1::Ingress),
         }
     }
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum CanisterTask {
@@ -359,6 +372,15 @@ pub mod execution_task {
                 CanisterTask::Unspecified => "CANISTER_TASK_UNSPECIFIED",
                 CanisterTask::Heartbeat => "CANISTER_TASK_HEARTBEAT",
                 CanisterTask::Timer => "CANISTER_TASK_TIMER",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "CANISTER_TASK_UNSPECIFIED" => Some(Self::Unspecified),
+                "CANISTER_TASK_HEARTBEAT" => Some(Self::Heartbeat),
+                "CANISTER_TASK_TIMER" => Some(Self::Timer),
+                _ => None,
             }
         }
     }
@@ -551,7 +573,6 @@ pub mod canister_state_bits {
         Stopped(super::CanisterStatusStopped),
     }
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CustomSectionType {
@@ -571,8 +592,16 @@ impl CustomSectionType {
             CustomSectionType::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CUSTOM_SECTION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CUSTOM_SECTION_TYPE_PUBLIC" => Some(Self::Public),
+            "CUSTOM_SECTION_TYPE_PRIVATE" => Some(Self::Private),
+            _ => None,
+        }
+    }
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NextScheduledMethod {
@@ -594,8 +623,17 @@ impl NextScheduledMethod {
             NextScheduledMethod::Message => "NEXT_SCHEDULED_METHOD_MESSAGE",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NEXT_SCHEDULED_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "NEXT_SCHEDULED_METHOD_GLOBAL_TIMER" => Some(Self::GlobalTimer),
+            "NEXT_SCHEDULED_METHOD_HEARTBEAT" => Some(Self::Heartbeat),
+            "NEXT_SCHEDULED_METHOD_MESSAGE" => Some(Self::Message),
+            _ => None,
+        }
+    }
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CyclesUseCase {
@@ -633,6 +671,26 @@ impl CyclesUseCase {
             CyclesUseCase::HttpOutcalls => "CYCLES_USE_CASE_HTTP_OUTCALLS",
             CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
             CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CYCLES_USE_CASE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CYCLES_USE_CASE_MEMORY" => Some(Self::Memory),
+            "CYCLES_USE_CASE_COMPUTE_ALLOCATION" => Some(Self::ComputeAllocation),
+            "CYCLES_USE_CASE_INGRESS_INDUCTION" => Some(Self::IngressInduction),
+            "CYCLES_USE_CASE_INSTRUCTIONS" => Some(Self::Instructions),
+            "CYCLES_USE_CASE_REQUEST_AND_RESPONSE_TRANSMISSION" => {
+                Some(Self::RequestAndResponseTransmission)
+            }
+            "CYCLES_USE_CASE_UNINSTALL" => Some(Self::Uninstall),
+            "CYCLES_USE_CASE_CANISTER_CREATION" => Some(Self::CanisterCreation),
+            "CYCLES_USE_CASE_ECDSA_OUTCALLS" => Some(Self::EcdsaOutcalls),
+            "CYCLES_USE_CASE_HTTP_OUTCALLS" => Some(Self::HttpOutcalls),
+            "CYCLES_USE_CASE_DELETED_CANISTERS" => Some(Self::DeletedCanisters),
+            "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
+            _ => None,
         }
     }
 }
