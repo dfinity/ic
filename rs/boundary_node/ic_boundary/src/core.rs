@@ -266,7 +266,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .layer(middleware::from_fn_with_state(
                     HttpMetricParams::new(&registry, "http_request_in"),
                     metrics::with_metrics_middleware,
-                )),
+                ))
+                .layer(middleware::from_fn(routes::postprocess_response)),
         )
     };
 

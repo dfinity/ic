@@ -1,4 +1,4 @@
-use anyhow::{Context, Error};
+use anyhow::{anyhow, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
@@ -10,7 +10,7 @@ use axum::{
     Extension,
 };
 use candid::Principal;
-use http::{request::Parts, Method};
+use http::{header, request::Parts, Method};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -355,6 +355,18 @@ impl From<ErrorCause> for ApiError {
     }
 }
 
+pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
+    let mut resp = next.run(request).await;
+
+    // Set the correct content-type for all replies
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("application/cbor"),
+    );
+
+    resp
+}
+
 // Preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     State(lk): State<Arc<dyn Lookup>>,
@@ -404,10 +416,17 @@ pub async fn status(
         certified_height: None,
     };
 
-    // This shouldn't fail
-    Ok(serde_cbor::to_vec(&response)
-        .context("failed to cbor-encode response")?
-        .into_response())
+    let mut ser = serde_cbor::Serializer::new(Vec::new());
+    ser.self_describe()
+        .map_err(|_| ApiError::Unspecified(anyhow!("unable to add self-describe tag")))?;
+
+    response
+        .serialize(&mut ser)
+        .map_err(|_| ApiError::Unspecified(anyhow!("unable to serialize response to cbor")))?;
+
+    let cbor = ser.into_inner();
+
+    Ok(cbor.into_response())
 }
 
 // Handler for query calls
