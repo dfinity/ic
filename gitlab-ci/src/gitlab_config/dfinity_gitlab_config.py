@@ -61,12 +61,19 @@ class DfinityGitLabConfig:
             self._repo_root_local = pathlib.Path(git_root)
         self.gitlab_url = GITLAB_URL
         self.proj_id = GITLAB_PROJECT_ID
-        if "GITLAB_API_TOKEN" not in os.environ:
-            raise ValueError("Fatal: GITLAB_API_TOKEN env var not set")
-        self._gl = gitlab.Gitlab(self.gitlab_url, private_token=os.environ.get("GITLAB_API_TOKEN"))
         self.ci_cfg = {}
         self.ci_cfg_expanded = {}
         self._ci_cfg_included_file_list = []
+
+    @property
+    def _gl(self):
+        global gitlab_login
+        if not 'gitlab_login' in globals():
+            gitlab_api_token = os.getenv('GITLAB_API_TOKEN')
+            if gitlab_api_token is None:
+                raise ValueError("Fatal: GITLAB_API_TOKEN env var not set")
+            gitlab_login = gitlab.Gitlab(self.gitlab_url, private_token=gitlab_api_token)
+        return gitlab_login
 
     def ci_cfg_reset(self):
         """Reset/clear the CI config."""
