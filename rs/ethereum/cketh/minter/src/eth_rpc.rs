@@ -3,6 +3,7 @@
 
 use crate::address::Address;
 use crate::endpoints::CandidBlockTag;
+use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{TransactionNonce, Wei};
@@ -533,6 +534,7 @@ pub enum ResponseTransform {
     Block,
     LogEntries,
     Transaction,
+    TransactionReceipt,
     FeeHistory,
     SendRawTransaction,
 }
@@ -556,6 +558,7 @@ impl ResponseTransform {
             Self::Block => redact_response::<Block>(body_bytes),
             Self::LogEntries => redact_response::<Vec<LogEntry>>(body_bytes),
             Self::Transaction => redact_response::<Transaction>(body_bytes),
+            Self::TransactionReceipt => redact_response::<TransactionReceipt>(body_bytes),
             Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
             Self::SendRawTransaction => {
                 sanitize_send_raw_transaction_result(body_bytes, Parser::new())

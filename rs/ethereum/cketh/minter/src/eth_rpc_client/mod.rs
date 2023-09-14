@@ -5,6 +5,7 @@ use crate::eth_rpc::{
     SendRawTransactionResult, Transaction,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
+use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{DEBUG, INFO};
 use crate::state::State;
@@ -15,6 +16,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 mod providers;
+pub mod responses;
 
 #[cfg(test)]
 mod tests;
@@ -158,6 +160,20 @@ impl EthRpcClient {
                 "eth_getTransactionByHash",
                 vec![tx_hash],
                 ResponseSizeEstimate::new(1200),
+            )
+            .await;
+        results.reduce_with_equality()
+    }
+
+    pub async fn eth_get_transaction_receipt(
+        &self,
+        tx_hash: Hash,
+    ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
+        let results: MultiCallResults<Option<TransactionReceipt>> = self
+            .parallel_call(
+                "eth_getTransactionReceipt",
+                vec![tx_hash],
+                ResponseSizeEstimate::new(700),
             )
             .await;
         results.reduce_with_equality()
