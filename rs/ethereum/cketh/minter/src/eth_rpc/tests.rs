@@ -1,14 +1,17 @@
 use super::*;
 
-fn check_response_normalization(transform: ResponseTransform, left: &str, right: &str) {
+fn check_response_normalization<O: HttpResponsePayload>(left: &str, right: &str) {
     fn add_envelope(reply: &str) -> Vec<u8> {
         format!("{{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {}}}", reply).into_bytes()
     }
 
     let mut left = add_envelope(left);
     let mut right = add_envelope(right);
-    transform.apply(&mut left);
-    transform.apply(&mut right);
+    let maybe_transform = O::response_transform();
+    if let Some(transform) = maybe_transform {
+        transform.apply(&mut left);
+        transform.apply(&mut right);
+    }
     let left_string = String::from_utf8(left).unwrap();
     let right_string = String::from_utf8(right).unwrap();
     assert_eq!(left_string, right_string);
@@ -16,8 +19,7 @@ fn check_response_normalization(transform: ResponseTransform, left: &str, right:
 
 #[test]
 fn tx_normalization() {
-    check_response_normalization(
-        ResponseTransform::Transaction,
+    check_response_normalization::<Transaction>(
         r#"{
         "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
         "blockNumber": "0x3ca487",
@@ -65,8 +67,7 @@ fn tx_normalization() {
 
 #[test]
 fn fee_history_normalization() {
-    check_response_normalization(
-        ResponseTransform::FeeHistory,
+    check_response_normalization::<FeeHistory>(
         r#"{
         "baseFeePerGas": [
             "0x729d3f3b3",
@@ -162,8 +163,7 @@ fn fee_history_normalization() {
 
 #[test]
 fn block_normalization() {
-    check_response_normalization(
-        ResponseTransform::Block,
+    check_response_normalization::<Block>(
         r#"{
         "number": "0x10eb3c6",
         "hash": "0x85db6d6ad071d127795df4c5f1b04863629d7c2832c89550aa2771bf81c40c85",
@@ -233,4 +233,74 @@ fn block_normalization() {
         "withdrawalsRoot": "0xedaa8043cdce8101ef827863eb0d808277d200a7a0ee77961934bd235dcb82c6"
     }"#,
     )
+}
+
+#[test]
+fn eth_get_logs_normalization() {
+    check_response_normalization::<Vec<LogEntry>>(
+        r#"[
+        {
+            "transactionHash": "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
+            "logIndex": "0x1d",
+            "blockHash": "0x4205f2436ee7a90aa87a88ae6914ec6860971360995f463602a40803bff98f4d",
+            "blockNumber": "0x3c6f2f",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "removed": false,
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+            ],
+            "transactionIndex": "0x1f"
+        },
+        {
+            "removed": false,
+            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
+            "blockNumber": "0x3ca487",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "logIndex": "0x27",
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
+            ],
+            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            "transactionIndex": "0x22"
+        }
+    ]"#,
+        r#"[
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": "0x4205f2436ee7a90aa87a88ae6914ec6860971360995f463602a40803bff98f4d",
+            "blockNumber": "0x3c6f2f",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "logIndex": "0x1d",
+            "removed": false,
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+            ],
+            "transactionHash": "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
+            "transactionIndex": "0x1f"
+        },
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
+            "blockNumber": "0x3ca487",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "logIndex": "0x27",
+            "removed": false,
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
+            ],
+            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            "transactionIndex": "0x22"
+        }
+    ]"#,
+    );
 }
