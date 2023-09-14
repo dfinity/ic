@@ -91,22 +91,33 @@ struct ValidationInProgress {
 impl ValidationInProgress {
     fn new(now: u64) -> Self {
         let mut tasks: VecDeque<Box<dyn ValidationTask>> = VecDeque::new();
-        tasks.push_back(Box::new((
-            CardinalitiesValidationTask::<SubaccountIndexValidator>::new(),
-            NeuronRangeValidationTask::<SubaccountIndexValidator>::new(),
-        )));
-        tasks.push_back(Box::new((
-            CardinalitiesValidationTask::<PrincipalIndexValidator>::new(),
+        tasks.push_back(Box::new(NeuronRangeValidationTask::<
+            SubaccountIndexValidator,
+        >::new()));
+        tasks.push_back(Box::new(CardinalitiesValidationTask::<
+            SubaccountIndexValidator,
+        >::new()));
+
+        tasks.push_back(Box::new(
             NeuronRangeValidationTask::<PrincipalIndexValidator>::new(),
-        )));
-        tasks.push_back(Box::new((
-            CardinalitiesValidationTask::<FollowingIndexValidator>::new(),
+        ));
+        tasks.push_back(Box::new(CardinalitiesValidationTask::<
+            PrincipalIndexValidator,
+        >::new()));
+
+        tasks.push_back(Box::new(
             NeuronRangeValidationTask::<FollowingIndexValidator>::new(),
-        )));
-        tasks.push_back(Box::new((
-            CardinalitiesValidationTask::<KnownNeuronIndexValidator>::new(),
-            NeuronRangeValidationTask::<KnownNeuronIndexValidator>::new(),
-        )));
+        ));
+        tasks.push_back(Box::new(CardinalitiesValidationTask::<
+            FollowingIndexValidator,
+        >::new()));
+
+        tasks.push_back(Box::new(NeuronRangeValidationTask::<
+            KnownNeuronIndexValidator,
+        >::new()));
+        tasks.push_back(Box::new(CardinalitiesValidationTask::<
+            KnownNeuronIndexValidator,
+        >::new()));
 
         Self {
             started_time_seconds: now,
@@ -152,24 +163,6 @@ trait ValidationTask {
 
     /// Performs the next chunk of validation.
     fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Option<ValidationIssue>;
-}
-
-/// (A, B) should be a ValidationTask if both are.
-impl<A: ValidationTask, B: ValidationTask> ValidationTask for (A, B) {
-    fn is_done(&self) -> bool {
-        self.0.is_done() && self.1.is_done()
-    }
-
-    fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        if !self.0.is_done() {
-            return self.0.validate_next_chunk(neuron_store);
-        }
-        if !self.1.is_done() {
-            return self.1.validate_next_chunk(neuron_store);
-        }
-        println!("validate_next_chunk should not be called when is_done() is true");
-        None
-    }
 }
 
 /// A list of tasks should also be a (composed) task.
