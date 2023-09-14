@@ -1,7 +1,7 @@
 #![allow(unused)] // TODO(NNS1-2409): Re-enable once we add code to migrate indexes.
 
 use crate::{
-    known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex},
+    known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
     neuron_store::NeuronStoreError,
     pb::v1::Neuron,
     storage::Signed32,
@@ -434,34 +434,31 @@ where
     }
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
+        // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
+        let neuron_id = existing_neuron.id.expect("Neuron must have an id");
         let known_neuron_name = match existing_neuron.known_neuron_data.as_ref() {
             Some(known_neuron_data) => &known_neuron_data.name,
             // This is fine. Only some (a small number) of Neurons are known.
             None => return Ok(()),
         };
 
-        let removed_neuron_id = self.remove_known_neuron(known_neuron_name);
-        match removed_neuron_id {
-            None => Err(NeuronIndexDefect::KnownNeuron {
-                reason: format!(
-                    "Known neuron name {} already absent from the index",
-                    known_neuron_name
-                ),
-            }),
-            Some(removed_neuron_id) => {
-                // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
-                if removed_neuron_id == existing_neuron.id.expect("Neuron must have an id") {
-                    Ok(())
-                } else {
-                    Err(NeuronIndexDefect::KnownNeuron {
+        self.remove_known_neuron(known_neuron_name, neuron_id)
+            .map_err(|error| match error {
+                RemoveKnownNeuronError::AlreadyAbsent => NeuronIndexDefect::KnownNeuron {
+                    reason: format!(
+                        "Known neuron name {} cannot be removed as it does not exist",
+                        known_neuron_name
+                    ),
+                },
+                RemoveKnownNeuronError::NameExistsWithDifferentNeuronId(existing_neuron_id) => {
+                    NeuronIndexDefect::KnownNeuron {
                         reason: format!(
-                            "Known neuron name {} existed for another neuron {:?}",
-                            known_neuron_name, removed_neuron_id
+                            "Known neuron name {} exists for a different neuron id {}",
+                            known_neuron_name, existing_neuron_id.id
                         ),
-                    })
+                    }
                 }
-            }
-        }
+            })
     }
 
     fn update_neuron(
