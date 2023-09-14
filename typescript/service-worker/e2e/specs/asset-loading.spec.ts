@@ -5,6 +5,7 @@ import {
   runInBrowser,
   waitForServiceWorkerUpgrade,
   env,
+  loadSampleAssetUnderLoad,
 } from '../utils';
 
 const { baseUrl, swPath, currentSwPath, latestSwPath, previousSwPath } = env;
@@ -23,7 +24,10 @@ it('should load sample asset', async () => {
 
     console.log('\n\nDeploying latest service worker...');
     await deployServiceWorker(latestSwPath, swPath);
-    await waitForServiceWorkerUpgrade(browser);
+    await Promise.all([
+      await waitForServiceWorkerUpgrade(browser),
+      await loadSampleAssetUnderLoad(browser),
+    ]);
 
     console.log('Running tests...');
     contentElem = await loadSampleAsset(browser);
@@ -31,7 +35,10 @@ it('should load sample asset', async () => {
 
     console.log('\n\nDeploying current service worker...');
     await deployServiceWorker(currentSwPath, swPath);
-    await waitForServiceWorkerUpgrade(browser);
+    await Promise.all([
+      await waitForServiceWorkerUpgrade(browser),
+      await loadSampleAssetUnderLoad(browser),
+    ]);
 
     console.log('Running tests...');
     contentElem = await loadSampleAsset(browser);
@@ -39,7 +46,10 @@ it('should load sample asset', async () => {
 
     console.log('\n\nDeploying previous service worker...');
     await deployServiceWorker(previousSwPath, swPath);
-    await waitForServiceWorkerUpgrade(browser);
+    await Promise.all([
+      await waitForServiceWorkerUpgrade(browser),
+      await loadSampleAssetUnderLoad(browser),
+    ]);
 
     console.log('Running tests...');
     contentElem = await loadSampleAsset(browser);
@@ -47,7 +57,10 @@ it('should load sample asset', async () => {
 
     console.log('\n\nDeploying current service worker...');
     await deployServiceWorker(currentSwPath, swPath);
-    await waitForServiceWorkerUpgrade(browser);
+    await Promise.all([
+      await waitForServiceWorkerUpgrade(browser),
+      await loadSampleAssetUnderLoad(browser),
+    ]);
 
     console.log('Running tests...');
     contentElem = await loadSampleAsset(browser);
