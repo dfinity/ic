@@ -661,7 +661,7 @@ pub fn process(
 
     let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
     let wasm_heap_limit =
-        NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
+        NumWasmPages::from(wasmtime_environ::WASM64_MAX_PAGES as usize) - wasm_reserved_pages;
 
     if wasm_heap_size_after > wasm_heap_limit {
         wasm_result = Err(HypervisorError::WasmReservedPages);

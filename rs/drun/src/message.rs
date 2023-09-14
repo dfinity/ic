@@ -255,7 +255,7 @@ fn parse_install(
                 wasm_data,
                 payload,
                 None,
-                Some(8 * 1024 * 1024 * 1024), // drun users dont care about memory limits
+                None,
                 None,
                 Some(KEEP_MAIN_MEMORY_ON_UPGRADE),
             )

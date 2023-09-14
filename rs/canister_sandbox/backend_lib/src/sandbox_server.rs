@@ -165,6 +165,7 @@ mod tests {
         methods::{FuncRef, WasmMethod},
         time::Time,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        MAX_WASM_MEMORY_IN_BYTES,
     };
     use mockall::*;
     use std::collections::{BTreeMap, BTreeSet};
@@ -180,7 +181,7 @@ mod tests {
                 NumInstructions::new(INSTRUCTION_LIMIT),
                 NumInstructions::new(INSTRUCTION_LIMIT),
             ),
-            canister_memory_limit: NumBytes::new(4 << 30),
+            canister_memory_limit: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
