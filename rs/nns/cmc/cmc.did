@@ -123,7 +123,7 @@ type CyclesCanisterInitPayload = record {
 };
 
 service : (opt CyclesCanisterInitPayload) -> {
-  // Propmts the cycles minting canister to process a payment by converting ICP
+  // Prompts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
   notify_top_up : (NotifyTopUpArg) -> (NotifyTopUpResult);
 

@@ -325,7 +325,7 @@ fn test_single_neuron_proposal_new() {
 /// To simplify test setup:
 /// - The rejection fee is set to zero
 /// - all votes happen at proposal creation time.
-/// - uses an arbtrary duration for proposal expiration time.
+/// - uses an arbitrary duration for proposal expiration time.
 fn check_proposal_status_after_voting_and_after_expiration(
     neurons: impl IntoIterator<Item = Neuron>,
     behavior: impl Into<fake::ProposalNeuronBehavior>,
@@ -1617,7 +1617,7 @@ async fn test_follow_negative() {
         Vote::No,
     );
 
-    // Now proccess the proposals: neurons 2, 3, 4, 5, 6 have voted no (5/9)
+    // Now process the proposals: neurons 2, 3, 4, 5, 6 have voted no (5/9)
     gov.run_periodic_tasks().now_or_never();
     // The proposal should now be rejected.
     assert_eq!(
@@ -2117,7 +2117,7 @@ async fn test_manage_neuron() {
     )
     .await
     .unwrap();
-    // Now proccess the proposals: proposal should be executed as
+    // Now process the proposals: proposal should be executed as
     // neuron 2 is the sole followee of neuron 1 on the manage neuron
     // topic.
     gov.run_periodic_tasks().now_or_never();
@@ -2860,7 +2860,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
             day_after_genesis: 1,
             actual_timestamp_seconds: fake_driver.now(),
             settled_proposals: vec![ProposalId { id: 1 }],
-            // We should have distrubuted 100 e8 equivalent if all voters still existed.
+            // We should have distributed 100 e8 equivalent if all voters still existed.
             // Since neuron 999 is gone and had a voting power 3x that of neuron 2,
             // only 1/4 is actually distributed.
             distributed_e8s_equivalent: 25,
@@ -3087,7 +3087,7 @@ async fn test_genesis_in_the_future_in_supported() {
     // Let's go just at the time we should create the first reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     gov.run_periodic_tasks().now_or_never();
-    // This time, the other long proposal submitted before genesis shoud be
+    // This time, the other long proposal submitted before genesis should be
     // considered
     assert_eq!(
         *gov.latest_reward_event(),
@@ -4198,7 +4198,7 @@ fn test_nns1_520() {
 }
 
 #[test]
-fn test_disburse_to_main_acccount() {
+fn test_disburse_to_main_account() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
     let id = neuron.id.unwrap();
@@ -4390,7 +4390,7 @@ fn claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: PrincipalId) 
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 }
 
-/// Like the above, but explicitely sets the controller in the MemoAndController
+/// Like the above, but explicitly sets the controller in the MemoAndController
 /// struct.
 #[test]
 fn test_claim_neuron_memo_and_controller_by_controller() {
@@ -7520,7 +7520,7 @@ fn test_list_proposals() {
     );
 }
 
-// A proposal with resticted voting is included only if the caller is allowed
+// A proposal with restricted voting is included only if the caller is allowed
 // to vote on the proposal.
 #[test]
 fn test_filter_proposals_neuron_visibility() {
@@ -7998,7 +7998,7 @@ fn test_filter_proposals_excluding_topics() {
     );
 }
 
-// Only shows votes from neurons that the caller either controlls
+// Only shows votes from neurons that the caller either controls
 // or is a registered hot key for.
 #[test]
 fn test_filter_proposal_ballots() {
@@ -9514,7 +9514,7 @@ fn test_update_node_provider() {
         .unwrap_err();
     assert_eq!(err.error_type, ErrorType::PreconditionFailed as i32);
 
-    // Attempting to update a non-existant Node Provider with a valid reward account
+    // Attempting to update a non-existent Node Provider with a valid reward account
     // should fail
     let err = gov
         .update_node_provider(&PrincipalId::new_anonymous(), update_np)
@@ -9545,7 +9545,7 @@ fn increase_dissolve_delay(
 /// * A non dissolving neuron and an increment lower than the maximum one.
 /// * A non dissolving neuron and an increment higher than the maximum one.
 /// * A dissolving neuron and an increment lower than the maximum one.
-/// * A dissolving neuron and an increment higher than the maximun one.
+/// * A dissolving neuron and an increment higher than the maximum one.
 /// * A dissolved neuron.
 #[test]
 fn test_increase_dissolve_delay() {
@@ -12798,7 +12798,7 @@ async fn test_proposal_url_not_on_list_fails() {
 }
 
 #[tokio::test]
-async fn make_open_sns_token_swap_proposals_concurrently_targetting_the_same_sns() {
+async fn make_open_sns_token_swap_proposals_concurrently_targeting_the_same_sns() {
     let proposal = Proposal {
         title: Some("Put Widget Dapp Under SNS Control".to_string()),
         url: "https://forum.dfinity.org/why-the-widget-sns-will-be-epic".to_string(),
@@ -12823,7 +12823,7 @@ async fn make_open_sns_token_swap_proposals_concurrently_targetting_the_same_sns
 }
 
 #[tokio::test]
-async fn make_open_sns_token_swap_proposals_concurrently_targetting_different_snses() {
+async fn make_open_sns_token_swap_proposals_concurrently_targeting_different_snses() {
     let proposal_1 = Proposal {
         title: Some("Put Widget Dapp Under SNS Control".to_string()),
         url: "https://forum.dfinity.org/why-the-widget-sns-will-be-epic".to_string(),

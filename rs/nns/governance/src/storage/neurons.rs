@@ -605,7 +605,7 @@ lazy_static! {
 ///
 /// Of course, a similar effect can be achieved "manually" by calling
 /// std::mem::take on each of the auxiliary fields, but that is error prone,
-/// because it is very easy forget to take one of the auxilliary fields. By
+/// because it is very easy to forget to take one of the auxiliary fields. By
 /// sticking to this, such mistakes can be avoided.
 ///
 /// Notice that full_neuron in the above example gets consumed. It is "replaced"

@@ -134,7 +134,7 @@ fn test_time_warp() {
         );
 
         // Advance time slightly (200 s) such that that the neuron should be fully
-        // disolved.
+        // dissolved.
         delta_s += 200;
         nns_canisters
             .governance

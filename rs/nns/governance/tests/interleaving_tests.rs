@@ -4,7 +4,7 @@
 use crate::interleaving::{
     drain_receiver_channel,
     test_data::{
-        CREATE_SERVICE_NERVOUS_SYSYEM_PROPOSAL, GET_SNS_CANISTERS_SUMMARY_RESPONSE,
+        CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL, GET_SNS_CANISTERS_SUMMARY_RESPONSE,
         GET_STATE_RESPONSE, LIST_DEPLOYED_SNSES_RESPONSE, OPEN_SNS_TOKEN_SWAP_PROPOSAL,
     },
     EnvironmentControlMessage, InterleavingTestEnvironment,
@@ -383,7 +383,7 @@ fn test_open_sns_token_swap_proposals_block_other_sns_proposals() {
     // While the other proposal is awaiting response from another canister, try to submit
     // another CreateServiceNervousSystem proposal.
     atomic::fence(AOrdering::SeqCst);
-    let proposal = CREATE_SERVICE_NERVOUS_SYSYEM_PROPOSAL.clone();
+    let proposal = CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL.clone();
     let make_proposal_result = unsafe { &mut *raw_ptr }
         .governance
         .make_proposal(&neuron_id, &owner, &proposal)

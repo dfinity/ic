@@ -224,7 +224,7 @@ impl NeuronBasketConstructionParameters {
 ///
 /// More precisely, result.len() == len. result.sum() == total. Each element of
 /// result is approximately equal to the others. However, unless len divides
-/// total evenly, the elements of result will inevitabley be not equal.
+/// total evenly, the elements of result will inevitably be not equal.
 ///
 /// There are two ways that Err can be returned:
 ///
@@ -445,7 +445,7 @@ impl Swap {
         if self.auto_finalize_swap_response.is_some() {
             log!(
                 ERROR,
-                "Somehow, auto-finalization happend twice (second time at {}). Overriding self.auto_finalize_swap_response, old value was: {:?}",
+                "Somehow, auto-finalization happened twice (second time at {}). Overriding self.auto_finalize_swap_response, old value was: {:?}",
                 now_fn(true),
                 auto_finalize_swap_response,
             );

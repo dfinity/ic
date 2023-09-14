@@ -977,7 +977,7 @@ pub struct NervousSystemParameters {
     /// The max number of proposals for which ballots are still stored, i.e.,
     /// unsettled proposals. If this number of proposals is reached, new proposals
     /// can only be added in exceptional cases (for few proposals it is defined
-    /// that they are allowed even if resoures are low to guarantee that the relevant
+    /// that they are allowed even if resources are low to guarantee that the relevant
     /// canisters can be upgraded).
     ///
     /// This number must be larger than zero and at most as large as the defined
@@ -1046,7 +1046,7 @@ pub struct VotingRewardsParameters {
     /// periodic, but actual inter-reward periods are generally expected to be
     /// within a few seconds of this.
     ///
-    /// This supercedes super.reward_distribution_period_seconds.
+    /// This supersedes super.reward_distribution_period_seconds.
     #[prost(uint64, optional, tag = "1")]
     pub round_duration_seconds: ::core::option::Option<u64>,
     /// The amount of time that the growth rate changes (presumably, decreases)
@@ -1162,7 +1162,7 @@ pub struct RewardEvent {
     #[prost(uint64, optional, tag = "6")]
     pub rounds_since_last_distribution: ::core::option::Option<u64>,
 }
-/// The representation of the whole governance system, containting all
+/// The representation of the whole governance system, containing all
 /// information about the governance system that must be kept
 /// across upgrades of the governance system, i.e. kept in stable memory.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1275,8 +1275,8 @@ pub mod governance {
     /// Nested message and enum types in `NeuronInFlightCommand`.
     pub mod neuron_in_flight_command {
         /// A general place holder for sync commands. The neuron lock is
-        /// never left holding a sync command (as it either suceeds to
-        /// aquire the lock and releases it in the same call, or never
+        /// never left holding a sync command (as it either succeeds to
+        /// acquire the lock and releases it in the same call, or never
         /// acquires it in the first place), but it still must be acquired
         /// to prevent interleaving with another async command. Thus there's
         /// no value in actually storing the command itself, and this placeholder

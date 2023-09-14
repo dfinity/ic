@@ -92,7 +92,7 @@ lazy_static! {
             community_fund_investment_e8s: Some(0),
         })),
     };
-    pub(crate) static ref CREATE_SERVICE_NERVOUS_SYSYEM_PROPOSAL: Proposal = Proposal {
+    pub(crate) static ref CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL: Proposal = Proposal {
         title: Some("CSNS Proposal".to_string()),
         summary: "Summary of the proposal".to_string(),
         url: "".to_string(),
@@ -100,7 +100,7 @@ lazy_static! {
             CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
         ))
     };
-    pub static ref DEPLOY_NEW_SNS_REPONSE: DeployNewSnsResponse = DeployNewSnsResponse {
+    pub static ref DEPLOY_NEW_SNS_RESPONSE: DeployNewSnsResponse = DeployNewSnsResponse {
         canisters: Some(SnsCanisterIds {
             root: Some(SNS_ROOT_CANISTER_ID.get()),
             ledger: Some(SNS_LEDGER_CANISTER_ID.get()),

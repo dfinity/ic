@@ -655,7 +655,7 @@ message SetDefaultFollowees {
   map<int32, Neuron.Followees> default_followees = 1;
 }
 
-// Obsolete. Superceded by OpenSnsTokenSwap.
+// Obsolete. Superseded by OpenSnsTokenSwap.
 message SetSnsTokenSwapOpenTimeWindow {
   // The swap canister to send the request to.
   ic_base_types.pb.v1.PrincipalId swap_canister_id = 1;
@@ -1116,7 +1116,7 @@ message GovernanceError {
     // The proposal is defective in some way (e.g. title is too long). If the
     // same proposal is submitted again without modification, it will be
     // rejected regardless of changes in the system's state (e.g. increasing
-    // the neuron's desolve delay will not make the proposal acceptable).
+    // the neuron's dissolve delay will not make the proposal acceptable).
     ERROR_TYPE_INVALID_PROPOSAL = 16;
     // The neuron attempted to join the community fund while already
     // a member.

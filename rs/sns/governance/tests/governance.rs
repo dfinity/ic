@@ -615,7 +615,7 @@ fn test_disburse_maturity_fails_if_invalid_percentage_to_disburse() {
 ///
 /// This test sets up a GovernanceCanisterFixture, then sets up an exhaustive pair of manage_neuron
 /// requests and expected responses, and then calls manage_neuron for each request/response pair
-/// and asserts that the actual reponse is equal to the expected response.
+/// and asserts that the actual response is equal to the expected response.
 #[test]
 fn test_vesting_neuron_manage_neuron_operations() {
     use manage_neuron::Command;

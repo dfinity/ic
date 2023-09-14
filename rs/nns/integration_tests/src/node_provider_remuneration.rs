@@ -273,7 +273,7 @@ fn test_automated_node_provider_remuneration() {
 
         assert!(
             !rewards_were_triggered,
-            "Automated rewards were trigerred even though less than 1 month has passed."
+            "Automated rewards were triggered even though less than 1 month has passed."
         );
 
         // Assert account balances haven't changed
@@ -327,7 +327,7 @@ fn test_automated_node_provider_remuneration() {
 
         assert!(
             rewards_were_triggered,
-            "Automated rewards were not trigerred even though more than 1 month has passed."
+            "Automated rewards were not triggered even though more than 1 month has passed."
         );
 
         assert_ne!(

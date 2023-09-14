@@ -444,7 +444,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
             RootProposalBallot::Yes,
         )
         .await
-        .expect_err("Should have returned an eror")
+        .expect_err("Should have returned an error")
         .contains("Expected governance wasm sha must match");
 
         Ok(())

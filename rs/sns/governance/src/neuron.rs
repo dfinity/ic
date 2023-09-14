@@ -526,7 +526,7 @@ impl Neuron {
     /// for the voting power calculation.
     ///
     /// It it is determined as the sum of staked tokens and staked maturity
-    /// minus fees occured for rejected proposals made by this neuron.
+    /// minus fees occurred for rejected proposals made by this neuron.
     fn voting_power_stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
             .saturating_sub(self.neuron_fees_e8s)
@@ -978,7 +978,7 @@ mod tests {
         }
 
         /// Tests that the voting power is not increased when the neuron meets
-        /// neither bonus criteria (age or disolve delay)
+        /// neither bonus criteria (age or dissolve delay)
         #[test]
         fn test_voting_power_not_eligible_for_boost(
             base_stake in 0u64..1_000_000,

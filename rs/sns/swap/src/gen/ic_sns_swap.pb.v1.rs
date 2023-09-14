@@ -13,7 +13,7 @@
 ///                                                                      sufficient_participation
 ///                                                                      && (swap_due || icp_target_reached)
 /// PENDING -------------------> ADOPTED ---------------------> OPEN -----------------------------------------> COMMITTED
-///          Swap recieves a request        The opening delay      |                                                |
+///          Swap receives a request        The opening delay      |                                                |
 ///          from NNS governance to         has elapsed            | not sufficient_participation                   |
 ///          schedule opening                                      | && (swap_due || icp_target_reached)            |
 ///                                                                v                                                v

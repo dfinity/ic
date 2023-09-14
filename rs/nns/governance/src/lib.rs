@@ -164,7 +164,7 @@ impl Metric for u64 {
     }
 }
 
-/// Helper function that encodes neuron-related gauge vector metrics groupped into the following buckets:
+/// Helper function that encodes neuron-related gauge vector metrics grouped into the following buckets:
 /// forall n: Neuron.
 ///     n in bucket_0 <==>        0 <= dissolve_delay(n) < 6 months
 ///     n in bucket_1 <==> 6 months <= dissolve_delay(n) < 12 months

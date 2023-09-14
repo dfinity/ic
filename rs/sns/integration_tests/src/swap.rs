@@ -2161,7 +2161,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
         }
     }
 
-    // Analogous to the previous loop, insepct the source_nns_neuron_id field,
+    // Analogous to the previous loop, inspect the source_nns_neuron_id field,
     // but this time, in non-Community Fund neurons.
     for principal_id in direct_participant_principal_ids {
         let mut sns_neurons = sns_governance_list_neurons(
@@ -2783,7 +2783,7 @@ fn test_deletion_of_sale_ticket_legacy() {
         .get_e8s()
     );
 
-    //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successfull --> the ticket should no longer exist afterwards
+    //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successful --> the ticket should no longer exist afterwards
     let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
@@ -2878,7 +2878,7 @@ fn test_deletion_of_sale_ticket_legacy() {
     )
     .is_ok());
 
-    // Refresh tokens so ticket is deleted: Call is successfull and the existing ticket is deleted.
+    // Refresh tokens so ticket is deleted: Call is successful and the existing ticket is deleted.
     let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),

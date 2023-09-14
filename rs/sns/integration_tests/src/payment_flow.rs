@@ -912,7 +912,7 @@ fn test_maximum_reached() {
 }
 
 #[test]
-fn test_committment_below_participant_minimum() {
+fn test_commitment_below_participant_minimum() {
     let user0 = PrincipalId::new_user_test_id(0);
     let user1 = PrincipalId::new_user_test_id(1);
     let user2 = PrincipalId::new_user_test_id(2);
@@ -1022,7 +1022,7 @@ fn test_committment_below_participant_minimum() {
         .refresh_buyer_tokens(&user0, None)
         .is_ok());
 
-    //Check that user1's purchase was registerred
+    //Check that user1's purchase was registered
     assert_eq!(
         payment_flow_protocol
             .get_buyer_state(&user1)
@@ -1033,10 +1033,10 @@ fn test_committment_below_participant_minimum() {
         amount1_0.clone()
     );
 
-    // Check that user2's purchase was not registerred
+    // Check that user2's purchase was not registered
     assert!(payment_flow_protocol.get_buyer_state(&user2).is_none());
 
-    // Check that user0's purchase was registerred and that he has bought the tokens left in the sale
+    // Check that user0's purchase was registered and that he has bought the tokens left in the sale
     assert_eq!(
         payment_flow_protocol
             .get_buyer_state(&user0)

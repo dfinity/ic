@@ -157,7 +157,7 @@ impl governance::Mode {
     ///
     /// # Arguments
     /// * `action` Value in the action field of a Proposal. This function
-    ///   determins whether to allow submission of the proposal.
+    ///   determines whether to allow submission of the proposal.
     /// * `disallowed_target_canister_ids`: When the action is a
     ///   ExecuteGenericNervousSystemFunction, the target of the function cannot
     ///   be one of these canisters. Generally, this would contain the ID of the
@@ -2533,7 +2533,7 @@ pub(crate) mod tests {
                 Action::TransferSnsTreasuryFunds(Default::default())
             ];
 
-            // Conditionally allow: No targetting SNS canisters.
+            // Conditionally allow: No targeting SNS canisters.
             fn execute(function_id: u64) -> Action {
                 Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
                     function_id,

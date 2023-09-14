@@ -421,7 +421,7 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
         "ledger" => SnsCanisterType::Ledger,
         "swap" => SnsCanisterType::Swap,
         "index" => SnsCanisterType::Index,
-        _ => panic!("Uknown canister type."),
+        _ => panic!("Unknown canister type."),
     };
 
     let add_sns_wasm_request = AddWasmRequest {
@@ -549,7 +549,7 @@ fn use_test_neuron_1_owner_identity(
 }
 
 fn import_test_neuron_1_owner() -> Result<(), String> {
-    // Step 1: Save secret key belonging to TEST_NEURON_1_ONWER to a (temporary) pem file.
+    // Step 1: Save secret key belonging to TEST_NEURON_1_OWNER to a (temporary) pem file.
     let contents: String = TEST_NEURON_1_OWNER_KEYPAIR.to_pem();
     let mut pem_file = NamedTempFile::new().expect("Unable to create a temporary file.");
     pem_file
@@ -844,7 +844,7 @@ impl<'a> RunCommandError<'a> {
                 RunCommandError::new_unable_to_run_command_report(command, error)
             }
             RunCommandError::UnsuccessfulExit { command, output } => {
-                RunCommandError::new_unsuccesful_exit_report(command, output)
+                RunCommandError::new_unsuccessful_exit_report(command, output)
             }
         }
     }
@@ -864,7 +864,7 @@ impl<'a> RunCommandError<'a> {
         )
     }
 
-    fn new_unsuccesful_exit_report(command: &[&str], output: &std::process::Output) -> String {
+    fn new_unsuccessful_exit_report(command: &[&str], output: &std::process::Output) -> String {
         let std::process::Output {
             status,
             stdout,

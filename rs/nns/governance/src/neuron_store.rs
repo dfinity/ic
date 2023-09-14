@@ -422,7 +422,7 @@ impl NeuronStore {
     /// needs some help from self to scan a range of heap neurons based on begin, and limit
     /// (i.e. batch size). That functionality is provided by heap_neurons_range_with_begin_and_limit
     ///
-    // Alternatively, we could have caller (Governance) pass the auxilliary data, and make
+    // Alternatively, we could have caller (Governance) pass the auxiliary data, and make
     // neuron_can_be_archived independent of Governance, by having it take the data it needs, rather
     // than have all of Governance at its disposal. need-to-know for the win!
     #[allow(dead_code)]

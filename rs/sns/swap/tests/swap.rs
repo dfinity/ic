@@ -1746,7 +1746,7 @@ fn test_error_refund_single_user() {
             ..params()
         };
         let mut swap = Swap::new(init());
-        // Swap is not open and therefore cannot be commited
+        // Swap is not open and therefore cannot be committed
         assert_eq!(swap.lifecycle(), Pending);
         assert!(!swap.can_commit(params.swap_due_timestamp_seconds));
 
@@ -1772,7 +1772,7 @@ fn test_error_refund_single_user() {
         // Verify that SNS Swap canister registered the tokens
         assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
-        // User has not commited yet --> No neuron has been created
+        // User has not committed yet --> No neuron has been created
         assert!(std::panic::catch_unwind(|| verify_participant_balances(
             &swap,
             &user1,
@@ -1781,7 +1781,7 @@ fn test_error_refund_single_user() {
         ))
         .is_err());
 
-        // User has not commited yet --> Cannot get a refund
+        // User has not committed yet --> Cannot get a refund
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -1805,7 +1805,7 @@ fn test_error_refund_single_user() {
         // The life cycle should have changed to COMMITTED
         assert_eq!(swap.lifecycle(), Committed);
 
-        // Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
+        // Now that the lifecycle has changed to committed, the neurons for the buyers should have been generated
         verify_participant_balances(
             &swap,
             &user1,
@@ -2070,7 +2070,7 @@ fn test_error_refund_after_close() {
         //The life cycle should have changed to COMMITTED
         assert_eq!(swap.lifecycle(), Committed);
 
-        //Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
+        //Now that the lifecycle has changed to committed, the neurons for the buyers should have been generated
         verify_participant_balances(
             &swap,
             &user1,
@@ -4259,7 +4259,7 @@ fn test_refresh_buyer_tokens() {
         let amount_user2_0 = 35 * E8;
         let mut swap = Swap::new(init());
 
-        // Make sure tokens can only be commited once the swap is open
+        // Make sure tokens can only be committed once the swap is open
         assert!(swap
             .refresh_buyer_token_e8s(user1, None, SWAP_CANISTER_ID, &mock_stub(vec![]))
             .now_or_never()
@@ -4269,13 +4269,13 @@ fn test_refresh_buyer_tokens() {
         //Open the swap
         open_swap(&mut swap, &params);
 
-        // Makse sure user1 has not committed any users yet
+        // Make sure user1 has not committed any users yet
         assert!(!swap.buyers.contains_key(&user1.to_string()));
 
         buy_token_ok(&mut swap, &user1, &amount_user1_0, &amount_user1_0);
 
-        // Make sure user1's committment is reflected in the buyers state
-        // Total commited balance should be that of user1
+        // Make sure user1's commitment is reflected in the buyers state
+        // Total committed balance should be that of user1
         check_final_conditions(&mut swap, &user1, &(amount_user1_0), &(amount_user1_0));
 
         // Commit another 35 ICP
@@ -4297,8 +4297,8 @@ fn test_refresh_buyer_tokens() {
             &(amount_user1_0 + amount_user1_1),
         );
 
-        // Makse sure user1's committmend is reflected in the buyers state
-        // Total commited balance should be that of user1 + user2
+        // Make sure user1's committmend is reflected in the buyers state
+        // Total committed balance should be that of user1 + user2
         check_final_conditions(
             &mut swap,
             &user1,
@@ -4492,7 +4492,7 @@ fn test_refresh_buyer_tokens() {
         );
     }
 
-    // Test commited tokens below minimum
+    // Test committed tokens below minimum
     {
         let params = Params {
             max_icp_e8s: 100 * E8,
