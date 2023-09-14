@@ -7,6 +7,18 @@ export async function waitForServiceWorkerUpgrade(
   await setTimeout(3000);
 }
 
+export async function loadSampleAssetUnderLoad(
+  browser: WebdriverIO.Browser
+): Promise<void> {
+  await Promise.all(
+    new Array(100).fill(async () => {
+      const contentElem = await loadSampleAsset(browser);
+
+      await expectSampleAssetLoaded(contentElem);
+    })
+  );
+}
+
 export async function loadSampleAsset(
   browser: WebdriverIO.Browser
 ): Promise<WebdriverIO.Element> {
