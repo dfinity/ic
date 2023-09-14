@@ -166,7 +166,7 @@ echo
 echo "Please initialise subnet backups by running this command:"
 echo "${WORK_DIR}/ic-backup --config-file ${WORK_DIR}/config.json5 init"
 echo
-echo "finaly start the backup service with this command:"
+echo "finally start the backup service with this command:"
 echo "sudo systemctl start ic-backup.service"
 echo
 echo "also consider to let it run on a reboot with this command:"

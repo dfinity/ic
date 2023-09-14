@@ -12,7 +12,7 @@ pub enum IncomingSource {
     /// We use systemd's created socket.
     #[default]
     Systemd,
-    /// We use the corresponing path as socket.
+    /// We use the corresponding path as socket.
     Path(PathBuf),
 }
 
@@ -28,7 +28,7 @@ pub struct Config {
     /// Proxy url is validated and needs to have scheme, host and port specified. I.e socks5://socksproxy.com:1080
     /// `Option<String>` can't be used because the decision on using a proxy is based on the subnet and this information
     /// is not present at adapter startup. So to enable/disable the proxy there exists a `socks_proxy_allowed` field in
-    /// the adpater request.
+    /// the adapter request.
     pub socks_proxy: String,
 }
 

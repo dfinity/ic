@@ -1773,7 +1773,7 @@ pub mod test {
             let cup_share_summary_height = make_next_cup_share(&pool);
 
             // Advance by two rounds so we have a finalized block at the heights
-            // This is neccesary for the validate function to succeed
+            // This is necessary for the validate function to succeed
             pool.advance_round_normal_operation_no_cup_n(1);
             pool.insert_unvalidated(cup_share_data_height.clone());
             pool.insert_unvalidated(cup_share_summary_height.clone());

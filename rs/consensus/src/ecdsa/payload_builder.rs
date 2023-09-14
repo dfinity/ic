@@ -3983,7 +3983,7 @@ mod tests {
             summary.update_refs(new_summary_height); // expected
             assert_eq!(summary, summary_from_proto);
 
-            // Check signature_agreement upgrade compatiblity
+            // Check signature_agreement upgrade compatibility
             summary_proto
                 .signature_agreements
                 .push(pb::CompletedSignature {

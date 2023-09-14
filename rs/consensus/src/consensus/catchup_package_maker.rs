@@ -434,7 +434,7 @@ mod tests {
                     cup_height,
                 ))));
 
-            // Nothing happens, because the state is not commited yet.
+            // Nothing happens, because the state is not committed yet.
             assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
             state_manager
@@ -449,7 +449,7 @@ mod tests {
             // yet.
             assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
-            // Now make the state manager return a hash which differes from the mocked hash
+            // Now make the state manager return a hash which differs from the mocked hash
             // in our fixtures (empty one).
             state_manager
                 .get_mut()

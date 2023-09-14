@@ -897,7 +897,7 @@ pub(crate) fn metadata_to_shares(
         .collect()
 }
 
-/// Mock up a test node, which has the feauture enabled
+/// Mock up a test node, which has the feature enabled
 pub(crate) fn test_config_with_http_feature<T>(
     num_nodes: usize,
     run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>) -> T,

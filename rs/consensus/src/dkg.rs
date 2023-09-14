@@ -207,7 +207,7 @@ impl DkgImpl {
         messages: Vec<&Message>,
     ) -> ChangeSet {
         // Because dealing generation is not entirely deterministic, it is
-        // actually possible to recieve multiple dealings from an honest dealer.
+        // actually possible to receive multiple dealings from an honest dealer.
         // As such, we simply try validating the first message in the list, and
         // get a result for that message. Other messages will be dealt with by
         // subsequent calls to this function.
@@ -1071,22 +1071,22 @@ fn create_remote_dkg_configs(
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
         (Err(err0), Err(err1)) => {
-            error!(logger, "Failled to create a remote DKG config {}", err0);
-            error!(logger, "Failled to create a remote DKG config {}", err1);
+            error!(logger, "Failed to create a remote DKG config {}", err0);
+            error!(logger, "Failed to create a remote DKG config {}", err1);
             Err(vec![
                 (low_thr_dkg_id, err0.to_string()),
                 (high_thr_dkg_id, err1.to_string()),
             ])
         }
         (Ok(_), Err(err1)) => {
-            error!(logger, "Failled to create a remote DKG config {}", err1);
+            error!(logger, "Failed to create a remote DKG config {}", err1);
             Err(vec![
                 (low_thr_dkg_id, sibl_err),
                 (high_thr_dkg_id, err1.to_string()),
             ])
         }
         (Err(err0), Ok(_)) => {
-            error!(logger, "Failled to create a remote DKG config {}", err0);
+            error!(logger, "Failed to create a remote DKG config {}", err0);
             Err(vec![
                 (low_thr_dkg_id, err0.to_string()),
                 (high_thr_dkg_id, sibl_err),
@@ -1328,7 +1328,7 @@ fn get_dkg_summary_from_cup_contents(
     // For the first 2 intervals we use the length value contained in the
     // genesis subnet record.
     let interval_length = get_dkg_interval_length(registry, registry_version, subnet_id)
-        .expect("Could not retieve the interval length for the genesis summary.");
+        .expect("Could not retrieve the interval length for the genesis summary.");
     let next_interval_length = interval_length;
     Summary::new(
         configs,
@@ -1820,7 +1820,7 @@ mod tests {
         });
     }
 
-    /// Tests, which transcripts get reshared, when DKG succeded or failed.
+    /// Tests, which transcripts get reshared, when DKG succeeded or failed.
     #[test]
     fn test_transcript_resharing() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -2392,7 +2392,7 @@ mod tests {
                     let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
                     let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
 
-                    // We instantiate the DKG component for node Id = 1 nd Id = 2.
+                    // We instantiate the DKG component for node Id = 1 and Id = 2.
                     let dkg_key_manager_1 = new_dkg_key_manager(
                         crypto.clone(),
                         logger.clone(),
@@ -3409,7 +3409,7 @@ mod tests {
                 Err(ValidationError::Permanent(PermanentError::InvalidDealer(_)))
             );
 
-            // Use valid message and valid signer but add messges to parent block as well.
+            // Use valid message and valid signer but add messages to parent block as well.
             // Now the message is already in the blockchain, and `DealerAlreadyDealt` error
             // is returned.
             let messages = vec![Message::fake(valid_dealing_content, node_test_id(0))];
@@ -3896,7 +3896,7 @@ mod tests {
     }
 
     // Since the `DkgKeyManager` component is not running, we need to allow it to
-    // make progess occasionally.
+    // make progress occasionally.
     //
     // This function calls on_state_change and sync, to allow the transcripts to be
     // loaded.

@@ -369,7 +369,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
     ///
     /// The returned iterator has a lifetime that is independent from the pool
     /// itself so that it can be passed around to perform big chunks of work
-    /// asynchonously.
+    /// asynchronously.
     pub fn iterate<Message: ConsensusMessageHashable + PerTypeCFInfo + 'static>(
         &self,
         min_key: &[u8],

@@ -131,7 +131,7 @@ struct TranscriptId {
 
     source_height: Height  
     // height at which the construction of the transcript was initiated, i.e., the height
-    // at the correspnding transcript param was added to the quadruples_under_construction
+    // at the corresponding transcript param was added to the quadruples_under_construction
     // field in the ECDSA payload
 
 
@@ -151,7 +151,7 @@ unless the
 `transcript_id` appears in an object contained in the ECDSA 
 payload of the finalized tip.
 This does not apply when we are doing xnet resharing on the target subnet,
-as the `source_height` field refers to a a hight on the source subnet,
+as the `source_height` field refers to a a height on the source subnet,
 not the target subnet.
 
 ````rust
@@ -189,7 +189,7 @@ struct TranscriptBase {
 
     opt_target_subnet_id: Option<SubnetId>;
     // Only used for xnet resharing. 
-    // The subnet hosting the receivers is by default the same as trasncript_id.source_subnet_id, 
+    // The subnet hosting the receivers is by default the same as transcript_id.source_subnet_id, 
     // and is otherwise given by opt_target_subnet_id
 
     fn receivers() -> Set<NodeId> { 
@@ -334,7 +334,7 @@ fn build_reshare_of_masked_param_ref(
     uid_generator.next_transcript_id(height);
     param_ref = TranscriptParamRef(
                     TranscriptXBase<TranscriptRef>(
-                        TranscriptBase(transcript_id, regsitry_version, None), 
+                        TranscriptBase(transcript_id, registry_version, None), 
                         Operation<TranscriptRef>::ReshareOfMasked(m)));
     return (param_ref, uid_generator);
 }
@@ -548,7 +548,7 @@ fn validate_dealing(
 ````
 
 
-Auxilliary dealing validation functions
+Auxiliary dealing validation functions
 
 
 ````rust
@@ -704,7 +704,7 @@ fn decrypt_and_validate_my_share(
 // The implementation may assume dealing has already been publicly validated.
 // DIFF: the code uses the index of dealing.dealer_id in transcript_param.dealers()
 // in the associated data, rather than dealing.dealer_id. This should be OK, but is not ideal.
-// DIFF: the code also incudes the registry_version -- this is not strictly necessary,
+// DIFF: the code also includes the registry_version -- this is not strictly necessary,
 // as all other data in the associated TranscariptParamRef has been agreed upon in consensus.
 ````
 
@@ -1424,7 +1424,7 @@ fn interpolate_secrete_share(points: Set<(NodeId, SecretShare)>, transcript: Tra
 ````rust
 fn verify_sig(node_id: NodeId, 
               registry_version: RegistryVersion, 
-              sig: Sig, object: SignableOject
+              sig: Sig, object: SignableObject
 ) -> Option<bool>;
 // Verifies that sig is a valid signature on object under the public key
 // belonging to node_id in version registry_version of the registry.
@@ -1522,7 +1522,7 @@ struct EcdsaPayload {
     // reshare requests being serviced
 
     transcripts: Set<Transcript>,
-    // transcripts created at this height -- TrasncriptRef's point here
+    // transcripts created at this height -- TranscriptRef's point here
 
     // INVARIANT: the function oldest_registry_version_in_use function takes into account
     // registry versions in ongoing_signatures, current_key_state, next_key_state,
@@ -1540,7 +1540,7 @@ enum CompletedSignature {
 // NOTE: the reason for this enum type is to allow signatures to be reported to execution exactly once. 
 // When a signature is freshly constructed, it is added a block as Unreported.
 // However, it may appear in some number of subsequent blocks as Reported. 
-// When the block containg the reported signature is finalized, execution layer may pass the signature along.
+// When the block containing the reported signature is finalized, execution layer may pass the signature along.
 // We leave the reported signature in subsequent block so long as the the call context still contains the 
 // the corresponding signing request.
 // All of this achieves two goals: (1) a signature will be reported just once to execution, and (2)
@@ -1568,7 +1568,7 @@ struct QuadrupleInCreation {
 }
 
 
-// Logic for key contruction can follow one of these paths:
+// Logic for key construction can follow one of these paths:
 //    1. Begin -> MakingRandom -> MakingRandomUnmasked -> Created
 //    2. Begin -> MakingReshared -> Created
 //    3. Ibid
@@ -1607,7 +1607,7 @@ struct UIDGenerator {
 
     fn next_transcript_id(height: Height) -> TranscriptId
     {  return TranscriptId(next_unused_transcript_id++, my_subnet_id, height); } 
-    // DIFF:  unlike the code, we explictly pass in the height.
+    // DIFF:  unlike the code, we explicitly pass in the height.
 
     fn next_quadruple_id() -> QuadrupleId { return QuadrupleId(next_unused_quadruple_id++); }
 }
@@ -1706,7 +1706,7 @@ fn validate_ecdsa_payload(
 
     // NOTE: we do not explicitly check that transcript_cache contains two different transcripts with the same
     // transcript_id, or any extraneous transcripts. If that happens, then payload != computed_payload.
-    // Simlarly, we do not explicitly check that signature_cache contains any extraneous signatures.
+    // Similarly, we do not explicitly check that signature_cache contains any extraneous signatures.
 }
 ````
 
@@ -2377,7 +2377,7 @@ fn get_completed_reshare_requests(
 {
     // Gather all transcript params corresponding to ongoing reshare requests at the tip of chain
     // which is the same as the ongoing_reshare_requests value in the caller (update_reshare_agreements).
-    // NOTE: on the block builder path, we only need the correspinding transcript_id's,
+    // NOTE: on the block builder path, we only need the corresponding transcript_id's,
     // while on the block validator path, we need the full transcript to carry out dealing validation
     requested_reshare_params:  Map<ReshareRequestId, TranscriptParam>
         = get_requested_reshare_params(notarized_chain);

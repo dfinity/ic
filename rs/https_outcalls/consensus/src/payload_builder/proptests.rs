@@ -143,7 +143,7 @@ fn prop_artifacts(
         })
 }
 
-/// Generate a resonse and metadata supporting that response too
+/// Generate a response and metadata supporting that response too
 fn prop_response_with_shares(
     max_timeout: u64,
     max_size: usize,

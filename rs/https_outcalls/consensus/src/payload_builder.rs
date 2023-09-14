@@ -441,7 +441,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 CanisterHttpTransientValidationError::ConsensusRegistryVersionUnavailable,
             ))?;
 
-        // Check conditions on individual reponses
+        // Check conditions on individual responses
         for response in &payload.responses {
             // Check that response is consistent
             utils::check_response_consistency(response)

@@ -56,7 +56,7 @@ impl ConfigValidate for Config {
             ));
         }
         if self.disk_threshold_warn > 100 {
-            return Err("Disk threshhold warning value is > 100".to_string());
+            return Err("Disk threshold warning value is > 100".to_string());
         }
         // we accept no subnets in the config at the initial stage only
         if self.subnets.is_empty() && self.slack_token != "<INSERT SLACK TOKEN>" {

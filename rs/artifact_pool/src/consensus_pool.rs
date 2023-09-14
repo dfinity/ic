@@ -622,7 +622,7 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
-                        panic!("Timestmap is not found for MoveToValidated: {:?}", to_move)
+                        panic!("Timestamp is not found for MoveToValidated: {:?}", to_move)
                     });
                     unvalidated_ops.remove(msg_id);
                     validated_ops.insert(ValidatedConsensusArtifact {
@@ -1674,7 +1674,7 @@ mod tests {
 
         impl BackupAge for FakeAge {
             fn get_elapsed_time(&self, path: &Path) -> Result<Duration, PurgingError> {
-                // Fake age of an artifact is determined through map look up. Panics on non-existant keys.
+                // Fake age of an artifact is determined through map look up. Panics on non-existent keys.
                 let name = path
                     .file_name()
                     .map(|os| os.to_os_string().into_string().unwrap())
