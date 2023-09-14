@@ -446,7 +446,7 @@ pub struct SetDefaultFollowees {
     #[prost(map = "int32, message", tag = "1")]
     pub default_followees: ::std::collections::HashMap<i32, neuron::Followees>,
 }
-/// Obsolete. Superceded by OpenSnsTokenSwap.
+/// Obsolete. Superseded by OpenSnsTokenSwap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1171,7 +1171,7 @@ pub mod governance_error {
         /// The proposal is defective in some way (e.g. title is too long). If the
         /// same proposal is submitted again without modification, it will be
         /// rejected regardless of changes in the system's state (e.g. increasing
-        /// the neuron's desolve delay will not make the proposal acceptable).
+        /// the neuron's dissolve delay will not make the proposal acceptable).
         InvalidProposal = 16,
         /// The neuron attempted to join the community fund while already
         /// a member.

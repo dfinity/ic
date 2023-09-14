@@ -608,7 +608,7 @@ async fn assert_neurons_can_be_claimed(
     // Given a sample neuron ID from `expected_neuron_ids`, assert that we can
     // can get this neuron's info via the `get_neuron_info` Governance method,
     // but `get_full_neuron` returns an error (as `test_identity` does not
-    // controll the neuron yet)
+    // control the neuron yet)
     let sample_neuron_id = expected_neuron_ids.get(0).unwrap().id;
     let get_neuron_info_response: Result<Result<NeuronInfo, GovernanceError>, String> = governance
         .update_from_sender("get_neuron_info", candid_one, sample_neuron_id, &sender)

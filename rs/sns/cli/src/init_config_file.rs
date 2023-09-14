@@ -95,7 +95,7 @@ pub struct SnsGovernanceConfig {
     /// initial_reward_rate_basis_points and final_reward_rate_basis_points.
     /// In the config file we use percentages instead of basis points to try to
     /// be a bit more user friendly.
-    /// For example, on the ic dashbord
+    /// For example, on the ic dashboard
     /// <https://dashboard.internetcomputer.org/circulation> we show the reward
     /// rate in terms of percentages instead of basis points.
     pub initial_reward_rate_percentage: Option<f64>,

@@ -684,7 +684,7 @@ where
         .expect("local_test_with_config_with_mutations_on_system_subnet failed")
 }
 
-/// Encapsulates different test scenarios, with diferent upgrade modes.
+/// Encapsulates different test scenarios, with different upgrade modes.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum UpgradeTestingScenario {
     Never,

@@ -170,7 +170,7 @@ fn query_impl(
     }
 }
 
-/// Make a query reqeust to a canister on a StateMachine (with no sender)
+/// Make a query request to a canister on a StateMachine (with no sender)
 pub fn query(
     machine: &StateMachine,
     canister: CanisterId,

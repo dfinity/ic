@@ -191,7 +191,7 @@ fn test_rosetta1_92() {
         // Perform some more transfers, this should create another archive canister but
         // because of ROSETTA1-92 it doesn't.
         // Perform the transfers in single transfer batches so that we give archiving
-        // some oportunity to catch up.
+        // some opportunity to catch up.
         for _i in 0..blocks_per_archive_node {
             perform_transfers(nns_canisters.clone(), user.clone(), 1).await;
         }

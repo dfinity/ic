@@ -43,7 +43,7 @@ pub struct NnsInitPayloads {
     pub sns_wasms: SnsWasmCanisterInitPayload,
 }
 
-/// Builder to help create the intial payloads for the NNS canisters.
+/// Builder to help create the initial payloads for the NNS canisters.
 pub struct NnsInitPayloadsBuilder {
     pub registry: RegistryCanisterInitPayloadBuilder,
     pub governance: GovernanceCanisterInitPayloadBuilder,

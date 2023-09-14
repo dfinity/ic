@@ -787,7 +787,7 @@ mod tests {
         // This is the weighted average that tells us what the age should be
         // in seconds.
         let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        // Decrease the age that we expect from now to get the exected timestamp
+        // Decrease the age that we expect from now to get the expected timestamp
         // since when the neurons should be aging.
         assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
     }
@@ -809,7 +809,7 @@ mod tests {
         // This is the weighted average that tells us what the age should be
         // in seconds.
         let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        // Decrease the age that we expect from now to get the exected timestamp
+        // Decrease the age that we expect from now to get the expected timestamp
         // since when the neurons should be aging.
         assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
     }
@@ -830,7 +830,7 @@ mod tests {
         // This is the weighted average that tells us what the age should be
         // in seconds.
         let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        // Decrease the age that we expect from now to get the exected timestamp
+        // Decrease the age that we expect from now to get the expected timestamp
         // since when the neurons should be aging.
         assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
     }
@@ -869,7 +869,7 @@ mod tests {
         let original_aging_since_timestamp_seconds = neuron.aging_since_timestamp_seconds;
         let new_stake_e8s = 5 * E8;
         neuron.update_stake_adjust_age(new_stake_e8s, NOW);
-        // The only effect of the above call shoudl be an update of
+        // The only effect of the above call should be an update of
         // `cached_neuron_stake_e8s`; e.g., the operation does not simply fail.
         assert_eq!(neuron.dissolve_state, original_dissolve_state);
         assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);

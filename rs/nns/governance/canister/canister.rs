@@ -985,7 +985,7 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
 // works.
 //
 // We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unecessary
+// the .wasm; using `candid::export_service` here would involve unnecessary
 // runtime computation
 
 #[cfg(not(feature = "test"))]

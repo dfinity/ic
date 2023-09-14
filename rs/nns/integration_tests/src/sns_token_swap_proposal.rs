@@ -87,7 +87,7 @@ fn test_only_one_sns_token_swap_proposal_can_be_open() {
     // Step 2: Run the code under test.
     let response2 = make_open_sns_token_swap_proposal(&mut state_machine, swap_canister_id);
 
-    // Step 3: Insepct the result. Expect it to be a fail.
+    // Step 3: Inspect the result. Expect it to be a fail.
     match response2.command {
         Some(manage_neuron_response::Command::Error(e)) => {
             assert!(

@@ -257,7 +257,7 @@ mod test {
     }
 
     #[test]
-    fn days_fully_after_flattening_produce_linar_reward() {
+    fn days_fully_after_flattening_produce_linear_reward() {
         assert_approx_eq!(
             rewards_pool_to_distribute_in_supply_fraction_for_one_day(8 * 366),
             0.05 / 365.25

@@ -210,7 +210,7 @@ impl ExplosiveTokens {
 
     // This is a bit special and is an interface optimization that serves a
     // common use case: proportional scaling. E.g. Suppose you have two
-    // accounts, one with 100 ICP and aother with 200 ICP. From these two
+    // accounts, one with 100 ICP and another with 200 ICP. From these two
     // sources, you want to raise 30 ICP. If you want the accounts to be used
     // "proportionally", then you'd source 10 ICP from the first account, and 20
     // ICP from the second. To calculate these, you would do

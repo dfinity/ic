@@ -1554,7 +1554,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     );
 
     // Step 3.2: Inspect the neurons. In particular, look at their maturity to
-    // make sure that their propotion of the reward purse is proportional to
+    // make sure that their proportion of the reward purse is proportional to
     // their voting power/reward shares.
     let mut total_observed_rewards_e8s = 0;
     for (neuron, weight) in zip(&neurons, [2, 3, 0]) {

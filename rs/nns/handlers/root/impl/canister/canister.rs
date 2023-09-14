@@ -48,7 +48,7 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}canister_post_upgrade", LOG_PREFIX);
     // Wipe out stable memory, because earlier version of this canister were
-    // stateful. This minimizes risk of future mis-interpretation of data.
+    // stateful. This minimizes risk of future misinterpretation of data.
     stable::set(&[]);
 }
 

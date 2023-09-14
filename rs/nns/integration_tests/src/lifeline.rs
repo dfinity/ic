@@ -86,7 +86,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             },
         );
 
-        let proposal_submission_reponse: ManageNeuronResponse = nns_canisters
+        let proposal_submission_response: ManageNeuronResponse = nns_canisters
             .governance
             .update_from_sender(
                 "manage_neuron",
@@ -104,13 +104,13 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .expect("submit root upgrade failed");
 
         let proposal_id = if let CommandResponse::MakeProposal(resp) =
-            proposal_submission_reponse.command.as_ref().unwrap()
+            proposal_submission_response.command.as_ref().unwrap()
         {
             ProposalId(resp.proposal_id.unwrap().id)
         } else {
             panic!(
-                "Unexpected proposal submission reponse: {:?}",
-                proposal_submission_reponse
+                "Unexpected proposal submission response: {:?}",
+                proposal_submission_response
             );
         };
 
@@ -201,7 +201,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
         let init_arg: &[u8] = &[];
 
         let proposal = create_external_update_proposal_candid(
-            "Proposal to ugprade the root canister",
+            "Proposal to upgrade the root canister",
             "",
             "",
             NnsFunction::NnsRootUpgrade,
@@ -212,7 +212,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             },
         );
 
-        let proposal_submission_reponse: ManageNeuronResponse = nns_canisters
+        let proposal_submission_response: ManageNeuronResponse = nns_canisters
             .governance
             .update_from_sender(
                 "manage_neuron",
@@ -230,13 +230,13 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             .expect("submit root upgrade failed");
 
         let proposal_id = if let CommandResponse::MakeProposal(resp) =
-            proposal_submission_reponse.command.as_ref().unwrap()
+            proposal_submission_response.command.as_ref().unwrap()
         {
             ProposalId(resp.proposal_id.unwrap().id)
         } else {
             panic!(
-                "Unexpected proposal submission reponse: {:?}",
-                proposal_submission_reponse
+                "Unexpected proposal submission response: {:?}",
+                proposal_submission_response
             );
         };
 
