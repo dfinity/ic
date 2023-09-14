@@ -32,6 +32,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::{self, WasmMetadata},
+    page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
 };
@@ -816,6 +817,7 @@ impl SchedulerTestBuilder {
             config,
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
@@ -828,6 +830,7 @@ impl SchedulerTestBuilder {
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
             deterministic_time_slicing,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         SchedulerTest {
             state: Some(state),

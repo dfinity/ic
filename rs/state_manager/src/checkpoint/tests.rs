@@ -409,7 +409,7 @@ fn can_recover_a_stopping_canister() {
         let controller = user_test_id(24).get();
 
         let mut canister_state = CanisterState {
-            system_state: SystemState::new_stopping(
+            system_state: SystemState::new_stopping_for_testing(
                 canister_id,
                 controller,
                 INITIAL_CYCLES,
@@ -476,7 +476,7 @@ fn can_recover_a_stopped_canister() {
         let controller = user_test_id(24).get();
 
         let canister_state = CanisterState {
-            system_state: SystemState::new_stopped(
+            system_state: SystemState::new_stopped_for_testing(
                 canister_id,
                 controller,
                 INITIAL_CYCLES,
@@ -528,7 +528,7 @@ fn can_recover_a_running_canister() {
         let controller = user_test_id(24).get();
 
         let canister_state = CanisterState {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 canister_id,
                 controller,
                 INITIAL_CYCLES,

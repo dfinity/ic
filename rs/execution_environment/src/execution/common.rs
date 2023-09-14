@@ -569,7 +569,7 @@ mod test {
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {
         let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running(
+        let system_state = SystemState::new_running_for_testing(
             CanisterId::from_u64(42),
             CanisterId::from(100u64).into(),
             Cycles::new(1 << 36),

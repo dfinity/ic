@@ -34,11 +34,12 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase, testing::SystemStateTesting, SystemState,
-};
-use ic_replicated_state::{
-    page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterState,
-    CanisterStatus, NumWasmPages, PageMap, ReplicatedState,
+    canister_state::system_state::CyclesUseCase,
+    page_map::{self, TestPageAllocatorFileDescriptorImpl},
+    testing::CanisterQueuesTesting,
+    testing::SystemStateTesting,
+    CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, PageMap,
+    ReplicatedState, SystemState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
@@ -74,8 +75,6 @@ use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, sync::Arc};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
-
-use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -242,6 +241,7 @@ impl CanisterManagerBuilder {
             ),
             cycles_account_manager,
             ingress_history_writer,
+            Arc::new(TestPageAllocatorFileDescriptorImpl),
         )
     }
 }
@@ -2365,7 +2365,7 @@ fn delete_canister_consumed_cycles_observed() {
         let initial_cycles = Cycles::new(5_000_000_000_000);
 
         let mut canister = CanisterState {
-            system_state: SystemState::new_stopped(
+            system_state: SystemState::new_stopped_for_testing(
                 canister_id,
                 controller_id.get(),
                 initial_cycles,
@@ -2961,6 +2961,7 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
                 .build(),
             mock_time(),
             AddCanisterChangeToHistory::No,
+            Arc::new(TestPageAllocatorFileDescriptorImpl),
         ),
         Vec::new()
     );
@@ -2985,6 +2986,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                 .build(),
             mock_time(),
             AddCanisterChangeToHistory::No,
+            Arc::new(TestPageAllocatorFileDescriptorImpl),
         )[0],
         Response::Ingress(IngressResponse {
             message_id: message_test_id(456),

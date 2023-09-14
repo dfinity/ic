@@ -348,6 +348,20 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.consumed_cycles_since_replica_started,
         canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
     );
+
+    let starting_time = Instant::now();
+    // on initial rollout the checkpoint file won't exist.
+    let wasm_chunk_store_data = if canister_layout.wasm_chunk_store().exists() {
+        PageMap::open(
+            &canister_layout.wasm_chunk_store(),
+            height,
+            Arc::clone(&fd_factory),
+        )?
+    } else {
+        PageMap::new(Arc::clone(&fd_factory))
+    };
+    durations.insert("wasm_chunk_store", starting_time.elapsed());
+
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
         *canister_id,
@@ -365,6 +379,8 @@ pub fn load_canister_state<P: ReadPolicy>(
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
         canister_state_bits.canister_history,
+        wasm_chunk_store_data,
+        canister_state_bits.wasm_chunk_store_metadata,
     );
 
     let canister_state = CanisterState {

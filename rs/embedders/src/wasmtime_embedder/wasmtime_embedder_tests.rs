@@ -8,6 +8,7 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -40,7 +41,8 @@ fn test_wasmtime_system_api() {
     ))
     .expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
-    let system_state = SystemState::new_for_start(canister_id);
+    let system_state =
+        SystemState::new_for_start(canister_id, Arc::new(TestPageAllocatorFileDescriptorImpl));
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),

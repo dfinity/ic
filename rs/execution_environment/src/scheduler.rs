@@ -23,6 +23,7 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
     },
+    page_map::PageAllocatorFileDescriptor,
     testing::ReplicatedStateTesting,
     CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
@@ -112,6 +113,7 @@ pub(crate) struct SchedulerImpl {
     rate_limiting_of_heap_delta: FlagStatus,
     rate_limiting_of_instructions: FlagStatus,
     deterministic_time_slicing: FlagStatus,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl SchedulerImpl {
@@ -368,6 +370,7 @@ impl SchedulerImpl {
         rate_limiting_of_heap_delta: FlagStatus,
         rate_limiting_of_instructions: FlagStatus,
         deterministic_time_slicing: FlagStatus,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         let scheduler_cores = config.scheduler_cores as u32;
         Self {
@@ -382,6 +385,7 @@ impl SchedulerImpl {
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
             deterministic_time_slicing,
+            fd_factory,
         }
     }
 
@@ -1011,6 +1015,7 @@ impl SchedulerImpl {
                         canister,
                         state_time,
                         AddCanisterChangeToHistory::No,
+                        Arc::clone(&self.fd_factory),
                     ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::BestEffort;

@@ -14,7 +14,7 @@ use ic_protobuf::{
 use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{CanisterHistory, CyclesUseCase},
+        system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
@@ -157,6 +157,7 @@ pub struct CanisterStateBits {
     pub canister_version: u64,
     pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub canister_history: CanisterHistory,
+    pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
 }
 
 #[derive(Clone)]
@@ -1635,6 +1636,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 })
                 .collect(),
             canister_history: Some((&item.canister_history).into()),
+            wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
         }
     }
 }
@@ -1744,6 +1746,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             canister_history: try_from_option_field(
                 value.canister_history,
                 "CanisterStateBits::canister_history",
+            )
+            .unwrap_or_default(),
+            wasm_chunk_store_metadata: try_from_option_field(
+                value.wasm_chunk_store_metadata,
+                "CanisterStateBits::wasm_chunk_store_metadata",
             )
             .unwrap_or_default(),
         })

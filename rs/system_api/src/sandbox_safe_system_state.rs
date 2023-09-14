@@ -1095,7 +1095,7 @@ mod tests {
 
     #[test]
     fn test_apply_balance_changes() {
-        let mut system_state = SystemState::new_running(
+        let mut system_state = SystemState::new_running_for_testing(
             canister_test_id(0),
             user_test_id(1).get(),
             Cycles::new(1_000_000_000),

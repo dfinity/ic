@@ -988,6 +988,7 @@ struct PopulatedMetadata {
 pub enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
+    WasmChunkStore(CanisterId),
 }
 
 impl PageMapType {
@@ -995,6 +996,7 @@ impl PageMapType {
     fn list_all(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
         for (id, canister) in &state.canister_states {
+            result.push(Self::WasmChunkStore(id.to_owned()));
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
@@ -1012,6 +1014,7 @@ impl PageMapType {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
+            PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
         }
     }
 
@@ -1028,6 +1031,9 @@ impl PageMapType {
                     .as_ref()
                     .map(|ex| &ex.stable_memory.page_map)
             }),
+            PageMapType::WasmChunkStore(id) => state
+                .canister_state(id)
+                .map(|can| can.system_state.wasm_chunk_store.page_map()),
         }
     }
 
@@ -1044,6 +1050,9 @@ impl PageMapType {
                     .as_mut()
                     .map(|ex| &mut ex.stable_memory.page_map)
             }),
+            PageMapType::WasmChunkStore(id) => state
+                .canister_state_mut(id)
+                .map(|can| can.system_state.wasm_chunk_store.page_map_mut()),
         }
     }
 }

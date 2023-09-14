@@ -48,6 +48,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_version: 0,
         consumed_cycles_since_replica_started_by_use_cases: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
+        wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
     }
 }
 

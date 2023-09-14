@@ -44,7 +44,7 @@ use common::*;
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
 
 fn get_system_state_with_cycles(cycles_amount: Cycles) -> SystemState {
-    SystemState::new_running(
+    SystemState::new_running_for_testing(
         canister_test_id(42),
         user_test_id(24).get(),
         cycles_amount,
@@ -1321,7 +1321,7 @@ fn canister_status() {
     );
     assert_eq!(api.ic0_canister_status(), Ok(1));
 
-    let stopping_system_state = SystemState::new_stopping(
+    let stopping_system_state = SystemState::new_stopping_for_testing(
         canister_test_id(42),
         user_test_id(24).get(),
         INITIAL_CYCLES,
@@ -1334,7 +1334,7 @@ fn canister_status() {
     );
     assert_eq!(api.ic0_canister_status(), Ok(2));
 
-    let stopped_system_state = SystemState::new_stopped(
+    let stopped_system_state = SystemState::new_stopped_for_testing(
         canister_test_id(42),
         user_test_id(24).get(),
         INITIAL_CYCLES,

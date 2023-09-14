@@ -653,6 +653,43 @@ fn missing_stable_memory_file_is_handled() {
     });
 }
 
+#[test]
+/// When the chunk store is first deployed, the replicated state won't have
+/// checkpoint files for the Wasm chunk store.
+fn missing_wasm_chunk_store_is_handled() {
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        // Since the canister has no execution state, there should be no stable memory
+        // file.
+        let state_layout = state_manager.state_layout();
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout
+                .checkpoint(height(1))
+                .unwrap()
+                .raw_path()
+                .to_path_buf(),
+            height(1),
+        )
+        .unwrap();
+
+        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+        let canister_wasm_chunk_store = canister_layout.wasm_chunk_store();
+        assert!(canister_wasm_chunk_store.exists());
+        std::fs::remove_file(&canister_wasm_chunk_store).unwrap();
+
+        let state_manager = restart_fn(state_manager, None);
+        let (recovered_height, recovered) = state_manager.take_tip();
+        assert_eq!(height(1), recovered_height);
+
+        assert!(!canister_wasm_chunk_store.exists());
+        state_manager.commit_and_certify(recovered, height(2), CertificationScope::Full);
+    });
+}
+
 fn state_manager_crash_test<Test>(
     fixtures: Vec<
         Box<dyn FnOnce(StateManagerImpl) + std::panic::UnwindSafe + std::panic::RefUnwindSafe>,
@@ -3064,6 +3101,14 @@ fn can_get_dirty_pages() {
 
     fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
+        canister_state
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .update(&[
+                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            ]);
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
@@ -3139,6 +3184,21 @@ fn can_get_dirty_pages() {
             },
             DirtyPageMap {
                 height: height(1),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(80))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(90))),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
+            },
+            DirtyPageMap {
+                height: height(1),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(100))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(1),
                 file_type: FileType::WasmBinary(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
@@ -3196,6 +3256,21 @@ fn can_get_dirty_pages() {
             DirtyPageMap {
                 height: height(2),
                 file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(80))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(90))),
+                page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                file_type: FileType::PageMap(PageMapType::WasmChunkStore(canister_test_id(100))),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {

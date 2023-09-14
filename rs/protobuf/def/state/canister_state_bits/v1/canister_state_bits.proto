@@ -269,6 +269,17 @@ message CanisterHistory {
   uint64 total_num_changes = 2;
 }
 
+message WasmChunkData {
+  bytes hash = 1;
+  uint64 index = 2;
+  uint64 length = 3;
+}
+
+message WasmChunkStoreMetadata {
+  repeated WasmChunkData chunks = 1;
+  uint64 size = 2;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -333,4 +344,6 @@ message CanisterStateBits {
   state.queues.v1.Cycles reserved_balance = 38;
   // The user-specified upper limit on `reserved_balance`.
   state.queues.v1.Cycles reserved_balance_limit = 39;
+  // Maps tracking chunks in the Wasm chunk store.
+  WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
 }

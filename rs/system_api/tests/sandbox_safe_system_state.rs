@@ -51,7 +51,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
 
     // Set cycles balance low enough that not even the cost for transferring
     // the request is covered.
-    let system_state = SystemState::new_running(
+    let system_state = SystemState::new_running_for_testing(
         canister_test_id(0),
         user_test_id(1).get(),
         request_payload_cost - Cycles::new(10),
@@ -101,7 +101,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
 
     // Set cycles balance to a number that is enough to cover for the request
     // transfer but not to cover the cost of processing the expected response.
-    let system_state = SystemState::new_running(
+    let system_state = SystemState::new_running_for_testing(
         canister_test_id(0),
         user_test_id(1).get(),
         total_cost - Cycles::new(10),
@@ -133,7 +133,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
 
-    let system_state = SystemState::new_running(
+    let system_state = SystemState::new_running_for_testing(
         canister_test_id(0),
         user_test_id(1).get(),
         INITIAL_CYCLES,
@@ -173,7 +173,7 @@ fn correct_charging_source_canister_for_a_request() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .with_subnet_type(subnet_type)
         .build();
-    let mut system_state = SystemState::new_running(
+    let mut system_state = SystemState::new_running_for_testing(
         canister_test_id(0),
         user_test_id(1).get(),
         INITIAL_CYCLES,
@@ -406,7 +406,7 @@ fn test_inter_canister_call(
         .with_subnet_type(subnet_type)
         .build();
     let sender_controller = user_test_id(1).get();
-    let mut system_state = SystemState::new_running(
+    let mut system_state = SystemState::new_running_for_testing(
         sender,
         sender_controller,
         INITIAL_CYCLES,
