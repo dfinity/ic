@@ -13929,6 +13929,7 @@ name = "pocket-ic-server"
 version = "0.0.1"
 dependencies = [
  "axum",
+ "base64 0.11.0",
  "candid",
  "clap 3.2.23",
  "hex",
@@ -13938,6 +13939,7 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-ic00-types",
  "ic-interfaces-state-manager",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
@@ -13951,6 +13953,7 @@ dependencies = [
  "sha2 0.9.9",
  "tempfile",
  "tokio",
+ "wat",
 ]
 
 [[package]]

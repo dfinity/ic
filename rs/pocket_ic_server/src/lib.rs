@@ -34,13 +34,13 @@
 //! The start state is a dedicated state that always exists independent of which computations have
 //! been carried out. A state which has no outcoming computations is called a leaf.
 
-pub mod state_api;
-
 pub mod pocket_ic;
+pub mod state_api;
 
 use crate::state_api::state::OpOut;
 use ic_crypto_sha2::Sha256;
 use ic_types::time::Time;
+use std::time::Duration;
 
 /// Represents an identifiable operation on a TargetType.
 pub trait Operation {
@@ -82,7 +82,6 @@ pub mod mocket_ic {
 
     use super::*;
     use crate::state_api::state::{HasStateLabel, StateLabel};
-    use std::time::Duration;
 
     #[derive(Clone)]
     pub struct QueryOp {
@@ -151,9 +150,9 @@ pub mod mocket_ic {
         type TargetType = MocketIc;
 
         fn compute(self, mocket_ic: &mut MocketIc) -> OpOut {
-            OpOut::IcResult(Ok(WasmResult::Reply(
+            OpOut::WasmResult(WasmResult::Reply(
                 mocket_ic.query(self.payload).to_be_bytes().to_vec(),
-            )))
+            ))
         }
 
         fn id(&self) -> OpId {
@@ -213,7 +212,7 @@ pub mod mocket_ic {
 mod tests {
     use super::mocket_ic::*;
     use super::*;
-    use crate::pocket_ic::{ExecuteIngressMessage, PocketIc};
+    use crate::pocket_ic::{CanisterCall, ExecuteIngressMessage, PocketIc};
     use crate::state_api::state::*;
     use candid::{decode_args, encode_args};
     use ic_cdk::api::management_canister::main::CreateCanisterArgument;
@@ -264,7 +263,7 @@ mod tests {
                 break;
             } else {
                 println!("Polling...");
-                std::thread::sleep(std::time::Duration::from_millis(300));
+                std::thread::sleep(Duration::from_millis(300));
             }
         }
     }
@@ -277,36 +276,33 @@ mod tests {
             .add_initial_instance(pocket_ic)
             .build();
         let instance_id = 0;
-        let msg1 = ExecuteIngressMessage {
+        let msg1 = ExecuteIngressMessage(CanisterCall {
             sender: PrincipalId::default(),
             canister_id: CanisterId::ic_00(),
-            method: "create_canister".to_string(),
+            method: "provisional_create_canister_with_cycles".to_string(),
             payload: encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
-        };
+        });
         let res = rt
-            .block_on(api_state.issue(msg1.on_instance(instance_id)))
+            .block_on(
+                api_state
+                    .issue_with_timeout(msg1.on_instance(instance_id), Duration::from_secs(30)),
+            )
             .unwrap();
-        // TODO: fixme: we have to poll
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        println!("result is: {:?}", res);
-        if let IssueOutcome::Output(OpOut::IcResult(result)) = res {
-            match result {
-                Ok(wasmresult) => match wasmresult {
-                    WasmResult::Reply(bytes) => {
-                        println!("wasm result bytes {:?}", bytes);
-                        let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
-                        println!("result: {}", canister_id);
-                    }
-                    WasmResult::Reject(x) => {
-                        println!("wasm reject {:?}", x);
-                    }
-                },
-                Err(user_error) => {
-                    println!("user error: {:?}", user_error);
-                }
+
+        use IssueOutcome::*;
+        use WasmResult::*;
+        match res {
+            Output(OpOut::WasmResult(Reply(bytes))) => {
+                println!("wasm result bytes {:?}", bytes);
+                let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
+                println!("result: {}", canister_id);
             }
-        } else {
-            println!("did not get expected IssueOutcome");
+            Output(OpOut::WasmResult(Reject(x))) => {
+                println!("wasm reject {:?}", x);
+            }
+            e => {
+                panic!("unexpected result: {:?}", e);
+            }
         }
     }
 
@@ -315,9 +311,9 @@ mod tests {
         let (rt, api_state) = api_with_single_instance();
         let instance_id = 0;
 
-        let sync_wait_timeout = std::time::Duration::from_secs(2);
+        let sync_wait_timeout = Duration::from_secs(2);
         let delay = Delay {
-            duration: std::time::Duration::from_secs(1),
+            duration: Duration::from_secs(1),
         };
         let IssueOutcome::Output(OpOut::NoOutput) = rt
             .block_on(
