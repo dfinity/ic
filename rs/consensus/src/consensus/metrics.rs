@@ -290,7 +290,7 @@ impl FinalizerMetrics {
             ),
             ecdsa_available_quadruples: metrics_registry.int_gauge(
                 "consensus_ecdsa_available_quadruples",
-                "The number of avaiable ECDSA quadruples",
+                "The number of available ECDSA quadruples",
             ),
             ecdsa_quadruples_in_creation: metrics_registry.int_gauge(
                 "consensus_ecdsa_quadruples_in_creation",

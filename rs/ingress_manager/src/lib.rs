@@ -96,7 +96,7 @@ impl IngressManagerMetrics {
             ),
             ingress_selector_validate_payload_time: metrics_registry.histogram(
                 "ingress_selector_validate_payload_time",
-                "Ingress Selector vaidate_payload execution time in seconds",
+                "Ingress Selector validate_payload execution time in seconds",
                 decimal_buckets(-3, 1),
             ),
             ingress_payload_cache_size: metrics_registry.int_gauge(

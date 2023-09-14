@@ -205,7 +205,7 @@ pub fn deliver_batches(
 /// - The block contains an ECDSA payload with current key transcript ref, and
 /// - the corresponding transcript exists in past blocks, and
 /// - we can extract the tECDSA master public key from the transcript.
-/// Otherwide `Ok(None)` is returned.
+/// Otherwise `Ok(None)` is returned.
 /// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
 /// a newer CUP is already present in the pool and we should continue from there.

@@ -646,7 +646,7 @@ impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> 
         let mut tx = self
             .db_env
             .begin_rw_txn()
-            .expect("Unable to begin transation to initialize consensus pool");
+            .expect("Unable to begin transaction to initialize consensus pool");
         let key = ArtifactKey::from(cup.get_id());
 
         // convert cup to bytes

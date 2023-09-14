@@ -312,7 +312,7 @@ mod tests {
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
-                // Since we changed to PurgeBelowExpiry insteads of invidivual removal,
+                // Since we changed to PurgeBelowExpiry insteads of individual removal,
                 // It is enough to check if there is PurgeBelowExpiry, and nothing being
                 // moved to validated.
                 assert_eq!(change_set.len(), 1);

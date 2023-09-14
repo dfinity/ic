@@ -304,8 +304,8 @@ pub mod test {
 
     #[test]
     fn test_notarization_threshold_for_safety_and_liveness() {
-        // This test is written assuming that the finalization treshold and
-        // the notarization treshold are the same.
+        // This test is written assuming that the finalization threshold and
+        // the notarization threshold are the same.
         let finalization_uses_notarization_threshold =
             FinalizationContent::committee() == NotarizationContent::committee();
         assert!(finalization_uses_notarization_threshold);

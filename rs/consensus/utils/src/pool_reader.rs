@@ -866,7 +866,7 @@ pub mod test {
                 );
             }
 
-            // For the hight from the 4th round there is no version.
+            // For the height from the 4th round there is no version.
             assert!(pool_reader
                 .registry_version(Height::from(4 * total_length + 1))
                 .is_none());

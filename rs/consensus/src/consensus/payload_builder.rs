@@ -82,7 +82,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
 
         // To call the section builders in a somewhat fair manner,
         // we call them in a rotation. Note that this is not really fair,
-        // as payload builders that yield a lot always give precendence to the
+        // as payload builders that yield a lot always give precedence to the
         // same next payload builder. This might give an advantage to a particular
         // payload builder.
         let num_sections = self.section_builder.len();
@@ -235,7 +235,7 @@ pub(crate) mod test {
 
     #[cfg(feature = "proptest")]
     impl PayloadBuilderImpl {
-        /// Return the number of critical errors that have occured.
+        /// Return the number of critical errors that have occurred.
         ///
         /// This is useful for proptests.
         pub(crate) fn count_critical_errors(&self) -> u64 {
