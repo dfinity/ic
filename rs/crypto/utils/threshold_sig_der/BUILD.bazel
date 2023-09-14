@@ -12,7 +12,6 @@ rust_library(
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/types/types",
         "@crate_index//:base64",
-        "@crate_index//:openssl",
     ],
 )
 
