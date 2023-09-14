@@ -1,6 +1,8 @@
 use crate::{Computation, OpId, Operation};
+use base64;
 use ic_state_machine_tests::UserError;
 use ic_state_machine_tests::WasmResult;
+use ic_types::CanisterId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,9 +12,37 @@ use tokio::{sync::RwLock, task::spawn_blocking, time};
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_millis(150);
 
+pub const STATE_LABEL_HASH_SIZE: usize = 32;
+
 /// Uniquely identifies a state.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct StateLabel(pub [u8; 32]);
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
+
+impl std::fmt::Debug for StateLabel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "StateLabel(")?;
+        self.0.iter().try_for_each(|b| write!(f, "{:02X}", b))?;
+        write!(f, ")")
+    }
+}
+
+impl std::convert::TryFrom<Vec<u8>> for StateLabel {
+    // The input vector having the wrong size is the only possible error condition.
+    type Error = InvalidSize;
+
+    fn try_from(v: Vec<u8>) -> Result<StateLabel, InvalidSize> {
+        if v.len() != STATE_LABEL_HASH_SIZE {
+            return Err(InvalidSize);
+        }
+
+        let mut res = StateLabel::default();
+        res.0[0..STATE_LABEL_HASH_SIZE].clone_from_slice(v.as_slice());
+        Ok(res)
+    }
+}
+
+// The only error condition is if the vector has the wrong size.
+pub struct InvalidSize;
 
 /// The state of the PocketIc-API.
 ///
@@ -92,11 +122,48 @@ impl<T> Default for PocketIcApiStateBuilder<T> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum OpOut {
     NoOutput,
     Time(u64),
-    IcResult(Result<WasmResult, UserError>),
+    WasmResult(WasmResult),
+    CanisterId(CanisterId),
+    IcUserErr(UserError),
+    Cycles(u128),
+}
+
+impl From<Result<WasmResult, UserError>> for OpOut {
+    fn from(r: Result<WasmResult, UserError>) -> Self {
+        match r {
+            Ok(r) => Self::WasmResult(r),
+            Err(e) => Self::IcUserErr(e),
+        }
+    }
+}
+
+impl From<Result<(), UserError>> for OpOut {
+    fn from(r: Result<(), UserError>) -> Self {
+        match r {
+            Ok(_) => Self::NoOutput,
+            Err(e) => Self::IcUserErr(e),
+        }
+    }
+}
+
+impl std::fmt::Debug for OpOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpOut::NoOutput => write!(f, "NoOutput"),
+            OpOut::Time(x) => write!(f, "Time({})", x),
+            OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
+            OpOut::Cycles(x) => write!(f, "Cycles({})", x),
+            OpOut::IcUserErr(x) => write!(f, "{}", x),
+            OpOut::WasmResult(WasmResult::Reject(x)) => write!(f, "Reject({})", x),
+            OpOut::WasmResult(WasmResult::Reply(bytes)) => {
+                write!(f, "Reply({})", base64::encode(&bytes))
+            }
+        }
+    }
 }
 
 pub type Computations = HashMap<OpId, (StateLabel, OpOut)>;
