@@ -10,9 +10,9 @@ use ic_icrc1_ledger_sm_tests::{
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
-    AccountIdentifier, ArchiveOptions, Block, CandidBlock, FeatureFlags, GetBlocksArgs,
-    GetBlocksRes, InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload, Operation,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, UpgradeArgs,
+    AccountIdBlob, AccountIdentifier, ArchiveOptions, Block, CandidBlock, FeatureFlags,
+    GetBlocksArgs, GetBlocksRes, InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload,
+    Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, UpgradeArgs,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -122,6 +122,14 @@ fn get_blocks_pb(
         .bytes();
     let result: GetBlocksRes = ProtoBuf::from_bytes(bytes).map(|c| c.0).unwrap();
     result
+}
+
+fn account_identifier(env: &StateMachine, ledger: CanisterId, account: Account) -> AccountIdBlob {
+    let bytes = env
+        .query(ledger, "account_identifier", Encode!(&account).unwrap())
+        .expect("failed to calculate account identifier")
+        .bytes();
+    Decode!(&bytes, AccountIdBlob).expect("Unable to decode account_identifier endpoint result")
 }
 
 #[test]
@@ -652,4 +660,57 @@ fn test_balances_overflow() {
 #[test]
 fn test_approval_trimming() {
     ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn account_identifier_test() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .build()
+        .unwrap();
+    let ledger = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let owner =
+        Principal::try_from("aspvh-rnqud-zk2qo-4objq-d537b-j36qa-l74s3-jricy-57syn-tt5iq-bae")
+            .unwrap();
+
+    // default subaccount
+    let expected_account_id =
+        hex::decode("b43c3536fb53da333e8f93e1703d61b47cee3638103c0bd7ddff8cbdf04b5ca5").unwrap();
+    let account_id = account_identifier(
+        &env,
+        ledger,
+        Account {
+            owner,
+            subaccount: None,
+        },
+    );
+    assert_eq!(expected_account_id, account_id);
+
+    // subaccount 1
+    let expected_account_id =
+        hex::decode("c59f11aa439a50b084e6a28769ac2f43fb95f452f97351b2dd89060e284151e8").unwrap();
+    let subaccount = Some(
+        hex::decode("0000000000000000000000000000000000000000000000000000000000000001")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    let account_id = account_identifier(&env, ledger, Account { owner, subaccount });
+    assert_eq!(expected_account_id, account_id);
+
+    // random subaccount
+    let expected_account_id =
+        hex::decode("95eee02ffd99469c20b0488dad381d0b71a97f9b3e4387ad11ad65c3055f10c5").unwrap();
+    let subaccount = Some(
+        hex::decode("C6EE2D822ED28BA50D807AE0969B422E181CD4484D93CD556923938355A4BAA7")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    let account_id = account_identifier(&env, ledger, Account { owner, subaccount });
+    assert_eq!(expected_account_id, account_id);
 }

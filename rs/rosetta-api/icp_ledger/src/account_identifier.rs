@@ -10,7 +10,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::protobuf as proto;
+use crate::{protobuf as proto, AccountIdBlob};
 
 /// While this is backed by an array of length 28, it's canonical representation
 /// is a hex string of length 64. The first 8 characters are the CRC-32 encoded
@@ -112,7 +112,7 @@ impl AccountIdentifier {
 
     /// Converts this account identifier into a binary "address".
     /// The address is CRC32(identifier) . identifier.
-    pub fn to_address(&self) -> [u8; 32] {
+    pub fn to_address(&self) -> AccountIdBlob {
         let mut result = [0u8; 32];
         result[0..4].copy_from_slice(&self.generate_checksum());
         result[4..32].copy_from_slice(&self.hash);
@@ -120,7 +120,7 @@ impl AccountIdentifier {
     }
 
     /// Tries to parse an account identifier from a binary address.
-    pub fn from_address(blob: [u8; 32]) -> Result<Self, ChecksumError> {
+    pub fn from_address(blob: AccountIdBlob) -> Result<Self, ChecksumError> {
         check_sum(blob)
     }
 
