@@ -557,13 +557,13 @@ impl BackupHelper {
         None
     }
 
-    fn get_disk_stats(&self, typ: DiskStats) -> Result<u32, String> {
+    fn get_disk_stats(&self, dir: &Path, typ: DiskStats) -> Result<u32, String> {
         let mut cmd = Command::new("df");
         cmd.arg(match typ {
             DiskStats::Inodes => "-i",
             DiskStats::Space => "-k",
         });
-        cmd.arg(&self.root_dir);
+        cmd.arg(dir);
         match exec_cmd(&mut cmd) {
             Ok(str) => {
                 if let Some(val) = str
@@ -579,12 +579,16 @@ impl BackupHelper {
                     num_str.pop();
                     if let Ok(n) = num_str.parse::<u32>() {
                         if n >= self.disk_threshold_warn {
-                            let status = match typ {
+                            let resource = match typ {
                                 DiskStats::Inodes => "inodes",
                                 DiskStats::Space => "space",
                             };
-                            self.notification_client
-                                .report_warning_slack(format!("{} usage is at {}%", status, n))
+                            self.notification_client.report_warning_slack(format!(
+                                "[{}] {} usage is at {}%",
+                                dir.to_str().unwrap_or_default(),
+                                resource,
+                                n
+                            ))
                         }
                         Ok(n)
                     } else {
@@ -650,22 +654,21 @@ impl BackupHelper {
         file.write_all(now_str.as_bytes())
             .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
 
-        match (
-            self.get_disk_stats(DiskStats::Space),
-            self.get_disk_stats(DiskStats::Inodes),
-        ) {
-            (Ok(space), Ok(inodes)) => {
-                debug!(
-                    self.log,
-                    "[#{}] Space: {}% Inodes: {}%", self.thread_id, space, inodes
-                );
-                self.notification_client
-                    .push_metrics_disk_stats(space, inodes);
-                Ok(())
-            }
-            (Err(err), Ok(_)) => Err(err),
-            (_, Err(err)) => Err(err),
+        self.log_disk_stats()
+    }
+
+    fn log_disk_stats(&self) -> Result<(), String> {
+        for dir in &[&self.root_dir, &self.cold_storage_dir] {
+            let space = self.get_disk_stats(dir, DiskStats::Space)?;
+            let inodes = self.get_disk_stats(dir, DiskStats::Inodes)?;
+            debug!(
+                self.log,
+                "[{:?}] Space: {}% Inodes: {}%", dir, space, inodes
+            );
+            self.notification_client
+                .push_metrics_disk_stats(dir, space, inodes);
         }
+        Ok(())
     }
 
     pub fn need_cold_storage_move(&self) -> Result<bool, String> {
@@ -678,30 +681,8 @@ impl BackupHelper {
     }
 
     pub fn do_move_cold_storage(&self) -> Result<(), String> {
-        let old_space = self.get_disk_stats(DiskStats::Space)? as i32;
-        let old_inodes = self.get_disk_stats(DiskStats::Inodes)? as i32;
-
         let max_height = self.cold_store_artifacts()?;
         self.cold_store_states(max_height)?;
-
-        // i32 to calculate negative difference below
-        let new_space = self.get_disk_stats(DiskStats::Space)? as i32;
-        let new_inodes = self.get_disk_stats(DiskStats::Inodes)? as i32;
-
-        let action_text = if self.do_cold_storage {
-            "Moved to cold storage"
-        } else {
-            "Cleaned up"
-        };
-        self.notification_client.message_slack(format!(
-            "✅ {} artifacts of subnet {:?} and states up to height *{}*, \
-            saved {}% of space and {}% of inodes.",
-            action_text,
-            self.subnet_id,
-            max_height,
-            old_space - new_space,
-            old_inodes - new_inodes
-        ));
         info!(
             self.log,
             "Finished moving old artifacts and states of subnet {:?} to the cold storage",
