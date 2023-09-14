@@ -30,7 +30,7 @@ use crate::{
         test_env_api::*,
     },
     orchestrator::utils::upgrade::{
-        bless_replica_version_with_urls, get_assigned_replica_version, get_update_image_url,
+        bless_replica_version_with_urls, get_assigned_replica_version,
         update_subnet_replica_version, UpdateImageType,
     },
     util::{block_on, get_nns_node},
@@ -62,14 +62,14 @@ pub fn test(env: TestEnv) {
     let original_version = get_assigned_replica_version(&nns_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = get_update_image_url(UpdateImageType::ImageTest, &original_version);
+    let upgrade_url = env.get_ic_os_update_img_test_url().expect("no image URL");
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
     // A list of URLs, among which only one is valid:
     let release_package_urls = vec![
         "http://invalid.test-url.dfinity.network:0001".to_string(),
         "http://invalid.test-url.dfinity.network:0002".to_string(),
-        upgrade_url,
+        upgrade_url.to_string(),
         "http://invalid.test-url.dfinity.network:0004".to_string(),
         "http://invalid.test-url.dfinity.network:0005".to_string(),
     ];
@@ -83,6 +83,8 @@ pub fn test(env: TestEnv) {
         &original_version,
         UpdateImageType::ImageTest,
         release_package_urls,
+        env.get_ic_os_update_img_test_sha256()
+            .expect("no SHA256 hash"),
         &logger,
     ));
 

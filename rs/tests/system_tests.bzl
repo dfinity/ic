@@ -90,6 +90,7 @@ def system_test(
         tags = [],
         test_timeout = "long",
         flaky = True,
+        malicious = False,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
         uses_guestos_dev = False,
@@ -105,6 +106,7 @@ def system_test(
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       flaky: rerun in case of failure (up to 3 times).
+      malicious: use the malicious disk image.
       colocated_test_driver_vm_resources: a structure describing
       the required resources of the colocated test-driver VM. For example:
         {
@@ -160,6 +162,14 @@ def system_test(
     if uses_guestos_dev_test:
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256"
+
+    if malicious:
+        _guestos_malicous = "//ic-os/guestos/envs/dev-fixed-version-malicious:" if ic_os_fixed_version else "//ic-os/guestos/envs/dev-malicious:"
+
+        _env_deps[_guestos_malicous + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos_malicous + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256"
+        _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos_malicous + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256"
 
     run_system_test(
         name = name,

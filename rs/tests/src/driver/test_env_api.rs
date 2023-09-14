@@ -978,15 +978,17 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_malicious_ic_os_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/disk-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL",
+        )?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_malicious_ic_os_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/disk-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "malicious_ic_os_img_sha256")?;
+        let sha256 = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256",
+        )?;
+        bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
         Ok(sha256)
     }
 
@@ -1017,15 +1019,17 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_malicious_ic_os_update_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/update-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL",
+        )?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/update-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "malicious_ic_os_update_img_sha256")?;
+        let sha256 = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256",
+        )?;
+        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
         Ok(sha256)
     }
 

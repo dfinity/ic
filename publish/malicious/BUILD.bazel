@@ -5,7 +5,10 @@ load("//publish:defs.bzl", "malicious_binary")
 malicious_binary(
     name = "replica",
     binary = "//rs/replica",
-    visibility = ["//ic-os/guestos/envs/dev-malicious:__pkg__"],
+    visibility = [
+        "//ic-os/guestos/envs/dev-fixed-version-malicious:__pkg__",
+        "//ic-os/guestos/envs/dev-malicious:__pkg__",
+    ],
 )
 
 gzip_compress(

@@ -225,6 +225,7 @@ fn downgrade_upgrade_roundtrip(
 
     stop_node(&logger, &faulty_node);
 
+    info!(logger, "Upgrade to version {}", target_version);
     upgrade_to(nns_node, subnet_id, &subnet_node, target_version, &logger);
 
     // Killing redundant nodes should not prevent the `faulty_node` downgrading to mainnet version and catching up after restarting.
@@ -242,7 +243,7 @@ fn downgrade_upgrade_roundtrip(
     ));
     info!(logger, "After upgrade could read message '{}'", msg);
 
-    let msg_2 = "hello world after downgrade!";
+    let msg_2 = "hello world after an upgrade!";
     let can_id_2 = store_message(
         &faulty_node.get_public_url(),
         faulty_node.effective_canister_id(),
@@ -263,6 +264,8 @@ fn downgrade_upgrade_roundtrip(
     }
 
     stop_node(&logger, &faulty_node);
+
+    info!(logger, "Downgrade to version {}", branch_version);
     upgrade_to(nns_node, subnet_id, &subnet_node, branch_version, &logger);
 
     let msg_3 = "hello world after upgrade!";
