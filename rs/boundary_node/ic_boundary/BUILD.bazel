@@ -57,7 +57,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:url",
     "@crate_index//:wiremock",
-    "@crate_index//:x509_parser_0_15",
+    "@crate_index//:x509-parser",
 ]
 
 MACRO_DEPENDENCIES = [

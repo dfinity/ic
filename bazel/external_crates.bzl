@@ -1288,12 +1288,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.19",
             ),
             "x509-parser": crate.spec(
-                version = "^0.12.0",
-            ),
-            "x509-parser_0_15": crate.spec(
-                package = "x509-parser",
-                version = "^0.15.0",
+                version = "^0.15.1",
                 features = ["verify"],
+            ),
+            "x509-parser-without-verify": crate.spec(
+                package = "x509-parser",
+                version = "^0.14.0",
             ),
             "yansi": crate.spec(
                 version = "^0.5.0",
