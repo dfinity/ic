@@ -352,8 +352,8 @@ fn replace_tls_certificate_pubkey_with_invalid_one(cert: &mut X509PublicKeyCert)
         .subject_pki
         .subject_public_key
         .data;
-    let range_of_pubkey_raw_in_der = range_of_needle_in_haystack(pubkey_raw, x509_cert_der);
-    let invalid_pubkey = invalidate_valid_ed25519_pubkey_bytes(pubkey_raw);
+    let range_of_pubkey_raw_in_der = range_of_needle_in_haystack(&pubkey_raw, x509_cert_der);
+    let invalid_pubkey = invalidate_valid_ed25519_pubkey_bytes(&pubkey_raw);
     cert.certificate_der
         .splice(range_of_pubkey_raw_in_der, invalid_pubkey.0.iter().copied());
 }
