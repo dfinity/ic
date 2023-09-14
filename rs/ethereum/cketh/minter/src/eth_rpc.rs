@@ -324,7 +324,7 @@ pub struct GetLogsParam {
 //    "removed": false
 //  }
 // ```
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LogEntry {
     /// The address from which this log originated.
@@ -356,7 +356,11 @@ pub struct LogEntry {
     pub removed: bool,
 }
 
-impl HttpResponsePayload for Vec<LogEntry> {}
+impl HttpResponsePayload for Vec<LogEntry> {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::LogEntries)
+    }
+}
 
 /// Parameters of the [`eth_getBlockByNumber`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getblockbynumber) call.
 #[derive(Debug, Serialize, Clone)]
@@ -478,7 +482,11 @@ pub struct Block {
     pub base_fee_per_gas: Wei,
 }
 
-impl HttpResponsePayload for Block {}
+impl HttpResponsePayload for Block {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::Block)
+    }
+}
 
 /// An envelope for all JSON-RPC requests.
 #[derive(Serialize)]
@@ -523,6 +531,7 @@ impl<T> JsonRpcResult<T> {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ResponseTransform {
     Block,
+    LogEntries,
     Transaction,
     FeeHistory,
     SendRawTransaction,
@@ -545,6 +554,7 @@ impl ResponseTransform {
 
         match self {
             Self::Block => redact_response::<Block>(body_bytes),
+            Self::LogEntries => redact_response::<Vec<LogEntry>>(body_bytes),
             Self::Transaction => redact_response::<Transaction>(body_bytes),
             Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
             Self::SendRawTransaction => {
