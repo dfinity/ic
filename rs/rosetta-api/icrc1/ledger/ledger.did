@@ -6,49 +6,49 @@ type Timestamp = nat64;
 type Duration = nat64;
 type Tokens = nat;
 type TxIndex = nat;
-type Allowance = record { allowance : nat; expires_at : opt nat64 };
+type Allowance = record { allowance : nat; expires_at : opt Timestamp };
 type AllowanceArgs = record { account : Account; spender : Account };
 type Approve = record {
   fee : opt nat;
   from : Account;
-  memo : opt vec nat8;
-  created_at_time : opt nat64;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
   amount : nat;
   expected_allowance : opt nat;
-  expires_at : opt nat64;
+  expires_at : opt Timestamp;
   spender : Account;
 };
 type ApproveArgs = record {
   fee : opt nat;
-  memo : opt vec nat8;
-  from_subaccount : opt vec nat8;
-  created_at_time : opt nat64;
+  memo : opt blob;
+  from_subaccount : opt blob;
+  created_at_time : opt Timestamp;
   amount : nat;
   expected_allowance : opt nat;
-  expires_at : opt nat64;
+  expires_at : opt Timestamp;
   spender : Account;
 };
 type ApproveError = variant {
   GenericError : record { message : text; error_code : nat };
   TemporarilyUnavailable;
-  Duplicate : record { duplicate_of : nat };
+  Duplicate : record { duplicate_of : BlockIndex };
   BadFee : record { expected_fee : nat };
   AllowanceChanged : record { current_allowance : nat };
-  CreatedInFuture : record { ledger_time : nat64 };
+  CreatedInFuture : record { ledger_time : Timestamp };
   TooOld;
-  Expired : record { ledger_time : nat64 };
+  Expired : record { ledger_time : Timestamp };
   InsufficientFunds : record { balance : nat };
 };
-type ApproveResult = variant { Ok : nat; Err : ApproveError };
+type ApproveResult = variant { Ok : BlockIndex; Err : ApproveError };
 
 type HttpRequest = record {
   url : text;
   method : text;
-  body : vec nat8;
+  body : blob;
   headers : vec record { text; text };
 };
 type HttpResponse = record {
-  body : vec nat8;
+  body : blob;
   headers : vec record { text; text };
   status_code : nat16;
 };
@@ -72,7 +72,7 @@ type TransferError = variant {
     BadBurn : record { min_burn_amount : Tokens };
     InsufficientFunds : record { balance : Tokens };
     TooOld;
-    CreatedInFuture : record { ledger_time : nat64 };
+    CreatedInFuture : record { ledger_time : Timestamp };
     TemporarilyUnavailable;
     Duplicate : record { duplicate_of : BlockIndex };
     GenericError : record { error_code : nat; message : text };
@@ -213,22 +213,22 @@ type Transaction = record {
   kind : text;
   mint : opt Mint;
   approve : opt Approve;
-  timestamp : nat64;
+  timestamp : Timestamp;
   transfer : opt Transfer;
 };
 
 type Burn = record {
   from : Account;
-  memo : opt vec nat8;
-  created_at_time : opt nat64;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
   amount : nat;
   spender : opt Account;
 };
 
 type Mint = record {
   to : Account;
-  memo : opt vec nat8;
-  created_at_time : opt nat64;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
   amount : nat;
 };
 
@@ -236,8 +236,8 @@ type Transfer = record {
   to : Account;
   fee : opt nat;
   from : Account;
-  memo : opt vec nat8;
-  created_at_time : opt nat64;
+  memo : opt blob;
+  created_at_time : opt Timestamp;
   amount : nat;
   spender : opt Account;
 };
@@ -351,7 +351,7 @@ type TransferFromError = variant {
     InsufficientFunds : record { balance : Tokens };
     InsufficientAllowance : record { allowance : Tokens };
     TooOld;
-    CreatedInFuture : record { ledger_time : nat64 };
+    CreatedInFuture : record { ledger_time : Timestamp };
     Duplicate : record { duplicate_of : BlockIndex };
     TemporarilyUnavailable;
     GenericError : record { error_code : nat; message : text };
