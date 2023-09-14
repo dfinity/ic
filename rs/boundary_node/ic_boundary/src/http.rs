@@ -47,7 +47,7 @@ impl<T: HttpClient> HttpClient for WithMetrics<T> {
         // Attribute (Status Code)
         let status_code = match &out {
             Ok(out) => out.status().as_u16().to_string(),
-            Err(_) => "".to_string(),
+            Err(_) => "000".to_string(),
         };
 
         let MetricParams {
