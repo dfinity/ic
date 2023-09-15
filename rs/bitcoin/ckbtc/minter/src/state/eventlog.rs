@@ -167,8 +167,6 @@ pub enum Event {
         reason: ReimbursementReason,
         /// The corresponding burn block on the ledger.
         burn_block_index: u64,
-        /// The fee charged for the KYT check.
-        kyt_fee: u64,
     },
 
     /// Indicates that a reimbursement has been executed.
@@ -335,15 +333,13 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 account,
                 amount,
                 burn_block_index,
-                kyt_fee,
                 reason,
             } => {
-                state.reimbursement_map.insert(
+                state.schedule_deposit_reimbursement(
                     burn_block_index,
                     ReimburseDepositTask {
                         account,
                         amount,
-                        kyt_fee,
                         reason,
                     },
                 );

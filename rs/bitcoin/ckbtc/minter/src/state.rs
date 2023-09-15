@@ -357,13 +357,15 @@ pub struct CkBtcMinterState {
 pub struct ReimburseDepositTask {
     pub account: Account,
     pub amount: u64,
-    pub kyt_fee: u64,
     pub reason: ReimbursementReason,
 }
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize, candid::CandidType, Copy)]
 pub enum ReimbursementReason {
-    TaintedDestination,
+    TaintedDestination {
+        kyt_provider: Principal,
+        kyt_fee: u64,
+    },
     CallFailed,
 }
 
@@ -961,6 +963,24 @@ impl CkBtcMinterState {
             }
             Entry::Vacant(_) => Err(Overdraft(amount)),
         }
+    }
+
+    pub fn schedule_deposit_reimbursement(
+        &mut self,
+        burn_block_index: u64,
+        reimburse_deposit_task: ReimburseDepositTask,
+    ) {
+        match reimburse_deposit_task.reason {
+            ReimbursementReason::TaintedDestination {
+                kyt_provider,
+                kyt_fee,
+            } => {
+                *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+            }
+            ReimbursementReason::CallFailed => {}
+        }
+        self.reimbursement_map
+            .insert(burn_block_index, reimburse_deposit_task);
     }
 
     /// Checks whether the internal state of the minter matches the other state
