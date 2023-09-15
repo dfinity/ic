@@ -2,6 +2,7 @@
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use candid::{CandidType, Deserialize};
+use minicbor::{Decode, Encode};
 use serde::Serialize;
 use std::fmt::{Display, Formatter};
 
@@ -18,9 +19,25 @@ pub enum MinterArg {
     UpgradeArg(UpgradeArg),
 }
 
-#[derive(CandidType, Clone, Copy, Default, Serialize, Deserialize, Debug, Eq, PartialEq, Hash)]
+#[derive(
+    CandidType,
+    Clone,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+    Encode,
+    Decode,
+)]
+#[cbor(index_only)]
 pub enum EthereumNetwork {
+    #[n(1)]
     Mainnet,
+    #[n(11155111)]
     #[default]
     Sepolia,
 }

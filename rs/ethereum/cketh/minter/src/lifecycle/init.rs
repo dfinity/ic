@@ -8,15 +8,23 @@ use crate::transactions::EthTransactions;
 use candid::types::number::Nat;
 use candid::types::principal::Principal;
 use candid::{CandidType, Deserialize};
+use minicbor::{Decode, Encode};
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(CandidType, serde::Serialize, Deserialize, Clone, Debug, Encode, Decode)]
 pub struct InitArg {
+    #[n(0)]
     pub ethereum_network: EthereumNetwork,
+    #[n(1)]
     pub ecdsa_key_name: String,
+    #[n(2)]
     pub ethereum_contract_address: Option<String>,
+    #[cbor(n(3), with = "crate::cbor::principal")]
     pub ledger_id: Principal,
+    #[n(4)]
     pub ethereum_block_height: CandidBlockTag,
+    #[cbor(n(6), with = "crate::cbor::nat")]
     pub minimum_withdrawal_amount: Nat,
+    #[cbor(n(7), with = "crate::cbor::nat")]
     pub next_transaction_nonce: Nat,
 }
 

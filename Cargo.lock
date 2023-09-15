@@ -5626,6 +5626,8 @@ dependencies = [
  "ic-icrc1-client-cdk",
  "ic-metrics-encoder",
  "icrc-ledger-types",
+ "minicbor",
+ "minicbor-derive",
  "num-bigint 0.4.3",
  "num-traits",
  "phantom_newtype",

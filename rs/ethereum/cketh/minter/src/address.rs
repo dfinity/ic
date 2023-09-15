@@ -1,4 +1,5 @@
 use ic_crypto_ecdsa_secp256k1::PublicKey;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter, LowerHex, UpperHex};
@@ -8,9 +9,16 @@ use std::str::FromStr;
 mod tests;
 
 /// An Ethereum account address.
-#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct Address(#[serde(with = "crate::serde_data")] [u8; 20]);
+#[cbor(transparent)]
+pub struct Address(
+    #[serde(with = "crate::serde_data")]
+    #[cbor(n(0), with = "minicbor::bytes")]
+    [u8; 20],
+);
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
