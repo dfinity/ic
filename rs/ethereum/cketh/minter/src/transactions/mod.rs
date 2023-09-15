@@ -7,15 +7,19 @@ use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
 use crate::tx::{
     ConfirmedEip1559Transaction, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
 };
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::vec_deque::Iter;
 use std::collections::{BTreeMap, VecDeque};
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 pub struct EthWithdrawalRequest {
+    #[n(0)]
     pub withdrawal_amount: Wei,
+    #[n(1)]
     pub destination: Address,
+    #[cbor(n(2), with = "crate::cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
 }
 

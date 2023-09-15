@@ -6,15 +6,19 @@ mod tests;
 use crate::eth_rpc::Quantity;
 use candid::Nat;
 use ethnum::u256;
+use minicbor::{Decode, Encode};
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Wei is the smallest denomination of ether.
 /// 1 wei == 10^(-18) ether
-#[derive(Clone, Copy, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Copy, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct Wei(ethnum::u256);
+#[cbor(transparent)]
+pub struct Wei(#[cbor(n(0), with = "crate::cbor::u256")] ethnum::u256);
 
 fn nat_into_u256(value: Nat) -> Result<u256, String> {
     let value_bytes = value.0.to_bytes_be();
@@ -118,9 +122,12 @@ impl fmt::Display for Wei {
 /// If that's not the case, the transaction is rejected
 /// (if the nonce was already seen in another transaction from the same sender)
 /// or kept in the node's transaction pool while waiting for the missing nonce.
-#[derive(Clone, Copy, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Copy, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct TransactionNonce(ethnum::u256);
+#[cbor(transparent)]
+pub struct TransactionNonce(#[cbor(n(0), with = "crate::cbor::u256")] ethnum::u256);
 
 impl TransactionNonce {
     pub const ZERO: Self = TransactionNonce(ethnum::u256::ZERO);

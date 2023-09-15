@@ -3,6 +3,7 @@ use crate::transactions::EthWithdrawalRequest;
 use crate::tx::TransactionPrice;
 use candid::{CandidType, Deserialize, Nat};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
+use minicbor::{Decode, Encode};
 use serde::Serialize;
 use std::fmt::{Display, Formatter};
 
@@ -34,18 +35,22 @@ pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(CandidType, Debug, Default, Serialize, Deserialize, Clone, Encode, Decode)]
+#[cbor(index_only)]
 pub enum CandidBlockTag {
     /// The latest mined block.
     #[default]
+    #[cbor(n(0))]
     Latest,
     /// The latest safe head block.
     /// See
     /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    #[cbor(n(1))]
     Safe,
     /// The latest finalized block.
     /// See
     /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    #[cbor(n(2))]
     Finalized,
 }
 

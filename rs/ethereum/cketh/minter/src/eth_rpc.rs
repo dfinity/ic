@@ -17,6 +17,7 @@ use ic_cdk::api::management_canister::http_request::{
     TransformContext,
 };
 use ic_cdk_macros::query;
+use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
@@ -117,9 +118,16 @@ impl HttpResponsePayload for SendRawTransactionResult {
     }
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(
+    Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct Hash(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+#[cbor(transparent)]
+pub struct Hash(
+    #[serde(with = "crate::serde_data")]
+    #[cbor(n(0), with = "minicbor::bytes")]
+    pub [u8; 32],
+);
 
 impl Debug for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -428,9 +436,12 @@ impl HttpResponsePayload for FeeHistory {
 
 impl HttpResponsePayload for Wei {}
 
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(
+    Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Ord, PartialOrd, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct BlockNumber(pub Quantity);
+#[cbor(transparent)]
+pub struct BlockNumber(#[cbor(n(0), with = "crate::cbor::u256")] pub Quantity);
 
 impl From<BlockNumber> for BlockSpec {
     fn from(value: BlockNumber) -> Self {

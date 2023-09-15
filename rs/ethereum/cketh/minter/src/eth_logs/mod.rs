@@ -11,6 +11,7 @@ use candid::Principal;
 use ethnum::u256;
 use hex_literal::hex;
 use ic_canister_log::log;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -19,13 +20,19 @@ pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
 pub enum EthLogIndexTag {}
 pub type LogIndex = phantom_newtype::Id<EthLogIndexTag, u256>;
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct ReceivedEthEvent {
+    #[n(0)]
     pub transaction_hash: Hash,
+    #[n(1)]
     pub block_number: BlockNumber,
+    #[cbor(n(2), with = "crate::cbor::u256_id")]
     pub log_index: LogIndex,
+    #[n(3)]
     pub from_address: Address,
+    #[n(4)]
     pub value: Wei,
+    #[cbor(n(5), with = "crate::cbor::principal")]
     pub principal: Principal,
 }
 

@@ -35,6 +35,8 @@ ic-metrics-encoder = "1"
 rlp = "0.5.2"
 num-bigint = "0.4.3"
 num-traits = "0.2.14"
+minicbor = { workspace = true }
+minicbor-derive = { workspace = true }
 serde = "1"
 serde_json = "1"
 serde_bytes = "0.11"

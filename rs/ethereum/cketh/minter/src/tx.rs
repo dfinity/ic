@@ -5,13 +5,15 @@ use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
 use ic_crypto_ecdsa_secp256k1::RecoveryId;
 use ic_ic00_types::DerivationPath;
+use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 use serde::{Deserialize, Serialize};
 
 const EIP1559_TX_ID: u8 = 2;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
-pub struct AccessList(pub Vec<AccessListItem>);
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[cbor(transparent)]
+pub struct AccessList(#[n(0)] pub Vec<AccessListItem>);
 
 impl AccessList {
     pub fn new() -> Self {
@@ -31,12 +33,18 @@ impl rlp::Encodable for AccessList {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[cbor(transparent)]
+pub struct StorageKey(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
+
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 pub struct AccessListItem {
     /// Accessed address
+    #[n(0)]
     pub address: Address,
     /// Accessed storage keys
-    pub storage_keys: Vec<[u8; 32]>,
+    #[n(1)]
+    pub storage_keys: Vec<StorageKey>,
 }
 
 impl rlp::Encodable for AccessListItem {
@@ -47,22 +55,31 @@ impl rlp::Encodable for AccessListItem {
         s.append(&self.address.as_ref());
         s.begin_list(self.storage_keys.len());
         for storage_key in self.storage_keys.iter() {
-            s.append(&storage_key.as_ref());
+            s.append(&storage_key.0.as_ref());
         }
     }
 }
 
 /// https://eips.ethereum.org/EIPS/eip-1559
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 pub struct Eip1559TransactionRequest {
+    #[n(0)]
     pub chain_id: u64,
+    #[n(1)]
     pub nonce: TransactionNonce,
+    #[n(2)]
     pub max_priority_fee_per_gas: Wei,
+    #[n(3)]
     pub max_fee_per_gas: Wei,
+    #[cbor(n(4), with = "crate::cbor::u256")]
     pub gas_limit: Quantity,
+    #[n(5)]
     pub destination: Address,
+    #[n(6)]
     pub amount: Wei,
+    #[cbor(n(7), with = "minicbor::bytes")]
     pub data: Vec<u8>,
+    #[n(8)]
     pub access_list: AccessList,
 }
 
@@ -74,10 +91,13 @@ impl rlp::Encodable for Eip1559TransactionRequest {
     }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct Eip1559Signature {
+    #[n(0)]
     pub signature_y_parity: bool,
+    #[cbor(n(1), with = "crate::cbor::u256")]
     pub r: u256,
+    #[cbor(n(2), with = "crate::cbor::u256")]
     pub s: u256,
 }
 
@@ -89,9 +109,11 @@ impl rlp::Encodable for Eip1559Signature {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 pub struct SignedEip1559TransactionRequest {
+    #[n(0)]
     transaction: Eip1559TransactionRequest,
+    #[n(1)]
     signature: Eip1559Signature,
 }
 

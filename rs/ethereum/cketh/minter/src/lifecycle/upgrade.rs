@@ -5,12 +5,17 @@ use crate::state::STATE;
 use candid::{CandidType, Deserialize, Nat};
 use ic_canister_log::log;
 use ic_cdk::api::stable::StableReader;
+use minicbor::{Decode, Encode};
 
-#[derive(CandidType, Deserialize, Clone, Debug, Default)]
+#[derive(CandidType, serde::Serialize, Deserialize, Clone, Debug, Default, Encode, Decode)]
 pub struct UpgradeArg {
+    #[cbor(n(0), with = "crate::cbor::nat::option")]
     pub next_transaction_nonce: Option<Nat>,
+    #[cbor(n(1), with = "crate::cbor::nat::option")]
     pub minimum_withdrawal_amount: Option<Nat>,
+    #[n(2)]
     pub ethereum_contract_address: Option<String>,
+    #[n(3)]
     pub ethereum_block_height: Option<CandidBlockTag>,
 }
 
