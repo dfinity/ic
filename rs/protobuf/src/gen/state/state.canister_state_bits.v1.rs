@@ -486,6 +486,24 @@ pub struct CanisterHistory {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Unsigned128 {
+    #[prost(bytes = "vec", tag = "1")]
+    pub raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TotalQueryStats {
+    #[prost(message, optional, tag = "1")]
+    pub num_calls: ::core::option::Option<Unsigned128>,
+    #[prost(message, optional, tag = "2")]
+    pub num_instructions: ::core::option::Option<Unsigned128>,
+    #[prost(message, optional, tag = "3")]
+    pub ingress_payload_size: ::core::option::Option<Unsigned128>,
+    #[prost(message, optional, tag = "4")]
+    pub egress_payload_size: ::core::option::Option<Unsigned128>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmChunkData {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
@@ -578,6 +596,9 @@ pub struct CanisterStateBits {
     /// Maps tracking chunks in the Wasm chunk store.
     #[prost(message, optional, tag = "40")]
     pub wasm_chunk_store_metadata: ::core::option::Option<WasmChunkStoreMetadata>,
+    /// Statistics on query execution for entire lifetime of canister.
+    #[prost(message, optional, tag = "41")]
+    pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

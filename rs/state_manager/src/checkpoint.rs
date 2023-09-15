@@ -399,6 +399,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             time_of_last_allocation_charge: Time::from_nanos_since_unix_epoch(
                 canister_state_bits.time_of_last_allocation_charge_nanos,
             ),
+            total_query_stats: canister_state_bits.total_query_stats,
         },
     };
 

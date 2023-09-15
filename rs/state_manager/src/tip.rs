@@ -557,6 +557,7 @@ fn serialize_canister_to_tip(
                 .wasm_chunk_store
                 .metadata()
                 .clone(),
+            total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
         }
         .into(),
     )?;
