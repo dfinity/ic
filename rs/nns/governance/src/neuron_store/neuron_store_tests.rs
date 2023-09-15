@@ -175,8 +175,10 @@ fn test_heap_range_with_begin_and_limit() {
         12 => simple_neuron(12),
     });
 
-    let observed_neurons =
-        neuron_store.heap_neurons_range_with_begin_and_limit(NeuronId { id: 3 }, 2);
+    let observed_neurons: Vec<_> = neuron_store
+        .range_heap_neurons(NeuronId { id: 3 }..)
+        .take(2)
+        .collect();
 
     assert_eq!(observed_neurons, vec![simple_neuron(3), simple_neuron(7)],);
 }

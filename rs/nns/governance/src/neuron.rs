@@ -13,7 +13,10 @@ use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    ops::RangeBounds,
+};
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
@@ -1029,4 +1032,20 @@ mod tests {
             }
         }
     }
+}
+
+/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
+/// that operate on NeuronId ranges with internal u64 representations in data.
+pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
+    let first = match range.start_bound() {
+        std::ops::Bound::Included(start) => start.id,
+        std::ops::Bound::Excluded(start) => start.id + 1,
+        std::ops::Bound::Unbounded => 0,
+    };
+    let last = match range.end_bound() {
+        std::ops::Bound::Included(end) => end.id,
+        std::ops::Bound::Excluded(end) => end.id - 1,
+        std::ops::Bound::Unbounded => u64::MAX,
+    };
+    first..=last
 }
