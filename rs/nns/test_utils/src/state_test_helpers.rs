@@ -9,10 +9,12 @@ use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{
-    CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResult,
-    CanisterStatusResultV2, UpdateSettingsArgs,
+    CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    UpdateSettingsArgs,
 };
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
@@ -254,7 +256,7 @@ pub fn get_canister_status(
 pub fn get_canister_status_from_root(
     machine: &StateMachine,
     target: CanisterId,
-) -> ic_nervous_system_clients::canister_status::CanisterStatusResult {
+) -> CanisterStatusResult {
     update_with_sender(
         machine,
         ROOT_CANISTER_ID,
@@ -726,7 +728,7 @@ pub fn nns_set_followees_for_neuron(
         topic,
         followees: followees
             .iter()
-            .map(|leader| ic_nns_common::pb::v1::NeuronId { id: leader.id })
+            .map(|leader| NeuronId { id: leader.id })
             .collect(),
     });
 

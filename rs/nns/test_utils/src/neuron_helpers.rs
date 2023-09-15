@@ -1,14 +1,16 @@
-use crate::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID};
-use crate::state_test_helpers::{list_neurons, nns_governance_make_proposal};
+use crate::{
+    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
+    state_test_helpers::{list_neurons, nns_governance_make_proposal},
+};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::manage_neuron_response::Command;
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::{ExecuteNnsFunction, Neuron, NnsFunction, Proposal};
+use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_governance::pb::v1::{
+    manage_neuron_response::Command, proposal::Action, ExecuteNnsFunction, Neuron, NnsFunction,
+    Proposal,
+};
 use ic_state_machine_tests::StateMachine;
 use std::collections::HashMap;
 

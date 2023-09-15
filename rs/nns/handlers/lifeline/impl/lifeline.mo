@@ -69,13 +69,17 @@ actor {
 
     type CanisterIdRecord = { canister_id : Principal };
 
+    type DefiniteCanisterSettings = {
+        controllers : [Principal];
+
+    };
+
     type CanisterStatusResult = {
-        controller : Principal;
         status : { #stopped; #stopping; #running };
         memory_size : Nat;
         module_hash : ?Blob;
         cycles : Nat;
-        balance : [(Blob, Nat)]
+        settings: DefiniteCanisterSettings;
     };
 
     public shared func canister_status(id : CanisterIdRecord) : async CanisterStatusResult {

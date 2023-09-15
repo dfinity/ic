@@ -36,16 +36,20 @@ use ic_registry_transport::{
     serialize_get_value_request, Error,
 };
 use ic_test_utilities::types::ids::{subnet_test_id, user_test_id};
-use ic_types::crypto::{CurrentNodePublicKeys, KeyPurpose};
-use ic_types::p2p::build_default_gossip_config;
-use ic_types::{NodeId, ReplicaVersion};
+use ic_types::{
+    crypto::{CurrentNodePublicKeys, KeyPurpose},
+    p2p::build_default_gossip_config,
+    NodeId, ReplicaVersion,
+};
 use maplit::btreemap;
 use on_wire::bytes;
 use prost::Message;
-use registry_canister::mutations::common::decode_registry_value;
-use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
-use registry_canister::mutations::node_management::do_add_node::{
-    connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload,
+use registry_canister::mutations::{
+    common::decode_registry_value,
+    node_management::{
+        common::make_add_node_registry_mutations,
+        do_add_node::{connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload},
+    },
 };
 use std::convert::TryFrom;
 
