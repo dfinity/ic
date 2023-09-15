@@ -607,17 +607,17 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_participant_total_icp_e8s",
-        swap().participant_total_icp_e8s() as f64,
+        swap().current_total_participation_e8s() as f64,
         "The total amount of ICP contributed by direct investors and the Community Fund",
     )?;
     w.encode_gauge(
         "sale_direct_investor_total_icp_e8s",
-        swap().direct_investor_total_icp_e8s() as f64,
+        swap().current_direct_participation_e8s() as f64,
         "The total amount of ICP contributed by direct investors",
     )?;
     w.encode_gauge(
         "sale_cf_total_icp_e8s",
-        swap().cf_total_icp_e8s() as f64,
+        swap().current_neurons_fund_participation_e8s() as f64,
         "The total amount of ICP contributed by the Community Fund",
     )?;
 
