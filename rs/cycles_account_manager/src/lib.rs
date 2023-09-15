@@ -103,6 +103,11 @@ impl ResourceSaturation {
         Self::new(usage / scaling, threshold / scaling, capacity / scaling)
     }
 
+    /// Returns the part of the usage that is above the threshold.
+    pub fn usage_above_threshold(&self) -> u64 {
+        self.usage.saturating_sub(self.threshold)
+    }
+
     /// Scales the given value proportionally to the resource saturation.
     /// More specifically, the value is scaled by `(U - T) / (C - T)`,
     /// where
@@ -636,12 +641,38 @@ impl CyclesAccountManager {
         storage_saturation: &ResourceSaturation,
         subnet_size: usize,
     ) -> Cycles {
+        // The reservation cycles for `allocated_bytes` can be computed as
+        // the difference between
+        // - the total reservation cycles from 0 to `usage + allocated_bytes` and
+        // - the total reservation cycles from 0 to `usage`.
+        self.total_storage_reservation_cycles(
+            &storage_saturation.add(allocated_bytes.get()),
+            subnet_size,
+        ) - self.total_storage_reservation_cycles(storage_saturation, subnet_size)
+    }
+
+    /// Returns the total amount of reserved cycles for the given resource
+    /// saturation level. In other words, it computes how many cycles would be
+    /// reserved for a resource allocation that goes from 0 to the usage
+    /// specified in the given resource saturation.
+    fn total_storage_reservation_cycles(
+        &self,
+        storage_saturation: &ResourceSaturation,
+        subnet_size: usize,
+    ) -> Cycles {
         let duration = Duration::from_secs(
             storage_saturation
-                .add(allocated_bytes.get())
                 .reservation_factor(self.config.max_storage_reservation_period.as_secs()),
         );
-        self.memory_cost(allocated_bytes, duration, subnet_size)
+        // We need to compute the area of the triangle with
+        // - base: (U - T) = usage_above_threshold(),
+        // - height: duration * fee.
+        // That is equal to `(base * height) / 2 = base * (height / 2)`.
+        self.memory_cost(
+            NumBytes::new(storage_saturation.usage_above_threshold()),
+            duration / 2,
+            subnet_size,
+        )
     }
 
     ////////////////////////////////////////////////////////////////////////////
