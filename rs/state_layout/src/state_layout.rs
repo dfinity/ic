@@ -20,8 +20,9 @@ use ic_replicated_state::{
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
-    nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
-    ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
+    batch::TotalCanisterQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
+    ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation, NumInstructions,
+    PrincipalId,
 };
 use ic_utils::fs::sync_path;
 use ic_utils::thread::parallel_map;
@@ -158,6 +159,7 @@ pub struct CanisterStateBits {
     pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
+    pub total_query_stats: TotalCanisterQueryStats,
 }
 
 #[derive(Clone)]
@@ -1637,6 +1639,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .collect(),
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
+            total_query_stats: Some((&item.total_query_stats).into()),
         }
     }
 }
@@ -1751,6 +1754,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             wasm_chunk_store_metadata: try_from_option_field(
                 value.wasm_chunk_store_metadata,
                 "CanisterStateBits::wasm_chunk_store_metadata",
+            )
+            .unwrap_or_default(),
+            total_query_stats: try_from_option_field(
+                value.total_query_stats,
+                "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
         })

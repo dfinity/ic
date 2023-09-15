@@ -10,6 +10,7 @@ use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_ic00_types::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::TotalCanisterQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
@@ -71,6 +72,16 @@ pub struct SchedulerState {
     /// needed to calculate how much time should be considered when charging
     /// occurs.
     pub time_of_last_allocation_charge: Time,
+
+    /// Query statistics.
+    ///
+    /// As queries are executed in non-deterministic fashion state modifications are
+    /// disallowed during the query call.
+    /// Instead, each node collects statistics about query execution locally and periodically,
+    /// once per "epoch", sends those to other machines as part of consensus blocks.
+    /// At the end of an "epoch", each node deterministically aggregates all those partial
+    /// query statistics received from consensus blocks and mutates these values.
+    pub total_query_stats: TotalCanisterQueryStats,
 }
 
 impl Default for SchedulerState {
@@ -84,6 +95,7 @@ impl Default for SchedulerState {
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
             time_of_last_allocation_charge: UNIX_EPOCH,
+            total_query_stats: TotalCanisterQueryStats::default(),
         }
     }
 }

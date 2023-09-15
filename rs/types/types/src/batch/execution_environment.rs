@@ -1,8 +1,12 @@
 use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
 use ic_base_types::{CanisterId, NodeId};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_state_bits::v1::{
+    TotalQueryStats as TotalQueryStatsProto, Unsigned128,
+};
 use ic_protobuf::state::stats::v1::{QueryStats, QueryStatsInner};
 use ic_protobuf::types::v1::{self as pb};
+
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::Hash;
@@ -13,6 +17,67 @@ pub struct CanisterQueryStats {
     pub num_instructions: u64, // Want u128, but not supported in protobuf
     pub ingress_payload_size: u64,
     pub egress_payload_size: u64,
+}
+
+/// Total number of query stats collected since creation of the canister.
+///
+/// This is a separate struct since values contained in here are accumulated
+/// since the canister has been created. Hence, we need larger integers to make
+/// overflows very unlikely.
+///
+/// As rates are calculated by repeated polling query stats, overlfows should not be
+/// a problem if the client side is polling frequently enough and handles those overflows.
+///
+/// Given the size of these values, overflows sould be rare, though.
+#[derive(Default, PartialEq, Eq, Debug, Clone)]
+pub struct TotalCanisterQueryStats {
+    pub num_calls: u128,
+    pub num_instructions: u128,
+    pub ingress_payload_size: u128,
+    pub egress_payload_size: u128,
+}
+
+fn get_u128_from_protobuf(proto: Option<Unsigned128>) -> Result<u128, ProxyDecodeError> {
+    let array: [u8; 16] = proto
+        .ok_or(ProxyDecodeError::MissingField(
+            "CanisterStateBits::total_query_stats",
+        ))?
+        .raw
+        .try_into()
+        .map_err(|e| {
+            ProxyDecodeError::Other(format!("Failed to decode total_query_stats: {:?}", e))
+        })?;
+    Ok(u128::from_le_bytes(array))
+}
+
+fn get_protobuf_for_u128(value: u128) -> Unsigned128 {
+    Unsigned128 {
+        raw: value.to_le_bytes().to_vec(),
+    }
+}
+
+impl TryFrom<TotalQueryStatsProto> for TotalCanisterQueryStats {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: TotalQueryStatsProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            num_calls: get_u128_from_protobuf(value.num_calls)?,
+            num_instructions: get_u128_from_protobuf(value.num_instructions)?,
+            ingress_payload_size: get_u128_from_protobuf(value.ingress_payload_size)?,
+            egress_payload_size: get_u128_from_protobuf(value.egress_payload_size)?,
+        })
+    }
+}
+
+impl From<&TotalCanisterQueryStats> for TotalQueryStatsProto {
+    fn from(value: &TotalCanisterQueryStats) -> Self {
+        TotalQueryStatsProto {
+            num_calls: Some(get_protobuf_for_u128(value.num_calls)),
+            num_instructions: Some(get_protobuf_for_u128(value.num_instructions)),
+            ingress_payload_size: Some(get_protobuf_for_u128(value.ingress_payload_size)),
+            egress_payload_size: Some(get_protobuf_for_u128(value.egress_payload_size)),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]

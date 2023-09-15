@@ -269,6 +269,17 @@ message CanisterHistory {
   uint64 total_num_changes = 2;
 }
 
+message Unsigned128 {
+  bytes raw = 1;
+}
+
+message TotalQueryStats {
+  Unsigned128 num_calls = 1;
+  Unsigned128 num_instructions = 2;
+  Unsigned128 ingress_payload_size = 3;
+  Unsigned128 egress_payload_size = 4;
+}
+
 message WasmChunkData {
   bytes hash = 1;
   uint64 index = 2;
@@ -346,4 +357,6 @@ message CanisterStateBits {
   state.queues.v1.Cycles reserved_balance_limit = 39;
   // Maps tracking chunks in the Wasm chunk store.
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
+  // Statistics on query execution for entire lifetime of canister.
+  TotalQueryStats total_query_stats = 41;
 }
