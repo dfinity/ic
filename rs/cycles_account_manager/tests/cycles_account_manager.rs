@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
@@ -931,4 +931,120 @@ fn scaling_of_resource_saturation() {
     let rs = ResourceSaturation::new(100, 100, 200);
     // The usage should be capped at the capacity.
     assert_eq!(1000, rs.add(200).reservation_factor(1000));
+}
+
+#[test]
+fn test_storage_reservation_cycles() {
+    const GB: u64 = 1024 * 1024 * 1024;
+
+    let cfg = CyclesAccountManagerConfig::application_subnet();
+    let cam = CyclesAccountManagerBuilder::new().build();
+
+    // Allocation of 100GB below the threshold.
+    assert_eq!(
+        Cycles::new(0),
+        cam.storage_reservation_cycles(
+            NumBytes::new(100 * GB),
+            &ResourceSaturation::new(0, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE
+        )
+    );
+
+    // Allocation of 101GB at (usage=0GB, threshold=100GB, capacity=200GB).
+    // Only 1GB above the threshold participates in reservation.
+    assert_eq!(
+        Cycles::new(
+            cfg.max_storage_reservation_period.as_secs() as u128
+                * cfg.gib_storage_per_second_fee.get()
+                // The remaining computes the area of the triangle
+                // above the threshold with
+                // - base = 1
+                // - height = (101 - 100) / (200 - 100).
+                / (200 - 100)
+                / 2
+        ),
+        cam.storage_reservation_cycles(
+            NumBytes::new(101 * GB),
+            &ResourceSaturation::new(0, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE
+        )
+    );
+
+    // Allocation of 40GB at (usage=90GB, threshold=100GB, capacity=200GB).
+    // Only 30GB above the threshold participate in reservation.
+    assert_eq!(
+        Cycles::new(
+            cfg.max_storage_reservation_period.as_secs() as u128
+                * cfg.gib_storage_per_second_fee.get()
+                // The remaining computes the area of the triangle
+                // above the threshold with
+                // - base = 30
+                // - height = (130 - 100) / (200 - 100).
+                * 30
+                * (130 - 100)
+                / (200 - 100)
+                / 2
+        ),
+        cam.storage_reservation_cycles(
+            NumBytes::new(40 * GB),
+            &ResourceSaturation::new(90 * GB, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE
+        )
+    );
+
+    // Allocation of 40GB at (usage=100GB, threshold=100GB, capacity=200GB).
+    // All 40GB participate in reservation.
+    assert_eq!(
+        Cycles::new(
+            cfg.max_storage_reservation_period.as_secs() as u128
+                * cfg.gib_storage_per_second_fee.get()
+                // The remaining computes the area of the triangle above the
+                // threshold with
+                // - base = 40
+                // - height = (140 - 100) / (200 - 100).
+                * 40
+                * (140 - 100)
+                / (200 - 100)
+                / 2
+        ),
+        cam.storage_reservation_cycles(
+            NumBytes::new(40 * GB),
+            &ResourceSaturation::new(100 * GB, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE
+        )
+    );
+
+    // Allocation of 40GB at (usage=160GB, threshold=100GB, capacity=200GB).
+    // All 40GB participate in reservation.
+    assert_eq!(
+        Cycles::new(
+            cfg.max_storage_reservation_period.as_secs() as u128
+                * cfg.gib_storage_per_second_fee.get()
+                * (
+                    // This computes the difference of areas of two triangles.
+                    // The bigger triangle has base = 100, height = (200 - 100) / (200 - 100).
+                    // The smaller triangle has base = 60, height = (160 - 100) / (200 - 100).
+                    100 * (200 - 100) / (200 - 100) / 2 - 60 * (160 - 100) / (200 - 100) / 2
+                )
+        ),
+        cam.storage_reservation_cycles(
+            NumBytes::new(40 * GB),
+            &ResourceSaturation::new(160 * GB, 100 * GB, 200 * GB),
+            SMALL_APP_SUBNET_MAX_SIZE
+        )
+    );
+
+    // The total reserved cycles of small allocations should match that of one
+    // large allocation.
+    let rs0 = ResourceSaturation::new(0, 100 * GB, 1000 * GB);
+    let mut total = Cycles::zero();
+    let mut rs = rs0.clone();
+    for _ in 0..1000 {
+        total += cam.storage_reservation_cycles(NumBytes::new(GB), &rs, 13);
+        rs = rs.add(GB);
+    }
+    assert_eq!(
+        total,
+        cam.storage_reservation_cycles(NumBytes::new(1000 * GB), &rs0, 13)
+    )
 }
