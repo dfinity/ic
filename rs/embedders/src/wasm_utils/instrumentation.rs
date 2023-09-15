@@ -565,9 +565,9 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// space, but this would be error-prone).
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
-    let ooi_type = Type::Func([], []);
+    let ooi_type = FuncType::new([], []);
 
-    let uam_type = Type::Func([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
+    let uam_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
 
     let ooi_type_idx = add_func_type(&mut module, ooi_type);
     let uam_type_idx = add_func_type(&mut module, uam_type);
