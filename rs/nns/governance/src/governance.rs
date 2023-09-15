@@ -6448,8 +6448,8 @@ impl Governance {
         const BATCH_LEN: usize = COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN;
         let batch = self
             .neuron_store
-            .heap_neurons_range_with_begin_and_limit(next_neuron_id, BATCH_LEN)
-            .into_iter()
+            .range_heap_neurons(next_neuron_id..)
+            .take(BATCH_LEN)
             // Append auxiliary data; to wit, whether the neuron is inactive.
             .map(|neuron| {
                 let is_inactive = self.neuron_can_be_archived(&neuron);

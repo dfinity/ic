@@ -2,6 +2,7 @@
 
 use crate::{
     governance::LOG_PREFIX,
+    neuron::neuron_id_range_to_u64_range,
     pb::v1::{
         governance_error::ErrorType, neuron::Followees, BallotInfo, GovernanceError,
         KnownNeuronData, Neuron, NeuronStakeTransfer,
@@ -192,7 +193,7 @@ where
     pub fn read(&self, neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
         let neuron_id = neuron_id.id;
 
-        let abridged_neuron = self
+        let main_neuron_part = self
             .main
             .get(&neuron_id)
             // Deal with no entry by blaming it on the caller.
@@ -203,32 +204,7 @@ where
                 )
             })?;
 
-        // Auxiliary Data
-        // --------------
-
-        let hot_keys = read_repeated_field(NeuronId { id: neuron_id }, &self.hot_keys_map);
-        let recent_ballots =
-            read_repeated_field(NeuronId { id: neuron_id }, &self.recent_ballots_map);
-        let followees = self.read_followees(NeuronId { id: neuron_id });
-
-        let known_neuron_data = self.known_neuron_data_map.get(&neuron_id);
-        let transfer = self.transfer_map.get(&neuron_id);
-
-        // Final Assembly
-        // --------------
-
-        let result = DecomposedNeuron {
-            main: abridged_neuron,
-
-            hot_keys,
-            recent_ballots,
-            followees,
-
-            known_neuron_data,
-            transfer,
-        }
-        .reconstitute();
-        Ok(result)
+        Ok(self.reconstitute_neuron(main_neuron_part))
     }
 
     /// Changes an existing entry.
@@ -332,6 +308,26 @@ where
         Ok(())
     }
 
+    pub fn len(&self) -> u64 {
+        self.main.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.main.is_empty()
+    }
+
+    /// Returns the next neuron_id equal to or higher than the provided neuron_id
+    pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
+    where
+        R: RangeBounds<NeuronId>,
+    {
+        let range = neuron_id_range_to_u64_range(&range);
+
+        self.main
+            .range(range)
+            .map(|(_neuron_id, neuron)| self.reconstitute_neuron(neuron))
+    }
+
     /// Inserts or updates, depending on whether an entry (with the same ID) is
     /// already present.
     ///
@@ -380,6 +376,30 @@ where
         update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
 
         Ok(())
+    }
+
+    /// Internal function to take what's in the main map and fill in the remaining data from
+    /// the other stable storage maps.
+    fn reconstitute_neuron(&self, main_neuron_part: Neuron) -> Neuron {
+        let neuron_id = main_neuron_part.id.unwrap();
+        let hot_keys = read_repeated_field(neuron_id, &self.hot_keys_map);
+        let recent_ballots = read_repeated_field(neuron_id, &self.recent_ballots_map);
+        let followees = self.read_followees(neuron_id);
+
+        let known_neuron_data = self.known_neuron_data_map.get(&neuron_id.id);
+        let transfer = self.transfer_map.get(&neuron_id.id);
+
+        DecomposedNeuron {
+            main: main_neuron_part,
+
+            hot_keys,
+            recent_ballots,
+            followees,
+
+            known_neuron_data,
+            transfer,
+        }
+        .reconstitute()
     }
 
     // Misc Private Helper(s)

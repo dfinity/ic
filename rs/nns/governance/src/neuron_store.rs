@@ -1,5 +1,6 @@
 use crate::{
     governance::{Environment, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+    neuron::neuron_id_range_to_u64_range,
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
     storage::{neuron_indexes::CorruptedNeuronIndexes, NEURON_INDEXES, STABLE_NEURON_STORE},
 };
@@ -18,7 +19,10 @@ use ic_nervous_system_governance::index::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashSet},
+    ops::RangeBounds,
+};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
@@ -40,7 +44,7 @@ pub enum NeuronStoreError {
 }
 
 impl NeuronStoreError {
-    fn not_found(neuron_id: &NeuronId) -> Self {
+    pub fn not_found(neuron_id: &NeuronId) -> Self {
         NeuronStoreError::NeuronNotFound(NeuronNotFound {
             neuron_id: *neuron_id,
         })
@@ -254,18 +258,15 @@ impl NeuronStore {
     ///
     /// The len of the result is at most limit. It is also maximal; that is, if the return value has
     /// len < limit, then the caller can assume that there are no more Neurons.
-    pub fn heap_neurons_range_with_begin_and_limit(
-        &self,
-        begin: NeuronId,
-        limit: usize,
-    ) -> Vec<Neuron> {
-        let begin = begin.id;
+    pub fn range_heap_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
+    where
+        R: RangeBounds<NeuronId>,
+    {
+        let range = neuron_id_range_to_u64_range(&range);
 
         self.heap_neurons
-            .range(begin..)
+            .range(range)
             .map(|(_id, neuron)| neuron.clone())
-            .take(limit)
-            .collect()
     }
 
     /// Internal - map over neurons after filtering
