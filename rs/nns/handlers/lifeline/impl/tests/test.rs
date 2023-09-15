@@ -1,5 +1,7 @@
 use dfn_candid::candid;
-use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+};
 use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, set_up_lifeline_canister, set_up_universal_canister,
@@ -30,7 +32,10 @@ fn test_get_status() {
             )
             .await
             .unwrap();
-        assert_eq!(status.controller(), lifeline.canister_id().get());
+        assert_eq!(
+            status.settings.controllers,
+            vec![lifeline.canister_id().get()]
+        );
 
         Ok(())
     });
