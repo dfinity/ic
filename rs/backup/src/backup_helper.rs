@@ -39,7 +39,8 @@ pub struct BackupHelper {
     pub registry_client: Arc<RegistryClientImpl>,
     pub notification_client: NotificationClient,
     pub downloads_guard: Arc<Mutex<bool>>,
-    pub disk_threshold_warn: u32,
+    pub hot_disk_resource_threshold_percentage: u32,
+    pub cold_disk_resource_threshold_percentage: u32,
     pub cold_storage_dir: PathBuf,
     pub versions_hot: usize,
     pub artifacts_guard: Mutex<bool>,
@@ -557,7 +558,7 @@ impl BackupHelper {
         None
     }
 
-    fn get_disk_stats(&self, dir: &Path, typ: DiskStats) -> Result<u32, String> {
+    fn get_disk_stats(&self, dir: &Path, threshold: u32, typ: DiskStats) -> Result<u32, String> {
         let mut cmd = Command::new("df");
         cmd.arg(match typ {
             DiskStats::Inodes => "-i",
@@ -578,7 +579,7 @@ impl BackupHelper {
                     let mut num_str = val.to_string();
                     num_str.pop();
                     if let Ok(n) = num_str.parse::<u32>() {
-                        if n >= self.disk_threshold_warn {
+                        if n >= threshold {
                             let resource = match typ {
                                 DiskStats::Inodes => "inodes",
                                 DiskStats::Space => "space",
@@ -658,9 +659,15 @@ impl BackupHelper {
     }
 
     fn log_disk_stats(&self) -> Result<(), String> {
-        for dir in &[&self.root_dir, &self.cold_storage_dir] {
-            let space = self.get_disk_stats(dir, DiskStats::Space)?;
-            let inodes = self.get_disk_stats(dir, DiskStats::Inodes)?;
+        for (dir, threshold) in &[
+            (&self.root_dir, self.hot_disk_resource_threshold_percentage),
+            (
+                &self.cold_storage_dir,
+                self.cold_disk_resource_threshold_percentage,
+            ),
+        ] {
+            let space = self.get_disk_stats(dir, *threshold, DiskStats::Space)?;
+            let inodes = self.get_disk_stats(dir, *threshold, DiskStats::Inodes)?;
             debug!(
                 self.log,
                 "[{:?}] Space: {}% Inodes: {}%", dir, space, inodes
@@ -1292,7 +1299,8 @@ mod tests {
             registry_client,
             notification_client,
             downloads_guard: Mutex::new(true).into(),
-            disk_threshold_warn: 75,
+            hot_disk_resource_threshold_percentage: 75,
+            cold_disk_resource_threshold_percentage: 95,
             cold_storage_dir: temp_dir.join("cold_storage"),
             versions_hot,
             artifacts_guard: Mutex::new(true),

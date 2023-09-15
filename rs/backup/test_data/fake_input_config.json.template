@@ -1,5 +1,4 @@
 {
-    "version": 5,
     "push_metrics": false,
     "backup_instance": "BACKUP_INSTANCE",
     "nns_url": "https://fake_nns_url.network",
@@ -16,7 +15,8 @@
     "metrics_urls": ["https://fake_metrics_url.network"],
     "network_name": "fake_network_name",
     "ssh_private_key": "SSH_PRIVATE_KEY_TEMPLATE",
-    "disk_threshold_warn": 75,
+    "hot_disk_resource_threshold_percentage": 75,
+    "cold_disk_resource_threshold_percentage": 75,
     "slack_token": "<INSERT SLACK TOKEN>",
     "cold_storage": {
         "cold_storage_dir": "/tmp/cold_storage",

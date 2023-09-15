@@ -198,7 +198,6 @@ pub fn test(env: TestEnv) {
         versions_hot: 1,
     });
     let config = Config {
-        version: 1,
         push_metrics: false,
         metrics_urls: vec![],
         network_name: "testnet".to_string(),
@@ -208,7 +207,8 @@ pub fn test(env: TestEnv) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
-        disk_threshold_warn: 75,
+        hot_disk_resource_threshold_percentage: 75,
+        cold_disk_resource_threshold_percentage: 95,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
         cold_storage,
         blacklisted_nodes: None,

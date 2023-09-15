@@ -116,8 +116,8 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_disk_usage gauge\n\
             # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
-            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\" resource=\"space\"}} {2}\n\
-            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\" resource=\"inodes\"}} {3}\n",
+            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"space\"}} {2}\n\
+            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"inodes\"}} {3}\n",
             self.network_name,
             dir.to_str().unwrap_or_default(),
             space,
@@ -126,7 +126,15 @@ impl NotificationClient {
         self.push_metrics(message)
     }
 
-    pub fn push_metrics_version(&self, version: u32) {
+    pub fn push_metrics_version(&self) {
+        // Convert semantic version to a single number, e.g.
+        // 3.23.56 => 3*1000_000 + 23 * 1000 + 56 => 3_023_056.
+        let major = env!("CARGO_PKG_VERSION_MAJOR");
+        let minor = env!("CARGO_PKG_VERSION_MINOR");
+        let patch = env!("CARGO_PKG_VERSION_PATCH");
+        let version = major.parse::<u32>().unwrap_or_default() * 1_000_000
+            + minor.parse::<u32>().unwrap_or_default() * 1000
+            + patch.parse::<u32>().unwrap_or_default();
         let message = format!(
             "# TYPE backup_version_number gauge\n\
             # HELP backup_version_number The current version of the ic-backup tool that is running on this pod.\n\
