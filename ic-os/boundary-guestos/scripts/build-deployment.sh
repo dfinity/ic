@@ -154,6 +154,7 @@ OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:-}"
 CERTIFICATE_ISSUER_CREDENTIALS="${CERTIFICATE_ISSUER_CREDENTIALS:-}"
+CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE:-}"
 if [ -z ${NNS_PUBLIC_KEY+x} ]; then
     err "--nns_public_key not set"
     exit 1
