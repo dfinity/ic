@@ -85,7 +85,6 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "version": 26,
     "push_metrics": ${PUSH_METRICS},
     "metrics_urls": [],
     "network_name": "mercury",
@@ -94,15 +93,16 @@ read -r -d '' CONFIG <<-EOM
     "nns_pem": "${WORK_DIR}/$PUBLIC_KEY_NAME",
     "root_dir": "${ROOT_DIR}",
     "excluded_dirs": [
-        "backups", 
-        "diverged_checkpoints", 
+        "backups",
+        "diverged_checkpoints",
         "diverged_state_markers",
-        "fs_tmp", 
-        "tip", 
+        "fs_tmp",
+        "tip",
         "tmp"
     ],
     "ssh_private_key": "${BACKUP_HOME}/.ssh/id_ed25519_backup",
-    "disk_threshold_warn": 75,
+    "hot_disk_resource_threshold_percentage": 75,
+    "cold_disk_resource_threshold_percentage": 95,
     "slack_token": "<INSERT SLACK TOKEN>",
     "cold_storage": null,
     "blacklisted_nodes": [],
