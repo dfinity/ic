@@ -144,22 +144,19 @@ pub fn schedule_deposit_reimbursement(
     amount: u64,
     reason: ReimbursementReason,
     burn_block_index: u64,
-    kyt_fee: u64,
 ) {
     record_event(&Event::ScheduleDepositReimbursement {
         account,
         amount,
         reason,
         burn_block_index,
-        kyt_fee,
     });
-    state.reimbursement_map.insert(
+    state.schedule_deposit_reimbursement(
         burn_block_index,
         ReimburseDepositTask {
             account,
             amount,
             reason,
-            kyt_fee,
         },
     );
 }

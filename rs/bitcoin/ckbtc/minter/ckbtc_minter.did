@@ -226,7 +226,13 @@ type MinterInfo = record {
     kyt_fee : nat64;
 };
 
-type ReimbursementReason = variant { CallFailed; TaintedDestination };
+type ReimbursementReason = variant {
+    CallFailed;
+    TaintedDestination : record {
+        kyt_fee : nat64;
+        kyt_provider: principal;
+    };
+};
 
 type Event = variant {
     init : InitArgs;
@@ -277,7 +283,6 @@ type Event = variant {
         block_index : nat64;
     };
     schedule_deposit_reimbursement : record {
-        kyt_fee : nat64;
         account : Account;
         burn_block_index : nat64;
         amount : nat64;

@@ -1850,6 +1850,16 @@ fn test_retrieve_btc_with_approval_fail() {
         Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
     );
 
+    ckbtc
+        .env
+        .execute_ingress(ckbtc.minter_id, "distribute_kyt_fee", Encode!().unwrap())
+        .expect("failed to transfer funds");
+
+    assert_eq!(
+        ckbtc.balance_of(Principal::from(ckbtc.kyt_provider)),
+        Nat::from(2 * KYT_FEE)
+    );
+
     // Check that we reimburse ckBTC if the call to the KYT canister fails
 
     let stop_canister_result = ckbtc.env.stop_canister(ckbtc.kyt_id);
