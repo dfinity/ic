@@ -508,25 +508,6 @@ pre-commit:
         exit 1
       fi
 
-gitlab-ci-config-validation:
-  extends:
-    - .ubuntu-k8s
-    - .rules-master-pipeline-no-merge-train
-  variables:
-    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-  artifacts:
-    reports:
-      junit: test_report.xml
-    paths:
-      - gitlab-ci/src/htmlcov
-  script:
-    - |
-      set -xeuo pipefail
-      cd gitlab-ci
-      python3 src/gitlab_config/main.py --cfg-validate-job-name --cfg-file config/zz-generated-gitlab-ci.yaml
-      python3 src/gitlab_config/main.py --cfg-bash-linter --cfg-file config/zz-generated-gitlab-ci.yaml
-      python3 src/gitlab_config/main.py --cfg-gitlab-linter --cfg-file config/zz-generated-gitlab-ci.yaml
-
 python-gitlab-ci-tests:
   extends:
     - .ubuntu-k8s

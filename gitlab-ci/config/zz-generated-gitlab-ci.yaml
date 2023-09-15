@@ -3837,40 +3837,6 @@ dependency-scan-release-cut:
     GIT_STRATEGY: fetch
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
-gitlab-ci-config-validation:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - gitlab-ci/src/htmlcov
-    reports:
-      junit:
-        - test_report.xml
-    when: always
-  extends:
-    - ".ubuntu-k8s"
-    - ".rules-master-pipeline-no-merge-train"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:2da2766c7ab6cfc0ae6104e39e104ed5de4389c87f121b18ca4bc4d672f7ba03
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
-  script:
-    - |
-      set -xeuo pipefail
-      cd gitlab-ci
-      python3 src/gitlab_config/main.py --cfg-validate-job-name --cfg-file config/zz-generated-gitlab-ci.yaml
-      python3 src/gitlab_config/main.py --cfg-bash-linter --cfg-file config/zz-generated-gitlab-ci.yaml
-      python3 src/gitlab_config/main.py --cfg-gitlab-linter --cfg-file config/zz-generated-gitlab-ci.yaml
-  tags:
-    - dfinity-ic
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    SHELL_WRAPPER: "/usr/bin/time"
 heavy-memory-update-performance-test-nightly:
   artifacts:
     expire_in: 3 days

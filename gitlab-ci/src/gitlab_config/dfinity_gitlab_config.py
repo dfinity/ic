@@ -65,14 +65,30 @@ class DfinityGitLabConfig:
         self.ci_cfg_expanded = {}
         self._ci_cfg_included_file_list = []
 
+
+    @staticmethod
+    def _get_gitlab_token():
+        # first check file created by bazel-ci/main.sh via bazel-test-all
+        gitlab_token_path = f"{os.getenv('HOME')}/.gitlab/api_token"
+        try:
+            with open(gitlab_token_path, "r") as token_file:
+                gitlab_token = token_file.read().strip()
+        except FileNotFoundError:
+            gitlab_token = None
+
+        # if not there, check env var
+        if gitlab_token is None or gitlab_token == "":
+            gitlab_token = os.getenv('GITLAB_API_TOKEN')
+            if gitlab_token is None:
+                raise ValueError(f"Fatal: GITLAB_API_TOKEN env var not set or {gitlab_token_path} empty")
+        return gitlab_token
+
     @property
     def _gl(self):
         global gitlab_login
         if not 'gitlab_login' in globals():
-            gitlab_api_token = os.getenv('GITLAB_API_TOKEN')
-            if gitlab_api_token is None:
-                raise ValueError("Fatal: GITLAB_API_TOKEN env var not set")
-            gitlab_login = gitlab.Gitlab(self.gitlab_url, private_token=gitlab_api_token)
+            gitlab_token = self._get_gitlab_token()
+            gitlab_login = gitlab.Gitlab(self.gitlab_url, gitlab_token)
         return gitlab_login
 
     def ci_cfg_reset(self):

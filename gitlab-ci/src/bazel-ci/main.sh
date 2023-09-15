@@ -13,6 +13,10 @@ AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
 
+GITLAB_TOKEN="${HOME}/.gitlab/api_token"
+mkdir -p "$(dirname "${GITLAB_TOKEN}")"
+echo "$GITLAB_API_TOKEN" >"${GITLAB_TOKEN}"
+
 ic_version_rc_only="0000000000000000000000000000000000000000"
 if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
