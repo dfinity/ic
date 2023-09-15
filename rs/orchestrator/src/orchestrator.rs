@@ -24,7 +24,7 @@ use slog_async::AsyncGuard;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::{convert::TryFrom, time::Duration};
+use std::{convert::TryFrom, thread, time::Duration};
 use tokio::sync::watch::{self, Receiver, Sender};
 use tokio::{sync::RwLock, task::JoinHandle};
 
@@ -108,6 +108,13 @@ impl Orchestrator {
             .as_str(),
             1,
         );
+
+        let version = replica_version.clone();
+        thread::spawn(move || loop {
+            let message = format!("\nNode-id: {}\nReplica version: {}\n\n", node_id, version);
+            UtilityCommand::notify_host(&message, 1);
+            thread::sleep(Duration::from_secs(15 * 60));
+        });
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
