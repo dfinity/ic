@@ -113,12 +113,12 @@ function process_bootstrap() {
     # take injected config bits and move them to state directories
     if [ -e "${TMPDIR}/ic_crypto" ]; then
         echo "Installing initial crypto material"
-        cp -r -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
+        cp -rL -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
     fi
     for ITEM in ic_registry_local_store nns_public_key.pem node_operator_private_key.pem; do
         if [ -e "${TMPDIR}/${ITEM}" ]; then
             echo "Setting up initial ${ITEM}"
-            cp -r -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
+            cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
         fi
     done
 
@@ -133,7 +133,7 @@ function process_bootstrap() {
     for DIR in accounts_ssh_authorized_keys; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
             echo "Setting up accounts_ssh_authorized_keys"
-            cp -r "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
+            cp -rL "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
         fi
     done
 

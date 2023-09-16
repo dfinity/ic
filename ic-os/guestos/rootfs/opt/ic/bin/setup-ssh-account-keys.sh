@@ -15,7 +15,7 @@ for ACCOUNT in root backup readonly admin; do
         HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
         GROUP=$(id -ng "${ACCOUNT}")
         mkdir -p "${HOMEDIR}/.ssh"
-        cp "${ORIGIN}" "${HOMEDIR}/.ssh/authorized_keys"
+        cp -L "${ORIGIN}" "${HOMEDIR}/.ssh/authorized_keys"
         chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}/.ssh"
         restorecon -vr "${HOMEDIR}/.ssh"
     fi
