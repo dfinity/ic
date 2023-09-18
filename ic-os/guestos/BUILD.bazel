@@ -34,33 +34,6 @@ sh_test(
     data = [":rootfs/opt/ic/share/ic.json5.template"],
 )
 
-genrule(
-    name = "launch-single-vm",
-    srcs = [
-        "//rs/ic_os/launch-single-vm",
-        "//ic-os/guestos/envs/dev:disk-img-url",
-        "//ic-os/guestos/envs/dev:disk-img.tar.zst.sha256",
-        "//ic-os:scripts/build-bootstrap-config-image.sh",
-        "//bazel:version.txt",
-    ],
-    outs = ["launch_single_vm_script"],
-    cmd = """
-BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
-VERSION="$$(cat $(location //bazel:version.txt))"
-URL="$$(cat $(location //ic-os/guestos/envs/dev:disk-img-url))"
-SHA="$$(cat $(location //ic-os/guestos/envs/dev:disk-img.tar.zst.sha256))"
-SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
-cat <<EOF > $@
-#!/usr/bin/env bash
-set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT"
-EOF
-    """,
-    executable = True,
-    tags = ["manual"],
-)
-
 # All guest-os targets are named the same, just stay in different submodules.
 # To build or run specific target:
 #
