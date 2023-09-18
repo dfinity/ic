@@ -1404,9 +1404,18 @@ impl Scheduler for SchedulerImpl {
                 &ExecutionThread(self.config.scheduler_cores as u32),
             );
 
+            let default_reserved_balance_limit =
+                self.cycles_account_manager.default_reserved_balance_limit();
+
             for canister in state.canisters_iter_mut() {
                 cycles_in_sum += canister.system_state.balance();
                 cycles_in_sum += canister.system_state.queues().input_queue_cycles();
+                // TODO(RUN-763): This is needed only for one replica release in
+                // order to initialize the existing canisters. After that it can
+                // be removed.
+                canister
+                    .system_state
+                    .initialize_reserved_balance_limit_if_empty(default_reserved_balance_limit);
             }
 
             RoundLimits {

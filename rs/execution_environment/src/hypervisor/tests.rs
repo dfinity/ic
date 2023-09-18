@@ -6001,6 +6001,8 @@ fn stable_memory_grow_reserves_cycles() {
 
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+        .unwrap();
 
     let balance_before = test.canister_state(canister_id).system_state.balance();
     let result = test
@@ -6099,6 +6101,8 @@ fn wasm_memory_grow_reserves_cycles() {
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        .unwrap();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
 
     let balance_before = test.canister_state(canister_id).system_state.balance();
@@ -6224,6 +6228,8 @@ fn resource_saturation_scaling_works_in_regular_execution() {
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        .unwrap();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
 
     let subnet_memory_usage =

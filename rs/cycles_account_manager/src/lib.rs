@@ -1047,6 +1047,12 @@ impl CyclesAccountManager {
             + self.config.http_response_per_byte_fee * response_size)
             * (subnet_size as u64)
     }
+
+    /// Returns the default value of the reserved balance limit for the case
+    /// when the canister doesn't have it set in the settings.
+    pub fn default_reserved_balance_limit(&self) -> Cycles {
+        self.config.default_reserved_balance_limit
+    }
 }
 
 /// Encapsulates the payer and cost of inducting an ingress messages.
