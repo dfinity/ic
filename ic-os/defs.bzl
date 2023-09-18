@@ -15,6 +15,7 @@ def icos_build(
         image_deps_func,
         mode = None,
         malicious = False,
+        nvme = False,
         upgrades = True,
         vuln_scan = True,
         visibility = None,
@@ -28,6 +29,7 @@ def icos_build(
       image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
+      nvme: if True, emulate nvme when running local VMs
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
@@ -63,7 +65,8 @@ def icos_build(
 
     build_grub_partition("partition-grub.tar", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
 
-    # -------------------- Build the docker image --------------------
+    # -------------------- Build the container image --------------------
+
     build_container_filesystem_config_file = Label(image_deps.get("build_container_filesystem_config_file"))
 
     build_container_filesystem(
@@ -447,6 +450,63 @@ def icos_build(
             },
             tags = ["manual"],
         )
+
+    # -------------------- VM Developer Tools --------------------
+
+    native.genrule(
+        name = "launch-remote-vm",
+        srcs = [
+            "//rs/ic_os/launch-single-vm",
+            ":disk-img-url",
+            ":disk-img.tar.zst.sha256",
+            "//ic-os:scripts/build-bootstrap-config-image.sh",
+            ":version.txt",
+        ],
+        outs = ["launch_remote_vm_script"],
+        cmd = """
+        BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
+        VERSION="$$(cat $(location :version.txt))"
+        URL="$$(cat $(location :disk-img-url))"
+        SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
+        SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT"
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
+
+    if nvme:
+        qemu_command = "qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device nvme,drive=drive0,serial=deadbeef1 -drive file=disk.img,format=raw,id=drive0,if=none"
+    else:
+        qemu_command = "qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio"
+
+    native.genrule(
+        name = "launch-local-vm",
+        srcs = [
+            ":disk-img.tar",
+        ],
+        outs = ["launch_local_vm_script"],
+        cmd = """
+        TEMP="$$(mktemp -d)"
+        IMAGE="$(location :disk-img.tar)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+cp $$IMAGE $$TEMP
+cd $$TEMP
+tar xf disk-img.tar
+""" + qemu_command + """
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
 
     # -------------------- final "return" target --------------------
     # The good practice is to have the last target in the macro with `name = name`.
