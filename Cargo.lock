@@ -11492,6 +11492,7 @@ dependencies = [
  "async-trait",
  "axum",
  "base64 0.11.0",
+ "bytes",
  "candid",
  "clap 4.4.2",
  "flate2",
