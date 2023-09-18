@@ -179,6 +179,31 @@ impl From<TransactionNonce> for candid::Nat {
     }
 }
 
+/// Number of transactions emitted by an address at a given block height (`finalized`, `safe` or `latest`).
+/// This should closely follow [`TransactionNonce`] in case the address is the minter's one,
+/// but depending on the block height the two may differ.
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct TransactionCount(ethnum::u256);
+
+impl fmt::Debug for TransactionCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for TransactionCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u64> for TransactionCount {
+    fn from(value: u64) -> Self {
+        TransactionCount(ethnum::u256::from(value))
+    }
+}
+
 pub enum BurnIndexTag {}
 pub type LedgerBurnIndex = Id<BurnIndexTag, u64>;
 

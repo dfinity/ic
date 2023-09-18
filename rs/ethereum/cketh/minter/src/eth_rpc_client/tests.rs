@@ -35,15 +35,16 @@ mod eth_rpc_client {
 }
 
 mod multi_call_results {
+    use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
+
+    const ANKR: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Ankr);
+    const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare);
 
     mod reduce_with_equality {
         use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
-        use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, CLOUDFLARE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use ic_cdk::api::call::RejectionCode;
-
-        const ANKR: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Ankr);
-        const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare);
 
         #[test]
         #[should_panic(expected = "MultiCallResults cannot be empty")]
@@ -185,6 +186,43 @@ mod multi_call_results {
             assert_eq!(reduced, Ok("0x01".to_string()));
         }
     }
+
+    mod reduce_with_min_by_key {
+        use crate::eth_rpc::{Block, BlockNumber, JsonRpcResult};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, CLOUDFLARE};
+        use crate::eth_rpc_client::MultiCallResults;
+        use crate::numeric::Wei;
+
+        #[test]
+        fn should_get_minimum_block_number() {
+            let results: MultiCallResults<Block> = MultiCallResults::from_non_empty_iter(vec![
+                (
+                    ANKR,
+                    Ok(JsonRpcResult::Result(Block {
+                        number: BlockNumber::new(0x411cda),
+                        base_fee_per_gas: Wei::new(0x10),
+                    })),
+                ),
+                (
+                    CLOUDFLARE,
+                    Ok(JsonRpcResult::Result(Block {
+                        number: BlockNumber::new(0x411cd9),
+                        base_fee_per_gas: Wei::new(0x10),
+                    })),
+                ),
+            ]);
+
+            let reduced = results.reduce_with_min_by_key(|block| block.number);
+
+            assert_eq!(
+                reduced,
+                Ok(Block {
+                    number: BlockNumber::new(0x411cd9),
+                    base_fee_per_gas: Wei::new(0x10),
+                })
+            );
+        }
+    }
 }
 
 mod eth_get_transaction_receipt {
@@ -263,5 +301,32 @@ mod eth_get_transaction_receipt {
             let error = serde_json::from_str::<TransactionStatus>(&status);
             assert_matches!(error, Err(e) if e.to_string().contains("invalid transaction status"));
         }
+    }
+}
+
+mod eth_get_transaction_count {
+    use crate::address::Address;
+    use crate::eth_rpc::{BlockSpec, BlockTag};
+    use crate::eth_rpc_client::requests::GetTransactionCountParams;
+    use crate::numeric::TransactionCount;
+    use std::str::FromStr;
+
+    #[test]
+    fn should_serialize_get_transaction_count_params_as_tuple() {
+        let params = GetTransactionCountParams {
+            address: Address::from_str("0x407d73d8a49eeb85d32cf465507dd71d507100c1").unwrap(),
+            block: BlockSpec::Tag(BlockTag::Finalized),
+        };
+        let serialized_params = serde_json::to_string(&params).unwrap();
+        assert_eq!(
+            serialized_params,
+            r#"["0x407d73d8a49eeb85d32cf465507dd71d507100c1","finalized"]"#
+        );
+    }
+
+    #[test]
+    fn should_deserialize_transaction_count() {
+        let count: TransactionCount = serde_json::from_str("\"0x3d8\"").unwrap();
+        assert_eq!(count, TransactionCount::from(0x3d8));
     }
 }
