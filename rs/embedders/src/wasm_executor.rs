@@ -125,7 +125,7 @@ pub trait PausedWasmExecution: std::fmt::Debug + Send {
     fn abort(self: Box<Self>);
 }
 
-/// Changes in the canister state after a successul Wasm execution.
+/// Changes in the canister state after a successful Wasm execution.
 #[derive(Clone, Debug)]
 pub struct CanisterStateChanges {
     /// The state of the global variables after execution.

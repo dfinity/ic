@@ -614,7 +614,7 @@ mod tests {
             &Principal::from_text("aaaaa-aa")?, // canister
         )?;
 
-        // Check regsitration
+        // Check registration
         let reg = REGISTRATIONS
             .with(|regs| regs.borrow().get(&id.to_owned().into()))
             .expect("expected registration to exist but none found");

@@ -512,7 +512,7 @@ fn run_directive<'a>(
         }
         // These directives include many wasm modules that wasm-transform won't
         // be able to recognize as invalid (e.g. function bodies that don't type
-        // check). So we want to assert that after parsing and endcoding,
+        // check). So we want to assert that after parsing and encoding,
         // wasmtime still throws an error on validation. That is, wasm-transform
         // didn't somehow make an invalid module valid.
         WastDirective::AssertInvalid {
@@ -592,7 +592,7 @@ fn run_directive<'a>(
                     span_location(span, text, path)
                 )),
                 Err(e) => {
-                    // There seemes to be one case in `bulk.wast` where the
+                    // There seems to be one case in `bulk.wast` where the
                     // error message contains extra information.
                     let message = if message.starts_with("uninitialized element") {
                         "uninitialized element"
@@ -758,7 +758,7 @@ fn error_to_string(e: anyhow::Error) -> String {
 }
 
 /// These tests run on data from the WebAssembly spec testsuite. The suite is not
-/// incuded in our repo, but is imported by Bazel using the `new_git_repository`
+/// included in our repo, but is imported by Bazel using the `new_git_repository`
 /// rule in `WORKSPACE.bazel`.
 ///
 /// If you need to look at the test `wast` files directly they can be found in

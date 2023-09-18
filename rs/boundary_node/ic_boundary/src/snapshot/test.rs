@@ -98,7 +98,7 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
             reg_ver,
             Some(SubnetListRecord { subnets }),
         )
-        .expect("Coult not add subnet list record.");
+        .expect("Could not add subnet list record.");
 
     // Add routing table
     data_provider

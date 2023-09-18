@@ -383,7 +383,7 @@ async fn main() -> Result<(), Error> {
             .layer(Extension(MetricsMiddlewareArgs {
                 counter: meter
                     .u64_counter("requests_total")
-                    .with_description("Counts occurences of requests")
+                    .with_description("Counts occurrences of requests")
                     .init(),
                 recorder: meter
                     .f64_histogram("request_duration")

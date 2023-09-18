@@ -22,7 +22,7 @@ impl MetricParams {
         Self {
             counter: meter
                 .u64_counter(name.to_string())
-                .with_description(format!("Counts occurences of {name} calls"))
+                .with_description(format!("Counts occurrences of {name} calls"))
                 .init(),
             recorder: meter
                 .f64_histogram(format!("{name}.duration_nsec"))

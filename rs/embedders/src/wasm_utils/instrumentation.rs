@@ -136,7 +136,7 @@ use wasmparser::{
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-// The indicies of injected function imports.
+// The indices of injected function imports.
 pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
     UpdateAvailableMemory = 1,
@@ -386,7 +386,7 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
 
         // TableGet and TableSet are expensive operations because they
-        // are translated into memory manipulation oprations.
+        // are translated into memory manipulation operations.
         // Results based on benchmarks.
         Operator::TableGet { .. } => 5,
         Operator::TableSet { .. } => 5,
@@ -407,7 +407,7 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         Operator::TableSize { .. } => 100,
 
         // Bulk memory ops are of cost 100. They are heavy operations because
-        // they are translated into function calls in the x86 dissasembly. Validated
+        // they are translated into function calls in the x86 disassembly. Validated
         // in benchmarks.
         Operator::MemoryFill { .. }
         | Operator::MemoryCopy { .. }
@@ -1132,9 +1132,9 @@ enum InjectionPointCostDetail {
 impl InjectionPointCostDetail {
     /// If the cost is statically known, increment it by the given amount.
     /// Otherwise do nothing.
-    fn increment_cost(&mut self, additonal_cost: u64) {
+    fn increment_cost(&mut self, additional_cost: u64) {
         match self {
-            Self::StaticCost { scope: _, cost } => *cost += additonal_cost,
+            Self::StaticCost { scope: _, cost } => *cost += additional_cost,
             Self::DynamicCost => {}
         }
     }

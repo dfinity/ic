@@ -229,7 +229,7 @@ fn charge_direct_fee<S: SystemApi>(
         // Continue execution
     }
 
-    // We are going to substract a potentially large fee from the instruction
+    // We are going to subtract a potentially large fee from the instruction
     // counter. To avoid underflows, we need to first ensure that the
     // instruction counter is not negative.
     if instruction_counter < 0 {
