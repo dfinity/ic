@@ -77,14 +77,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             common_name,
             issuance_time.as_secs_since_unix_epoch(),
             not_after_u64,
-        )
-        .map_err(
-            |TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message: e }| {
-                CspTlsKeygenError::InvalidNotAfterDate {
-                    message: e,
-                    not_after: not_after.to_string(),
-                }
-            },
         )?;
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes).map_err(|err| {
             CspTlsKeygenError::InternalError {
@@ -207,19 +199,28 @@ fn validate_tls_certificate(
 
 fn asn1_time_string_to_unix_timestamp(time_asn1: &str) -> Result<u64, CspTlsKeygenError> {
     let asn1_format = format_description!("[year][month][day][hour][minute][second]Z"); // e.g., 99991231235959Z
-    let time_offsetdatetime = PrimitiveDateTime::parse(time_asn1, asn1_format)
-        .map_err(|_e| CspTlsKeygenError::InvalidNotAfterDate {
-            message: "invalid X.509 certificate expiration date (not_after): failed to parse ASN1 datetime format"
-                .to_string(),
-            not_after: time_asn1.to_string(),
+    let time_primitivedatetime = PrimitiveDateTime::parse(time_asn1, asn1_format)
+        .map_err(|_e| CspTlsKeygenError::InvalidArguments {
+            message: format!("invalid X.509 certificate expiration date (notAfter={time_asn1}): failed to parse ASN1 datetime format"),
         })?;
-    let time_i64 = time_offsetdatetime.assume_utc().unix_timestamp();
-    let time_u64 =
-        u64::try_from(time_i64).map_err(|_e| CspTlsKeygenError::InvalidNotAfterDate {
-            message:
-                "invalid X.509 certificate expiration date (not_after): failed to convert to u64"
-                    .to_string(),
-            not_after: time_asn1.to_string(),
-        })?;
+    let time_i64 = time_primitivedatetime.assume_utc().unix_timestamp();
+    let time_u64 = u64::try_from(time_i64).map_err(|_e| CspTlsKeygenError::InvalidArguments {
+        message: format!(
+            "invalid X.509 certificate expiration date (notAfter={time_asn1}): failed to convert to u64"
+        ),
+    })?;
     Ok(time_u64)
+}
+
+impl From<TlsKeyPairAndCertGenerationError> for CspTlsKeygenError {
+    fn from(tls_keys_generation_error: TlsKeyPairAndCertGenerationError) -> Self {
+        match tls_keys_generation_error {
+            TlsKeyPairAndCertGenerationError::InvalidArguments(e) => {
+                Self::InvalidArguments { message: e }
+            }
+            TlsKeyPairAndCertGenerationError::InternalError(e) => {
+                Self::InternalError { internal_error: e }
+            }
+        }
+    }
 }

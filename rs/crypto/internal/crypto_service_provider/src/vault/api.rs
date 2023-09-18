@@ -136,7 +136,7 @@ impl From<CspPublicKeyStoreError> for CurrentNodePublicKeysError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspTlsKeygenError {
-    InvalidNotAfterDate { message: String, not_after: String },
+    InvalidArguments { message: String },
     InternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
     TransientInternalError { internal_error: String },

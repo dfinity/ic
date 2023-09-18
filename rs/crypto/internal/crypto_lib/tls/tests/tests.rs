@@ -235,7 +235,7 @@ fn should_set_not_after_correctly() {
 }
 
 #[test]
-fn should_return_error_if_notafter_date_is_not_after_notbefore_date() {
+fn should_fail_if_notafter_date_is_not_after_notbefore_date() {
     let not_before = GENESIS;
     let not_after = not_before;
     let not_before_str = OffsetDateTime::from_unix_timestamp(unix_timestamp(not_before))
@@ -252,10 +252,68 @@ fn should_return_error_if_notafter_date_is_not_after_notbefore_date() {
         not_after.as_secs_since_unix_epoch(),
     );
 
-    assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message })
-        if message.contains(
-            &format!("notBefore date ({}) must be before notAfter date ({})", not_before_str, not_after_str)
-        )
+    assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
+        if e.contains(&format!("notBefore date ({}) must be before notAfter date ({})", not_before_str, not_after_str))
+    );
+}
+
+#[test]
+fn should_fail_if_notbefore_date_is_too_large_for_i64() {
+    let result = generate_tls_key_pair_der(
+        &mut reproducible_rng(),
+        "common name",
+        u64::MAX,
+        GENESIS.as_secs_since_unix_epoch(),
+    );
+
+    assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
+        if e == "invalid notBefore date: failed to convert to i64"
+    );
+}
+
+#[test]
+fn should_fail_if_notbefore_date_is_invalid_offsetdatetime() {
+    let max_possible_offsetdatetime = 253_402_300_799_u64; // unix timestamp for "99991231235959Z" == "9999-12-31 23:59:59.0 +00:00:00"
+
+    let result = generate_tls_key_pair_der(
+        &mut reproducible_rng(),
+        "common name",
+        max_possible_offsetdatetime + 1,
+        0,
+    );
+
+    assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
+        if e.starts_with("invalid notBefore date: failed to convert to OffsetDateTime")
+    );
+}
+
+#[test]
+fn should_fail_if_notafter_date_is_too_large_for_i64() {
+    let result = generate_tls_key_pair_der(
+        &mut reproducible_rng(),
+        "common name",
+        GENESIS.as_secs_since_unix_epoch(),
+        u64::MAX,
+    );
+
+    assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
+        if e == "invalid notAfter date: failed to convert to i64"
+    );
+}
+
+#[test]
+fn should_fail_if_notafter_date_is_invalid_offsetdatetime() {
+    let max_possible_offsetdatetime = 253_402_300_799_u64; // unix timestamp for "99991231235959Z" == "9999-12-31 23:59:59.0 +00:00:00"
+
+    let result = generate_tls_key_pair_der(
+        &mut reproducible_rng(),
+        "common name",
+        GENESIS.as_secs_since_unix_epoch(),
+        max_possible_offsetdatetime + 1,
+    );
+
+    assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
+        if e.starts_with("invalid notAfter date: failed to convert to OffsetDateTime")
     );
 }
 

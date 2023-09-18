@@ -244,7 +244,7 @@ should_have_a_strategy_for_each_variant!(
     CspTlsKeygenError::TransientInternalError {
         internal_error: "dummy error to match upon".to_string()
     },
-    InvalidNotAfterDate { .. },
+    InvalidArguments { .. },
     InternalError { .. },
     DuplicateKeyId { .. },
     TransientInternalError { .. },

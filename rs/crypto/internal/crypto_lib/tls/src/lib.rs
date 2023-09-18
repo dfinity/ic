@@ -32,7 +32,8 @@ pub struct TlsEd25519CertificateDerBytes {
 /// The generation of a TLS key pair and X.509 certificate failed.
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub enum TlsKeyPairAndCertGenerationError {
-    InvalidNotAfterDate { message: String },
+    InvalidArguments(String),
+    InternalError(String),
 }
 
 /// A DER-encoded Ed25519 secret key in PKCS#8 v1 format (RFC 5208).
@@ -82,7 +83,7 @@ pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
         not_after_secs_since_unix_epoch,
         &secret_key,
     )?;
-    Ok(der_encode_cert_and_secret_key(x509_cert, &secret_key))
+    der_encode_cert_and_secret_key(x509_cert, &secret_key)
 }
 
 /// Generates an X.509 v3 certificate.
@@ -101,63 +102,87 @@ fn x509_v3_certificate(
     not_after_secs_since_unix_epoch: u64,
     secret_key: &ed25519_types::SecretKeyBytes,
 ) -> Result<rcgen::Certificate, TlsKeyPairAndCertGenerationError> {
-    let not_before_time = OffsetDateTime::from_unix_timestamp(
-        i64::try_from(not_before_secs_since_unix_epoch).expect("invalid not_before"),
-    )
-    .expect("invalid not_before");
-    let not_after_time = OffsetDateTime::from_unix_timestamp(
-        i64::try_from(not_after_secs_since_unix_epoch).expect("invalid not_after"),
-    )
-    .expect("invalid not_after");
-
-    if not_before_time >= not_after_time {
-        return Err(TlsKeyPairAndCertGenerationError::InvalidNotAfterDate {
-            message: format!(
-                "notBefore date ({}) must be before notAfter date ({})",
-                not_before_time, not_after_time,
-            ),
-        });
+    let not_before_i64 = i64::try_from(not_before_secs_since_unix_epoch).map_err(|_e| {
+        TlsKeyPairAndCertGenerationError::InvalidArguments(
+            "invalid notBefore date: failed to convert to i64".to_string(),
+        )
+    })?;
+    let not_before = OffsetDateTime::from_unix_timestamp(not_before_i64).map_err(|e| {
+        TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
+            "invalid notBefore date: failed to convert to OffsetDateTime: {}",
+            e
+        ))
+    })?;
+    let not_after_i64 = i64::try_from(not_after_secs_since_unix_epoch).map_err(|_e| {
+        TlsKeyPairAndCertGenerationError::InvalidArguments(
+            "invalid notAfter date: failed to convert to i64".to_string(),
+        )
+    })?;
+    let not_after = OffsetDateTime::from_unix_timestamp(not_after_i64).map_err(|e| {
+        TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
+            "invalid notAfter date: failed to convert to OffsetDateTime: {}",
+            e
+        ))
+    })?;
+    if not_before >= not_after {
+        return Err(TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
+            "notBefore date ({}) must be before notAfter date ({})",
+            not_before, not_after,
+        )));
     }
-
-    let mut cert_params = CertificateParams::default();
-    cert_params.alg = &PKCS_ED25519;
-    cert_params.not_before = not_before_time;
-    cert_params.not_after = not_after_time;
-    cert_params.serial_number = Some(SerialNumber::from_slice(&serial));
-
     let mut distinguished_name = DistinguishedName::new();
     distinguished_name.push(
         DnType::CommonName,
         DnValue::Utf8String(common_name.to_string()),
     );
+    let key_pair = rcgen_keypair_from_ed25519_keypair(secret_key, public_key)?;
+
+    let mut cert_params = CertificateParams::default();
+    cert_params.alg = &PKCS_ED25519;
+    cert_params.not_before = not_before;
+    cert_params.not_after = not_after;
+    cert_params.serial_number = Some(SerialNumber::from_slice(&serial));
     cert_params.distinguished_name = distinguished_name;
+    cert_params.key_pair = Some(key_pair);
 
-    cert_params.key_pair = Some(rcgen_keypair_from_ed25519_keypair(secret_key, public_key));
-
-    Ok(rcgen::Certificate::from_params(cert_params).expect("failed to create X509 certificate"))
+    rcgen::Certificate::from_params(cert_params).map_err(|e| {
+        TlsKeyPairAndCertGenerationError::InternalError(format!(
+            "failed to create X509 certificate: {}",
+            e
+        ))
+    })
 }
 
 fn rcgen_keypair_from_ed25519_keypair(
     secret_key: &ed25519_types::SecretKeyBytes,
     public_key: &ed25519_types::PublicKeyBytes,
-) -> KeyPair {
+) -> Result<KeyPair, TlsKeyPairAndCertGenerationError> {
     let keypair_der = secret_key_to_pkcs8_v2_der(secret_key, public_key);
-    let keypair_rcgen = KeyPair::from_der(keypair_der.expose_secret())
-        .expect("failed to create Ed25519 key pair from raw private key");
-    keypair_rcgen
+    KeyPair::from_der(keypair_der.expose_secret()).map_err(|e| {
+        TlsKeyPairAndCertGenerationError::InternalError(format!(
+            "failed to create Ed25519 key pair from raw private key: {}",
+            e
+        ))
+    })
 }
 
 fn der_encode_cert_and_secret_key(
     mut x509_cert: Certificate,
     secret_key: &ed25519_types::SecretKeyBytes,
-) -> (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes) {
-    let cert_der = x509_cert
-        .serialize_der()
-        .expect("unable to DER encode certificate");
+) -> Result<
+    (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
+    TlsKeyPairAndCertGenerationError,
+> {
+    let cert_der = x509_cert.serialize_der().map_err(|e| {
+        TlsKeyPairAndCertGenerationError::InternalError(format!(
+            "failed to DER-encode X509 certificate: {}",
+            e
+        ))
+    })?;
     x509_cert.zeroize();
     let private_key_pkcs8_v1_der = secret_key_to_pkcs8_v1_der(secret_key);
-    (
+    Ok((
         TlsEd25519CertificateDerBytes { bytes: cert_der },
         TlsEd25519SecretKeyDerBytes::from(private_key_pkcs8_v1_der),
-    )
+    ))
 }
