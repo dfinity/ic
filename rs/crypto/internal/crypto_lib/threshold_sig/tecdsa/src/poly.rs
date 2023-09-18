@@ -684,7 +684,7 @@ impl LagrangeCoefficients {
         }
         let point_scalar_refs: Vec<(&EccPoint, &EccScalar)> =
             y.iter().zip(self.coefficients.iter()).collect();
-        // The coefficents are public (being derived from the node indexes)
+        // The coefficients are public (being derived from the node indexes)
         // and so it is safe to use a variable-time multiplication algorithm.
         let result = EccPoint::mul_n_points_vartime(&point_scalar_refs[..])?;
 

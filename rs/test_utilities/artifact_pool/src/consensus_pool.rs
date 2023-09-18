@@ -408,7 +408,7 @@ impl TestConsensusPool {
         rb_shares: u32,
         f_shares: u32,
         // this is a vector of 32-element arrays with random usize numbers
-        certfied_height: Option<Height>,
+        certified_height: Option<Height>,
     ) -> Height {
         let notarized_height = self
             .pool
@@ -471,7 +471,7 @@ impl TestConsensusPool {
                 add_catch_up_package_if_needed = false;
             }
             block.rank = Rank(i as u64);
-            if let Some(height) = certfied_height {
+            if let Some(height) = certified_height {
                 block.context.certified_height = height;
             }
             let block_proposal = BlockProposal::fake(

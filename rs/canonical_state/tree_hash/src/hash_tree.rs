@@ -783,7 +783,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         root: NodeId,
     }
 
-    // We only initalize thread pools lazily the first time we need them
+    // We only initialize thread pools lazily the first time we need them
     enum ParStrategy {
         Sequential,
         Concurrent,

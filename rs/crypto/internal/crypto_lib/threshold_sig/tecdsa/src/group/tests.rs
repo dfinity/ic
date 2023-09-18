@@ -6,7 +6,7 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
     let get_bit = |bytes: &[u8]| {
         if i > (naf.positive_bits.len() * 8) {
             panic!(
-                "Out of bounds: accesing bit {i} in a buffer containing {} bits",
+                "Out of bounds: accessing bit {i} in a buffer containing {} bits",
                 naf.positive_bits.len() * 8
             )
         }

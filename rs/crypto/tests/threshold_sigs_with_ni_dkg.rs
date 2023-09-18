@@ -526,7 +526,7 @@ mod non_interactive_distributed_key_generation {
             run_dkg_and_load_transcripts(&config2, &mut env, rng);
         let new_in_epoch2: HashSet<_> = epoch2_nodes.difference(&epoch1_nodes).cloned().collect();
 
-        // A low threshhold transcript just to bypass a check in retain_only_active_keys
+        // A low threshold transcript just to bypass a check in retain_only_active_keys
         let config3 = config2.new_with_inverted_threshold(rng);
         let (transcript3, _dkg_id3, epoch3_nodes) =
             run_dkg_and_load_transcripts(&config3, &mut env, rng);

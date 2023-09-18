@@ -5,7 +5,7 @@
 //! longer be backwards-compatible.
 //!
 //! Such changes must be rolled out in stages, in order to maintain backwards
-//! (and ideally forwards) compatibility with one or more preceeding
+//! (and ideally forwards) compatibility with one or more preceding
 //! protocol versions.
 
 use crate::{

@@ -12,7 +12,7 @@ pub fn hash(data: &[u8]) -> [u8; 64] {
     let hash = hasher.finalize();
     hash.as_slice()
         .try_into()
-        .expect("infallable as length is 64")
+        .expect("infallible as length is 64")
 }
 
 impl InternalSha512 {
@@ -24,6 +24,6 @@ impl InternalSha512 {
         let hash = self.state.finalize();
         hash.as_slice()
             .try_into()
-            .expect("infallable as length is 64")
+            .expect("infallible as length is 64")
     }
 }

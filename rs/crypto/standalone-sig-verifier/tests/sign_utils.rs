@@ -122,7 +122,7 @@ fn should_fail_parsing_ec_keys_on_unsupported_curves() {
     }
 }
 
-// Genereates a new EC key pair, and computes an ECDSA signature on MESSAGE.
+// Generates a new EC key pair, and computes an ECDSA signature on MESSAGE.
 // Returns the generated public key and the signature, both DER-encoded.
 fn new_pk_and_sig_der(curve_name: Nid) -> (Vec<u8>, Vec<u8>) {
     let group = EcGroup::from_curve_name(curve_name).expect("unable to create EC group");

@@ -111,7 +111,7 @@ fn test_sha256_with_nonempty_context_and_nonempty_input() {
 }
 
 #[test]
-fn test_sha256_with_empty_context_and_emtpy_data() {
+fn test_sha256_with_empty_context_and_empty_data() {
     let context = TestContext::new(&[]);
     let data = b"";
 
@@ -131,7 +131,7 @@ fn test_sha256_with_empty_context_and_emtpy_data() {
 }
 
 #[test]
-fn test_sha256_with_nonempty_context_and_emtpy_input() {
+fn test_sha256_with_nonempty_context_and_empty_input() {
     let context = TestContext::new(&[0x11, 0x22, 0x33, 0x44]);
     let data = b"";
 

@@ -20,7 +20,7 @@ pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
 /// * `pk` is the public key associated with this secret key
 /// # Errors
 /// * `MalformedPublicKey` if the public key could not be parsed
-/// * `MalformedSecretKey` if the secret key does not coorespond with the public
+/// * `MalformedSecretKey` if the secret key does not correspond with the public
 ///   key
 pub fn secret_key_from_components(
     sk_raw_bytes: &[u8],
