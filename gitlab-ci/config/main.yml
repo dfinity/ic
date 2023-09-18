@@ -243,6 +243,8 @@ bazel-test-coverage:
           --combined_report=lcov $(<cov_targets.txt) || true
       cp bazel-out/_coverage/_coverage_report.dat cov_report.dat
       genhtml --output cov_html cov_report.dat
+  after_script:
+    - bazel clean --expunge
 
 
 bazel-test-all:
