@@ -6,18 +6,6 @@ mod tls_public_key_cert {
     use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 
     #[test]
-    fn should_create_certificate_from_valid_x509() {
-        let cert_x509 = generate_ed25519_cert().1;
-
-        let cert = TlsPublicKeyCert::new_from_x509(cert_x509.clone()).unwrap();
-
-        assert_eq!(
-            cert_x509.to_der().expect("failed to convert X509 to DER"),
-            *cert.as_der()
-        );
-    }
-
-    #[test]
     fn should_create_certificate_from_valid_der() {
         let cert_der = generate_ed25519_cert()
             .1
@@ -27,18 +15,6 @@ mod tls_public_key_cert {
         let cert = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
 
         assert_eq!(cert_der, *cert.as_der());
-    }
-
-    #[test]
-    fn should_create_equal_from_der_and_x509() {
-        let cert_x509 = generate_ed25519_cert().1;
-        let cert_der = cert_x509.to_der().expect("failed to convert X509 to DER");
-
-        let cert1 = TlsPublicKeyCert::new_from_x509(cert_x509).unwrap();
-
-        let cert2 = TlsPublicKeyCert::new_from_der(cert_der).unwrap();
-
-        assert_eq!(cert1, cert2);
     }
 
     #[test]
@@ -110,7 +86,13 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_deserialize_from_serialized() {
-        let cert = TlsPublicKeyCert::new_from_x509(generate_ed25519_cert().1).unwrap();
+        let cert = TlsPublicKeyCert::new_from_der(
+            generate_ed25519_cert()
+                .1
+                .to_der()
+                .expect("failed to DER encode tls cert"),
+        )
+        .unwrap();
 
         let serialized = json5::to_string(&cert).unwrap();
 
@@ -136,7 +118,9 @@ mod tls_public_key_cert {
         assert!(result.is_ok());
 
         let deserialized = result.unwrap();
-        let subj_name = deserialized.as_x509().subject_name();
+        use openssl::x509::X509;
+        let x509_cert = X509::from_der(deserialized.as_der()).expect("invalid DER");
+        let subj_name = x509_cert.subject_name();
         let subj_name = format!("{:?}", subj_name);
         assert_eq!(subj_name, "[commonName = \"Spock\"]");
     }
@@ -158,7 +142,13 @@ mod tls_public_key_cert {
         // Also, config uses JSON5.
         use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 
-        let cert = TlsPublicKeyCert::new_from_x509(generate_ed25519_cert().1).unwrap();
+        let cert = TlsPublicKeyCert::new_from_der(
+            generate_ed25519_cert()
+                .1
+                .to_der()
+                .expect("failed to DER encode tls cert"),
+        )
+        .unwrap();
 
         let proto_cert = X509PublicKeyCert {
             certificate_der: cert.as_der().clone(),

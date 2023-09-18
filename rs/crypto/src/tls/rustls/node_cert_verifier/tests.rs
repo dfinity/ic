@@ -196,7 +196,7 @@ mod client_cert_verifier_tests {
             result.err(),
             Some(TLSError::General(
                 "The presented certificate subject CN could not be parsed as node ID: MalformedPeerCertificateError \
-                { internal_error: \"Too many X509NameEntryRefs\" }".to_string(),
+                { internal_error: \"invalid subject common name (CN): found second common name (CN) entry, but expected a single one\" }".to_string(),
             ))
         );
     }

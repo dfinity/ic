@@ -2711,7 +2711,8 @@ dependencies = [
  "rand_pcg 0.3.1",
  "randomkit",
  "rayon",
- "rcgen",
+ "rcgen 0.10.0",
+ "rcgen 0.11.1",
  "regex",
  "reqwest",
  "retain_mut",
@@ -7569,6 +7570,19 @@ dependencies = [
  "ring",
  "time 0.3.23",
  "yasna",
+]
+
+[[package]]
+name = "rcgen"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4954fbc00dcd4d8282c987710e50ba513d351400dbdd00e803a05172a90d8976"
+dependencies = [
+ "pem 2.0.1",
+ "ring",
+ "time 0.3.23",
+ "yasna",
+ "zeroize",
 ]
 
 [[package]]

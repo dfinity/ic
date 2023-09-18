@@ -82,7 +82,7 @@ mod keygen {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
 
-        let x509_cert = cert.as_x509();
+        let x509_cert = &x509(&cert);
         let public_key = x509_cert
             .public_key()
             .expect("Missing public key in a certificate.");
@@ -97,7 +97,7 @@ mod keygen {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
 
-        let x509_cert = cert.as_x509();
+        let x509_cert = &x509(&cert);
         assert_eq!(cn_entries(x509_cert).count(), 1);
         let subject_cn = cn_entries(x509_cert)
             .next()
@@ -112,8 +112,9 @@ mod keygen {
         let cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
+        let cert_x509 = x509(&cert);
 
-        let subject_cn = cn_entries(cert.as_x509())
+        let subject_cn = cn_entries(&cert_x509)
             .next()
             .expect("Missing 'subject CN' entry in a certificate");
         assert_eq!(b"w43gn-nurca-aaaaa-aaaap-2ai", subject_cn.data().as_slice());
@@ -125,9 +126,9 @@ mod keygen {
         let cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
+        let cert_x509 = x509(&cert);
 
-        let issuer_cn = cert
-            .as_x509()
+        let issuer_cn = cert_x509
             .issuer_name()
             .entries_by_nid(Nid::COMMONNAME)
             .next()
@@ -143,7 +144,7 @@ mod keygen {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
 
-        let subject_alt_names = cert.as_x509().subject_alt_names();
+        let subject_alt_names = x509(&cert).subject_alt_names();
         assert!(subject_alt_names.is_none());
     }
 
@@ -157,8 +158,7 @@ mod keygen {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
 
-        let cert_serial = cert
-            .as_x509()
+        let cert_serial = x509(&cert)
             .serial_number()
             .to_bn()
             .expect("Failed parsing SN as BigNum.");
@@ -233,7 +233,7 @@ mod keygen {
                 utc.format("%b %e %H:%M:%S %Y GMT").to_string()
             };
 
-            assert_eq!(cert.as_x509().not_before().to_string(), expected_not_before);
+            assert_eq!(x509(&cert).not_before().to_string(), expected_not_before);
         }
     }
 
@@ -244,7 +244,7 @@ mod keygen {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
         assert!(
-            cert.as_x509().not_after()
+            x509(&cert).not_after()
                 == Asn1Time::from_str_x509(NOT_AFTER).expect("Failed parsing string as Asn1Time")
         );
     }
@@ -255,7 +255,7 @@ mod keygen {
         let invalid_not_after = "invalid_not_after_date";
         let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
         assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-            if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
+            if message.eq("invalid X.509 certificate expiration date (not_after): failed to parse ASN1 datetime format") && not_after.eq(invalid_not_after)
         );
     }
 
@@ -265,10 +265,10 @@ mod keygen {
             .with_time_source(FastForwardTimeSource::new())
             .build();
         const UNIX_EPOCH: &str = "19700101000000Z";
-        const UNIX_EPOCH_AS_TIME_DATE: &str = "(Jan  1 00:00:00 1970 GMT)";
+        const UNIX_EPOCH_AS_TIME_DATE: &str = "1970-01-01 0:00:00.0 +00:00:00";
 
         let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), UNIX_EPOCH);
-        let expected_message = format!("'not after' date {UNIX_EPOCH_AS_TIME_DATE} must be after 'not before' date {UNIX_EPOCH_AS_TIME_DATE}");
+        let expected_message = format!("notBefore date ({UNIX_EPOCH_AS_TIME_DATE}) must be before notAfter date ({UNIX_EPOCH_AS_TIME_DATE})");
         assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
             if message == expected_message && not_after == UNIX_EPOCH
         );
@@ -301,7 +301,8 @@ mod keygen {
             let cert = csp_vault
                 .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
                 .expect("Failed to generate certificate");
-            let not_before = cert.as_x509().not_before();
+            let cert_x509 = x509(&cert);
+            let not_before = cert_x509.not_before();
 
             let expected_not_before: &Asn1TimeRef = &Asn1Time::from_unix(secs.saturating_sub(GRACE_PERIOD_SECS)).expect("failed to convert time");
             let diff = not_before.diff(expected_not_before).expect("failed to obtain time diff");
@@ -445,10 +446,14 @@ mod keygen {
     }
 
     fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
-        cert.as_x509()
+        x509(cert)
             .serial_number()
             .to_bn()
             .expect("Failed parsing SN as BigNum")
+    }
+
+    fn x509(tls_cert: &TlsPublicKeyCert) -> X509 {
+        X509::from_der(tls_cert.as_der()).expect("Error parsing DER")
     }
 }
 
@@ -560,12 +565,8 @@ mod sign {
 
         assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
         let result = csp_vault.tls_sign(&random_message(rng), &key_id);
-        assert_eq!(
-            result.expect_err("Unexpected success."),
-            CspTlsSignError::MalformedSecretKey {
-                error: "Failed to convert TLS secret key DER from key store to OpenSSL private key"
-                    .to_string()
-            }
+        assert_matches!(result, Err(CspTlsSignError::MalformedSecretKey { error })
+            if error.starts_with("Failed to convert TLS secret key DER from key store to Ed25519 secret key")
         );
     }
 
@@ -582,12 +583,8 @@ mod sign {
             .build();
 
         let result = csp_vault.tls_sign(&random_message(rng), &key_id);
-        assert_eq!(
-            result.expect_err("Unexpected success."),
-            CspTlsSignError::MalformedSecretKey {
-                error: "Invalid length of raw OpenSSL private key: expected 32 bytes, but got 57"
-                    .to_string()
-            }
+        assert_matches!(result, Err(CspTlsSignError::MalformedSecretKey { error })
+            if error.starts_with("Failed to convert TLS secret key DER from key store to Ed25519 secret key")
         );
     }
 

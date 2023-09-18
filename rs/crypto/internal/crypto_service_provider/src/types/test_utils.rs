@@ -12,7 +12,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     gen_keypair, CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes,
     MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
 };
-use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
+use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPop, FsEncryptionPublicKey,
 };

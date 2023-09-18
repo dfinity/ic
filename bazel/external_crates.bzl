@@ -850,6 +850,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "rcgen": crate.spec(
                 version = "^0.10.0",
             ),
+            "rcgen-0_11": crate.spec(
+                package = "rcgen",
+                version = "^0.11.1",
+                features = [
+                    "zeroize",
+                ],
+            ),
             "regex": crate.spec(
                 version = "^1.3.9",
             ),

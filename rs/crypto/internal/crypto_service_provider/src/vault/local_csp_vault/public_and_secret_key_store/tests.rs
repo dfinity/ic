@@ -1000,7 +1000,7 @@ mod validate_pks_and_sks {
                     ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(
-                    "invalid TLS certificate: failed to parse DER".to_string(),
+                    "Malformed certificate: TlsPublicKeyCertCreationError { internal_error: \"Error parsing DER: Parsing Error: InvalidDate\" }".to_string(),
                 )),
             },
             ParameterizedTest {

@@ -4,11 +4,10 @@
 
 use async_trait::async_trait;
 use core::fmt;
+use ic_crypto_sha2::Sha256;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
-use openssl::hash::MessageDigest;
-use openssl::x509::X509;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -17,6 +16,7 @@ use std::hash::{Hash, Hasher};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::{ClientConfig, ServerConfig};
+use x509_parser::certificate::X509Certificate;
 
 #[cfg(test)]
 mod tests;
@@ -24,8 +24,6 @@ mod tests;
 #[derive(Clone, Debug, Serialize)]
 /// An X.509 certificate
 pub struct TlsPublicKeyCert {
-    #[serde(skip_serializing)]
-    cert: X509,
     // rename, to match previous serializations (which used X509PublicKeyCert)
     #[serde(rename = "certificate_der")]
     der_cached: Vec<u8>,
@@ -36,28 +34,33 @@ pub struct TlsPublicKeyCert {
 impl TlsPublicKeyCert {
     /// Creates a certificate from ASN.1 DER encoding
     pub fn new_from_der(cert_der: Vec<u8>) -> Result<Self, TlsPublicKeyCertCreationError> {
-        let cert = X509::from_der(&cert_der).map_err(|e| TlsPublicKeyCertCreationError {
-            internal_error: format!("Error parsing DER: {}", e),
-        })?;
-
+        use x509_parser::prelude::FromDer;
+        let (remainder, _cert) =
+            X509Certificate::from_der(&cert_der).map_err(|e| TlsPublicKeyCertCreationError {
+                internal_error: format!("Error parsing DER: {}", e),
+            })?;
+        if !remainder.is_empty() {
+            return Err(TlsPublicKeyCertCreationError {
+                internal_error: format!(
+                    "DER not fully consumed when parsing. Remainder: {remainder:?}",
+                ),
+            });
+        }
         Ok(Self {
-            hash_cached: Self::hash(&cert)?,
-            cert,
+            hash_cached: Sha256::hash(&cert_der).to_vec(),
             der_cached: cert_der,
         })
     }
 
-    /// Creates a certificate from an existing OpenSSL struct
-    pub fn new_from_x509(cert: X509) -> Result<Self, TlsPublicKeyCertCreationError> {
-        let der_cached = cert.to_der().map_err(|e| TlsPublicKeyCertCreationError {
-            internal_error: format!("Error encoding DER: {}", e),
-        })?;
-
-        Ok(Self {
-            hash_cached: Self::hash(&cert)?,
-            cert,
-            der_cached,
-        })
+    /// Creates a certificate from PEM encoding
+    pub fn new_from_pem(pem_cert: &str) -> Result<Self, TlsPublicKeyCertCreationError> {
+        let cert_der = x509_parser::pem::Pem::read(std::io::Cursor::new(pem_cert))
+            .map_err(|e| TlsPublicKeyCertCreationError {
+                internal_error: format!("Error parsing PEM: {e}"),
+            })?
+            .0
+            .contents;
+        Self::new_from_der(cert_der)
     }
 
     /// Returns the certificate in DER format
@@ -65,28 +68,11 @@ impl TlsPublicKeyCert {
         &self.der_cached
     }
 
-    /// Returns the certificate as an OpenSSL struct
-    pub fn as_x509(&self) -> &X509 {
-        &self.cert
-    }
-
     /// Returns the certificate in protobuf format
     pub fn to_proto(&self) -> X509PublicKeyCert {
         X509PublicKeyCert {
             certificate_der: self.der_cached.clone(),
         }
-    }
-
-    fn hash(cert: &X509) -> Result<Vec<u8>, TlsPublicKeyCertCreationError> {
-        let hash = cert
-            .digest(MessageDigest::sha256())
-            .map_err(|e| TlsPublicKeyCertCreationError {
-                internal_error: format!("Error hashing certificate: {}", e),
-            })?
-            .iter()
-            .cloned()
-            .collect();
-        Ok(hash)
     }
 }
 

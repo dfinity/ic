@@ -1,5 +1,5 @@
 {
-  "checksum": "ef3a1f40dcc8dd7c2aa41eb22870b049b5a8eb3a892e5d84c800f2644e0e827e",
+  "checksum": "e652a71294731b9f3bd46cf215f6728e2796d1db6094efe39270c084c3d4f13c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13587,6 +13587,11 @@
               "target": "rcgen"
             },
             {
+              "id": "rcgen 0.11.1",
+              "target": "rcgen",
+              "alias": "rcgen_0_11"
+            },
+            {
               "id": "regex 1.9.1",
               "target": "regex"
             },
@@ -26763,27 +26768,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -26817,27 +26807,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.4.3"
@@ -39015,6 +38990,69 @@
         },
         "edition": "2021",
         "version": "0.10.0"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "rcgen 0.11.1": {
+      "name": "rcgen",
+      "version": "0.11.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/rcgen/0.11.1/download",
+          "sha256": "4954fbc00dcd4d8282c987710e50ba513d351400dbdd00e803a05172a90d8976"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rcgen",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "rcgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "pem",
+            "zeroize"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "pem 2.0.1",
+              "target": "pem"
+            },
+            {
+              "id": "ring 0.16.20",
+              "target": "ring"
+            },
+            {
+              "id": "time 0.3.23",
+              "target": "time"
+            },
+            {
+              "id": "yasna 0.5.2",
+              "target": "yasna"
+            },
+            {
+              "id": "zeroize 1.6.0",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.11.1"
       },
       "license": "MIT OR Apache-2.0"
     },

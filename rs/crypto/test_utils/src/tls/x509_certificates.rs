@@ -41,8 +41,12 @@ pub fn generate_ed25519_cert() -> (PKey<Private>, X509) {
 pub fn generate_ed25519_tlscert() -> (PKey<Private>, TlsPublicKeyCert) {
     let key_pair = ed25519_key_pair();
     let server_cert_x509 = generate_cert(&key_pair, MessageDigest::null());
-    let server_cert = TlsPublicKeyCert::new_from_x509(server_cert_x509)
-        .expect("error converting X509 to TlsPublicKeyCert");
+    let server_cert = TlsPublicKeyCert::new_from_der(
+        server_cert_x509
+            .to_der()
+            .expect("failed to DER encode server cert"),
+    )
+    .expect("error converting X509 to TlsPublicKeyCert");
     (key_pair, server_cert)
 }
 
