@@ -18,9 +18,8 @@ ic-async-utils = { path = "../../async_utils" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
 ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { path = "../../types/base_types" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-peer-manager = { path = "../../p2p/peer_manager" }

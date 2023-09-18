@@ -13,8 +13,8 @@
 use std::time::Duration;
 
 use axum::Router;
+use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
-use ic_types::NodeId;
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 

@@ -5,6 +5,7 @@ use bytes::Bytes;
 use either::Either;
 use futures::FutureExt;
 use http::Request;
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_icos_sev::Sev;
 use ic_logger::info;
 use ic_metrics::MetricsRegistry;
@@ -18,7 +19,6 @@ use ic_p2p_test_utils::{
 };
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
 use tokio::sync::Notify;
 use turmoil::Builder;

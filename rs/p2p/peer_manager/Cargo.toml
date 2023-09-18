@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { path = "../../types/base_types" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
@@ -19,5 +19,5 @@ tokio = { version = "1.32.0", features = ["full"] }
 
 [dev-dependencies]
 ic-p2p-test-utils = { path = "../test_utils" }
-ic-test-utilities = { path = "../../test_utilities" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }

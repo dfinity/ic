@@ -40,6 +40,7 @@ use axum::Router;
 use either::Either;
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{
     AllowedClients, MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
     TlsStream,
@@ -52,7 +53,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
-use ic_types::{NodeId, RegistryVersion};
 use quinn::{
     AsyncUdpSocket, ConnectError, Connecting, Connection, ConnectionError, Endpoint,
     EndpointConfig, RecvStream, SendStream, VarInt,
