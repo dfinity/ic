@@ -1,5 +1,5 @@
+use ic_base_types::NodeId;
 use ic_metrics::{tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry};
-use ic_types::NodeId;
 use prometheus::{GaugeVec, IntCounter, IntCounterVec, IntGauge};
 use quinn::Connection;
 use tokio_metrics::TaskMonitor;

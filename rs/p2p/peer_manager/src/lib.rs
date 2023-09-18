@@ -17,12 +17,12 @@ use std::{
     time::Duration,
 };
 
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
-use ic_types::{NodeId, RegistryVersion, SubnetId};
 use metrics::PeerManagerMetrics;
 use tokio::{
     runtime::Handle,

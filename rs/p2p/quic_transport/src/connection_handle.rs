@@ -6,7 +6,7 @@
 //!
 use bytes::Bytes;
 use http::{Request, Response};
-use ic_types::NodeId;
+use ic_base_types::NodeId;
 use quinn::Connection;
 
 use crate::{

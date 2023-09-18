@@ -3,10 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, TlsConfig, TlsConfigError};
 use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
 use ic_p2p_test_utils::{temp_crypto_component_with_tls_keys, RegistryConsensusHandle};
-use ic_types::{NodeId, RegistryVersion};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 
