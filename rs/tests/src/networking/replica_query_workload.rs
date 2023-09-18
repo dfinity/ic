@@ -35,8 +35,6 @@ const CANISTER_METHOD: &str = "read";
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Duration of each request is placed into one of two categories - below or above this threshold.
 const DURATION_THRESHOLD: Duration = Duration::from_secs(2);
-// Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
-const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to workload creation.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
@@ -52,7 +50,7 @@ pub fn log_max_open_files(log: &Logger) {
 
 // Run a test with configurable number of query requests per second,
 // duration of the test, and the required success ratio.
-pub fn test(env: TestEnv, rps: usize, runtime: Duration, min_success_ratio: f64) {
+pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
     let log = env.logger();
     log_max_open_files(&log);
     info!(
@@ -112,27 +110,14 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration, min_success_ratio: f64)
     );
     let requests_count_below_threshold =
         load_metrics.requests_count_below_threshold(DURATION_THRESHOLD);
-    let requests_ratio_below_threshold =
-        load_metrics.requests_ratio_below_threshold(DURATION_THRESHOLD);
     info!(log, "Workload execution results: {load_metrics}");
-    info!(
-        log,
-        "Requests below {} sec:\nRequests_count: {:?} \nRequests_ratio: {:?}.",
-        DURATION_THRESHOLD.as_secs(),
-        requests_count_below_threshold,
-        requests_ratio_below_threshold,
-    );
-    info!(
-        &log,
-        "Minimum expected success ratio is {}, actual success ratio is {}.",
-        min_success_ratio,
-        load_metrics.success_ratio()
-    );
-    assert!(
-        load_metrics.success_ratio() > min_success_ratio,
+    assert_eq!(
+        load_metrics.failure_calls(),
+        0,
         "Too many requests have failed."
     );
-    assert!(requests_ratio_below_threshold
+    let min_expected_counter = rps as u64 * runtime.as_secs();
+    assert!(requests_count_below_threshold
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
+        .all(|(_, count)| *count == min_expected_counter));
 }

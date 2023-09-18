@@ -17,7 +17,6 @@ use super::engine::Engine;
 #[derive(Default, Clone, Debug)]
 pub struct RequestDurationBucket {
     threshold: Duration,
-    requests_above_threshold: u64,
     requests_below_threshold: u64,
 }
 
@@ -31,19 +30,6 @@ impl RequestDurationBucket {
 
     pub fn requests_count_below_threshold(&self) -> u64 {
         self.requests_below_threshold
-    }
-
-    pub fn requests_count_above_threshold(&self) -> u64 {
-        self.requests_above_threshold
-    }
-
-    pub fn requests_ratio_below_threshold(&self) -> f64 {
-        self.requests_below_threshold as f64
-            / (self.requests_above_threshold + self.requests_below_threshold) as f64
-    }
-
-    pub fn requests_ratio_above_threshold(&self) -> f64 {
-        1.0 - self.requests_ratio_below_threshold()
     }
 }
 
@@ -110,14 +96,6 @@ impl LoadTestMetrics {
         self.success_calls() + self.failure_calls()
     }
 
-    pub fn success_ratio(&self) -> f64 {
-        self.success_calls() as f64 / self.total_calls() as f64
-    }
-
-    pub fn failure_ratio(&self) -> f64 {
-        1.0 - self.success_ratio()
-    }
-
     pub fn errors(&self) -> HashMap<String, Counter> {
         self.inner.values().fold(HashMap::new(), |mut acc, x| {
             for (error, count) in x.errors() {
@@ -140,22 +118,6 @@ impl LoadTestMetrics {
                         .find(|bucket| bucket.threshold == threshold)
                         .expect("No bucket with a given threshold exists.")
                         .requests_count_below_threshold(),
-                )
-            })
-            .collect()
-    }
-
-    pub fn requests_ratio_below_threshold(&self, threshold: Duration) -> Vec<(String, f64)> {
-        self.inner
-            .iter()
-            .map(|(key, val)| {
-                (
-                    key.clone(),
-                    val.requests_duration_buckets
-                        .iter()
-                        .find(|bucket| bucket.threshold == threshold)
-                        .expect("No bucket with a given threshold exists.")
-                        .requests_ratio_below_threshold(),
                 )
             })
             .collect()
@@ -275,14 +237,6 @@ impl RequestMetrics {
         &self.errors_map
     }
 
-    pub fn success_ratio(&self) -> f64 {
-        self.success_calls as f64 / self.total_calls() as f64
-    }
-
-    pub fn failure_ratio(&self) -> f64 {
-        1.0 - self.success_ratio()
-    }
-
     pub fn push<T, S>(&mut self, item: RequestOutcome<T, S>)
     where
         T: Clone,
@@ -297,9 +251,7 @@ impl RequestMetrics {
         self.total_attempts += item.attempts;
 
         for bucket in self.requests_duration_buckets.iter_mut() {
-            if item.duration >= bucket.threshold {
-                bucket.requests_above_threshold += 1;
-            } else {
+            if item.duration < bucket.threshold {
                 bucket.requests_below_threshold += 1;
             }
         }

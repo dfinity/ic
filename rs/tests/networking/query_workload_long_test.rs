@@ -14,10 +14,9 @@ use ic_tests::systest;
 // This value should more or less equal to
 // config.query_execution_threads * (1 sec / <avg latency in secs for executing a single query to the counter canister>)
 // The avg. latency in seconds for a query to the counter canister is 1 ms, according to latest data from execution.
-const RPS: usize = 1000;
-const MIN_SUCCESS_RATIO: f64 = 0.95;
+const RPS: usize = 100;
 const USE_BOUNDARY_NODE: bool = false;
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60);
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(10 * 60);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(5 * 60);
@@ -36,7 +35,7 @@ fn main() -> Result<()> {
             Some(ImageSizeGiB::new(500)),
         )
     };
-    let test = |env| test(env, RPS, WORKLOAD_RUNTIME, MIN_SUCCESS_RATIO);
+    let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
         .with_setup(config)
         .add_test(systest!(test))

@@ -10,8 +10,6 @@ pub const MEGABYTE: u64 = KILOBYTE * KILOBYTE;
 /// subnet configs.
 pub use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 
-/// Current NNS subnet size. Used in SLO tests as default.
-pub const NNS_SUBNET_SIZE: usize = 40;
 pub const UNIT_DELAY_APP_SUBNET: Duration = Duration::from_millis(1000);
 pub const UNIT_DELAY_NNS_SUBNET: Duration = Duration::from_millis(3000);
 pub const INITIAL_NOTARY_DELAY_APP_SUBNET: Duration = Duration::from_millis(600);
