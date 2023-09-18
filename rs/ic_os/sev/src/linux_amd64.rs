@@ -238,7 +238,7 @@ where
         read_into_buffer(&mut stream, &mut serialized_len).await?;
         let len = u32::from_le_bytes(serialized_len.try_into().map_err(|_| {
             ValidateAttestationError::HandshakeError {
-                description: "unable to conver serialized length".into(),
+                description: "unable to convert serialized length".into(),
             }
         })?);
         let mut buffer: Vec<u8> = Vec::new();

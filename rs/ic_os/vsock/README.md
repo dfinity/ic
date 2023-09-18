@@ -10,7 +10,7 @@ The `protocol` module defines the communication protocol and offers utility func
 
 To maintain the highest level of isolation and security between the two operating systems, the GuestOS is restricted to strictly defined commands.
 
-## Comands
+## Commands
 
 The following commands are supported:
 

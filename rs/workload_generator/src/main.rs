@@ -551,9 +551,9 @@ async fn main() {
                 .await;
 
             // Drop the engine with the hope that all client connections will be closed.
-            // Sometimes we may end up in situation where all file decriptors
+            // Sometimes we may end up in situation where all file descriptors
             // are consumed by the number of connections. We need a more
-            // sustainable solution where the file decriptors
+            // sustainable solution where the file descriptors
             // are not a bottleneck.
             std::mem::drop(eng);
             let summary = Summary::from_facts(&facts);

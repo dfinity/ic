@@ -66,7 +66,7 @@ impl MetricParams {
             // Count
             counter: register_int_counter_vec_with_registry!(
                 format!("{action}_total"),
-                format!("Counts occurences of {action} calls"),
+                format!("Counts occurrences of {action} calls"),
                 labels,
                 registry
             )
@@ -95,7 +95,7 @@ impl HttpMetricParams {
 
             counter: register_int_counter_vec_with_registry!(
                 format!("{action}_total"),
-                format!("Counts occurences of {action} calls"),
+                format!("Counts occurrences of {action} calls"),
                 LABELS_HTTP,
                 registry
             )

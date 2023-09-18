@@ -443,7 +443,7 @@ impl<RL: List, LL: List, U: Update> Run for Runner<RL, LL, U> {
             .local_lister
             .list()
             .await
-            .context("failed to list local entrie")?;
+            .context("failed to list local entries")?;
 
         if remote_entries != local_entries {
             self.updater

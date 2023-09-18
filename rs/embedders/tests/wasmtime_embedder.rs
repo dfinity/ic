@@ -561,7 +561,7 @@ mod test {
     #[should_panic(
         expected = "Given number of exported globals 3 is not equal to the number of instance exported globals 2"
     )]
-    fn try_to_set_globals_that_are_more_than_the_instace_globals() {
+    fn try_to_set_globals_that_are_more_than_the_instance_globals() {
         let _instance = WasmtimeInstanceBuilder::new()
             // Module only exports one global, but instrumentation adds a second.
             .with_wat(
@@ -578,7 +578,7 @@ mod test {
     #[should_panic(
         expected = "Given number of exported globals 1 is not equal to the number of instance exported globals 2"
     )]
-    fn try_to_set_globals_that_are_less_than_the_instace_globals() {
+    fn try_to_set_globals_that_are_less_than_the_instance_globals() {
         let _instance = WasmtimeInstanceBuilder::new()
             // Module only exports one global, but instrumentation adds a second.
             .with_wat(

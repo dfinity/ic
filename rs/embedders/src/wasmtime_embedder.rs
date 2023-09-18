@@ -60,7 +60,7 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
         Ok(trap) => trap_code_to_hypervisor_error(trap),
         Err(err) => {
             // The error could be either a compile error or some other error.
-            // We have to inspect the error message to distingiush these cases.
+            // We have to inspect the error message to distinguish these cases.
             let message = {
                 // We cannot use `format!` here because displaying `err` may fail.
                 let mut output = String::new();
@@ -174,7 +174,7 @@ pub struct WasmtimeEmbedder {
     // Each time a new memory is created it is added to this map.  Each time a
     // `SigsegvMemoryTracker` is created it will look up the corresponding memory in the map
     // and remove it. So memories will only be in this map for the time between module
-    // instatiation and creation of the corresponding `SigsegvMemoryTracker`.
+    // instantiation and creation of the corresponding `SigsegvMemoryTracker`.
     created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
 }
 

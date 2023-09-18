@@ -290,7 +290,7 @@ impl<P: Provision, L: Load<(String, String)>> Provision for WithLoad<P, L> {
                 // attempt to ensure they are valid
                 // otherwise proceed to provision new ones
                 let validity = extract_cert_validity(name, cert.as_bytes())
-                    .context("failed to extract certificiate validity")?;
+                    .context("failed to extract certificate validity")?;
 
                 if let Some(validity) = validity {
                     let (expiration, now) = (

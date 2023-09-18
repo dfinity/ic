@@ -570,7 +570,7 @@ fn send_message(
                     as MsgControlLenType;
             assert!(
                 hdr.msg_controllen <= cmsgbuf.len() as MsgControlLenType,
-                "Controll message buffer overflow: {} > {}",
+                "Control message buffer overflow: {} > {}",
                 hdr.msg_controllen,
                 cmsgbuf.len(),
             );
@@ -607,7 +607,7 @@ fn send_message(
 /// It is a wrapper around `libc::recvmsg()` and returns the result of that
 /// syscall (which is the number of bytes read or -1 on error).
 ///
-/// If reading is successfull, then the function pushes the read bytes and file
+/// If reading is successful, then the function pushes the read bytes and file
 /// descriptors onto the given `buf` and `fds`.
 fn receive_message(
     socket_fd: i32,

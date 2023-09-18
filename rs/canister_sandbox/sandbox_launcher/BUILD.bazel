@@ -16,7 +16,7 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-# `sandbox_launcher` executible name referenced by code and other scripts.
+# `sandbox_launcher` executable name referenced by code and other scripts.
 # Therefore reserve that name for the rust binary.
 rust_binary(
     name = "sandbox_launcher",

@@ -186,7 +186,7 @@ pub struct InstrumentationOutput {
     /// Other methods are assumed to be private to the module and are ignored.
     pub exported_functions: BTreeSet<WasmMethod>,
 
-    /// Data segements.
+    /// Data segments.
     pub data: Segments,
 
     /// Instrumented Wasm binary.

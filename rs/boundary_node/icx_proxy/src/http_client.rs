@@ -72,7 +72,7 @@ impl<B> HyperBody for B where
 {
 }
 
-/// Trait representing the contraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
+/// Trait representing the constraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
 pub trait HyperService<B1: HyperBody>:
     http_transport::HyperService<B1, ResponseBody = Self::ResponseBody2>
 {

@@ -219,7 +219,7 @@ impl DeterministicTimeSlicing {
             });
         }
 
-        // At this pont we know that the next slice will be able to run, so we
+        // At this point we know that the next slice will be able to run, so we
         // can commit the state changes and pause now.
         state.update(instruction_counter, execution_complexity);
         state.execution_status = ExecutionStatus::Paused;
