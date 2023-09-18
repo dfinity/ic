@@ -315,9 +315,9 @@ where
                         // blocking workers are busy, the task is put on a queue (which is what we want).
                         //
                         // Note: One issue here is that we drop the join handle "on the floor". Threads
-                        // that are not awaited upon before exiting the process are known to cause spurios
+                        // that are not awaited upon before exiting the process are known to cause spurious
                         // issues. This should not be a problem as the tokio Executor will wait
-                        // indefinitively for threads to return, unless a shutdown timeout is configured.
+                        // indefinitely for threads to return, unless a shutdown timeout is configured.
                         //
                         // See: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
                         let bg_task = spawn_blocking({

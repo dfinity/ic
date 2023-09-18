@@ -585,7 +585,7 @@ where
 
 // In order to implement FI-487 in steps we need to split the test
 // //rs/rosetta-api/icrc1/ledger/tests/tests.rs#test_metadata in two:
-//  1. the first part that setup ledger and environemnt and tests the
+//  1. the first part that setup ledger and environment and tests the
 //     ICRC-1 metadata that both the ICP and the ICRC-1 Ledgers have
 //  2. the second part that tests the metadata that only the ICRC-1 Ledger
 //     has
@@ -726,7 +726,7 @@ where
         lookup(&metadata, "icrc1:decimals"),
         &Value::from(DECIMAL_PLACES as u64)
     );
-    //Not all ICRC-1 impelmentations have the same metadata entries. Thus only certain basic fields are shared by all ICRC-1 implementaions
+    // Not all ICRC-1 implementations have the same metadata entries. Thus only certain basic fields are shared by all ICRC-1 implementations.
     assert_eq!(
         lookup(&metadata, NAT_META_KEY),
         &Value::from(NAT_META_VALUE)
@@ -1007,7 +1007,7 @@ where
     assert_eq!(9_000_000, balance_of(&env, canister_id, p1.0));
     assert_eq!(0, balance_of(&env, canister_id, MINTER));
 
-    // You have at least FEE, you can burn at least FEE
+    // You have at least FEE, you can burn at least FEE.
     assert_eq!(
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE)
@@ -1229,7 +1229,6 @@ pub fn test_archiving<T>(
     assert_eq!(0, missing_blocks_reply.archived_transactions.len());
 
     // Upgrade the archive and check that the data is still available.
-
     let archive_canister_id = CanisterId::new(archive_principal.into())
         .expect("failed to convert Principal to CanisterId");
 
@@ -1514,9 +1513,9 @@ where
     T: CandidType,
 {
     let env = StateMachine::new();
-    // by default the fee collector is not set
+    // By default the fee collector is not set.
     let ledger_id = install_ledger(&env, ledger_wasm.clone(), encode_init_args, vec![]);
-    // only 1 test case because we modify the ledger within the test
+    // Only 1 test case because we modify the ledger within the test.
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     runner
         .run(
@@ -1530,19 +1529,19 @@ where
                     a1 != a2 && a2 != a3 && a1 != a3
                 }),
             |(account_from, account_to, fee_collector, amount)| {
-                // test 1: with no fee collector the fee should be burned
+                // Test 1: with no fee collector the fee should be burned.
 
-                // mint some tokens for a user
+                // Mint some tokens for a user.
                 transfer(&env, ledger_id, MINTER, account_from, 3 * (amount + FEE))
                     .expect("Unable to mint tokens");
 
-                // record the previous total_supply and make the transfer.
+                // Record the previous total_supply and make the transfer.
                 let total_supply_before = total_supply(&env, ledger_id);
                 transfer(&env, ledger_id, account_from, account_to, amount)
                     .expect("Unable to perform transfer");
 
-                // if the fee was burned then the total_supply after the
-                // transfer should be the one before plus the (burned) FEE
+                // If the fee was burned then the total_supply after the
+                // transfer should be the one before plus the (burned) FEE.
                 assert_eq!(
                     total_supply_before,
                     total_supply(&env, ledger_id) + FEE,
@@ -1550,10 +1549,10 @@ where
                     FEE
                 );
 
-                // test 2: upgrade the ledger to have a fee collector.
-                //         The fee should be collected by the fee collector
+                // Test 2: upgrade the ledger to have a fee collector.
+                //         The fee should be collected by the fee collector.
 
-                // set the fee collector
+                // Set the fee collector.
                 let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
                     change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector)),
                     ..UpgradeArgs::default()
@@ -1565,30 +1564,30 @@ where
                 )
                 .unwrap();
 
-                // record the previous total_supply and make the transfer.
+                // Record the previous total_supply and make the transfer.
                 let total_supply_before = total_supply(&env, ledger_id);
                 transfer(&env, ledger_id, account_from, account_to, amount)
                     .expect("Unable to perform transfer");
 
-                // if the fee was burned then the total_supply after the
-                // transfer should be the one before (nothing burned)
+                // If the fee was burned then the total_supply after the
+                // transfer should be the one before (nothing burned).
                 assert_eq!(
                     total_supply_before,
                     total_supply(&env, ledger_id),
                     "Total supply shouldn't have changed"
                 );
 
-                // the fee collector must have collected the fee
+                // The fee collector must have collected the fee.
                 assert_eq!(
                     FEE,
                     balance_of(&env, ledger_id, fee_collector),
                     "The fee_collector should have collected the fee"
                 );
 
-                // test 3: upgrade the ledger to not have a fee collector.
+                // Test 3: upgrade the ledger to not have a fee collector.
                 //         The fee should once again be burned.
 
-                // unset the fee collector
+                // Unset the fee collector.
                 let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
                     change_fee_collector: Some(ChangeFeeCollector::Unset),
                     ..UpgradeArgs::default()
@@ -1600,13 +1599,13 @@ where
                 )
                 .unwrap();
 
-                // record the previous total_supply and make the transfer.
+                // Record the previous total_supply and make the transfer.
                 let total_supply_before = total_supply(&env, ledger_id);
                 transfer(&env, ledger_id, account_from, account_to, amount)
                     .expect("Unable to perform transfer");
 
-                // if the fee was burned then the total_supply after the
-                // transfer should be the one before plus the (burned) FEE
+                // If the fee was burned then the total_supply after the
+                // transfer should be the one before plus the (burned) FEE.
                 assert_eq!(
                     total_supply_before,
                     total_supply(&env, ledger_id) + FEE,
@@ -1614,7 +1613,7 @@ where
                     FEE
                 );
 
-                // the fee collector must have collected no fee this time
+                // The fee collector must have collected no fee this time.
                 assert_eq!(
                     FEE,
                     balance_of(&env, ledger_id, fee_collector),
@@ -1682,7 +1681,7 @@ where
     }
 
     let env = StateMachine::new();
-    // only 1 test case because we modify the ledger within the test
+    // Only 1 test case because we modify the ledger within the test.
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     runner
         .run(
@@ -1708,7 +1707,7 @@ where
 
                 // The block at index 0 is the minting operation for account_from and
                 // has the fee collector set.
-                // Make 2 more transfers that should point to the first block index
+                // Make 2 more transfers that should point to the first block index.
                 transfer(&env, ledger_id, account_from, account_to, amount)
                     .expect("Unable to perform the transfer");
                 transfer(&env, ledger_id, account_from, account_to, amount)
@@ -1716,12 +1715,12 @@ where
 
                 let blocks = get_blocks(&env, ledger_id.get().0, 0, 4).blocks;
 
-                // the first block must have the fee collector explicitly defined
+                // The first block must have the fee collector explicitly defined.
                 assert_eq!(
                     fee_collector_from_block(blocks.get(0).unwrap().clone()),
                     (Some(fee_collector_account), None)
                 );
-                // the other two blocks must have a pointer to the first block
+                // The other two blocks must have a pointer to the first block.
                 assert_eq!(
                     fee_collector_from_block(blocks.get(1).unwrap().clone()),
                     (None, Some(0))
@@ -1731,9 +1730,9 @@ where
                     (None, Some(0))
                 );
 
-                // change the fee collector to a new one. The next block must have
+                // Change the fee collector to a new one. The next block must have
                 // the fee collector set while the ones that follow will point
-                // to that one
+                // to that one.
                 let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
                     change_fee_collector: Some(ChangeFeeCollector::SetTo(account_from)),
                     ..UpgradeArgs::default()
@@ -1800,7 +1799,7 @@ where
     };
 
     // We didn't set the max_memo_length in the init params of the ledger
-    // so the memo will be accepted only if it's 32 bytes or less
+    // so the memo will be accepted only if it's 32 bytes or less.
     for i in 0..=32 {
         assert!(
             transfer_with_memo(&vec![0u8; i]).is_ok(),
@@ -1819,7 +1818,7 @@ where
     env.upgrade_canister(ledger_id, ledger_wasm.clone(), args)
         .unwrap();
 
-    // now the ledger should accept memos up to 64 bytes
+    // Now the ledger should accept memos up to 64 bytes.
     for i in 0..=64 {
         assert!(
             transfer_with_memo(&vec![0u8; i]).is_ok(),
@@ -1831,7 +1830,7 @@ where
 
     expect_memo_length_error(transfer_with_memo, &[0u8; u16::MAX as usize + 1]);
 
-    // Trying to shrink the memo should result in a failure
+    // Trying to shrink the memo should result in a failure.
     let args = ic_icrc1_ledger::LedgerArgument::Upgrade(Some(ic_icrc1_ledger::UpgradeArgs {
         max_memo_length: Some(63),
         ..ic_icrc1_ledger::UpgradeArgs::default()
@@ -1870,7 +1869,7 @@ pub fn icrc1_test_block_transformation<T>(
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
 
-    // Setup ledger as it is deployed on the mainnet
+    // Setup ledger as it is deployed on the mainnet.
     let (env, canister_id) = setup(
         ledger_wasm_mainnet,
         encode_init_args,
@@ -1888,10 +1887,10 @@ pub fn icrc1_test_block_transformation<T>(
     transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
     transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
 
-    // Fetch all blocks before the upgrade
+    // Fetch all blocks before the upgrade.
     let resp_pre_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
 
-    // Now upgrade the ledger to the new canister wasm
+    // Now upgrade the ledger to the new canister wasm.
     env.upgrade_canister(
         canister_id,
         ledger_wasm_current,
@@ -1899,17 +1898,17 @@ pub fn icrc1_test_block_transformation<T>(
     )
     .unwrap();
 
-    // Default archive threshhold is 10 blocks so all blocks should be on the ledger directly
-    // Fetch all blocks after the upgrade
+    // Default archive threshold is 10 blocks so all blocks should be on the ledger directly
+    // Fetch all blocks after the upgrade.
     let resp_post_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
 
-    // Make sure the same number of blocks were fetched before and after the upgrade
+    // Make sure the same number of blocks were fetched before and after the upgrade.
     assert_eq!(
         resp_pre_upgrade.blocks.len(),
         resp_post_upgrade.blocks.len()
     );
 
-    //Go through all blocks and make sure the blocks fetched before the upgrade are the same as after the upgrade
+    // Go through all blocks and make sure the blocks fetched before the upgrade are the same as after the upgrade.
     for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
         .blocks
         .into_iter()
@@ -2504,9 +2503,9 @@ where
     let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
         .expect("transfer_from failed");
     assert_eq!(block_index, 4);
-    // `from` paid 2 fees (approval and transfer_from) and 30_000 was transfered
+    // `from` paid 2 fees (approval and transfer_from) and 30_000 was transferred.
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
-    // `from_sub_1` paid approval fee
+    // `from_sub_1` paid approval fee.
     assert_eq!(balance_of(&env, canister_id, from_sub_1), 90_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
@@ -2520,7 +2519,7 @@ where
         .expect("transfer_from failed");
     assert_eq!(block_index, 5);
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
-    // `from_sub_1` paid 2 fees (approval and transfer_from) and 30_000 was transfered
+    // `from_sub_1` paid 2 fees (approval and transfer_from) and 30_000 was transferred.
     assert_eq!(balance_of(&env, canister_id, from_sub_1), 50_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 60_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);

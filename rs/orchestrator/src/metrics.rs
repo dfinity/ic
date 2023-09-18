@@ -8,7 +8,7 @@ pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
 pub struct OrchestratorMetrics {
     pub heart_beat_count: IntCounter,
     pub resident_mem_used: IntGauge,
-    /// Registry version last used to succesfully fetch datacenter information
+    /// Registry version last used to successfully fetch datacenter information
     pub datacenter_registry_version: IntGauge,
     pub ssh_access_registry_version: IntGauge,
     pub firewall_registry_version: IntGauge,

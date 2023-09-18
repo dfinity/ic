@@ -8,13 +8,13 @@ e.g. 0:9 are mint, 10-19 are burn and 20-29 are transfers. +
 .Cycles consumption by operation type for get_transaction
 [options="header"]
 |======================================================================
-|Operation | Average cycles consumtion per call 
+|Operation | Average cycles consumption per call 
 |Mint      | image:mint_operation_distribution.png[]
 |Burn      | image:burn_operation_distribution.png[]
 |Transfer  | image:transaction_operation_distribution.png[]
 |======================================================================
 
-[Note] Each cycles measure is the avarage of 10 calls on a local replica setup. +
+[Note] Each cycles measure is the average of 10 calls on a local replica setup. +
 
 .Cycles consumption by operation type for get_transactions(start, N (length))
 [options="header"]

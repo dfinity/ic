@@ -551,7 +551,7 @@ fn provisional_create_canister_with_cycles_and_top_up() {
     let provisional_whitelist = ProvisionalWhitelist::Set(btreeset!(
         // PrincipalId of CanisterA that is created below.  This code assumes
         // that we can predict the canister Ids that are generated in
-        // CanisterManager and may need upating if that is no longer the case.
+        // CanisterManager and may need updating if that is no longer the case.
         PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(),
         PrincipalId::new_anonymous(),
     ));

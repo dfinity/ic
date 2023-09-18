@@ -163,7 +163,7 @@ The interval at which ICs are polled for updates.
     default_value = "5s",
     value_parser = parse_duration,
     help = r#"
-The HTTP-request timeout used when quering for registry updates.
+The HTTP-request timeout used when querying for registry updates.
 
 "#
     )]

@@ -2040,7 +2040,7 @@ fn copy_file_and_set_permissions(
 }
 
 // Describes how to copy one directory to another.
-// The order of operations is improtant:
+// The order of operations is important:
 // 1. All directories should be created first.
 // 2. After that files can be copied in _any_ order.
 // 3. Finally, directories should be synced.

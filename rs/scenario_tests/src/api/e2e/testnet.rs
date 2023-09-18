@@ -139,7 +139,7 @@ pub fn load_testnet_topology(
             // but is 0.0.0.0.
             if addr.ip().is_unspecified() {
                 return Err(format!(
-                    "unspecified HTTP connecton endpoint for node {}",
+                    "unspecified HTTP connection endpoint for node {}",
                     node_id
                 ));
             }

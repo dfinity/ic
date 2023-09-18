@@ -333,7 +333,7 @@ impl PayloadBuilder {
         self
     }
 
-    /// Store the curent stack data (in a global variable) on the heap.
+    /// Store the current stack data (in a global variable) on the heap.
     /// NOTE: This does _not_ correspond to a Wasm global.
     pub fn set_global_data_from_stack(mut self) -> Self {
         self.0.push(Ops::SetGlobal as u8);
@@ -486,8 +486,8 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn msg_cycles_accept128(mut self, max_amount_hight: i64, max_amount_low: i64) -> Self {
-        self = self.push_int64(max_amount_hight as u64);
+    pub fn msg_cycles_accept128(mut self, max_amount_height: i64, max_amount_low: i64) -> Self {
+        self = self.push_int64(max_amount_height as u64);
         self = self.push_int64(max_amount_low as u64);
         self.0.push(Ops::AcceptCycles128 as u8);
         self

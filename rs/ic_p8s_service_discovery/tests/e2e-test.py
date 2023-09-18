@@ -12,7 +12,7 @@ from subprocess import Popen
 from unittest import TestCase
 
 IC_BINARY_NAME = "ic-p8s-sd"
-# Seconds to wait for the deamon to start up
+# Seconds to wait for the daemon to start up
 DAEMON_STARTUP_TIMEOUT_SECONDS = 270
 
 # the following are the targets addresses of the root subnet of mainnet at

@@ -11,7 +11,7 @@
 //! The orchestrator also triggers upgrades of the replica
 //! process. For that, it periodically performs the following operations:
 //!
-//! 1. Ask the registry for the current peers in the subnetwork it is suposed to
+//! 1. Ask the registry for the current peers in the subnetwork it is supposed to
 //! run it.
 //!
 //! 2. From each peer, fetch the latest catch-up package via a separate CUP
