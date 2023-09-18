@@ -233,13 +233,14 @@ impl SubnetAvailableMemory {
         self.scaling_factor
     }
 
-    /// Try to use some memory capacity and fail if not enough is available
+    /// Returns `Ok(())` if the subnet has enough available room for allocating
+    /// the given bytes in each of the memory types.
+    /// Otherwise, it returns an error.
     ///
-    /// `self.execution_memory`, `self.message_memory` and `self.wasm_custom_sections_memory`
-    /// are independent of each other. However, this function will not allocate anything if
-    /// there is not enough of either one of them (and return an error instead).
-    pub fn try_decrement(
-        &mut self,
+    /// Note that memory types are independent from each other and their limits
+    /// are checked independently.
+    pub fn check_available_memory(
+        &self,
         execution_requested: NumBytes,
         message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
@@ -257,9 +258,6 @@ impl SubnetAvailableMemory {
                 self.wasm_custom_sections_memory,
             )
         {
-            self.execution_memory -= execution_requested.get() as i64;
-            self.message_memory -= message_requested.get() as i64;
-            self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
             Ok(())
         } else {
             Err(SubnetAvailableMemoryError::InsufficientMemory {
@@ -271,6 +269,28 @@ impl SubnetAvailableMemory {
                 available_wasm_custom_sections: self.wasm_custom_sections_memory,
             })
         }
+    }
+
+    /// Try to use some memory capacity and fail if not enough is available.
+    ///
+    /// `self.execution_memory`, `self.message_memory` and `self.wasm_custom_sections_memory`
+    /// are independent of each other. However, this function will not allocate anything if
+    /// there is not enough of either one of them (and return an error instead).
+    pub fn try_decrement(
+        &mut self,
+        execution_requested: NumBytes,
+        message_requested: NumBytes,
+        wasm_custom_sections_requested: NumBytes,
+    ) -> Result<(), SubnetAvailableMemoryError> {
+        self.check_available_memory(
+            execution_requested,
+            message_requested,
+            wasm_custom_sections_requested,
+        )?;
+        self.execution_memory -= execution_requested.get() as i64;
+        self.message_memory -= message_requested.get() as i64;
+        self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
+        Ok(())
     }
 
     pub fn increment(
