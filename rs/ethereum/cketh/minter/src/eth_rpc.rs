@@ -342,7 +342,7 @@ pub struct LogEntry {
     // 32 Bytes - hash of the transactions from which this log was created.
     // None when its pending log.
     pub transaction_hash: Option<Hash>,
-    // Integer of the transactions position withing the block the log was created from.
+    // Integer of the transactions position within the block the log was created from.
     // None if the log is pending.
     pub transaction_index: Option<Quantity>,
     /// 32 Bytes - hash of the block in which this log appeared.

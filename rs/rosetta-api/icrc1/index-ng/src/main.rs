@@ -561,7 +561,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                             );
                             last_fee
                         }
-                        None => ic_cdk::trap(&format!("bug: index is stucked because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
+                        None => ic_cdk::trap(&format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
                     }
                 };
                 debit(block_index, from, fee);

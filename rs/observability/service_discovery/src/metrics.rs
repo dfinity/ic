@@ -32,7 +32,7 @@ impl Metrics {
             ),
             poll_error_count: metrics_registry.int_counter_vec(
                 "discovery_error_count",
-                "Total number of errors that occured while scraping ICs.",
+                "Total number of errors that occurred while scraping ICs.",
                 &[ERROR_TYPE],
             ),
             registries_update_latency_seconds: metrics_registry.histogram(

@@ -421,7 +421,7 @@ where
     Ok(result)
 }
 
-// Exectures a constructed statement
+// Executes a constructed statement
 fn execute(stmt: &mut Statement, params: &[&dyn ToSql]) -> anyhow::Result<()> {
     stmt.execute(params)
         .map_err(|e| anyhow::Error::msg(e.to_string()))?;

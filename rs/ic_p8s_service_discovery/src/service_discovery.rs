@@ -127,7 +127,7 @@ fn get_ic_topology(
 ) -> Result<Vec<PrometheusNodeRecord>, RegistryInvariantError> {
     let mut prometheus_service_discovery: Vec<PrometheusNodeRecord> = Vec::new();
 
-    // Fetch all subnet IDs, propogate errors
+    // Fetch all subnet IDs, propagate errors
     let subnet_ids = registry_client
         .get_subnet_ids(registry_version)
         .map_err(|source| RegistryInvariantError::GetSubnetsFailed {

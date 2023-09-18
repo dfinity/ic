@@ -226,7 +226,7 @@ impl Upgrade {
         Ok(Some(subnet_id))
     }
 
-    // Special case for when we are doing boostrap subnet recovery for
+    // Special case for when we are doing bootstrap subnet recovery for
     // nns and replacing the local registry store. Because we replace the
     // contents of the local registry store in the process of doing this, we
     // will not perpetually hit this case, and thus it is not important to

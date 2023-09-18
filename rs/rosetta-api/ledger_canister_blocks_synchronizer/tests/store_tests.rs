@@ -87,7 +87,7 @@ async fn store_smoke_test() {
 }
 
 #[actix_rt::test]
-async fn store_coherance_test() {
+async fn store_coherence_test() {
     init_test_logger();
     let tmpdir = create_tmp_dir();
 

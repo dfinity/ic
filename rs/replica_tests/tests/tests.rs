@@ -906,7 +906,7 @@ fn test_update_available_memory_3() {
         );
 
         // 6. Grow the memory by another page and modify its contents. Should fail since
-        // we exceed the maximum meory size.
+        // we exceed the maximum memory size.
         println!("> grow_by_one() memory.size = 3 -> memory.size = 4 (over limit)");
         let err = test
             .ingress(canister_id, "grow_by_one", vec![])
@@ -941,7 +941,7 @@ fn test_call_forbidden_function_in_canister_init() {
        (call $msg_reply_data_append
          (i32.const 0)
          (i32.const 0)))
-      ;; since we call a function which accesses memory we need to delcare memory
+      ;; since we call a function which accesses memory we need to declare memory
       (memory 0)
     )"#;
 

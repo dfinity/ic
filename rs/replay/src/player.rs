@@ -1153,7 +1153,7 @@ fn find_malicious_nodes(
 // 2. If there is exactly one hash with f+1 or more certification shares, ensure that it matches the locally
 //    computed one, otherwise indicate that manual inspection is required.
 // 3. If there are multiple hashes with f+1 or more certification shares, then there is no perfect way to choose
-//    the correct state. Return that manual inspection is required. During this inspeciton:
+//    the correct state. Return that manual inspection is required. During this inspection:
 //    a) Repetitively run the ic-replay tool to produce full states for all hashes with f+1 or more shares.
 //    b) Inspect how these states differ, estimate how bad it would be if certifications for all of them were issued.
 //    c) Decide which of both states is "preferable" to continue the subnet from and recover the subnet from there.
@@ -1326,7 +1326,7 @@ mod tests {
         let verify = |_: &CertificationShare| true;
         let f = 2;
 
-        // Node 7 is malicious and create mutliple shares for height 3. All of its shares shoud be ignored.
+        // Node 7 is malicious and creates multiple shares for height 3. All of its shares should be ignored.
         let shares = vec![
             // Height 1:
             // 3 shares for hash "1"

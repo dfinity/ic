@@ -35,7 +35,7 @@ docker run \
 == Connecting to local `dfx` replica with `ic-rosetta-api`
 
 You need https://github.com/nghttp2/nghttp2[`nghttp2`]. If you have nix,
-it's avaiable as `nixpkgs.nghttp2`.
+it's available as `nixpkgs.nghttp2`.
 
 After installing it, assuming `dfx` replica is listening at `8080` port,
 run this command in another terminal session:

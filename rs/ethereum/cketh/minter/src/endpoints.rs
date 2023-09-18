@@ -109,7 +109,7 @@ impl From<TransferFromError> for WithdrawalError {
                 panic!("bug: duplicate transfer of: {duplicate_of}")
             }
             TransferFromError::TemporarilyUnavailable => Self::TemporarilyUnavailable(
-                "ckETH ledger temporarily unavailble, try again".to_string(),
+                "ckETH ledger temporarily unavailable, try again".to_string(),
             ),
             TransferFromError::GenericError {
                 error_code,

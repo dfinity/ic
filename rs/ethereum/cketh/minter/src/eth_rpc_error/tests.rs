@@ -40,7 +40,7 @@ fn should_keep_unknown_error_and_normalize_response() {
 
 #[test]
 fn should_not_modify_response_when_deserialization_fails() {
-    let mut raw_response = br#"{"jsonrpc": "2.0", "unepected": "value", "id": 1}"#.to_vec();
+    let mut raw_response = br#"{"jsonrpc": "2.0", "unexpected": "value", "id": 1}"#.to_vec();
     let unmodified_response = raw_response.clone();
     check_sanitize_send_raw_transaction_result(&mut raw_response, unmodified_response);
 }

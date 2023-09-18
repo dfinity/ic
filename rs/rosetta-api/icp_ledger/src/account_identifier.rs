@@ -52,12 +52,12 @@ impl From<Account> for AccountIdentifier {
 }
 
 pub static SUB_ACCOUNT_ZERO: Subaccount = Subaccount([0; 32]);
-static ACCOUNT_DOMAIN_SEPERATOR: &[u8] = b"\x0Aaccount-id";
+static ACCOUNT_DOMAIN_SEPARATOR: &[u8] = b"\x0Aaccount-id";
 
 impl AccountIdentifier {
     pub fn new(account: PrincipalId, sub_account: Option<Subaccount>) -> AccountIdentifier {
         let mut hash = Sha224::new();
-        hash.write(ACCOUNT_DOMAIN_SEPERATOR);
+        hash.write(ACCOUNT_DOMAIN_SEPARATOR);
         hash.write(account.as_slice());
 
         let sub_account = sub_account.unwrap_or(SUB_ACCOUNT_ZERO);

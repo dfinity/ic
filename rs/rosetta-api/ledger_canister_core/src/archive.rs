@@ -18,17 +18,17 @@ fn default_cycles_for_archive_creation() -> u64 {
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveOptions {
     /// The number of blocks which, when exceeded, will trigger an archiving
-    /// operation
+    /// operation.
     pub trigger_threshold: usize,
-    /// The number of blocks to archive when trigger threshold is exceeded
+    /// The number of blocks to archive when trigger threshold is exceeded.
     pub num_blocks_to_archive: usize,
     pub node_max_memory_size_bytes: Option<u64>,
     pub max_message_size_bytes: Option<u64>,
     pub controller_id: PrincipalId,
-    // cycles to use for the call to create a new archive canister
+    // cycles to use for the call to create a new archive canister.
     #[serde(default)]
     pub cycles_for_archive_creation: Option<u64>,
-    // Max transactions returned by the [get_transactions] endpoint
+    // Max transactions returned by the [get_transactions] endpoint.
     #[serde(default)]
     pub max_transactions_per_response: Option<u64>,
 }
@@ -84,12 +84,12 @@ pub trait ArchiveCanisterWasm {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(bound = "")]
 pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
-    // List of Archive Nodes
+    // List of Archive Nodes.
     nodes: Vec<CanisterId>,
 
     controller_id: PrincipalId,
 
-    // BlockIndexs of Blocks stored in each archive node.
+    // BlockIndices of Blocks stored in each archive node.
 
     // We need this because Blocks are stored in encoded format as
     // EncodedBlocks, and different EncodedBlocks may have different lengths.
@@ -100,33 +100,33 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
 
     // To facilitate lookup by index we will keep track of the number of Blocks
     // stored in each archive. We store an inclusive range [from, to]. Thus,
-    // the range [0..9] means we store 10 blocks with indices from 0 to 9
+    // the range [0..9] means we store 10 blocks with indices from 0 to 9.
     nodes_block_ranges: Vec<(u64, u64)>,
 
-    // Maximum amount of data that can be stored in an Archive Node canister
+    // Maximum amount of data that can be stored in an Archive Node canister.
     node_max_memory_size_bytes: u64,
 
-    // Maximum inter-canister message size in bytes
+    // Maximum inter-canister message size in bytes.
     max_message_size_bytes: u64,
 
-    /// How many blocks have been sent to the archive
+    /// How many blocks have been sent to the archive.
     num_archived_blocks: u64,
 
     /// The number of blocks which, when exceeded, will trigger an archiving
-    /// operation
+    /// operation.
     pub trigger_threshold: usize,
     /// The number of blocks to archive when trigger threshold is exceeded
     pub num_blocks_to_archive: usize,
-    // cycles to use for the call to create a new canister and to install the archive
+    // Cycles to use for the call to create a new canister and to install the archive.
     #[serde(default = "default_cycles_for_archive_creation")]
     pub cycles_for_archive_creation: u64,
 
-    // The maximum number of transactions returned by the [get_transactions] archive endpoint
+    // The maximum number of transactions returned by the [get_transactions] archive endpoint.
     #[serde(default)]
     pub max_transactions_per_response: Option<u64>,
 
     /// Whether there are outstanding calls to the archive at the moment.
-    // We do not need to persist this flag because we cannot have any oustanding calls
+    // We do not need to persist this flag because we cannot have any outstanding calls
     // on upgrade.
     #[serde(skip)]
     archiving_in_progress: bool,
@@ -216,7 +216,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
         );
 
         // Get the CanisterId and remaining capacity of the node that can
-        // accept at least the first block
+        // accept at least the first block.
         let (node_canister_id, node_index, remaining_capacity) =
             node_and_capacity(log_sink.clone(), &archive, blocks[0].size_bytes() as u64)
                 .await
@@ -235,7 +235,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
              blocks.len()
         );
 
-        // Additionally, need to respect the inter-canister message size
+        // Additionally, need to respect the inter-canister message size.
         while !first_blocks.is_empty() {
             let chunk = take_prefix(&mut first_blocks, max_chunk_size);
             let chunk_len = chunk.len() as u64;
@@ -252,7 +252,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                 Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
             };
 
-            // Keep track of BlockIndexs
+            // Keep track of BlockIndices.
             let heights = inspect_archive(&archive, |archive| {
                 let heights = archive.nodes_block_ranges.get_mut(node_index);
                 match heights {
@@ -261,18 +261,18 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                         match archive.nodes_block_ranges.last().copied() {
                             // If we haven't recorded any heights yet in any of the
                             // nodes then this is the **first archive node** and it
-                            // starts with Block at height 0
+                            // starts with Block at height 0.
                             None => archive.nodes_block_ranges.push((0, chunk_len - 1)),
                             // If we haven't recorded any heights for this node but
                             // a previous node exists then the current heights
-                            // start one above those in the previous node
+                            // start one above those in the previous node.
                             Some((_, last_height)) => archive
                                 .nodes_block_ranges
                                 .push((last_height + 1, last_height + chunk_len)),
                         }
                     }
                     // We have already inserted some Blocks into this archive node.
-                    // Hence, we already have a value to work with
+                    // Hence, we already have a value to work with.
                     Some(heights) => {
                         heights.1 += chunk_len;
                     }
@@ -449,7 +449,7 @@ async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     }
 }
 
-/// Extract longest prefix from `blocks` which fits in `max_size`
+/// Extract longest prefix from `blocks` which fits in `max_size`.
 fn take_prefix(blocks: &mut VecDeque<EncodedBlock>, mut max_size: u64) -> Vec<EncodedBlock> {
     let mut result = vec![];
     while let Some(next) = blocks.front() {
@@ -463,5 +463,5 @@ fn take_prefix(blocks: &mut VecDeque<EncodedBlock>, mut max_size: u64) -> Vec<En
 }
 
 /// This error type should only be returned in the case where an await has been
-/// passed but we do not think that the archive canister has received the blocks
+/// passed but we do not think that the archive canister has received the blocks.
 pub struct FailedToArchiveBlocks(pub String);

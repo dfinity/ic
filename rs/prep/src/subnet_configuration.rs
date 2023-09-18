@@ -282,12 +282,12 @@ impl SubnetConfig {
 
         let nodes_in_subnet: BTreeSet<NodeId> = initialized_nodes
             .values()
-            .map(|initalized_node| initalized_node.node_id)
+            .map(|initialized_node| initialized_node.node_id)
             .collect();
 
         let membership_nodes: Vec<Vec<u8>> = initialized_nodes
             .values()
-            .map(|initalized_node| initalized_node.node_id.get().into_vec())
+            .map(|initialized_node| initialized_node.node_id.get().into_vec())
             .collect();
 
         let subnet_record = SubnetRecord {

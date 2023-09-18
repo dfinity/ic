@@ -60,7 +60,7 @@ use tokio::{runtime, sync::mpsc};
 pub struct XNetPayloadBuilderMetrics {
     /// Records the time it took to build the payload, by status.
     pub build_payload_duration: HistogramVec,
-    /// Records pull atempts, by status. Orthogonal to to slice queries, as some
+    /// Records pull attempts, by status. Orthogonal to to slice queries, as some
     /// attempts may fail before querying (e.g. due to registry errors) and
     /// some successful queries may produce invalid slices.
     pub pull_attempt_count: IntCounterVec,
