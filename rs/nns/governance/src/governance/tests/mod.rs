@@ -1437,6 +1437,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 random_swap_start_time: GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
                 },
+                neurons_fund_participation_constraints: None, // TODO[NNS1-2558]
             };
 
         // Step 2: Call the code under test.
