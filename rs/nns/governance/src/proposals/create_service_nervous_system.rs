@@ -8,7 +8,9 @@ use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_sns_init::pb::v1::{
     self as sns_init_pb, sns_init_payload, NeuronsFundParticipants, SnsInitPayload,
 };
-use ic_sns_swap::pb::v1::{self as sns_swap_pb, CfParticipant};
+use ic_sns_swap::pb::v1::{
+    self as sns_swap_pb, CfParticipant, NeuronsFundParticipationConstraints,
+};
 
 // TODO(NNS1-1919): Make this feature generally available by deleting this chunk
 // of code (and updating callers).
@@ -28,6 +30,7 @@ pub struct ExecutedCreateServiceNervousSystemProposal {
     pub proposal_id: u64,
     pub neurons_fund_participants: Vec<CfParticipant>,
     pub random_swap_start_time: GlobalTimeOfDay,
+    pub neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
 }
 
 impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
@@ -41,6 +44,7 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
         let neurons_fund_participants = Some(NeuronsFundParticipants {
             participants: src.neurons_fund_participants,
         });
+        let neurons_fund_participation_constraints = src.neurons_fund_participation_constraints;
         let start_time = src
             .create_service_nervous_system
             .swap_parameters
@@ -74,6 +78,7 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
         result.neurons_fund_participants = neurons_fund_participants;
         result.swap_start_timestamp_seconds = swap_start_timestamp_seconds;
         result.swap_due_timestamp_seconds = swap_due_timestamp_seconds;
+        result.neurons_fund_participation_constraints = neurons_fund_participation_constraints;
 
         result.validate_post_execution()?;
 

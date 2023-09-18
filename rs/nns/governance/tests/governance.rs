@@ -11419,7 +11419,8 @@ lazy_static! {
         neurons_fund_participants: CF_PARTICIPANTS.clone(),
         random_swap_start_time: GlobalTimeOfDay {
             seconds_after_utc_midnight: Some(RANDOM_U64)
-        }
+        },
+        neurons_fund_participation_constraints: None, // TODO[NNS1-2558]
     }).unwrap();
 
     static ref EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (

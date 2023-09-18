@@ -4455,6 +4455,9 @@ impl Governance {
             },
         );
 
+        // TOOD[NNS1-2591]: Compute and specify the Neuron's Fund participation constraints.
+        let neurons_fund_participation_constraints = None;
+
         // Record the maturity deductions that we just made.
         match self.heap_data.proposals.get_mut(&proposal_id) {
             Some(proposal_data) => {
@@ -4483,6 +4486,7 @@ impl Governance {
                 proposal_id,
                 neurons_fund_participants,
                 random_swap_start_time: self.randomly_pick_swap_start(),
+                neurons_fund_participation_constraints,
             };
 
         self.execute_create_service_nervous_system_proposal(
