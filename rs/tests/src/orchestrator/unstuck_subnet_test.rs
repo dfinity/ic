@@ -102,7 +102,7 @@ pub fn test(test_env: TestEnv) {
             bail!("Waiting for hash mismatch!")
         }
     })
-    .expect("No hash missmatch in the logs");
+    .expect("No hash mismatch in the logs");
 
     info!(logger, "Check that system does not make progress");
     cert_state_makes_no_progress_with_retries(

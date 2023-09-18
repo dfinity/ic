@@ -188,7 +188,7 @@ impl Service<Request<Vec<u8>>> for QueryService {
 
         let new_query_execution_service = self.query_execution_service.clone();
         // Pass old query execution service to future that has already been driven to readiness (called ready() on).
-        // Replace query service stored in struct with cloned verison of query_service.
+        // Replace query service stored in struct with cloned version of query_service.
         let mut old_query_execution_service = std::mem::replace(
             &mut self.query_execution_service,
             new_query_execution_service,

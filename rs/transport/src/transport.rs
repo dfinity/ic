@@ -18,7 +18,7 @@
 //! flows with the peer. If we are the server, we wait for peers to
 //! initiate the flow connections. When a connection is established,
 //! the ownership is passed from control plane to the data plane via
-//! on_connnect(flow_id, socket_read_half, socket_write_half)
+//! on_connect(flow_id, socket_read_half, socket_write_half)
 //! callback. The read/write halves are passed to the receive/send
 //! tasks respectively. At this point, data plane can start performing
 //! IOs on the peer connection.  If the data plane tasks detect a

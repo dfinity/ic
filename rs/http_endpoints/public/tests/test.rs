@@ -63,7 +63,7 @@ fn test_healthy_behind() {
 
     let mock_state_manager = basic_state_manager_mock();
 
-    // We use this atomic to make sure that the health transistion is from healthy -> certified_state_behind
+    // We use this atomic to make sure that the health transition is from healthy -> certified_state_behind
     let healthy = Arc::new(AtomicBool::new(false));
     let healthy_c = healthy.clone();
     let mut mock_consensus_cache = MockConsensusCache::new();

@@ -115,7 +115,7 @@ pub(crate) struct HttpError {
 
 pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>, BoxError>;
 
-/// Struct that holds all enpoint services.
+/// Struct that holds all endpoint services.
 #[derive(Clone)]
 struct HttpHandler {
     call_service: EndpointService,
@@ -737,7 +737,7 @@ async fn make_router(
             }
             "/" | "/_/" => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::RedirectToDashboard.into());
-                return (redirect_to_dasboard_response(), timer);
+                return (redirect_to_dashboard_response(), timer);
             }
             HTTP_DASHBOARD_URL_PATH => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Dashboard.into());
@@ -1068,7 +1068,7 @@ fn no_content_response() -> Response<Body> {
     response
 }
 
-fn redirect_to_dasboard_response() -> Response<Body> {
+fn redirect_to_dashboard_response() -> Response<Body> {
     // The empty string is simply to uniformize the return type with the cases where
     // the response is not empty.
     let mut response = Response::new(Body::from(""));

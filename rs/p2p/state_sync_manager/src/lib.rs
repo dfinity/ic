@@ -2,7 +2,7 @@
 //!
 //! Implements the necessary network logic for state sync:
 //!    - Periodic broadcasting of the latest state advert to all peers.
-//!    - Checking advertisments for peers against local state and
+//!    - Checking advertisements for peers against local state and
 //!      starting state sync if necessary.
 //!    - Adding peers to ongoing state sync if they advertise the same state.
 //!
@@ -47,7 +47,7 @@ mod routes;
 // Interval with which state is advertised to peers.
 const ADVERT_BROADCAST_INTERVAL: Duration = Duration::from_secs(5);
 // Timeout that is applies to advert broadcasts. This should be lower than the interval itself to
-// avoid unecessary build up of pending adverts in case of timeouts.
+// avoid unnecessary build up of pending adverts in case of timeouts.
 const ADVERT_BROADCAST_TIMEOUT: Duration =
     ADVERT_BROADCAST_INTERVAL.saturating_sub(Duration::from_secs(2));
 

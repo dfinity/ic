@@ -328,13 +328,13 @@ async fn handshake_and_serve_connection(
     tcp_stream: TcpStream,
     metrics_svc: BoxCloneService<Request<Body>, Response<Body>, HttpError>,
     registry_client: Arc<dyn RegistryClient>,
-    tls_handhake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     metrics: MetricsEndpointMetrics,
 ) -> Result<(), hyper::Error> {
     let mut b = [0_u8; 1];
     if tcp_stream.peek(&mut b).await.is_ok() && b[0] == 22 {
         let registry_version = registry_client.get_latest_version();
-        match tls_handhake
+        match tls_handshake
             .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
             .await
         {

@@ -29,7 +29,7 @@ pub(crate) enum CallOrQuery {
     Query,
 }
 
-pub(crate) fn representation_indepent_hash_call_or_query(
+pub(crate) fn representation_independent_hash_call_or_query(
     request_type: CallOrQuery,
     canister_id: Vec<u8>,
     method_name: &str,
@@ -104,7 +104,7 @@ pub struct HttpCanisterUpdate {
 impl HttpCanisterUpdate {
     /// Returns the representation-independent hash.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
-        representation_indepent_hash_call_or_query(
+        representation_independent_hash_call_or_query(
             CallOrQuery::Call,
             self.canister_id.0.clone(),
             &self.method_name,
@@ -222,7 +222,7 @@ impl HttpReadStateContent {
 impl HttpUserQuery {
     /// Returns the representation-independent hash.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
-        representation_indepent_hash_call_or_query(
+        representation_independent_hash_call_or_query(
             CallOrQuery::Query,
             self.canister_id.0.clone(),
             &self.method_name,
@@ -729,7 +729,7 @@ pub enum ReplicaHealthStatus {
     /// we should execute queries on "recent enough" state tree.
     CertifiedStateBehind,
     /// Signals that the replica can serve all types of API requests.
-    /// When users programatically access this information they should
+    /// When users programmatically access this information they should
     /// check only if 'ReplicaHealthStatus' is equal to 'Healthy' or not.
     Healthy,
 }

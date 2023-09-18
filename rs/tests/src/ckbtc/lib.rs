@@ -62,7 +62,7 @@ pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
 // const KYT_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
-/// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests rigth away
+/// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests right away
 pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;

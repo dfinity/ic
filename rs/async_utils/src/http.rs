@@ -67,7 +67,7 @@ pub async fn receive_body(
     {
         Ok(res) => res,
         Err(err) => Err(BodyReceiveError::Timeout(format!(
-            "Timout of {}s reached while receiving http body: {}",
+            "Timeout of {}s reached while receiving http body: {}",
             max_request_receive_duration.as_secs(),
             err
         ))),
@@ -80,7 +80,7 @@ mod tests {
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
     #[tokio::test]
-    async fn test_succesfully_parse_small_body() {
+    async fn test_successfully_parse_small_body() {
         let (mut sender, body) = Body::channel();
         let time_to_wait = Duration::from_secs(5);
         let max_request_size = Byte::from_bytes(5 * 1024 * 1024);

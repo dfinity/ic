@@ -149,7 +149,7 @@ impl TryFrom<QueryStats> for ReceivedEpochStats {
 }
 
 /// Content of the query stats payload appended to blocks.
-/// This explictly contains the senders Node ID. While this is redundant with meta
+/// This explicitly contains the senders Node ID. While this is redundant with meta
 /// data of the block itself, we want to keep metadata specific to query stats
 /// as part of the query stats payload. This way, consensus stays nice and generic and
 /// the query stats part is self contained.

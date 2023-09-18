@@ -107,7 +107,7 @@ pub struct Summary {
     pub interval_length: Height,
     /// The length of the next interval in rounds (following the start block).
     pub next_interval_length: Height,
-    /// The height of the block conatining that summary.
+    /// The height of the block containing that summary.
     pub height: Height,
     /// The number of intervals a DKG for the given remote target was attempted.
     pub initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,

@@ -502,9 +502,9 @@ impl TransportImpl {
         Ok(tls_stream)
     }
 
-    /// Initilizes a client
+    /// Initializes a client
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
-        // Creating the listeners requres that we are within a tokio runtime context.
+        // Creating the listeners requires that we are within a tokio runtime context.
         let _rt_enter_guard = self.rt_handle.enter();
         let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
         let tcp_listener = start_tcp_listener(server_addr);

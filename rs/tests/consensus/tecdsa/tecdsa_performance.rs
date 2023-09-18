@@ -1,5 +1,5 @@
 // This is a template showing how to run performance tests. Once a specific metric of interest
-// is indentified, one can create a separate test that displays it in a reproducable manner.
+// is identified, one can create a separate test that displays it in a reproducible manner.
 // For example throughput_with_small_messages.rs or throughput_with_large_messages.rs.
 //
 // Set up a testnet for interactive performance testing allocated in our performance DC (dm1):

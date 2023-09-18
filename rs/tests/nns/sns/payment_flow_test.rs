@@ -21,7 +21,7 @@ fn multiple_ticket_participants(env: TestEnv) {
 }
 
 /// This test is complementary to the //rs/tests/nns/sns:payment_flow_load_test, requiring less resources.
-/// Its purpose is to excercise the same API, catching potential regressions in regular CI pipelines (pre-master, hourly, nightly).
+/// Its purpose is to exercise the same API, catching potential regressions in regular CI pipelines (pre-master, hourly, nightly).
 ///
 /// Runbook:
 /// 1. Install NNS (with N users, each with X ICP) and SNS

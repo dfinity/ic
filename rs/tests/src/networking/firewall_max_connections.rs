@@ -136,7 +136,7 @@ pub fn connection_count_test(env: TestEnv) {
         "Universal VM successfully connected the the node. STDOUT: {}", result
     );
 
-    //  Make connections from driver to node tha should be rejected.
+    //  Make connections from driver to node that should be rejected.
 
     info!(
         log,

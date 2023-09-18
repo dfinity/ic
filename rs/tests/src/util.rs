@@ -1434,11 +1434,11 @@ pub fn assert_malicious(
         )
         .await
         .expect("Timed out while waiting for malicious logs")
-        .expect("Not all malicious nodes produced logs containting the malicious signal.");
+        .expect("Not all malicious nodes produced logs containing the malicious signal.");
     })
 }
 
-/// Malicous node logs have to be checked individually, because all nodes have to signal malice.
+/// Malicious node logs have to be checked individually, because all nodes have to signal malice.
 async fn assert_nodes_malicious_parallel(
     nodes: impl Iterator<Item = IcNodeSnapshot>,
     signals: Vec<&str>,
@@ -1457,7 +1457,7 @@ async fn assert_nodes_malicious_parallel(
     let result = join_all(futures).await.iter().all(|x| x.is_ok());
     match result {
         true => Ok(()),
-        false => Err("Not all malicious nodes produced logs containting the malicious signal."),
+        false => Err("Not all malicious nodes produced logs containing the malicious signal."),
     }
 }
 

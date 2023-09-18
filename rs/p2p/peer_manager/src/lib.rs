@@ -4,10 +4,10 @@
 //! and determines the subnet membership according to the latest
 //! registry version and the version currently used by consensus.
 //!
-//! The subnet memebership is made available as shared state via a tokio watcher.
+//! The subnet membership is made available as shared state via a tokio watcher.
 //!
-//! The compoment runs in a background task and should be started only once.
-//! If mutiple components require the shared state (i.e. the subnet membership)
+//! The component runs in a background task and should be started only once.
+//! If multiple components require the shared state (i.e. the subnet membership)
 //! the returned receiver should be cloned.
 //!
 use std::{

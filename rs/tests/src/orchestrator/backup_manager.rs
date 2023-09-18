@@ -300,7 +300,7 @@ pub fn test(env: TestEnv) {
             good_progress,
         );
         if new_height > 0 && checkpoint > good_progress && archive_height > good_progress {
-            info!(log, "New version was sucessfully backed up and archived");
+            info!(log, "New version was successfully backed up and archived");
             break;
         }
         sleep_secs(5);

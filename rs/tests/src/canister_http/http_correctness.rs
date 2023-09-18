@@ -127,7 +127,7 @@ pub fn test(env: TestEnv) {
                     cycles: 500_000_000_000,
                 },
                 |response| {
-                    let r = response.clone().expect("Http call should suceed");
+                    let r = response.clone().expect("Http call should succeed");
                     r.headers.len() == 1 && r.headers[0].0 == "hello" && r.headers[0].1 == "bonjour"
                 },
             )

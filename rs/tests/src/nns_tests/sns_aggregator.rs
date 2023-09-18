@@ -422,7 +422,7 @@ pub fn validate_aggregator_data(env: TestEnv) {
             let res = canister_agent.call(&request).await.result().unwrap();
             let res = Decode!(res.as_slice(), GetStateResponse).expect("failed to decode");
             // We've already checked above that the SNS sale params had propagated through the aggregator canister.
-            // Thus, they must also be availabe while querying the SNS directly.
+            // Thus, they must also be available while querying the SNS directly.
             let sns_sale_params = res.swap.unwrap().params.unwrap();
             let sns_sale_params_json = serde_json::to_value(sns_sale_params.clone()).unwrap();
             info!(

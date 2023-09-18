@@ -1256,7 +1256,7 @@ pub trait HasWasm {
     ///
     /// # Panics
     ///
-    /// * if `get_artifacs(p)` panics.
+    /// * if `get_artifacts(p)` panics.
     /// * if a .wat-module cannot be compiled
     /// * if a .wasm-module does not start with the expected magic bytes
     fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8>;

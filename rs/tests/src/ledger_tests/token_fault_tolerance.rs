@@ -111,7 +111,7 @@ pub fn test(env: TestEnv) {
     // Kill one NNS node. Three out of four nodes are still operational which is
     // enough for the subnet to make progress and thus complete the transfer
     // successfully.
-    info!(&log, "Killing nns node and tranfering ICP...");
+    info!(&log, "Killing nns node and transferring ICP...");
     nns_nodes[1].vm().kill();
     transfer(
         &log,

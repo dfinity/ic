@@ -102,7 +102,7 @@ impl State {
             .map(|chunk_size| vec![0; *chunk_size])
     }
 
-    /// Calulcates the artifact Id of the current state by hasing the ChunkId map.
+    /// Calulcates the artifact Id of the current state by hashing the ChunkId map.
     pub fn artifact_id(&self) -> StateSyncArtifactId {
         let state = self.0.lock().unwrap();
         let mut hasher = DefaultHasher::new();

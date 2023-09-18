@@ -298,14 +298,14 @@ pub fn test_kyt(env: TestEnv) {
             &logger,
             "Transfer to the minter account occurred at block {}", transfer_result
         );
-        let retireve_amount: u64 = 35_000_000;
+        let retrieve_amount: u64 = 35_000_000;
 
         // Put the kyt canister into reject all utxos mode.
         upgrade_kyt(&mut kyt_canister, KytMode::RejectAll).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
-                amount: retireve_amount,
+                amount: retrieve_amount,
                 address: btc_address2.to_string(),
             })
             .await
@@ -343,7 +343,7 @@ pub fn test_kyt(env: TestEnv) {
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
-                amount: retireve_amount,
+                amount: retrieve_amount,
                 address: btc_address2.to_string(),
             })
             .await
@@ -364,13 +364,13 @@ pub fn test_kyt(env: TestEnv) {
         wait_for_bitcoin_balance(
             &universal_canister,
             &logger,
-            retireve_amount - minters_fee - KYT_FEE - bitcoin_network_fee,
+            retrieve_amount - minters_fee - KYT_FEE - bitcoin_network_fee,
             &btc_address2,
         )
         .await;
 
         // Amount expected to be left on withdrawal_account
-        let expected_change_amount = transfer_amount - retireve_amount - KYT_FEE;
+        let expected_change_amount = transfer_amount - retrieve_amount - KYT_FEE;
         assert_account_balance(&ledger_agent, &withdrawal_account, expected_change_amount).await;
 
         let _ = minter_agent.distribute_kyt_fee().await;

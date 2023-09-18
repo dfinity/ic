@@ -1,7 +1,7 @@
 use crate::messages::Blob;
 use crate::{
     messages::{
-        http::{representation_indepent_hash_call_or_query, CallOrQuery},
+        http::{representation_independent_hash_call_or_query, CallOrQuery},
         HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
     },
     CanisterId, PrincipalId, UserId,
@@ -23,7 +23,7 @@ pub struct UserQuery {
 
 impl UserQuery {
     pub fn id(&self) -> MessageId {
-        MessageId::from(representation_indepent_hash_call_or_query(
+        MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Query,
             self.receiver.get().into_vec(),
             &self.method_name,

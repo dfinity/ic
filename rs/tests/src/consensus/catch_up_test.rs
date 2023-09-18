@@ -1,7 +1,7 @@
 /* tag::catalog[]
 Title:: Catch Up Test
 
-Goal:: Demonstrate catch up behaviour of nodes when both exectution and state sync are slow.
+Goal:: Demonstrate catch up behaviour of nodes when both execution and state sync are slow.
 
 Runbook::
 . Set up a malicious (defect) node that uses delays to simulate slow execution and state sync
@@ -157,7 +157,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
         info!(log, "Checking node catch up via metrics");
 
         // Regularly check whether the `state_manager_max_resident_height` metric of the malicious
-        // node reaches the values of the healty nodes
+        // node reaches the values of the healthy nodes
         let healthy_node_metrics = MetricsFetcher::new(
             topology.root_subnet().nodes(),
             vec![STATE_MANAGER_MAX_RESIDENT_HEIGHT.to_string()],

@@ -178,7 +178,7 @@ pub trait Transport: Send + Sync {
 pub struct ConnIdTag {}
 pub type ConnId = AmountOf<ConnIdTag, u64>;
 
-/// This is a workaround for being able to iniate quic transport
+/// This is a workaround for being able to initiate quic transport
 /// with both a real and virtual udp socket. This is needed due
 /// to an inconsistency with the quinn API. This is fixed upstream
 /// and can be removed with quinn 0.11.0.

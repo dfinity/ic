@@ -345,7 +345,7 @@ impl Display for RequestMetrics {
 pub struct RequestOutcome<ResultType, ErrorType> {
     result: Result<ResultType, ErrorType>,
     /// Each request class can be identified via a [`(workflow_pos, label)`] pair used to aggregate statistical information about outcomes of multiple requests with the same label.
-    /// - [`workflow_pos`] is an (optional, unique) position of this request in its workflow. [`None`] is used to classify the overall worflow outcome, in which case the position
+    /// - [`workflow_pos`] is an (optional, unique) position of this request in its workflow. [`None`] is used to classify the overall workflow outcome, in which case the position
     ///   is statically unknown. See [`with_workflow_position`]
     /// - [`label`] is a canister endpoint name, or some other (short) description of the request.
     /// See [`RequestOutcome.into_test_outcome`].

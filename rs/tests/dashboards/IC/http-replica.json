@@ -129,7 +129,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Percentage of erronerous responses (4xx/5xx)",
+      "title": "Percentage of erroneous responses (4xx/5xx)",
       "tooltip": {
         "shared": true,
         "sort": 2,

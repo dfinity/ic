@@ -560,7 +560,7 @@ fn create_and_upload_config_disk_image(
         let identity_file = boundary_node_dir.join("certificate_issuer_identity.pem");
         fs::write(&identity_file, cfg.issuer_identity)?;
 
-        // Issuer Encrpytion-Key
+        // Issuer Encryption-Key
         let key_file = boundary_node_dir.join("certificate_issuer_enc_key.pem");
         fs::write(&key_file, cfg.issuer_encryption_key)?;
 

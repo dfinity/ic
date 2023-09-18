@@ -47,7 +47,7 @@ fn workload_direct_auth_rps9600(env: TestEnv) {
 ///
 /// 1. Install NNS and SNS
 /// 2. Initiate the token sale
-/// 3. Generate workload (mimicking nns-dapp frontent) at various RPSs
+/// 3. Generate workload (mimicking nns-dapp frontend) at various RPSs
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(60 * 60))

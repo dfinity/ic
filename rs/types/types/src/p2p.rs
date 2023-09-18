@@ -29,7 +29,7 @@ pub struct GossipAdvert {
 // Gossip subnet constants //
 /////////////////////////////
 
-/// Maximumim timout for fetching an artifact. 10_000s.
+/// Maximum timeout for fetching an artifact. 10_000s.
 /// Reasoning: Block rate can be as low as 0.1 and we want to allow state sync
 /// to last for 1000 blocks (two checkopint intervals) -> 1000b/0.1b/s = 10000s
 pub const MAX_ARTIFACT_TIMEOUT: Duration = Duration::from_secs(10_000);
