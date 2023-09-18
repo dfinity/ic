@@ -113,7 +113,7 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
             .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);
     }
 
-    /// Inserts an unvalidated artifact from the unvalidated section.
+    /// Removes an unvalidated artifact from the unvalidated section.
     fn remove(&mut self, id: &DkgMessageId) {
         self.unvalidated.remove(id);
     }
