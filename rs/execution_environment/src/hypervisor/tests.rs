@@ -6352,3 +6352,45 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .description()
         .contains("due to its reserved cycles limit"));
 }
+
+#[test]
+fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
+    const CYCLES: Cycles = Cycles::new(200_000_000_000_000);
+    const CAPACITY: u64 = 1_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .with_subnet_memory_reservation(0)
+        .build();
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+        .unwrap();
+
+    let reserved_cycles_before = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            // 16_000 Wasm pages is more than the 1GB capacity, so this
+            // operation will fail with out-of-memory. However, the entire
+            // execution still succeeds.
+            .stable64_grow(16_000)
+            .push_bytes(&[])
+            .append_and_reply()
+            .build(),
+    )
+    .unwrap();
+    let reserved_cycles_after = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    assert_eq!(reserved_cycles_before, reserved_cycles_after);
+}

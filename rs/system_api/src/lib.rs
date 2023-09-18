@@ -658,23 +658,27 @@ impl MemoryUsage {
             NumBytes::new(new_usage),
         )?;
 
-        sandbox_safe_system_state.reserve_storage_cycles(
-            execution_bytes,
-            &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
-            api_type,
-        )?;
-
-        // The canister can increase its memory usage up to the reserved bytes without
-        // decrementing the subnet available memory because it was already decremented
-        // at the time of reservation.
         match self.memory_allocation {
             MemoryAllocation::BestEffort => {
-                match self.subnet_available_memory.try_decrement(
+                match self.subnet_available_memory.check_available_memory(
                     execution_bytes,
                     NumBytes::from(0),
                     NumBytes::from(0),
                 ) {
                     Ok(()) => {
+                        sandbox_safe_system_state.reserve_storage_cycles(
+                            execution_bytes,
+                            &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
+                            api_type,
+                        )?;
+                        // All state changes after this point should not fail
+                        // because the cycles have already been reserved.
+                        self.subnet_available_memory
+                            .try_decrement(execution_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .expect(
+                                "Decrementing subnet available memory is \
+                                 guaranteed to succeed by check_available_memory().",
+                            );
                         self.current_usage = NumBytes::from(new_usage);
                         self.allocated_execution_memory += execution_bytes;
                         Ok(())
@@ -683,11 +687,15 @@ impl MemoryUsage {
                 }
             }
             MemoryAllocation::Reserved(reserved_bytes) => {
-                // Note that this branch should be unreachable because
-                // `self.limit` should already be set to `reserved_bytes` and
-                // the guard above should have returned an error. In order to
-                // keep code robust, we repeat the check here again.
+                // The canister can increase its memory usage up to the reserved bytes
+                // without decrementing the subnet available memory and without
+                // reserving cycles because it has already done that during the
+                // original reservation.
                 if new_usage > reserved_bytes.get() {
+                    // Note that this branch should be unreachable because
+                    // `self.limit` should already be set to `reserved_bytes` and
+                    // the guard above should have returned an error. In order to
+                    // keep code robust, we repeat the check here again.
                     return Err(HypervisorError::OutOfMemory);
                 }
                 self.current_usage = NumBytes::from(new_usage);
