@@ -144,6 +144,7 @@ fn main() -> Result<(), anyhow::Error> {
             resolver,
             validator,
             client,
+            meter: meter.clone(),
         },
         proxy::ProxyOpts {
             address,

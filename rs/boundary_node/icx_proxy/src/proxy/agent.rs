@@ -32,6 +32,7 @@ use crate::error::ErrorFactory;
 use crate::http;
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
+use crate::metrics::RequestContext;
 use crate::{
     canister_id,
     proxy::{AppState, HandleError, HyperService, REQUEST_BODY_SIZE_LIMIT},
@@ -351,10 +352,24 @@ async fn process_request_inner(
         }
     }
 
-    let response = response_builder.body(match http_response.streaming_body {
-        Some(body) => body,
-        None => Body::from(http_response.body.clone()),
-    })?;
+    let mut response = response_builder
+        .header(
+            "X-IC-Streaming-Response",
+            http_response.has_streaming_body.to_string(),
+        )
+        .body(match http_response.streaming_body {
+            Some(body) => body,
+            None => Body::from(http_response.body.clone()),
+        })?;
+
+    // Create per-request context
+    let ctx = RequestContext {
+        request_size: http_request.body.len() as u64,
+        streaming_request: http_response.has_streaming_body,
+    };
+
+    // Inject it into response
+    response.extensions_mut().insert(ctx);
 
     info!(
         ">> {:?} {} {}",
