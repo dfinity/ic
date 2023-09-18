@@ -996,6 +996,7 @@ impl CanisterManager {
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let memory_allocation = canister.memory_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
+        let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1010,6 +1011,7 @@ impl CanisterManager {
             compute_allocation.as_percent(),
             Some(memory_allocation.bytes().get()),
             freeze_threshold.get(),
+            reserved_cycles_limit.map(|x| x.get()),
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,

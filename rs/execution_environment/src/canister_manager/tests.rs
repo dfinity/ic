@@ -6564,3 +6564,30 @@ fn canister_status_contains_reserved_cycles() {
     );
     assert!(status.reserved_cycles() > 0);
 }
+
+#[test]
+fn canister_status_contains_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(CYCLES);
+    let result = test.canister_status(canister_id);
+    let reply = get_reply(result);
+    let status = CanisterStatusResultV2::decode(&reply).unwrap();
+    assert_eq!(
+        status.settings().reserved_cycles_limit(),
+        candid::Nat::from(0),
+    );
+
+    test.canister_update_reserved_cycles_limit(canister_id, Cycles::new(42))
+        .unwrap();
+
+    let result = test.canister_status(canister_id);
+    let reply = get_reply(result);
+    let status = CanisterStatusResultV2::decode(&reply).unwrap();
+    assert_eq!(
+        status.settings().reserved_cycles_limit(),
+        candid::Nat::from(42),
+    );
+}

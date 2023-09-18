@@ -738,15 +738,18 @@ impl Payload<'_> for UninstallCodeArgs {}
 /// `(record {
 ///     controller : principal;
 ///     compute_allocation: nat;
-///     memory_allocation: opt nat;
+///     memory_allocation: nat;
+///     freezing_threshold: nat;
+///     reserved_cycles_limit: nat;
 /// })`
-#[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
+#[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq)]
 pub struct DefiniteCanisterSettingsArgs {
     controller: PrincipalId,
     controllers: Vec<PrincipalId>,
     compute_allocation: candid::Nat,
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
+    reserved_cycles_limit: candid::Nat,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -756,22 +759,26 @@ impl DefiniteCanisterSettingsArgs {
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
+        reserved_cycles_limit: Option<u128>,
     ) -> Self {
-        let memory_allocation = match memory_allocation {
-            None => candid::Nat::from(0),
-            Some(memory) => candid::Nat::from(memory),
-        };
+        let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
+        let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         Self {
             controller,
             controllers,
             compute_allocation: candid::Nat::from(compute_allocation),
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
+            reserved_cycles_limit,
         }
     }
 
     pub fn controllers(&self) -> Vec<PrincipalId> {
         self.controllers.clone()
+    }
+
+    pub fn reserved_cycles_limit(&self) -> candid::Nat {
+        self.reserved_cycles_limit.clone()
     }
 }
 
@@ -872,6 +879,7 @@ impl CanisterStatusResultV2 {
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
+        reserved_cycles_limit: Option<u128>,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
     ) -> Self {
@@ -890,6 +898,7 @@ impl CanisterStatusResultV2 {
                 compute_allocation,
                 memory_allocation,
                 freezing_threshold,
+                reserved_cycles_limit,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -931,6 +940,10 @@ impl CanisterStatusResultV2 {
 
     pub fn reserved_cycles(&self) -> u128 {
         self.reserved_cycles.0.to_u128().unwrap()
+    }
+
+    pub fn settings(&self) -> DefiniteCanisterSettingsArgs {
+        self.settings.clone()
     }
 }
 
