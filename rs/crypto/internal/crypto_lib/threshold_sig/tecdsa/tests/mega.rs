@@ -50,7 +50,7 @@ fn mega_key_validity() -> ThresholdEcdsaResult<()> {
 
         assert!(verify_mega_public_key(curve_type, &pk_bytes).is_ok());
 
-        // In compressed format flipping this bit is equivalant to
+        // In compressed format flipping this bit is equivalent to
         // flipping the sign of y, which is equivalent to negating the
         // point.  In all cases if pk_bytes is a valid encoding, this
         // modification is also

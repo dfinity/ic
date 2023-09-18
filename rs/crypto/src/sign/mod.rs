@@ -680,7 +680,7 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
             root_of_trust,
         );
 
-        // Processing of the cache statistics for metrics is deliberatly
+        // Processing of the cache statistics for metrics is deliberately
         // part of the canister signature run time metric. It is expected to take
         // very little time, but if something goes wrong, e.g., due to a mutex
         // locking congestion or similar, we should be able to notice that.

@@ -711,7 +711,7 @@ impl WitnessGeneratorImpl {
     ///   plugged into the wrong position. (This is checked via a debug assertion.)
     /// * It must apply that `subtree_size` is the size of the `hash_tree`
     ///   interpreted as a subtree, i.e., the number of nodes in the subtree.
-    ///   Othwerwise, the `subwitness` is plugged into the wrong position.
+    ///   Otherwise, the `subwitness` is plugged into the wrong position.
     ///   (This is checked via a debug assertion.)
     ///
     /// # Panics
@@ -892,7 +892,7 @@ impl WitnessGeneratorImpl {
                                         // `orig_tree` and `hash_tree` are well-formed, since the only way to
                                         // create a `WitnessGeneratorImpl` is via `try_from` or from a
                                         // `HashTreeBuilderImpl`, which both ensure the validity. Also,
-                                        // `hash_tree` cannot be empty since this case is handeled at the
+                                        // `hash_tree` cannot be empty since this case is handled at the
                                         // beginning of this function. Therefore, `pruned_for_all_but_pos`
                                         // cannot panic here and in other places in this function.
                                         Self::pruned_for_all_but_pos::<Builder>(

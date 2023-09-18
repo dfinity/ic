@@ -123,7 +123,7 @@ impl<T: UniqueHash> UniqueHash for Vec<T> {
 /// digests of the entries in the array.
 impl<T: UniqueHash, const N: usize> UniqueHash for [T; N] {
     fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
-        // We use the VECTOR domain seperator here since historically
+        // We use the VECTOR domain separator here since historically
         // only Vec<T> was used
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_VECTOR);
         for item in self.iter() {

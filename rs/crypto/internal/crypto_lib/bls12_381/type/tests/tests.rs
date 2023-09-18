@@ -319,7 +319,7 @@ fn test_scalar_small_random() {
     let range = 1039; // small prime
 
     /*
-    This upper bound is arbitrary and as the test is probabalistic it
+    This upper bound is arbitrary and as the test is probabilistic it
     might occasionally fail. However over 10000 iterations the largest
     number of attempts required was range*15, so using range*30 if the
     test fails it probably does indicate a problem.

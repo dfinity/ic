@@ -132,7 +132,7 @@ mod gen_key_pair_with_pop_tests {
 
         assert!(csp.gen_committee_signing_key_pair().is_ok());
 
-        // the attemtps after the first one should fail
+        // the attempts after the first one should fail
         for _ in 0..5 {
             assert_matches!(csp.gen_committee_signing_key_pair(),
                 Err(CspMultiSignatureKeygenError::InternalError { internal_error })

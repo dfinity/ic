@@ -643,7 +643,7 @@ pub enum MixedHashTreeConversionError {
 
 /// The maximum recursion depth of [`serde_cbor`] deserialization is currently 128.
 const MAX_HASH_TREE_DEPTH: u8 = 128;
-// error handlig does not work if `MAX_HASH_TREE_DEPTH == u8::MAX`, since we
+// error handling does not work if `MAX_HASH_TREE_DEPTH == u8::MAX`, since we
 // cannot reach the error bound of `u8::MAX + 1` with `u8`
 #[allow(clippy::assertions_on_constants)]
 const _: () = assert!(MAX_HASH_TREE_DEPTH < u8::MAX);

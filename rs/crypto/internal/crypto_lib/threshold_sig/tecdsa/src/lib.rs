@@ -584,7 +584,7 @@ pub fn publicly_verify_dealing(
 
 /// Verify a dealing using private information
 ///
-/// This private verification must be done after the dealing has been publically
+/// This private verification must be done after the dealing has been publicly
 /// verified. This operation decrypts the dealing and verifies that the
 /// decrypted value is consistent with the commitment in the dealing.
 #[allow(clippy::too_many_arguments)]
@@ -1049,7 +1049,7 @@ impl From<ThresholdEcdsaError> for ThresholdOpenDealingInternalError {
 /// opening for the dealing commitment.
 ///
 /// # Preconditions
-/// * The dealing has already been publically verified
+/// * The dealing has already been publicly verified
 /// * The complaint which caused us to provide an opening for this dealing has
 ///   already been verified to be valid.
 pub fn open_dealing(
@@ -1093,7 +1093,7 @@ impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
 /// complaint is a valid opening for the dealing.
 ///
 /// # Preconditions
-/// * The dealing has already been publically verified
+/// * The dealing has already been publicly verified
 /// # Errors
 /// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
 /// not match with the polynomial commitment.

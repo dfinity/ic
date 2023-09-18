@@ -128,7 +128,7 @@ impl P2PTestSynchronizer {
     }
 
     // wait_on_barrier_int
-    // Internal helper funtion providing blocking/non-blocking behavior in case a
+    // Internal helper function providing blocking/non-blocking behavior in case a
     // barrier has not reached
     fn wait_on_barrier_int(&self, barrier_name: String, block: bool) -> Result<(), i32> {
         let mut dir = self.get_test_group_directory();
@@ -165,7 +165,7 @@ impl P2PTestSynchronizer {
     }
 
     // Wait on a named barrier until all replicas in the the test-
-    // group singal the barrier. Calling wait implictly signals the
+    // group signal the barrier. Calling wait implicitly signals the
     // barrier for the calling replica.
     pub fn wait_on_barrier(&self, barrier_name: String) {
         self.wait_on_barrier_int(barrier_name, true)
@@ -173,7 +173,7 @@ impl P2PTestSynchronizer {
     }
 
     // Wait on a named barrier until all replicas in the the test-
-    // group singal the barrier. Calling wait implictly signals the
+    // group signal the barrier. Calling wait implicitly signals the
     // barrier for the calling replica.
     pub fn try_wait_on_barrier(&self, barrier_name: String) -> Result<(), i32> {
         self.wait_on_barrier_int(barrier_name, false)

@@ -188,7 +188,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
 
     let config = InitialNiDkgConfig::new(&nodes_set, dealer_subnet, dkg_tag, target_id, REG_V1);
 
-    let mut reciever_keys = BTreeMap::new();
+    let mut receiver_keys = BTreeMap::new();
 
     for node_id in nodes {
         let temp_crypto = TempCryptoComponent::builder()
@@ -202,10 +202,10 @@ fn should_get_master_key_associated_with_transcript_public_key() {
             .dkg_dealing_encryption_public_key
             .expect("missing dkg_dealing_encryption_pk");
 
-        reciever_keys.insert(node_id, dkg_dealing_encryption_pubkey);
+        receiver_keys.insert(node_id, dkg_dealing_encryption_pubkey);
     }
 
-    let (transcript, secret) = initial_dkg_transcript_and_master_key(config, &reciever_keys, rng);
+    let (transcript, secret) = initial_dkg_transcript_and_master_key(config, &receiver_keys, rng);
 
     let pk = transcript.public_key();
 

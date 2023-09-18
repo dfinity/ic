@@ -406,7 +406,7 @@ fn mega_hash_to_scalars(
 
 /// Compute the Proof Of Possession (PoP) base element
 ///
-/// This is used in conjuction with a DLOG equality ZK proof in order
+/// This is used in conjunction with a DLOG equality ZK proof in order
 /// for the sender to prove to recipients that it knew the discrete
 /// log of the ephemeral key.
 fn compute_pop_base(

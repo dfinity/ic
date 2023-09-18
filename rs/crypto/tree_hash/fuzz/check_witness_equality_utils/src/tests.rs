@@ -146,7 +146,7 @@ fn remove_leaf_removes_leaves_correctly() {
 }
 
 #[test]
-fn pahts_to_empty_subtrees_returns_correct_paths() {
+fn paths_to_empty_subtrees_returns_correct_paths() {
     let empty_tree = subtree!();
     let empty_tree_paths = paths_to_empty_subtrees(&empty_tree);
     assert_eq!(empty_tree_paths.len(), 0);

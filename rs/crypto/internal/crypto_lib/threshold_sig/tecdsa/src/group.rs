@@ -748,7 +748,7 @@ impl EccPoint {
         use subtle::ConstantTimeEq;
         if points.is_empty() {
             return Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                "The input to constant-time select from slice must contain at least one elememt",
+                "The input to constant-time select from slice must contain at least one element",
             )));
         }
         let mut result = Self::identity(points[0].curve_type());
@@ -1380,7 +1380,7 @@ pub struct NafLut {
 impl NafLut {
     /// Inclusive bounds of the LUT.
     /// Manually the bounds can be computed as an "all-one" NAF value, e.g.,
-    /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjecent non-zero values)
+    /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjacent non-zero values)
     const BOUND: [usize; 8] = [0, 1, 2, 5, 10, 21, 42, 85];
     pub const MIN_WINDOW_SIZE: usize = 3;
     pub const MAX_WINDOW_SIZE: usize = 7;

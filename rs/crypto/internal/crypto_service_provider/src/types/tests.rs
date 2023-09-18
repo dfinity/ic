@@ -174,7 +174,7 @@ fn should_return_correct_enum_variant() {
     ));
     assert_eq!(key.enum_variant(), "IDkgCommitmentOpening");
 
-    // plase add here tests for newly added ’CspSecretKey’ enums and increment the counter to match their count
+    // Please add here tests for newly added ’CspSecretKey’ enums and increment the counter to match their count.
     assert_eq!(CspSecretKey::COUNT, 7);
 }
 

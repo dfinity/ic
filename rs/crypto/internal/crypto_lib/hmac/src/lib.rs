@@ -90,7 +90,7 @@ impl<H: HmacHashFunction> Hmac<H> {
     /// Perform a one-shot HMAC computation
     ///
     /// A convenience method when the entire input is available in a
-    /// single contigious buffer.
+    /// single contiguous buffer.
     pub fn hmac(key: &[u8], input: &[u8]) -> Vec<u8> {
         let mut hmac = Self::new(key);
         hmac.write(input);

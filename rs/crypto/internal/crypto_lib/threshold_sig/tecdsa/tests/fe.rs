@@ -162,7 +162,7 @@ fn test_sqrt_is_consistent_with_math() -> Result<(), ThresholdEcdsaError> {
              * root modulo p. All currently supported primes have this form,
              * so verify that this is true.
              *
-             * This test would have to be ammended if support is later added
+             * This test would have to be amended if support is later added
              * for a prime field == 1 (mod 4)
              */
             if !bool::from(valid) {

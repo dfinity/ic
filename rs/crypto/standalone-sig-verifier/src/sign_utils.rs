@@ -88,7 +88,7 @@ pub fn user_public_key_from_bytes(
         return Err(CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Placeholder,
             key_bytes: Some(bytes.to_vec()),
-            internal_error: "Unsupported or unparseable public key".to_string(),
+            internal_error: "Unsupported or unparsable public key".to_string(),
         });
     };
 

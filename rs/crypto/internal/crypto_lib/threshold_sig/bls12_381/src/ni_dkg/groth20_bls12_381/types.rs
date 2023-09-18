@@ -82,7 +82,7 @@ pub struct FsEncryptionKeySetWithPop {
 
 /// Converts an old `FsEncryptionKeySet` to a `FsEncryptionKeySetWithPop`.
 ///
-/// The old `FsEncrptionPok` is formatted as a `FsEncryptionPop` as follows:
+/// The old `FsEncryptionPok` is formatted as a `FsEncryptionPop` as follows:
 /// * The `blinder` of the PoK is written as the `pop_key` value in the PoP
 /// * The `challenge` of the proof of possession is set equal to `0`.
 /// * The `response` of the Pok is written as the `response` value in the PoP,

@@ -300,7 +300,7 @@ impl PrivateKey {
         Some(sig.to_bytes().into())
     }
 
-    /// Return the public key cooresponding to this private key
+    /// Return the public key corresponding to this private key
     pub fn public_key(&self) -> PublicKey {
         let key = self.key.verifying_key();
         PublicKey { key: *key }

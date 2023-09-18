@@ -20,7 +20,7 @@ mod tests;
 /// Implements `ServerCertVerifier`. The peer
 /// certificate is considered trusted if the following conditions hold:
 /// * No intermediate certificates.
-/// * The end entitiy certificate can be parsed from DER.
+/// * The end entity certificate can be parsed from DER.
 /// * The end entity certificate subject CN can be parsed as a `NodeId`.
 /// * The `NodeId` parsed from the end entity's subject CN is
 ///   contained in `allowed_nodes` (as passed to `new`).
@@ -56,7 +56,7 @@ impl NodeServerCertVerifier {
 /// Implements `ClientCertVerifier`. The peer
 /// certificate is considered trusted if the following conditions hold:
 /// * No intermediate certificates.
-/// * The end entitiy certificate can be parsed from DER.
+/// * The end entity certificate can be parsed from DER.
 /// * The end entity certificate subject CN can be parsed as a `NodeId`.
 /// * The `NodeId` parsed from the end entity's subject CN is
 ///   contained in `allowed_nodes` (as passed to the constructors).
