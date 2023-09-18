@@ -6,7 +6,7 @@ use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
-use crate::numeric::{TransactionNonce, Wei};
+use crate::numeric::{TransactionCount, TransactionNonce, Wei};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
@@ -622,6 +622,16 @@ pub enum HttpOutcallError {
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
+pub fn are_errors_consistent<T: PartialEq>(
+    left: &HttpOutcallResult<JsonRpcResult<T>>,
+    right: &HttpOutcallResult<JsonRpcResult<T>>,
+) -> bool {
+    match (left, right) {
+        (Ok(JsonRpcResult::Result(_)), _) | (_, Ok(JsonRpcResult::Result(_))) => true,
+        _ => left == right,
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResponseSizeEstimate(u64);
 
@@ -657,6 +667,8 @@ pub trait HttpResponsePayload {
 }
 
 impl<T: HttpResponsePayload> HttpResponsePayload for Option<T> {}
+
+impl HttpResponsePayload for TransactionCount {}
 
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<I, O>(
