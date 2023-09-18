@@ -299,10 +299,7 @@ mod server {
         let (_client_result, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert_malformed_self_cert_server_error_containing(
-            &server_result,
-            "asn1 encoding routines:ASN1_get_object:too long",
-        );
+        assert_malformed_self_cert_server_error_containing(&server_result, "Error parsing DER");
     }
 
     #[test]
@@ -847,10 +844,7 @@ mod client {
 
         let result = new_tokio_runtime().block_on(client.run(server.port()));
 
-        assert_malformed_self_cert_client_error_containing(
-            &result,
-            "asn1 encoding routines:ASN1_get_object:too long",
-        );
+        assert_malformed_self_cert_client_error_containing(&result, "Error parsing DER");
     }
 
     #[test]

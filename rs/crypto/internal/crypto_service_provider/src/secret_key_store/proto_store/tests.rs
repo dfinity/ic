@@ -14,7 +14,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKey,
     MEGaPublicKeyK256Bytes,
 };
-use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
+use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use proptest::prelude::*;

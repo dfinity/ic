@@ -8,7 +8,7 @@ use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
-use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
@@ -35,7 +35,6 @@ use ic_types::crypto::{AlgorithmId, KeyPurpose};
 use ic_types::time::GENESIS;
 use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
-use openssl::asn1::Asn1Time;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use slog::Level;
@@ -1020,11 +1019,11 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
         .build();
     let (tls_cert_without_corresponding_secret_key, _tls_cert_der) = {
         let mut csprng = ChaChaRng::from_seed([9u8; 32]);
-        let not_before = Asn1Time::from_unix(123).expect("unable to create Asn1Time");
-        let not_after = Asn1Time::from_unix(456).expect("unable to create Asn1Time");
+        let not_before = 123_u64;
+        let not_after_unix_time = 456_u64;
         let common_name = "another_common_name";
         let (x509_cert, _key_pair) =
-            generate_tls_key_pair_der(&mut csprng, common_name, &not_before, &not_after)
+            generate_tls_key_pair_der(&mut csprng, common_name, not_before, not_after_unix_time)
                 .expect("error generating TLS key pair");
         (
             ic_crypto_tls_interfaces::TlsPublicKeyCert::new_from_der(x509_cert.bytes.clone())

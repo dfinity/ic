@@ -1684,7 +1684,7 @@ dependencies = [
  "opentelemetry-prometheus 0.13.0",
  "pem 1.1.1",
  "prometheus 0.13.3",
- "rcgen",
+ "rcgen 0.10.0",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -4938,7 +4938,7 @@ dependencies = [
  "mockall 0.11.4",
  "prometheus 0.13.3",
  "rand 0.8.5",
- "rcgen",
+ "rcgen 0.10.0",
  "reqwest",
  "rustls 0.21.7",
  "serde",
@@ -6223,6 +6223,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rcgen 0.10.0",
  "rsa",
  "serde",
  "serde_cbor",
@@ -6235,12 +6236,13 @@ dependencies = [
  "tarpc",
  "tempfile",
  "threadpool",
+ "time 0.3.22",
  "tokio",
- "tokio-openssl",
  "tokio-serde",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "x509-parser 0.15.1",
  "zeroize",
 ]
 
@@ -6442,19 +6444,20 @@ name = "ic-crypto-internal-tls"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
  "hex",
  "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
- "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-protobuf",
  "ic-types",
- "openssl",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rcgen 0.11.1",
  "serde",
- "serde_bytes",
  "serde_cbor",
+ "time 0.3.22",
+ "x509-parser 0.15.1",
  "zeroize",
 ]
 
@@ -6867,6 +6870,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "ic-crypto-sha2",
  "ic-crypto-test-utils",
  "ic-protobuf",
  "ic-types",
@@ -6876,6 +6880,7 @@ dependencies = [
  "serde",
  "tokio",
  "tokio-rustls 0.24.0",
+ "x509-parser 0.15.1",
 ]
 
 [[package]]
@@ -6977,8 +6982,8 @@ version = "0.8.0"
 dependencies = [
  "ic-base-types",
  "ic-crypto-tls-interfaces",
- "openssl",
  "tokio-rustls 0.24.0",
+ "x509-parser 0.15.1",
 ]
 
 [[package]]
@@ -14814,6 +14819,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rcgen"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4954fbc00dcd4d8282c987710e50ba513d351400dbdd00e803a05172a90d8976"
+dependencies = [
+ "pem 2.0.1",
+ "ring",
+ "time 0.3.22",
+ "yasna",
+ "zeroize",
+]
+
+[[package]]
 name = "rdrand"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16906,7 +16924,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rayon",
- "rcgen",
+ "rcgen 0.10.0",
  "regex",
  "registry-canister",
  "reqwest",
@@ -18877,9 +18895,9 @@ checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "yasna"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aed2e7a52e3744ab4d0c05c20aa065258e84c49fd4226f5191b2ed29712710b4"
+checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
 dependencies = [
  "time 0.3.22",
 ]
