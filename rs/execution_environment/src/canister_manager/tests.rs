@@ -5642,7 +5642,14 @@ fn install_reserves_cycles_on_memory_allocation() {
     test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
         .unwrap();
 
-    let canister_id = test.create_canister(CYCLES);
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
+        .unwrap();
 
     let subnet_memory_usage =
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
@@ -5726,7 +5733,14 @@ fn install_reserves_cycles_on_memory_grow() {
     test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
         .unwrap();
 
-    let canister_id = test.create_canister(CYCLES);
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
+        .unwrap();
 
     let wat = r#"
         (module
@@ -5787,7 +5801,14 @@ fn upgrade_reserves_cycles_on_memory_allocation() {
     test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
         .unwrap();
 
-    let canister_id = test.create_canister(CYCLES);
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
+        .unwrap();
 
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
@@ -5850,7 +5871,14 @@ fn upgrade_reserves_cycles_on_memory_grow() {
     test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
         .unwrap();
 
-    let canister_id = test.create_canister(CYCLES);
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
+        .unwrap();
 
     let wat = r#"
         (module
@@ -6015,7 +6043,13 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
 
     let balance_before = CYCLES;
     let canister_id = test
-        .create_canister_with_allocation(balance_before, None, Some(USAGE))
+        .create_canister_with_settings(
+            balance_before,
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(USAGE)
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
         .unwrap();
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
@@ -6065,7 +6099,14 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
     test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
         .unwrap();
 
-    let canister_id = test.create_canister(CYCLES);
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
+        .unwrap();
 
     let subnet_memory_usage =
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
@@ -6188,8 +6229,15 @@ fn resource_saturation_scaling_works_in_create_canister() {
 
     let balance_before = CYCLES;
     let canister_id = test
-        .create_canister_with_allocation(balance_before, None, Some(USAGE))
+        .create_canister_with_settings(
+            balance_before,
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(USAGE)
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
         .unwrap();
+
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
     assert_eq!(
@@ -6243,7 +6291,14 @@ fn resource_saturation_scaling_works_in_install_code() {
     test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD / SCALING))
         .unwrap();
 
-    let canister_id = test.create_canister(CYCLES);
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(CYCLES.get())
+                .build(),
+        )
+        .unwrap();
 
     let wat = r#"
         (module
@@ -6505,6 +6560,47 @@ fn create_canister_can_set_reserved_cycles_limit() {
 }
 
 #[test]
+fn create_canister_sets_default_reserved_cycles_limit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    let args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    let canister_id = CanisterIdRecord::decode(&reply).unwrap().get_canister_id();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance_limit(),
+        Some(
+            test.cycles_account_manager()
+                .default_reserved_balance_limit()
+        )
+    );
+}
+
+#[test]
 fn update_settings_can_set_reserved_cycles_limit() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const CAPACITY: u64 = 20_000_000_000;
@@ -6515,9 +6611,13 @@ fn update_settings_can_set_reserved_cycles_limit() {
         .with_subnet_memory_threshold(0)
         .build();
 
-    let canister_id = test.create_canister(CYCLES);
-
-    test.canister_update_reserved_cycles_limit(canister_id, Cycles::new(1))
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_reserved_cycles_limit(1)
+                .build(),
+        )
         .unwrap();
 
     assert_eq!(

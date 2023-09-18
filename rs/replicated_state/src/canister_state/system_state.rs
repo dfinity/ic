@@ -863,6 +863,19 @@ impl SystemState {
         self.reserved_balance_limit = Some(limit);
     }
 
+    /// Initializes `reserved_balance_limit` to the given default value if it
+    /// was not already set.
+    pub fn initialize_reserved_balance_limit_if_empty(&mut self, default_limit: Cycles) {
+        if self.reserved_balance_limit.is_none() {
+            self.reserved_balance_limit = Some(default_limit);
+        }
+    }
+
+    /// Sets `reserved_balance_limit` to `None` for testing.
+    pub fn clear_reserved_balance_limit_for_testing(&mut self) {
+        self.reserved_balance_limit = None;
+    }
+
     /// Records the given amount as debit that will be charged from the balance
     /// at some point in the future.
     ///

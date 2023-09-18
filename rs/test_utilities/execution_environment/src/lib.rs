@@ -472,13 +472,22 @@ impl ExecutionTest {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
     ) -> Result<CanisterId, UserError> {
-        let mut args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()), None);
-        args.settings = Some(
+        self.create_canister_with_settings(
+            cycles,
             CanisterSettingsArgsBuilder::new()
                 .with_maybe_compute_allocation(compute_allocation)
                 .with_maybe_memory_allocation(memory_allocation)
                 .build(),
-        );
+        )
+    }
+
+    pub fn create_canister_with_settings(
+        &mut self,
+        cycles: Cycles,
+        settings: CanisterSettingsArgs,
+    ) -> Result<CanisterId, UserError> {
+        let mut args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()), None);
+        args.settings = Some(settings);
 
         let result =
             self.subnet_message(Method::ProvisionalCreateCanisterWithCycles, args.encode());

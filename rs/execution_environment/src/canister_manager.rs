@@ -569,7 +569,7 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         sender_subnet_id: SubnetId,
         cycles: Cycles,
-        settings: CanisterSettings,
+        mut settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         subnet_size: usize,
@@ -601,6 +601,11 @@ impl CanisterManager {
                 cycles,
             );
         }
+
+        // Set the field to the default value if it is empty.
+        settings
+            .reserved_cycles_limit
+            .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
 
         // Validate settings before `create_canister_helper` applies them
         match self.validate_settings_for_canister_creation(
@@ -1145,7 +1150,7 @@ impl CanisterManager {
         &self,
         origin: CanisterChangeOrigin,
         cycles_amount: Option<u128>,
-        settings: CanisterSettings,
+        mut settings: CanisterSettings,
         specified_id: Option<PrincipalId>,
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
@@ -1164,6 +1169,11 @@ impl CanisterManager {
             Some(cycles_amount) => Cycles::from(cycles_amount),
             None => self.config.default_provisional_cycles_balance,
         };
+
+        // Set the field to the default value if it is empty.
+        settings
+            .reserved_cycles_limit
+            .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
 
         // Validate settings before `create_canister_helper` applies them
         // No creation fee applied.
