@@ -56,6 +56,13 @@ type InsertUpgradePathEntriesRequest = record {
   sns_governance_canister_id : opt principal;
 };
 type InsertUpgradePathEntriesResponse = record { error : opt SnsWasmError };
+type LinearScalingCoefficient = record {
+  slope_numerator : opt nat64;
+  intercept_icp_e8s : opt nat64;
+  from_direct_participation_icp_e8s : opt nat64;
+  slope_denominator : opt nat64;
+  to_direct_participation_icp_e8s : opt nat64;
+};
 type ListDeployedSnsesResponse = record { instances : vec DeployedSns };
 type ListUpgradeStep = record {
   pretty_version : opt PrettySnsVersion;
@@ -79,6 +86,11 @@ type NeuronDistribution = record {
   vesting_period_seconds : opt nat64;
 };
 type NeuronsFundParticipants = record { participants : vec CfParticipant };
+type NeuronsFundParticipationConstraints = record {
+  coefficient_intervals : vec LinearScalingCoefficient;
+  max_neurons_fund_participation_icp_e8s : opt nat64;
+  min_direct_participation_threshold_icp_e8s : opt nat64;
+};
 type PrettySnsVersion = record {
   archive_wasm_hash : text;
   root_wasm_hash : text;
@@ -121,6 +133,7 @@ type SnsInitPayload = record {
   wait_for_quiet_deadline_increase_seconds : opt nat64;
   transaction_fee_e8s : opt nat64;
   dapp_canisters : opt DappCanisters;
+  neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
   neurons_fund_participants : opt NeuronsFundParticipants;
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;

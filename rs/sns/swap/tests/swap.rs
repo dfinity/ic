@@ -174,7 +174,7 @@ fn create_generic_committed_swap() -> Swap {
         purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
         already_tried_to_auto_finalize: Some(false),
         auto_finalize_swap_response: None,
-        current_neurons_fund_contribution_e8s: None,
+        current_neurons_fund_contribution_icp_e8s: None,
     }
 }
 
@@ -1181,7 +1181,7 @@ async fn test_finalize_swap_ok() {
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
         auto_finalize_swap_response: None,
-        current_neurons_fund_contribution_e8s: None,
+        current_neurons_fund_contribution_icp_e8s: None,
     };
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
@@ -1463,8 +1463,8 @@ async fn test_finalize_swap_ok() {
                     open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: Some(SNS_GOVERNANCE_CANISTER_ID.into()),
-                        total_direct_contribution_e8s: Some(100 * E8),
-                        total_neurons_fund_contribution_e8s: None,
+                        total_direct_contribution_icp_e8s: Some(100 * E8),
+                        total_neurons_fund_contribution_icp_e8s: None,
                     })),
                 }
             )]
@@ -1543,7 +1543,7 @@ async fn test_finalize_swap_abort() {
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
         auto_finalize_swap_response: None,
-        current_neurons_fund_contribution_e8s: None,
+        current_neurons_fund_contribution_icp_e8s: None,
     };
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since

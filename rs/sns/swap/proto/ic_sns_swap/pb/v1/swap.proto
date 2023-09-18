@@ -265,7 +265,7 @@ message Swap {
 
   // Amount of contributions from the Neurons' Fund committed to this SNS so far.
   // TODO[NNS1-2570]: Update this field with the current value.
-  optional uint64 current_neurons_fund_contribution_e8s = 19;
+  optional uint64 current_neurons_fund_contribution_icp_e8s = 19;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -391,19 +391,18 @@ message Init {
   optional bool should_auto_finalize = 28;
 
   // Constraints for the Neurons' Fund participation in this swap.
-  // TODO[NNS1-2570]: Use this data to compute current_neurons_fund_contribution_e8s.
+  // TODO[NNS1-2570]: Use this data to compute current_neurons_fund_contribution_icp_e8s.
   optional NeuronsFundParticipationConstraints neurons_fund_participation_constraints = 29;
 }
 
 // Constraints for the Neurons' Fund participation in an SNS swap.
-// All amounts are in ICP e8s.
 message NeuronsFundParticipationConstraints {
   // The Neurons' Fund will not participate in this swap unless the direct
-  // contributions reach this threshold.
-  uint64 min_direct_participation_threashold_e8s = 1;
+  // contributions reach this threshold (in ICP e8s).
+  optional uint64 min_direct_participation_threshold_icp_e8s = 1;
 
-  // Maximum amount of contributions from the Neurons' Fund to this swap.
-  uint64 max_neurons_fund_participation_e8s = 2;
+  // Maximum amount (in ICP e8s) of contributions from the Neurons' Fund to this swap.
+  optional uint64 max_neurons_fund_participation_icp_e8s = 2;
 
   // List of intervals in which the given linear coefficients apply for scaling the
   // ideal Neurons' Fund participation amount (down) to the effective Neurons' Fund
@@ -411,6 +410,16 @@ message NeuronsFundParticipationConstraints {
   repeated LinearScalingCoefficient coefficient_intervals = 3;
 }
 
+// Some Neurons' Fund neurons might be too small, and some might be too large to participate in a
+// given SNS swap. This causes the need to adjust Neurons' Fund participation from an "ideal" amount
+// to an "effective" amount.
+// * The ideal-participation of the Neurons' Fund refers to the value dictated by some curve that
+//   specifies how direct contributions should be matched with Neurons' Fund maturity.
+// * The effective-participation of the Neurons' Fund refers to the value that the NNS Governance
+//   can actually allocate, given (1) the configuration of the Neurons' Fund at the time of
+//   execution of the corresponding CreateServiceNervousSystem proposal and (2) the amount of direct
+//   participation.
+//
 // This structure represents the coefficients of a linear transformation used for
 // mapping the Neurons' Fund ideal-participation to effective-participation on a given
 // linear (semi-open) interval. Say we have the following function for matching direct
@@ -418,21 +427,25 @@ message NeuronsFundParticipationConstraints {
 // participation amount corresponding to the direct participatio of `x` ICP e8s is
 // `f(x)`, while the Neuron's Fund *effective* participation amount is:
 // ```
-// g(x) = c.slope * f(x) + c.intercept
+// g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
 // ```
 // where `c: LinearScalingCoefficient` with
-// `c.from_direct_participation_e8s <= x < c.to_direct_participation_e8s`.
+// `c.from_direct_participation_icp_e8s <= x < c.to_direct_participation_icp_e8s`.
+// Note that we represent the slope as a rational number (as opposed to floating point),
+// enabling equality comparison between two instances of this structure.
 message LinearScalingCoefficient {
   // (Included) lower bound on the amount of direct participation (in ICP e8s) at which
   // these coefficients apply.
-  uint64 from_direct_participation_e8s = 1;
+  optional uint64 from_direct_participation_icp_e8s = 1;
   // (Excluded) upper bound on the amount of direct participation (in ICP e8s) at which
   // these coefficients apply.
-  uint64 to_direct_participation_e8s = 2;
-  // Slope of the linear transformation.
-  double slope = 3;
-  // Intercept of the linear transformation.
-  double intercept = 4;
+  optional uint64 to_direct_participation_icp_e8s = 2;
+  // Numerator or the slope of the linear transformation.
+  optional uint64 slope_numerator = 3;
+  // Denominator or the slope of the linear transformation.
+  optional uint64 slope_denominator = 4;
+  // Intercept of the linear transformation (in ICP e8s).
+  optional uint64 intercept_icp_e8s = 5;
 }
 
 // Represents multiple Neurons' Fund participants.
@@ -947,10 +960,10 @@ message SettleCommunityFundParticipation {
     // fetched using the swap canister's get_state method.
     ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 1;
     // Total amount of contributions from direct swap participants.
-    optional uint64 total_direct_contribution_e8s = 2;
+    optional uint64 total_direct_contribution_icp_e8s = 2;
     // Total amount of contributions from the Neuron's Fund.
     // TODO[NNS1-2570]: Ensure this field is set.
-    optional uint64 total_neurons_fund_contribution_e8s = 3;
+    optional uint64 total_neurons_fund_contribution_icp_e8s = 3;
   }
 
   // When this happens, maturity needs to be restored to Neurons' Fund neurons.

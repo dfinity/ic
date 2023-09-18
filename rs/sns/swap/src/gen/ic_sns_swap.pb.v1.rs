@@ -218,7 +218,7 @@ pub struct Swap {
     /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
     /// TODO\[NNS1-2570\]: Update this field with the current value.
     #[prost(uint64, optional, tag = "19")]
-    pub current_neurons_fund_contribution_e8s: ::core::option::Option<u64>,
+    pub current_neurons_fund_contribution_icp_e8s: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -346,30 +346,39 @@ pub struct Init {
     #[prost(bool, optional, tag = "28")]
     pub should_auto_finalize: ::core::option::Option<bool>,
     /// Constraints for the Neurons' Fund participation in this swap.
-    /// TODO\[NNS1-2570\]: Use this data to compute current_neurons_fund_contribution_e8s.
+    /// TODO\[NNS1-2570\]: Use this data to compute current_neurons_fund_contribution_icp_e8s.
     #[prost(message, optional, tag = "29")]
     pub neurons_fund_participation_constraints:
         ::core::option::Option<NeuronsFundParticipationConstraints>,
 }
 /// Constraints for the Neurons' Fund participation in an SNS swap.
-/// All amounts are in ICP e8s.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronsFundParticipationConstraints {
     /// The Neurons' Fund will not participate in this swap unless the direct
-    /// contributions reach this threshold.
-    #[prost(uint64, tag = "1")]
-    pub min_direct_participation_threashold_e8s: u64,
-    /// Maximum amount of contributions from the Neurons' Fund to this swap.
-    #[prost(uint64, tag = "2")]
-    pub max_neurons_fund_participation_e8s: u64,
+    /// contributions reach this threshold (in ICP e8s).
+    #[prost(uint64, optional, tag = "1")]
+    pub min_direct_participation_threshold_icp_e8s: ::core::option::Option<u64>,
+    /// Maximum amount (in ICP e8s) of contributions from the Neurons' Fund to this swap.
+    #[prost(uint64, optional, tag = "2")]
+    pub max_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
     /// List of intervals in which the given linear coefficients apply for scaling the
     /// ideal Neurons' Fund participation amount (down) to the effective Neurons' Fund
     /// participation amount.
     #[prost(message, repeated, tag = "3")]
     pub coefficient_intervals: ::prost::alloc::vec::Vec<LinearScalingCoefficient>,
 }
+/// Some Neurons' Fund neurons might be too small, and some might be too large to participate in a
+/// given SNS swap. This causes the need to adjust Neurons' Fund participation from an "ideal" amount
+/// to an "effective" amount.
+/// * The ideal-participation of the Neurons' Fund refers to the value dictated by some curve that
+///    specifies how direct contributions should be matched with Neurons' Fund maturity.
+/// * The effective-participation of the Neurons' Fund refers to the value that the NNS Governance
+///    can actually allocate, given (1) the configuration of the Neurons' Fund at the time of
+///    execution of the corresponding CreateServiceNervousSystem proposal and (2) the amount of direct
+///    participation.
+///
 /// This structure represents the coefficients of a linear transformation used for
 /// mapping the Neurons' Fund ideal-participation to effective-participation on a given
 /// linear (semi-open) interval. Say we have the following function for matching direct
@@ -377,28 +386,33 @@ pub struct NeuronsFundParticipationConstraints {
 /// participation amount corresponding to the direct participatio of `x` ICP e8s is
 /// `f(x)`, while the Neuron's Fund *effective* participation amount is:
 /// ```
-/// g(x) = c.slope * f(x) + c.intercept
+/// g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
 /// ```
 /// where `c: LinearScalingCoefficient` with
-/// `c.from_direct_participation_e8s <= x < c.to_direct_participation_e8s`.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+/// `c.from_direct_participation_icp_e8s <= x < c.to_direct_participation_icp_e8s`.
+/// Note that we represent the slope as a rational number (as opposed to floating point),
+/// enabling equality comparison between two instances of this structure.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinearScalingCoefficient {
     /// (Included) lower bound on the amount of direct participation (in ICP e8s) at which
     /// these coefficients apply.
-    #[prost(uint64, tag = "1")]
-    pub from_direct_participation_e8s: u64,
+    #[prost(uint64, optional, tag = "1")]
+    pub from_direct_participation_icp_e8s: ::core::option::Option<u64>,
     /// (Excluded) upper bound on the amount of direct participation (in ICP e8s) at which
     /// these coefficients apply.
-    #[prost(uint64, tag = "2")]
-    pub to_direct_participation_e8s: u64,
-    /// Slope of the linear transformation.
-    #[prost(double, tag = "3")]
-    pub slope: f64,
-    /// Intercept of the linear transformation.
-    #[prost(double, tag = "4")]
-    pub intercept: f64,
+    #[prost(uint64, optional, tag = "2")]
+    pub to_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Numerator or the slope of the linear transformation.
+    #[prost(uint64, optional, tag = "3")]
+    pub slope_numerator: ::core::option::Option<u64>,
+    /// Denominator or the slope of the linear transformation.
+    #[prost(uint64, optional, tag = "4")]
+    pub slope_denominator: ::core::option::Option<u64>,
+    /// Intercept of the linear transformation (in ICP e8s).
+    #[prost(uint64, optional, tag = "5")]
+    pub intercept_icp_e8s: ::core::option::Option<u64>,
 }
 /// Represents multiple Neurons' Fund participants.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1219,11 +1233,11 @@ pub mod settle_community_fund_participation {
         pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// Total amount of contributions from direct swap participants.
         #[prost(uint64, optional, tag = "2")]
-        pub total_direct_contribution_e8s: ::core::option::Option<u64>,
+        pub total_direct_contribution_icp_e8s: ::core::option::Option<u64>,
         /// Total amount of contributions from the Neuron's Fund.
         /// TODO\[NNS1-2570\]: Ensure this field is set.
         #[prost(uint64, optional, tag = "3")]
-        pub total_neurons_fund_contribution_e8s: ::core::option::Option<u64>,
+        pub total_neurons_fund_contribution_icp_e8s: ::core::option::Option<u64>,
     }
     /// When this happens, maturity needs to be restored to Neurons' Fund neurons.
     /// The amounts to be refunded can be found in the ProposalData's

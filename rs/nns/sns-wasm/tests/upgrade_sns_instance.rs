@@ -412,7 +412,6 @@ fn upgrade_archive_sns_canister_via_sns_wasms_legacy() {
             }
             .try_into()
             .unwrap(),
-            None,
             Some(old_version),
             false,
         )
@@ -690,7 +689,6 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed_legacy() {
             }
             .try_into()
             .unwrap(),
-            None,
             Some(old_version.clone()),
             false,
         )
