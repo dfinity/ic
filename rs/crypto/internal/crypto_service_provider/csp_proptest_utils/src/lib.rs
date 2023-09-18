@@ -608,7 +608,7 @@ mod csp_tls_keygen_error {
     use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 
     proptest_strategy_for_enum!(CspTlsKeygenError;
-        InvalidNotAfterDate => {message in ".*", not_after in ".*"},
+        InvalidArguments => {message in ".*"},
         InternalError => {internal_error in ".*"},
         DuplicateKeyId => {key_id in arb_key_id()},
         TransientInternalError => {internal_error in ".*"},

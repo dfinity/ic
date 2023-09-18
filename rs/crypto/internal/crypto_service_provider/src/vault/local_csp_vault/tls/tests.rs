@@ -254,8 +254,8 @@ mod keygen {
         let csp_vault = LocalCspVault::builder_for_test().build();
         let invalid_not_after = "invalid_not_after_date";
         let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
-        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-            if message.eq("invalid X.509 certificate expiration date (not_after): failed to parse ASN1 datetime format") && not_after.eq(invalid_not_after)
+        assert_matches!(result, Err(CspTlsKeygenError::InvalidArguments { message })
+            if message.contains("invalid X.509 certificate expiration date (notAfter=invalid_not_after_date): failed to parse ASN1 datetime format")
         );
     }
 
@@ -269,8 +269,8 @@ mod keygen {
 
         let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), UNIX_EPOCH);
         let expected_message = format!("notBefore date ({UNIX_EPOCH_AS_TIME_DATE}) must be before notAfter date ({UNIX_EPOCH_AS_TIME_DATE})");
-        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-            if message == expected_message && not_after == UNIX_EPOCH
+        assert_matches!(result, Err(CspTlsKeygenError::InvalidArguments { message })
+            if message == expected_message
         );
     }
 
