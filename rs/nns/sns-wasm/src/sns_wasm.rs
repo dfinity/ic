@@ -49,6 +49,26 @@ const LOG_PREFIX: &str = "[SNS-WASM] ";
 
 const INITIAL_CANISTER_CREATION_CYCLES: u64 = ONE_TRILLION;
 
+/// The number of canisters that the SNS-WASM canister will install when deploying
+/// an SNS. This constant is different than `SNS_CANISTER_COUNT` due to the Archive
+/// canister being spawned by the Ledger canister, and not the directly by the
+/// SNS-WASM canister. The canisters being installed are the:
+///   - SNS Governance Canister
+///   - SNS Root Canister
+///   - SNS Swap Canister
+///   - ICRC Ledger Canister
+///   - ICRC Index Canister
+pub const SNS_CANISTER_COUNT_AT_INSTALL: u64 = 5;
+
+/// The total number of SNS canister types that make up an SNS. These are:
+///   - SNS Governance Canister
+///   - SNS Root Canister
+///   - SNS Swap Canister
+///   - ICRC Ledger Canister
+///   - ICRC Index Canister
+///   - ICRC Ledger Archive Canister
+pub const SNS_CANISTER_TYPE_COUNT: u64 = 6;
+
 impl From<SnsCanisterIds> for DeployedSns {
     fn from(src: SnsCanisterIds) -> Self {
         Self {
@@ -851,7 +871,9 @@ where
             canister_api.accept_message_cycles(None)?
         } else {
             // We are loaning to the SNS a specific amount if we are not getting it from caller
-            SNS_CREATION_FEE.saturating_sub(INITIAL_CANISTER_CREATION_CYCLES.saturating_mul(5))
+            SNS_CREATION_FEE.saturating_sub(
+                INITIAL_CANISTER_CREATION_CYCLES.saturating_mul(SNS_CANISTER_COUNT_AT_INSTALL),
+            )
         };
         // We only collect the INITIAL_CANISTER_CREATION_CYCLES for the other 5 canisters because
         // archive will be created by the ledger post deploy.  In order to split whole allocation
@@ -859,7 +881,7 @@ where
         let uncollected_allocation_for_archive = INITIAL_CANISTER_CREATION_CYCLES;
         let cycles_per_canister = (remaining_unaccepted_cycles
             .saturating_sub(uncollected_allocation_for_archive))
-        .saturating_div(6);
+        .saturating_div(SNS_CANISTER_TYPE_COUNT);
 
         let results = futures::future::join_all(canisters.into_named_tuples().into_iter().map(
             |(label, canister_id)| async move {
