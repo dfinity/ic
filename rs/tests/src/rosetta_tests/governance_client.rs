@@ -79,7 +79,7 @@ impl GovernanceClient {
             assert!(proposal_id.is_some());
             debug!(
                 &self.logger,
-                "[governance_client] Making Proposal was succesfull proposal ID is {}",
+                "[governance_client] Making Proposal was successful proposal ID is {}",
                 proposal_id.unwrap().id
             );
             let arg = Encode!(&proposal_id.unwrap().id).expect("Error while encoding arg.");

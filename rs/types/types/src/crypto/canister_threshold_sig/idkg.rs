@@ -117,7 +117,7 @@ impl IDkgReceivers {
     ///   multisignature shares (i.e. |self| >= verification_threshold(|self|) +
     ///   faults_tolerated(|self|)) (error: `UnsatisfiedVerificationThreshold`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(receivers: BTreeSet<NodeId>) -> Result<Self, IDkgParamsValidationError> {
         Self::ensure_receivers_not_empty(&receivers)?;
@@ -240,7 +240,7 @@ impl IDkgDealers {
     /// * Dealers are not empty (error: `DealersEmpty`)
     /// * The number of dealers fits into `NodeIndex` (error: `TooManyDealers`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(dealers: BTreeSet<NodeId>) -> Result<Self, IDkgParamsValidationError> {
         Self::ensure_dealers_not_empty(&dealers)?;
@@ -700,7 +700,7 @@ pub enum IDkgTranscriptType {
 /// transcript is considered:
 /// * [`Masked`][`IDkgTranscriptType::Masked`] if the commitment perfectly hides the shared value.
 /// * [`Unmasked`][`IDkgTranscriptType::Unmasked`] if the commitment is not perfectly hiding and
-/// may reveal some informaiton about the shared value.
+/// may reveal some information about the shared value.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,

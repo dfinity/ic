@@ -666,7 +666,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -764,7 +764,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -919,7 +919,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -1130,7 +1130,7 @@ pub fn sw_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -1245,7 +1245,7 @@ pub fn icx_proxy_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -1433,7 +1433,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -1586,7 +1586,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -1768,7 +1768,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
@@ -1879,7 +1879,7 @@ pub fn seo_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}

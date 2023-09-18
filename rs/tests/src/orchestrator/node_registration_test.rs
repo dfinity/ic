@@ -65,7 +65,7 @@ pub fn test(env: TestEnv) {
     let unassigned_node = topology.unassigned_nodes().next().unwrap();
     let governance_canister = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    info!(&logger, "Remove the unassinged node from the registry");
+    info!(&logger, "Remove the unassigned node from the registry");
     block_on(async {
         let proposal_id = submit_external_proposal_with_test_id(
             &governance_canister,

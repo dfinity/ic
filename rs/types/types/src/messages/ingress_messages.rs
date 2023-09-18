@@ -3,7 +3,7 @@
 use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
 use crate::{
     messages::{
-        http::{representation_indepent_hash_call_or_query, CallOrQuery},
+        http::{representation_independent_hash_call_or_query, CallOrQuery},
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
     },
@@ -97,7 +97,7 @@ impl HasCanisterId for SignedIngressContent {
 
 impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
-        MessageId::from(representation_indepent_hash_call_or_query(
+        MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
             self.canister_id.get().into_vec(),
             &self.method_name,

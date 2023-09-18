@@ -84,7 +84,7 @@ pub enum BoundaryNodeHttpsConfig {
 
     /// Don't create real certificates and DNS records,
     /// instead dangerously accept self-signed certificates and
-    /// resolve domains on the client-side without quering DNS.
+    /// resolve domains on the client-side without querying DNS.
     AcceptInvalidCertsAndResolveClientSide,
 }
 

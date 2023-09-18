@@ -12,7 +12,7 @@ use tokio::{
 /// But this is not an issue because this could only happen in these cases:
 ///     - The runtime is shutting down. In this case we don't care about the invalid state.
 ///     - A task panics. In this case the panic should be propagated.
-///     - A task spawned on the Joinmap is unexpectetly cancelled. The API of this JoinMap
+///     - A task spawned on the Joinmap is unexpectedly cancelled. The API of this JoinMap
 ///       does expose any way of cancelling spawned tasks.
 ///     - Tasks can be only be cancelled by replacing them. In this case the internal invariant
 ///       tasks_by_key.len() == tasks.len() is preserved.

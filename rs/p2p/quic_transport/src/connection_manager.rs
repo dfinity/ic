@@ -248,7 +248,7 @@ pub(crate) fn start_connection_manager(
                 .expect("Failed to create udp socket");
 
             // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficently large value is used. Increasing these buffers can help with high packetloss.
+            // sufficiently large value is used. Increasing these buffers can help with high packetloss.
             // The value of 25MB isch chosen from experiments and the BDP product shown below to support
             // around 2Gb/s.
             // Bandwidth-Delay Product
@@ -394,7 +394,7 @@ impl ConnectionManager {
                 .set(self.connect_queue.len() as i64);
         }
         // This point is reached only in two cases - replica gracefully shutting down or
-        // bug which makes the peer manager unavaible.
+        // bug which makes the peer manager unavailable.
         // If the peer manager is unavailable, the replica needs must exist that's why
         // the endpoint is closed proactively.
         self.endpoint.close(0u8.into(), b"shutting down");
@@ -550,7 +550,7 @@ impl ConnectionManager {
             .spawn_on(peer_id, timeout_conn_fut, &self.rt);
     }
 
-    /// Process connection attempt result. If successfull connection is
+    /// Process connection attempt result. If successful connection is
     /// added to peer map. If unsuccessful and this node is dialer the
     /// connection will be retried. `peer` is `Some` if this node was
     /// the dialer. I.e lower node id.

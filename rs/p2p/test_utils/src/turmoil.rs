@@ -152,7 +152,7 @@ where
 {
     while !f() {
         if sim.step()? {
-            panic!("Simulation finished while checking condtion");
+            panic!("Simulation finished while checking condition");
         }
     }
     Ok(())
@@ -174,7 +174,7 @@ where
             break;
         }
         if sim.step()? {
-            panic!("Simulation finished while checking condtion");
+            panic!("Simulation finished while checking condition");
         }
     }
     Ok(())

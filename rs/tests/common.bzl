@@ -236,7 +236,7 @@ def canister_runtime_deps_impl(name, canister_wasm_providers, qualifying_caniste
     Args:
       name: base name to use for the rule providing the canister WASM.
       canister_wasm_providers: dict with (canister names as keys) and (values representing WASM-producing rules, tip-of-branch or mainnet).
-      qualifying_canisters: list of canisters to be qualified for the release, i.e., these shoud be built from the current branch.
+      qualifying_canisters: list of canisters to be qualified for the release, i.e., these should be built from the current branch.
     """
     for cname in qualifying_canisters:
         if cname not in canister_wasm_providers.keys():

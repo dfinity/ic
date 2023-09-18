@@ -336,7 +336,7 @@ pub(crate) enum DownloadChunkError {
     /// Request was not processed because peer endpoint is overloaded.
     /// This error is transient.
     Overloaded,
-    /// Request was not processed beacuse of a timeout either on the client side or on the server side.
+    /// Request was not processed because of a timeout either on the client side or on the server side.
     Timeout,
     /// An unexpected error occurred during the request. Requests to well-behaving peers
     /// do not return a RequestError.

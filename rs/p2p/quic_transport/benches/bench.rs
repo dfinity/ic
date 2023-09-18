@@ -28,7 +28,7 @@ use tokio::{
     task::JoinSet,
 };
 
-/// Benchmark tests RPS and throughput from one to NUM_NODES-1 with PARRALEL_REQUSTS number of requests at once.
+/// Benchmark tests RPS and throughput from one to NUM_NODES-1 with PARALLEL_REQUESTS number of requests at once.
 /// Adjust these values to test different scenarios.
 const NUM_NODES: u64 = 13;
 const PARALLEL_REQUESTS: u64 = 10;
@@ -133,19 +133,19 @@ fn bench_transport(criterion: &mut Criterion) {
         pretty_print(num_request_per_iter)
     );
     println!(
-        "Transfered request data per iteration: {} Bytes",
+        "Transferred request data per iteration: {} Bytes",
         pretty_print(num_request_per_iter * REQUEST_SIZE_BYTES)
     );
     println!(
-        "Transfered request data per iteration per peer: {} Bytes",
+        "Transferred request data per iteration per peer: {} Bytes",
         pretty_print(num_request_per_iter * REQUEST_SIZE_BYTES / NUM_NODES)
     );
     println!(
-        "Transfered response data per iteration: {} Bytes",
+        "Transferred response data per iteration: {} Bytes",
         pretty_print(num_request_per_iter * RESPONSE_SIZE_BYTES)
     );
     println!(
-        "Transfered response data per iteration per peer: {} Bytes",
+        "Transferred response data per iteration per peer: {} Bytes",
         pretty_print(num_request_per_iter * RESPONSE_SIZE_BYTES / NUM_NODES)
     );
 

@@ -110,7 +110,7 @@ pub fn config(
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     env.sync_with_prometheus();
-    info!(logger, "Step 1: Intalling NNS canisters ...");
+    info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()
         .root_subnet()

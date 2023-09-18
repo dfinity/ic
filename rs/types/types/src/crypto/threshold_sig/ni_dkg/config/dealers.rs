@@ -23,7 +23,7 @@ impl NiDkgDealers {
     /// * Dealers are not empty (error: `DealersEmpty`)
     /// * The number of dealers fits into `NodeIndex` (error: `TooManyDealers`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(dealers: BTreeSet<NodeId>) -> Result<Self, NiDkgConfigValidationError> {
         Self::ensure_dealers_not_empty(&dealers)?;

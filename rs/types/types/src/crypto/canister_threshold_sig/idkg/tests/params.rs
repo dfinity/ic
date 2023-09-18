@@ -196,20 +196,20 @@ fn should_return_none_initial_dealings_collection_threshold_for_unmasked_times_m
 
 #[test]
 fn should_return_correct_initial_dealings_collection_threshold_for_unmasked() {
-    // For 10 dealers, f = 3 and the initial_collection_threhold=2*f+1=7
+    // For 10 dealers, f = 3 and the initial_collection_threshold=2*f+1=7
     check_unverified_dealings_collection_threshold_for_unmasked(10, 7);
 
-    // For 7 to 9 dealers, f = 2 and the initial_collection_threhold=2*f+1=5
+    // For 7 to 9 dealers, f = 2 and the initial_collection_threshold=2*f+1=5
     for number_of_dealers in [7, 8, 9] {
         check_unverified_dealings_collection_threshold_for_unmasked(number_of_dealers, 5);
     }
 
-    // For 4 to 6 dealers, f = 1 and the initial_collection_threhold=2*f+1=3
+    // For 4 to 6 dealers, f = 1 and the initial_collection_threshold=2*f+1=3
     for number_of_dealers in [4, 5, 6] {
         check_unverified_dealings_collection_threshold_for_unmasked(number_of_dealers, 3);
     }
 
-    // For 1 to 3 dealers, f = 0 and the initial_collection_threhold=2*f+1=1
+    // For 1 to 3 dealers, f = 0 and the initial_collection_threshold=2*f+1=1
     for number_of_dealers in [1, 2, 3] {
         check_unverified_dealings_collection_threshold_for_unmasked(number_of_dealers, 1);
     }

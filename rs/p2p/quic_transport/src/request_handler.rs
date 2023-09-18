@@ -111,7 +111,7 @@ pub(crate) async fn run_stream_acceptor(
             _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 if let Err(err) = completed_request {
-                    // Cancelling tasks is ok. Panicing tasks are not.
+                    // Cancelling tasks is ok. Panicking tasks are not.
                     if err.is_panic() {
                         std::panic::resume_unwind(err.into_panic());
                     }

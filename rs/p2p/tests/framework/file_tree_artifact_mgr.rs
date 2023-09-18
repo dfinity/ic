@@ -33,7 +33,7 @@ type FileTreeSyncInMemoryPool = HashMap<TestArtifactId, FileTreeSyncArtifact>;
 #[derive(Clone)]
 pub struct ArtifactChunkingTestImpl {
     node_pool_dir: PathBuf, // Path to on disk pool
-    file_tree_sync_unvalidated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>, /* In memory representaion
+    file_tree_sync_unvalidated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>, /* In memory representation
                                                                             * on on-disk
                                                                             * pool */
     file_tree_sync_validated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>,

@@ -3,7 +3,7 @@
 //! The lifecycle of a request looks as follows:
 //!
 //! 1a. When a canister makes a http request, the [`CanisterHttpRequestContext`] is stored in the state.
-//! The canister http pool manager (which is a thread that continously checks for requests)
+//! The canister http pool manager (which is a thread that continuously checks for requests)
 //! will take the request and pass it to the network layer to make the actual request.
 //!
 //! 1b. The response may be passed to a transform function, which can make arbitrary changes to the response.
@@ -15,7 +15,7 @@
 //!
 //! 2. Now we need to get consensus of the content. Since the actual [`CanisterHttpResponseContent`] could be large and we
 //! require n-to-n communication, we will turn the content into a much smaller [`CanisterHttpResponseMetadata`] object,
-//! that contains all the the important information (such as the response hash) required to archieve consensus.
+//! that contains all the the important information (such as the response hash) required to achieve consensus.
 //!
 //! 3a. We sign the metadata to get the [`CanisterHttpResponseShare`] and store it in the pool.
 //!
@@ -33,7 +33,7 @@
 //! The blockmaker compiles a [`CanisterHttpResponseDivergence`] proof and includes it in it's payload.
 //! Once the proof has made it into a finalized block, the request is answered with an error message.
 //!
-//! Early detection of non-determinsitic server responses is not guaranteed to work if malicious nodes are present,
+//! Early detection of non-deterministic server responses is not guaranteed to work if malicious nodes are present,
 //! which sign multiple different responses for the same request.
 //! In that case, the non-determisitic server responses will time out using the timeout mechanism (see 4c).
 //!

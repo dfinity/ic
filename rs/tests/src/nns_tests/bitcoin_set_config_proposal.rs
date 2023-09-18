@@ -61,7 +61,7 @@ pub fn test(env: TestEnv) {
             assert_eq!(config.api_access, Flag::Enabled);
         });
 
-        const NEW_STABILTY_THRESHOLD: u128 = 17;
+        const NEW_STABILITY_THRESHOLD: u128 = 17;
         const NEW_API_ACCESS_FLAG: Flag = Flag::Disabled;
 
         // Submit (and execute) a proposal to update the settings of the Bitcoin canisters.
@@ -70,7 +70,7 @@ pub fn test(env: TestEnv) {
                 network,
                 &Canister::new(&nns, GOVERNANCE_CANISTER_ID),
                 SetConfigRequest {
-                    stability_threshold: Some(NEW_STABILTY_THRESHOLD),
+                    stability_threshold: Some(NEW_STABILITY_THRESHOLD),
                     api_access: Some(NEW_API_ACCESS_FLAG),
                     ..Default::default()
                 },
@@ -85,7 +85,7 @@ pub fn test(env: TestEnv) {
                 let config = get_bitcoin_config(&agent, network).await;
                 info!(&logger, "Bitcoin config: {:?}", config);
 
-                if config.stability_threshold == NEW_STABILTY_THRESHOLD
+                if config.stability_threshold == NEW_STABILITY_THRESHOLD
                     && config.api_access == NEW_API_ACCESS_FLAG
                 {
                     Ok(())

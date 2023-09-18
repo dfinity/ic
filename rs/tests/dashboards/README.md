@@ -54,7 +54,7 @@ directory. It will then be deployed automatically to both the mainnet and
 testnet Grafana instances.
 
 Tip: It is useful to change the value of the `"uid"` field in the JSON with the
-name of the dashboard with spaces and other special caracters replaced by dashes
+name of the dashboard with spaces and other special characters replaced by dashes
 (e.g. `"ic-progress-clock"` for the IC Progress Clock dashboard). That way the
 dashboard can be quickly accessed by typing e.g.
 `grafana.mainnet.dfinity.network/d/ic-progress-clock` into the address bar.

@@ -259,7 +259,7 @@ pub(crate) async fn bless_public_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     image_type: UpdateImageType,
-    url_image_type: UpdateImageType, // normaly it is the same as above, unless we want to have bogus url
+    url_image_type: UpdateImageType, // normally it is the same as above, unless we want to have bogus url
     logger: &Logger,
 ) {
     let upgrade_url = get_update_image_url(url_image_type, target_version);

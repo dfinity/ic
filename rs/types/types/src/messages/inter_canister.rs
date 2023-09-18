@@ -47,7 +47,7 @@ pub struct RequestMetadata {
     /// A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
     /// its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
     /// does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
-    /// downstream calls at any point in the tree. Since a call tree can be disolved from above if
+    /// downstream calls at any point in the tree. Since a call tree can be dissolved from above if
     /// a corresponding deadline expires, this effectively implies that `call_subtree_deadline` can only
     /// decrease as we go down the tree.
     ///

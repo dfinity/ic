@@ -173,7 +173,7 @@ impl<T: ExhaustiveSet, const N: usize> ExhaustiveSet for [T; N] {
         let mut result = Vec::new();
         let bound = 1 + exhaust_t.len() / N;
         for _ in 0..bound {
-            // populate array with cylic iterator
+            // populate array with cyclic iterator
             let elem = std::array::from_fn::<T, N, _>(|_| exhaust_iter.next().unwrap().clone());
 
             result.push(elem);

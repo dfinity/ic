@@ -325,7 +325,7 @@ async fn tests_for_illegal_wasm_memory_access(
             logger,
             &ret_val,
             format!(
-                "proxy_msg_reply_data_appendInput => {} {} Ouput =>",
+                "proxy_msg_reply_data_appendInput => {} {} Output =>",
                 0, 65536
             )
             .as_str(),

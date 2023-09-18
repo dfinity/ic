@@ -74,7 +74,7 @@ fn test_load_shedding_query() {
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let query_exec_running_clone = query_exec_running.clone();
 
-    // This agent's request wil be load shedded.
+    // This agent's request will be load shedded.
     let load_shedded_agent = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
@@ -221,7 +221,7 @@ fn test_load_shedding_read_state() {
     let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec!["time".into()]];
     let paths_clone = paths.clone();
 
-    // This agent's request wil be load shedded
+    // This agent's request will be load shedded
     let load_shedded_agent_resp = rt.spawn(async move {
         read_state_running.notified().await;
 
@@ -353,7 +353,7 @@ fn test_load_shedding_pprof() {
             .expect("request builder")
     };
 
-    // This request wil fill the load shedder.
+    // This request will fill the load shedder.
     let ok_request = rt.spawn(async move {
         let client = Client::new();
         let response = client.request(flame_graph_req()).await.unwrap();

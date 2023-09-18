@@ -185,7 +185,7 @@ impl Payload {
         }
     }
 
-    /// Return a Payload with the given hash, and an intialization function that
+    /// Return a Payload with the given hash, and an initialization function that
     /// will be use for lazily loading the actual `BlockPayload` matching
     /// the given hash. This function does not check if the eventually loaded
     /// `BlockPayload` with match the given hash, so it must be used with care.
