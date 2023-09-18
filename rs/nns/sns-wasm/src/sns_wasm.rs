@@ -629,9 +629,6 @@ where
             .get_and_validate_sns_init_payload(caller)
             .map_err(validation_deploy_error)?;
 
-        // TODO[NNS1-2593]: Extract the value for this field from deploy_new_sns_request
-        let neurons_fund_participation_constraints = None;
-
         let dapp_canisters = &sns_init_payload
             .dapp_canisters
             .as_ref()
@@ -734,7 +731,6 @@ where
         let initial_payloads = sns_init_payload
             .build_canister_payloads(
                 &sns_init_canister_ids,
-                neurons_fund_participation_constraints,
                 Some(Version {
                     root_wasm_hash: latest_version.root_wasm_hash,
                     governance_wasm_hash: latest_version.governance_wasm_hash,
@@ -4341,7 +4337,6 @@ mod test {
                 }
                 .try_into()
                 .unwrap(),
-                None,
                 Some(Version {
                     root_wasm_hash: deployed_version.root_wasm_hash,
                     governance_wasm_hash: deployed_version.governance_wasm_hash,

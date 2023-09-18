@@ -96,8 +96,8 @@ type Command_2 = variant {
   Disburse : Disburse;
 };
 type Committed = record {
-  total_direct_contribution_e8s : opt nat64;
-  total_neurons_fund_contribution_e8s : opt nat64;
+  total_direct_contribution_icp_e8s : opt nat64;
+  total_neurons_fund_contribution_icp_e8s : opt nat64;
   sns_governance_canister_id : opt principal;
 };
 type Configure = record { operation : opt Operation };

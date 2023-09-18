@@ -182,6 +182,12 @@ pub struct SnsInitPayload {
     /// The token_logo for the SNS project represented as a base64 encoded string.
     #[prost(string, optional, tag = "36")]
     pub token_logo: ::core::option::Option<::prost::alloc::string::String>,
+    /// Constraints for the Neurons' Fund participation in this swap. These constraints passed from
+    /// the NNS Governance (via SNS-W) to an SNS Swap to determine the Neurons' Fund participation
+    /// amount as a function of the direct participation amount.
+    #[prost(message, optional, tag = "37")]
+    pub neurons_fund_participation_constraints:
+        ::core::option::Option<::ic_sns_swap::pb::v1::NeuronsFundParticipationConstraints>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

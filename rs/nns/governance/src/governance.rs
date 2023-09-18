@@ -4556,8 +4556,6 @@ impl Governance {
         // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
         let request = DeployNewSnsRequest {
             sns_init_payload: Some(sns_init_payload),
-            // TODO[NNS1-2591]: Provide the Neuron's Fund participation constraints
-            // (once DeployNewSnsRequest is extended with the required fields).
         };
         let request = match Encode!(&request) {
             Ok(ok) => ok,

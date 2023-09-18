@@ -514,6 +514,7 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             ),
             neurons_fund_participants: None,
             token_logo: None,
+            neurons_fund_participation_constraints: None,
         })
     }
 }
@@ -1239,6 +1240,7 @@ wait_for_quiet_deadline_increase_seconds: 1000
             nns_proposal_id: _,
             neurons_fund_participants: _,
             token_logo: _,
+            neurons_fund_participation_constraints: _,
         } = sns_init_payload;
 
         assert_eq!(

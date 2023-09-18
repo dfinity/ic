@@ -394,6 +394,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             neurons_fund_participants: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
+            neurons_fund_participation_constraints: None,
         };
 
         result.validate_pre_execution()?;

@@ -1038,8 +1038,8 @@ mod settle_community_fund_participation_tests {
             open_sns_token_swap_proposal_id: Some(7),
             result: Some(Result::Committed(Committed {
                 sns_governance_canister_id: Some(PrincipalId::new_user_test_id(672891)),
-                total_direct_contribution_e8s: None,
-                total_neurons_fund_contribution_e8s: None,
+                total_direct_contribution_icp_e8s: None,
+                total_neurons_fund_contribution_icp_e8s: None,
             })),
         };
         static ref ABORTED: SettleCommunityFundParticipation = SettleCommunityFundParticipation {
@@ -1081,8 +1081,8 @@ mod settle_community_fund_participation_tests {
                 open_sns_token_swap_proposal_id: Some(7),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: None,
-                    total_direct_contribution_e8s: None,
-                    total_neurons_fund_contribution_e8s: None,
+                    total_direct_contribution_icp_e8s: None,
+                    total_neurons_fund_contribution_icp_e8s: None,
                 })),
             }
         ));
@@ -1243,6 +1243,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
+                neurons_fund_participation_constraints: None,
             },
         );
 
@@ -1556,6 +1557,8 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 neurons_fund_participants: Some(NeuronsFundParticipants {
                     participants: neurons_fund_participants,
                 }),
+                // TODO[NNS1-2558]: Test this field.
+                neurons_fund_participation_constraints: None,
 
                 // We'll examine these later
                 initial_token_distribution: None,

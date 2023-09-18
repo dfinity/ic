@@ -49,6 +49,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ".ic_sns_swap.pb.v1.NeuronBasketConstructionParameters",
         "#[derive(Eq)]",
     );
+    config.type_attribute(
+        ".ic_sns_swap.pb.v1.NeuronsFundParticipationConstraints",
+        "#[derive(Eq)]",
+    );
+    config.type_attribute(
+        ".ic_sns_swap.pb.v1.LinearScalingCoefficient",
+        "#[derive(Eq)]",
+    );
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);
