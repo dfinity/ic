@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("79d72adf725a8d80b450362603d30dacf6549e6e14faf1c31010202a5dacf443");
+    hex!("4515e8476f0a4f92300cc392c5fbe07f58c1481912304e5da8f750f8debdac20");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -82,6 +82,13 @@ impl PayloadBuilder {
 
     pub fn reply_data_append(mut self) -> Self {
         self.0.push(Ops::ReplyDataAppend as u8);
+        self
+    }
+
+    /// Pop a blob from the stack and append it to the global data on the heap.
+    /// NOTE: This does _not_ correspond to a Wasm global.
+    pub fn append_to_global_data(mut self) -> Self {
+        self.0.push(Ops::AppendGlobal as u8);
         self
     }
 
