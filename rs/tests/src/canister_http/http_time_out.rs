@@ -23,7 +23,9 @@ use crate::util::*;
 use anyhow::bail;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc};
+use ic_ic00_types::{
+    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
@@ -40,7 +42,7 @@ pub fn test(env: TestEnv) {
         let mut request = RemoteHttpRequest {
             request: CanisterHttpRequestArgs {
                 url: url_to_succeed.clone(),
-                headers: vec![],
+                headers: BoundedHttpHeaders::new(vec![]),
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
                 transform: Some(TransformContext {

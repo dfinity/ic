@@ -6,9 +6,9 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
-    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode,
-    CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId, HttpMethod,
-    TransformContext, TransformFunc,
+    self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
+    CanisterInstallMode, CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId,
+    HttpMethod, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -490,7 +490,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                 Encode!(&CanisterHttpRequestArgs {
                     url: "https://".to_string(),
                     max_response_bytes: None,
-                    headers: Vec::new(),
+                    headers: BoundedHttpHeaders::new(vec![]),
                     body: None,
                     method: HttpMethod::GET,
                     transform: Some(TransformContext {

@@ -303,7 +303,10 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
         }
 
         let request_body = args.body;
-        validate_http_headers_and_body(&args.headers, request_body.as_ref().unwrap_or(&vec![]))?;
+        validate_http_headers_and_body(
+            args.headers.get(),
+            request_body.as_ref().unwrap_or(&vec![]),
+        )?;
 
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
@@ -311,6 +314,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             max_response_bytes,
             headers: args
                 .headers
+                .get()
                 .clone()
                 .into_iter()
                 .map(|h| CanisterHttpHeader {
