@@ -17,12 +17,16 @@ use strum_macros::{EnumIter, IntoStaticStr};
 /// This struct allows metrics being disabled and enabled.
 pub struct CryptoMetrics {
     metrics: Option<Metrics>,
+    metrics_registry: Option<MetricsRegistry>,
 }
 
 impl CryptoMetrics {
     /// Constructs CryptoMetrics that are disabled.
     pub fn none() -> Self {
-        Self { metrics: None }
+        Self {
+            metrics: None,
+            metrics_registry: None,
+        }
     }
 
     /// Constructs CryptoMetrics that are enabled if the metrics registry is
@@ -30,7 +34,13 @@ impl CryptoMetrics {
     pub fn new(registry: Option<&MetricsRegistry>) -> Self {
         Self {
             metrics: registry.map(Metrics::new),
+            metrics_registry: registry.cloned(),
         }
+    }
+
+    /// Returns an `Option` of a reference to the metrics registry iff metrics are enabled.
+    pub fn metrics_registry(&self) -> Option<&MetricsRegistry> {
+        self.metrics_registry.as_ref()
     }
 
     /// Returns `Instant::now()` iff metrics are enabled.
@@ -693,7 +703,7 @@ impl Metrics {
                 "Number of cache hits for successfully verified BLS12-381 threshold signatures"),
                 cache_misses: r.int_counter(
                     "crypto_bls12_381_sig_cache_misses",
-                "Number of cache misses for successfully verified BLS12-381 threshold signatures"), 
+                "Number of cache misses for successfully verified BLS12-381 threshold signatures"),
             },
             observe_minimum_epoch_in_active_nidkg_transcripts: r.gauge(
                 "crypto_minimum_epoch_in_active_nidkg_transcripts",
@@ -708,7 +718,7 @@ impl Metrics {
                 "Minimum registry version in active iDKG transcripts"
             ),
             crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: r.int_counter(
-                "crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry", 
+                "crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry",
                 "latest iDKG dealing encryption public key too old, but not in registry"
             ),
         }
