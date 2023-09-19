@@ -1,7 +1,7 @@
-use crate::eth_logs::{LogIndex, ReceivedEthEvent};
-use crate::eth_rpc::{BlockNumber, Hash};
+use crate::eth_logs::ReceivedEthEvent;
+use crate::eth_rpc::Hash;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
-use crate::numeric::{LedgerBurnIndex, LedgerMintIndex};
+use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, LogIndex};
 use crate::transactions::EthWithdrawalRequest;
 use crate::tx::SignedEip1559TransactionRequest;
 use minicbor::{Decode, Encode};
@@ -26,7 +26,7 @@ pub enum EventType {
         #[n(0)]
         txhash: Hash,
         /// The log index of the event within the block.
-        #[cbor(n(1), with = "crate::cbor::u256_id")]
+        #[cbor(n(1))]
         log_index: LogIndex,
         /// The reason why minter considers the deposit invalid.
         #[n(2)]
@@ -39,7 +39,7 @@ pub enum EventType {
         #[n(0)]
         txhash: Hash,
         /// The log index of the deposit event.
-        #[cbor(n(1), with = "crate::cbor::u256_id")]
+        #[cbor(n(1))]
         log_index: LogIndex,
         /// The transaction index on the ckETH ledger.
         #[cbor(n(2), with = "crate::cbor::id")]

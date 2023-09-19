@@ -1,8 +1,8 @@
 use crate::address::Address;
 use crate::endpoints::CandidBlockTag;
-use crate::eth_rpc::{BlockNumber, BlockTag};
+use crate::eth_rpc::BlockTag;
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::{TransactionNonce, Wei};
+use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::{InvalidStateError, State};
 use crate::transactions::EthTransactions;
 use candid::types::number::Nat;

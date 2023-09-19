@@ -1,6 +1,6 @@
 use crate::address::Address;
-use crate::eth_rpc::{BlockNumber, Hash, Quantity};
-use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
+use crate::eth_rpc::{Hash, Quantity};
+use crate::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
 use crate::transactions::EthWithdrawalRequest;
 use crate::tx::{
     AccessList, ConfirmedEip1559Transaction, Eip1559Signature, Eip1559TransactionRequest,
@@ -131,7 +131,7 @@ mod eth_withdrawal_request {
     #[test]
     fn should_have_readable_debug_representation() {
         let request = withdrawal_request_with_index(LedgerBurnIndex::new(131));
-        let expected_debug = "EthWithdrawalRequest { withdrawal_amount: Wei(1_100_000_000_000_000), destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, ledger_burn_index: 131 }";
+        let expected_debug = "EthWithdrawalRequest { withdrawal_amount: 1_100_000_000_000_000, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, ledger_burn_index: 131 }";
         assert_eq!(format!("{:?}", request), expected_debug);
     }
 }

@@ -2,13 +2,12 @@
 mod tests;
 
 use crate::address::Address;
-use crate::eth_rpc::{BlockNumber, FixedSizeData, Hash, LogEntry};
+use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::logs::{DEBUG, INFO};
-use crate::numeric::Wei;
+use crate::numeric::{BlockNumber, LogIndex, Wei};
 use crate::state::{read_state, State};
 use candid::Principal;
-use ethnum::u256;
 use hex_literal::hex;
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
@@ -17,8 +16,6 @@ use std::fmt;
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
-pub enum EthLogIndexTag {}
-pub type LogIndex = phantom_newtype::Id<EthLogIndexTag, u256>;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct ReceivedEthEvent {
@@ -26,7 +23,7 @@ pub struct ReceivedEthEvent {
     pub transaction_hash: Hash,
     #[n(1)]
     pub block_number: BlockNumber,
-    #[cbor(n(2), with = "crate::cbor::u256_id")]
+    #[cbor(n(2))]
     pub log_index: LogIndex,
     #[n(3)]
     pub from_address: Address,
@@ -177,7 +174,6 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
             .ok_or(ReceivedEthEventError::PendingLogEntry)?;
         let log_index = entry
             .log_index
-            .map(LogIndex::new)
             .ok_or(ReceivedEthEventError::PendingLogEntry)?;
         let event_source = EventSource(transaction_hash, log_index);
 
@@ -219,7 +215,7 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
                         hex::encode(data)
                     )),
                 })?;
-        let value = Wei::from(u256::from_be_bytes(value_bytes));
+        let value = Wei::from_be_bytes(value_bytes);
 
         Ok(ReceivedEthEvent {
             transaction_hash,

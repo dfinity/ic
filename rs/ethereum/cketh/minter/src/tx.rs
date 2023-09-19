@@ -1,6 +1,6 @@
 use crate::address::Address;
-use crate::eth_rpc::{BlockNumber, FeeHistory, Hash, Quantity};
-use crate::numeric::{TransactionNonce, Wei};
+use crate::eth_rpc::{FeeHistory, Hash, Quantity};
+use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
 use ic_crypto_ecdsa_secp256k1::RecoveryId;
@@ -61,7 +61,7 @@ impl rlp::Encodable for AccessListItem {
 }
 
 /// https://eips.ethereum.org/EIPS/eip-1559
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct Eip1559TransactionRequest {
     #[n(0)]
     pub chain_id: u64,
@@ -109,7 +109,7 @@ impl rlp::Encodable for Eip1559Signature {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct SignedEip1559TransactionRequest {
     #[n(0)]
     transaction: Eip1559TransactionRequest,
@@ -117,7 +117,7 @@ pub struct SignedEip1559TransactionRequest {
     signature: Eip1559Signature,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct ConfirmedEip1559Transaction {
     transaction: SignedEip1559TransactionRequest,
     block_hash: Hash,
@@ -210,12 +210,12 @@ impl Eip1559TransactionRequest {
 
     pub fn rlp_inner(&self, rlp: &mut RlpStream) {
         rlp.append(&self.chain_id);
-        encode_u256(rlp, self.nonce);
-        encode_u256(rlp, self.max_priority_fee_per_gas);
-        encode_u256(rlp, self.max_fee_per_gas);
+        rlp.append(&self.nonce);
+        rlp.append(&self.max_priority_fee_per_gas);
+        rlp.append(&self.max_fee_per_gas);
         encode_u256(rlp, self.gas_limit);
         rlp.append(&self.destination.as_ref());
-        encode_u256(rlp, self.amount);
+        rlp.append(&self.amount);
         rlp.append(&self.data);
         rlp.append(&self.access_list);
     }
@@ -272,7 +272,7 @@ async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
         })
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TransactionPrice {
     pub gas_limit: Quantity,
     pub max_fee_per_gas: Wei,
@@ -306,8 +306,8 @@ pub fn estimate_transaction_price(fee_history: &FeeHistory) -> TransactionPrice 
             MIN_MAX_PRIORITY_FEE_PER_GAS,
         )
     };
-    let max_fee_per_gas = Wei::TWO
-        .checked_mul(base_fee_of_next_finalized_block)
+    let max_fee_per_gas = base_fee_of_next_finalized_block
+        .checked_mul(2_u8)
         .expect("ERROR: overflow during transaction price estimation")
         .checked_add(max_priority_fee_per_gas)
         .expect("ERROR: overflow during transaction price estimation");

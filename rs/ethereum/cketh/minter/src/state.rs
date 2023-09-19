@@ -1,10 +1,10 @@
 use crate::address::Address;
 use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
-use crate::eth_rpc::{BlockNumber, BlockTag};
+use crate::eth_rpc::BlockTag;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
-use crate::numeric::{LedgerMintIndex, TransactionNonce, Wei};
+use crate::numeric::{BlockNumber, LedgerMintIndex, TransactionNonce, Wei};
 use crate::transactions::EthTransactions;
 use candid::Principal;
 use ic_canister_log::log;

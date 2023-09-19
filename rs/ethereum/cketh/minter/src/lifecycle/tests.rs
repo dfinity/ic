@@ -93,7 +93,7 @@ mod upgrade {
     use crate::address::Address;
     use crate::eth_rpc::BlockTag;
     use crate::lifecycle::upgrade::UpgradeArg;
-    use crate::numeric::{TransactionNonce, Wei};
+    use crate::numeric::{wei_from_milli_ether, TransactionNonce, Wei};
     use crate::state::{InvalidStateError, State};
     use assert_matches::assert_matches;
     use candid::Nat;
@@ -177,7 +177,7 @@ mod upgrade {
             ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                 .expect("BUG: invalid principal"),
             ethereum_block_height: Default::default(),
-            minimum_withdrawal_amount: Wei::from_milliether(10).into(),
+            minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
             next_transaction_nonce: Default::default(),
         })
         .expect("valid init args")
