@@ -52,7 +52,7 @@ try_from_u8!(
         GetGlobal = 22,
         BadPrint = 23,
         SetPreUpgrade = 24,
-        // = 25,
+        AppendGlobal = 25,
         Time = 26,
         CyclesAvailable = 27,
         CyclesBalance = 28,
