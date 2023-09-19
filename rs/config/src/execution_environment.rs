@@ -21,11 +21,7 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
 /// Logical storage is the amount of storage being used from the point of view
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
-///
-/// The gen 1 machines in production have 3TiB disks. We offer 450GiB to
-/// canisters. The rest will be used to for storing additional copies of the
-/// canister's data and the deltas.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(450 * GIB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(700 * GIB);
 
 /// This is the upper limit on how much memory can be used by all canister
 /// messages on a given subnet.

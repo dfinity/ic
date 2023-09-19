@@ -97,10 +97,11 @@ fn install_code_works() {
         .expect("Failed to execute ingress");
     assert_eq!(result, WasmResult::Reply("null".as_bytes().to_vec()));
 
-    // Assert there are 1_001 canisters running with the memory usage below 471 GB.
+    // Assert there are 1_001 canisters running with the memory usage below the
+    // subnet storage capacity, which is currently 700 GiB.
     assert_eq!(env.num_running_canisters(), 1_001);
     assert!(
-        env.canister_memory_usage_bytes() < 471_000_000_000,
+        env.canister_memory_usage_bytes() < 700 * 1024 * 1024 * 1024,
         "Actual: {} bytes",
         env.canister_memory_usage_bytes()
     );
