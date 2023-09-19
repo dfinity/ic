@@ -711,7 +711,7 @@ fn can_get_canister_information() {
                 ComputeAllocation::default().as_percent(),
                 None,
                 2592000,
-                None,
+                Some(5_000_000_000_000u128),
                 0u128,
                 0u128,
             )
