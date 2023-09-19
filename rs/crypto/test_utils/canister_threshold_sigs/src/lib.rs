@@ -323,6 +323,26 @@ pub mod node {
             }
         }
 
+        pub fn new_with_remote_vault<R: Rng + CryptoRng>(
+            node_id: NodeId,
+            registry: Arc<FakeRegistryClient>,
+            rng: &mut R,
+        ) -> Self {
+            let logger = InMemoryReplicaLogger::new();
+            Node {
+                id: node_id,
+                crypto_component: Arc::new(
+                    create_crypto_component_with_sign_mega_and_multisign_keys_in_registry_and_remote_vault(
+                        node_id,
+                        registry,
+                        ReplicaLogger::from(&logger),
+                        rng,
+                    ),
+                ),
+                logger,
+            }
+        }
+
         pub fn id(&self) -> NodeId {
             self.id
         }
@@ -581,6 +601,30 @@ pub mod node {
             })
             .with_logger(logger)
             .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .build()
+    }
+
+    fn create_crypto_component_with_sign_mega_and_multisign_keys_in_registry_and_remote_vault<
+        R: Rng + CryptoRng,
+    >(
+        node_id: NodeId,
+        registry: Arc<FakeRegistryClient>,
+        logger: ReplicaLogger,
+        rng: &mut R,
+    ) -> TempCryptoComponentGeneric<ChaCha20Rng> {
+        TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&registry) as Arc<_>)
+            .with_node_id(node_id)
+            .with_keys(ic_crypto_temp_crypto::NodeKeysToGenerate {
+                generate_node_signing_keys: true,
+                generate_committee_signing_keys: true,
+                generate_dkg_dealing_encryption_keys: false,
+                generate_idkg_dealing_encryption_keys: true,
+                generate_tls_keys_and_certificate: false,
+            })
+            .with_logger(logger)
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_remote_vault()
             .build()
     }
 
@@ -1063,6 +1107,24 @@ pub struct CanisterThresholdSigTestEnvironment {
 impl CanisterThresholdSigTestEnvironment {
     /// Creates a new test environment with the given number of nodes.
     pub fn new<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
+        Self::new_impl(num_of_nodes, |id, reg, rng| Node::new(id, reg, rng), rng)
+    }
+
+    /// Creates a new test environment with the given number of nodes and
+    /// corresponding remote vaults.
+    pub fn new_with_remote_vault<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
+        Self::new_impl(
+            num_of_nodes,
+            |id, reg, rng| Node::new_with_remote_vault(id, reg, rng),
+            rng,
+        )
+    }
+
+    fn new_impl<R, F>(num_of_nodes: usize, node_factory: F, rng: &mut R) -> Self
+    where
+        R: RngCore + CryptoRng,
+        F: Fn(NodeId, Arc<FakeRegistryClient>, &mut R) -> Node,
+    {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
         let registry_version = random_registry_version(rng);
@@ -1075,7 +1137,7 @@ impl CanisterThresholdSigTestEnvironment {
         };
 
         for node_id in n_random_node_ids(num_of_nodes, rng) {
-            let node = Node::new(node_id, Arc::clone(&registry), rng);
+            let node = node_factory(node_id, Arc::clone(&registry), rng);
             env.add_node(node);
         }
         env.registry.update_to_latest_version();
