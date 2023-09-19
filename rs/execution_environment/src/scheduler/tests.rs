@@ -18,8 +18,8 @@ use ic_config::{
 use ic_embedders::wasmtime_embedder::system_api_complexity::{cpu, overhead};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
-    self as ic00, CanisterIdRecord, CanisterStatusType, DerivationPath, EcdsaCurve, EmptyBlob,
-    Method, Payload as _,
+    self as ic00, BoundedHttpHeaders, CanisterIdRecord, CanisterStatusType, DerivationPath,
+    EcdsaCurve, EmptyBlob, Method, Payload as _,
 };
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
@@ -3401,7 +3401,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     let args = CanisterHttpRequestArgs {
         url,
         max_response_bytes: Some(response_size_limit),
-        headers: Vec::new(),
+        headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
         transform: Some(TransformContext {

@@ -25,7 +25,9 @@ use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc};
+use ic_ic00_types::{
+    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
@@ -135,7 +137,7 @@ pub fn test(env: TestEnv) {
                     RemoteHttpRequest {
                         request: CanisterHttpRequestArgs {
                             url: format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
-                            headers: vec![],
+                            headers: BoundedHttpHeaders::new(vec![]),
                             method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
                             transform: Some(TransformContext {

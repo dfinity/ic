@@ -8,7 +8,7 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    self as ic00, CanisterChange, CanisterHttpRequestArgs, CanisterIdRecord,
+    self as ic00, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs, CanisterIdRecord,
     CanisterStatusResultV2, CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     HttpMethod, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
@@ -1829,7 +1829,7 @@ fn execute_canister_http_request() {
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
         max_response_bytes: Some(response_size_limit),
-        headers: Vec::new(),
+        headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
         transform: Some(TransformContext {
@@ -1908,7 +1908,7 @@ fn execute_canister_http_request_disabled() {
     let args = CanisterHttpRequestArgs {
         url,
         max_response_bytes: None,
-        headers: Vec::new(),
+        headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
         transform: Some(TransformContext {
