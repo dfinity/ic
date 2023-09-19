@@ -94,24 +94,26 @@ pub struct EpochStats {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ReceivedEpochStats {
     pub epoch: Option<QueryStatsEpoch>,
-    pub stats: BTreeMap<(CanisterId, NodeId), CanisterQueryStats>,
+    pub stats: BTreeMap<CanisterId, BTreeMap<NodeId, CanisterQueryStats>>,
 }
 
 impl ReceivedEpochStats {
     pub fn as_query_stats(&self) -> Option<QueryStats> {
         // Serialize BTreeMap as vector
-        let query_stats: Vec<QueryStatsInner> = self
-            .stats
-            .iter()
-            .map(|((canister_id, node_id), stats)| QueryStatsInner {
-                proposer: Some(node_id_into_protobuf(*node_id)),
-                canister: Some(pb::CanisterId::from(*canister_id)),
-                num_calls: stats.num_calls,
-                num_instructions: stats.num_instructions,
-                ingress_payload_size: stats.ingress_payload_size,
-                egress_payload_size: stats.egress_payload_size,
-            })
-            .collect();
+        let mut query_stats = vec![];
+
+        for (canister_id, inner) in &self.stats {
+            for (node_id, stats) in inner {
+                query_stats.push(QueryStatsInner {
+                    proposer: Some(node_id_into_protobuf(*node_id)),
+                    canister: Some(pb::CanisterId::from(*canister_id)),
+                    num_calls: stats.num_calls,
+                    num_instructions: stats.num_instructions,
+                    ingress_payload_size: stats.ingress_payload_size,
+                    egress_payload_size: stats.egress_payload_size,
+                });
+            }
+        }
 
         self.epoch.map(|epoch| QueryStats {
             epoch: epoch.get(),
@@ -130,11 +132,9 @@ impl TryFrom<QueryStats> for ReceivedEpochStats {
         };
         for entry in value.query_stats {
             if let Ok(proposer) = node_id_try_from_option(entry.proposer) {
-                r.stats.insert(
-                    (
-                        try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?,
-                        proposer,
-                    ),
+                let key = try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
+                r.stats.entry(key).or_default().insert(
+                    proposer,
                     CanisterQueryStats {
                         num_calls: entry.num_calls,
                         num_instructions: entry.num_instructions,
