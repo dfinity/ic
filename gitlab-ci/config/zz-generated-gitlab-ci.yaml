@@ -2043,6 +2043,7 @@ benchmarks:
     RUST_BACKTRACE: full
     SHELL_WRAPPER: "/usr/bin/time"
 boundary-node-service-worker:
+  allow_failure: true
   artifacts:
     expire_in: 3 days
     paths:

@@ -6677,7 +6677,11 @@ fn canister_status_contains_reserved_cycles_limit() {
     let status = CanisterStatusResultV2::decode(&reply).unwrap();
     assert_eq!(
         status.settings().reserved_cycles_limit(),
-        candid::Nat::from(0),
+        candid::Nat::from(
+            test.cycles_account_manager()
+                .default_reserved_balance_limit()
+                .get()
+        ),
     );
 
     test.canister_update_reserved_cycles_limit(canister_id, Cycles::new(42))
