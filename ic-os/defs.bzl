@@ -70,13 +70,11 @@ def icos_build(
         name = "rootfs-tree.tar",
         context_files = [image_deps["container_context_files"]],
         config_file = build_container_filesystem_config_file,
-        visibility = visibility,
         target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
 
     tar_extract(
-        visibility = visibility,
         name = "file_contexts",
         src = "rootfs-tree.tar",
         path = "etc/selinux/default/contexts/files/file_contexts",
@@ -138,14 +136,14 @@ def icos_build(
     # -------------------- Extract boot partition --------------------
 
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar", visibility = [Label("//visibility:private")])
-        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], visibility = [Label("//visibility:private")])
+        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar")
+        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar", visibility = [Label("//visibility:private")])
-            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], visibility = [Label("//visibility:private")])
+            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar")
+            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"])
     else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], visibility = [Label("//visibility:private")])
+        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"])
 
         native.genrule(
             name = "partition-root-sign",
@@ -267,6 +265,7 @@ def icos_build(
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -287,13 +286,14 @@ def icos_build(
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = [":disk-img.tar"],
-        tags = ["manual"],
         visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum(
         name = "disk-img.tar.gz.sha256",
         srcs = [":disk-img.tar.gz"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -314,6 +314,7 @@ def icos_build(
         zstd_compress(
             name = "update-img.tar.zst",
             srcs = [":update-img.tar"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
@@ -334,12 +335,14 @@ def icos_build(
         gzip_compress(
             name = "update-img.tar.gz",
             srcs = [":update-img.tar"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
         sha256sum(
             name = "update-img.tar.gz.sha256",
             srcs = [":update-img.tar.gz"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
@@ -357,6 +360,7 @@ def icos_build(
         zstd_compress(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
@@ -377,12 +381,14 @@ def icos_build(
         gzip_compress(
             name = "update-img-test.tar.gz",
             srcs = [":update-img-test.tar"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
         sha256sum(
             name = "update-img-test.tar.gz.sha256",
             srcs = [":update-img-test.tar.gz"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
@@ -404,13 +410,14 @@ def icos_build(
                 ":disk-img.tar.gz",
             ],
             remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
+            visibility = visibility,
         )
 
         output_files(
             name = "disk-img-url",
             target = ":upload_disk-img",
             basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-            visibility = ["//visibility:public"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
@@ -425,6 +432,14 @@ def icos_build(
                 ],
                 remote_subdir = upload_prefix + "/update-img" + upload_suffix,
                 visibility = visibility,
+            )
+
+            output_files(
+                name = "update-img-url",
+                target = ":upload_update-img",
+                basenames = ["upload_update-img_update-img.tar.zst.url"],
+                visibility = visibility,
+                tags = ["manual"],
             )
 
     # end if upload_prefix != None
@@ -515,7 +530,6 @@ def boundary_node_icos_build(
         name = "rootfs-tree.tar",
         context_files = ["//ic-os/boundary-guestos:rootfs-files"],
         config_file = build_container_filesystem_config_file,
-        visibility = visibility,
         target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
@@ -625,6 +639,7 @@ def boundary_node_icos_build(
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -645,6 +660,14 @@ def boundary_node_icos_build(
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
+    sha256sum(
+        name = "disk-img.tar.gz.sha256",
+        srcs = [":disk-img.tar.gz"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -661,12 +684,14 @@ def boundary_node_icos_build(
             ":disk-img.tar.gz",
         ],
         remote_subdir = "boundary-os/disk-img" + upload_suffix,
+        visibility = visibility,
     )
 
     output_files(
         name = "disk-img-url",
         target = ":upload_disk-img",
         basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -721,7 +746,6 @@ def boundary_api_guestos_build(
         name = "rootfs-tree.tar",
         context_files = ["//ic-os/boundary-api-guestos:rootfs-files"],
         config_file = build_container_filesystem_config_file,
-        visibility = visibility,
         target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
@@ -831,6 +855,7 @@ def boundary_api_guestos_build(
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -851,6 +876,14 @@ def boundary_api_guestos_build(
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
+    sha256sum(
+        name = "disk-img.tar.gz.sha256",
+        srcs = [":disk-img.tar.gz"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -872,6 +905,7 @@ def boundary_api_guestos_build(
         name = "disk-img-url",
         target = ":upload_disk-img",
         basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+        visibility = visibility,
         tags = ["manual"],
     )
 

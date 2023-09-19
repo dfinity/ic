@@ -10,4 +10,5 @@ exports_files(["build_container_filesystem_config.txt"])
 boundary_api_guestos_build(
     name = "prod",
     image_deps_func = image_deps,
+    visibility = ["//visibility:public"],
 )
