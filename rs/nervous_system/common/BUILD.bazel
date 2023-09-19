@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:json5",
     "@crate_index//:maplit",
+    "@crate_index//:mockall",
     "@crate_index//:priority-queue",
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",

@@ -59,6 +59,7 @@ icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 itertools = "0.10.0"
 lazy_static = "1.4.0"
 maplit = "1.0.2"
+mockall = "0.11.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.11.0"
 serde = { version = "1.0", features = ["derive"] }

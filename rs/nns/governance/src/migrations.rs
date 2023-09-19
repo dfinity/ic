@@ -16,9 +16,7 @@ pub(crate) fn maybe_run_neuron_index_migration(
     migration: Migration,
     neuron_store: &mut NeuronStore,
 ) -> Migration {
-    let migration_status = migration
-        .status
-        .and_then(|status| MigrationStatus::from_i32(status));
+    let migration_status = migration.status.and_then(MigrationStatus::from_i32);
 
     let last_neuron_id = match migration_status {
         // The first time running the migration, starting at 0.

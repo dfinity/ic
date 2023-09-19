@@ -1424,11 +1424,17 @@ async fn test_sufficient_stake() {
         driver.get_fake_cmc(),
     );
     // Set stake to 0.5 ICP.
-    gov.neuron_store
-        .with_neuron_mut(&NeuronId { id: 1 }, |n| {
-            n.cached_neuron_stake_e8s = 50_000_000;
-        })
-        .expect("Neuron not found");
+    {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+        gov.neuron_store
+            .with_neuron_mut(&NeuronId { id: 1 }, is_neuron_inactive, |n| {
+                n.cached_neuron_stake_e8s = 50_000_000;
+            })
+            .expect("Neuron not found");
+    }
     // This should fail because the reject_cost_e8s is 1 ICP.
     assert_eq!(
         ErrorType::PreconditionFailed as i32,
@@ -1450,11 +1456,17 @@ async fn test_sufficient_stake() {
         .error_type
     );
     // Set stake to 1 ICP.
-    gov.neuron_store
-        .with_neuron_mut(&NeuronId { id: 1 }, |n| {
-            n.cached_neuron_stake_e8s = 100_000_000;
-        })
-        .expect("Neuron not found.");
+    {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+        gov.neuron_store
+            .with_neuron_mut(&NeuronId { id: 1 }, is_neuron_inactive, |n| {
+                n.cached_neuron_stake_e8s = 100_000_000;
+            })
+            .expect("Neuron not found.");
+    }
     // This should succeed because the reject_cost_e8s is 1 ICP (same as stake).
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -1590,11 +1602,17 @@ async fn test_follow_negative() {
         Some(manage_neuron_response::Command::Error(err))
             if err.error_type == ErrorType::NotAuthorized as i32
     );
-    gov.neuron_store
-        .with_neuron_mut(&NeuronId { id: 4 }, |n| {
-            n.controller = Some(principal(4));
-        })
-        .expect("Neuron not found");
+    {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+        gov.neuron_store
+            .with_neuron_mut(&NeuronId { id: 4 }, is_neuron_inactive, |n| {
+                n.controller = Some(principal(4));
+            })
+            .expect("Neuron not found");
+    }
     fake::register_vote_assert_success(
         &mut gov,
         principal(4),
@@ -2168,11 +2186,17 @@ async fn test_sufficient_stake_for_manage_neuron() {
     );
     // Set stake to less than 0.01 ICP (same as
     // neuron_management_fee_per_proposal_e8s).
-    gov.neuron_store
-        .with_neuron_mut(&NeuronId { id: 2 }, |n| {
-            n.cached_neuron_stake_e8s = 999_999;
-        })
-        .expect("Neuron not found.");
+    {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+        gov.neuron_store
+            .with_neuron_mut(&NeuronId { id: 2 }, is_neuron_inactive, |n| {
+                n.cached_neuron_stake_e8s = 999_999;
+            })
+            .expect("Neuron not found.");
+    }
     // Try to make a proposal... This should fail because the
     // neuron_management_fee_per_proposal_e8s is 0.01 ICP.
     assert_eq!(
@@ -2201,11 +2225,17 @@ async fn test_sufficient_stake_for_manage_neuron() {
         .error_type
     );
     // Set stake to 2 ICP.
-    gov.neuron_store
-        .with_neuron_mut(&NeuronId { id: 2 }, |n| {
-            n.cached_neuron_stake_e8s = 200_000_000;
-        })
-        .expect("Neuron not found.");
+    {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+        gov.neuron_store
+            .with_neuron_mut(&NeuronId { id: 2 }, is_neuron_inactive, |n| {
+                n.cached_neuron_stake_e8s = 200_000_000;
+            })
+            .expect("Neuron not found.");
+    }
     // This should now succeed.
     gov.make_proposal(
         &NeuronId { id: 2 },
@@ -3963,20 +3993,26 @@ fn governance_with_staked_neuron(
 
     assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
 
-    gov.neuron_store
-        .with_neuron_mut(&nid, |neuron| {
-            neuron.configure(
-                &from,
-                driver.now(),
-                &Configure {
-                    operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
-                        additional_dissolve_delay_seconds: dissolve_delay_seconds as u32,
-                    })),
-                },
-            )
-        })
-        .expect("Neuron not found")
-        .expect("Configure failed");
+    {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+        gov.neuron_store
+            .with_neuron_mut(&nid, is_neuron_inactive, |neuron| {
+                neuron.configure(
+                    &from,
+                    driver.now(),
+                    &Configure {
+                        operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                            additional_dissolve_delay_seconds: dissolve_delay_seconds as u32,
+                        })),
+                    },
+                )
+            })
+            .expect("Neuron not found")
+            .expect("Configure failed");
+    }
     (driver, gov, nid, to_subaccount)
 }
 
@@ -4020,18 +4056,24 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
-        gov.neuron_store
-            .with_neuron_mut(&id, |neuron| {
-                neuron.configure(
-                    &from,
-                    driver.now(),
-                    &Configure {
-                        operation: Some(Operation::StartDissolving(StartDissolving {})),
-                    },
-                )
-            })
-            .expect("Neuron not found")
-            .expect("Configure neuron failed.");
+        {
+            let proposals = &gov.heap_data.proposals;
+            let in_flight_commands = &gov.heap_data.in_flight_commands;
+            let is_neuron_inactive =
+                |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+            gov.neuron_store
+                .with_neuron_mut(&id, is_neuron_inactive, |neuron| {
+                    neuron.configure(
+                        &from,
+                        driver.now(),
+                        &Configure {
+                            operation: Some(Operation::StartDissolving(StartDissolving {})),
+                        },
+                    )
+                })
+                .expect("Neuron not found")
+                .expect("Configure neuron failed.");
+        }
         // Advance the time in the env
         driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
 
@@ -4048,19 +4090,24 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     } else {
         driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
     }
-    let neuron = gov
-        .neuron_store
-        .with_neuron_mut(&id, |neuron| {
-            let neuron_fees_e8s = 50_000_000; // 0.5 ICP
-            let neuron_maturity = 25_000_000;
-            // Pretend the neuron has some rewards and fees to pay.
-            neuron.neuron_fees_e8s = neuron_fees_e8s;
-            // .. and some maturity to collect.
-            neuron.maturity_e8s_equivalent = neuron_maturity;
+    let neuron = {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
+        gov.neuron_store
+            .with_neuron_mut(&id, is_neuron_inactive, |neuron| {
+                let neuron_fees_e8s = 50_000_000; // 0.5 ICP
+                let neuron_maturity = 25_000_000;
+                // Pretend the neuron has some rewards and fees to pay.
+                neuron.neuron_fees_e8s = neuron_fees_e8s;
+                // .. and some maturity to collect.
+                neuron.maturity_e8s_equivalent = neuron_maturity;
 
-            neuron.clone()
-        })
-        .expect("Neuron not found");
+                neuron.clone()
+            })
+            .expect("Neuron not found")
+    };
 
     (driver, gov, neuron)
 }
@@ -5666,8 +5713,12 @@ fn test_staked_maturity() {
     );
 
     {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
         gov.neuron_store
-            .with_neuron_mut(&id, |neuron| {
+            .with_neuron_mut(&id, is_neuron_inactive, |neuron| {
                 assert_eq!(neuron.maturity_e8s_equivalent, 0);
                 assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 
@@ -5758,8 +5809,12 @@ fn test_staked_maturity() {
 
     // Nowset the neuron to dissolve and advance time
     {
+        let proposals = &gov.heap_data.proposals;
+        let in_flight_commands = &gov.heap_data.in_flight_commands;
+        let is_neuron_inactive =
+            |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
         gov.neuron_store
-            .with_neuron_mut(&id, |neuron| {
+            .with_neuron_mut(&id, is_neuron_inactive, |neuron| {
                 assert_eq!(neuron.maturity_e8s_equivalent, 0);
                 assert_eq!(
                     neuron.staked_maturity_e8s_equivalent,

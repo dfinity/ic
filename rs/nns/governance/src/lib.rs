@@ -444,3 +444,7 @@ pub fn encode_metrics(
 
     Ok(())
 }
+
+fn is_copy_inactive_neurons_to_stable_memory_enabled() -> bool {
+    cfg! { any(test, feature = "test") }
+}

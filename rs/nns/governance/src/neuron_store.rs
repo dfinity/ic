@@ -1,5 +1,6 @@
 use crate::{
     governance::{Environment, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+    is_copy_inactive_neurons_to_stable_memory_enabled,
     neuron::neuron_id_range_to_u64_range,
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
     storage::{neuron_indexes::CorruptedNeuronIndexes, NEURON_INDEXES, STABLE_NEURON_STORE},
@@ -273,12 +274,12 @@ impl NeuronStore {
     fn map_heap_neurons_filtered<R>(
         &self,
         filter: impl Fn(&Neuron) -> bool,
-        mut f: impl FnMut(&Neuron) -> R,
+        f: impl FnMut(&Neuron) -> R,
     ) -> Vec<R> {
         self.heap_neurons
             .values()
             .filter(|n| filter(n))
-            .map(|n| f(n))
+            .map(f)
             .collect()
     }
 
@@ -349,27 +350,40 @@ impl NeuronStore {
     /// unless the neuron is not found
     pub fn with_neuron_mut<R>(
         &mut self,
-        nid: &NeuronId,
+        neuron_id: &NeuronId,
+        is_neuron_inactive: impl Fn(&Neuron) -> bool,
         f: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
         let neuron = self
             .heap_neurons
-            .get_mut(&nid.id)
-            .ok_or_else(|| NeuronStoreError::not_found(nid))?;
-        Ok(f(neuron))
+            .get_mut(&neuron_id.id)
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+
+        // TODO(NNS1-2584): let was_inactive_before = is_neuron_inactive(neuron);
+        // TODO(NNS1-2582): let original_neuron = neuron.clone()
+
+        let result = Ok(f(neuron));
+
+        // Update STABLE_NEURON_STORE. For now, this functionality is disabled by default. It is
+        // enabled when building tests, and when feature = "test" is enabled.
+        if is_copy_inactive_neurons_to_stable_memory_enabled() {
+            write_through_to_stable_neuron_store(is_neuron_inactive, neuron);
+        }
+
+        result
     }
 
     /// Execute a function with a reference to a neuron, returning the result of the function,
     /// unless the neuron is not found
     pub fn with_neuron<R>(
         &self,
-        nid: &NeuronId,
+        neuron_id: &NeuronId,
         f: impl FnOnce(&Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
         let neuron = self
             .heap_neurons
-            .get(&nid.id)
-            .ok_or_else(|| NeuronStoreError::not_found(nid))?;
+            .get(&neuron_id.id)
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
         Ok(f(neuron))
     }
 
@@ -415,17 +429,16 @@ impl NeuronStore {
     /// Why not pass (begin, size) instead of batch: Unfortunately, it is not enough to have the
     /// Neuron itself (available here) in order to determine whether it is active or not. Rather,
     /// there are a couple other pieces of data that are needed: locks and open proposals. These are
-    /// not available in NeuronStore; Governance has them. This is why the method
-    /// neuron_can_be_archived is in Governance.
+    /// not available in NeuronStore; Governance has them.
     ///
     /// As a result, batch is constructed by the caller (Governance), since it has the
     /// aforementioned needed supporting auxiliary data. Of course, to do this, Governance still
     /// needs some help from self to scan a range of heap neurons based on begin, and limit
     /// (i.e. batch size). That functionality is provided by heap_neurons_range_with_begin_and_limit
     ///
-    // Alternatively, we could have caller (Governance) pass the auxiliary data, and make
-    // neuron_can_be_archived independent of Governance, by having it take the data it needs, rather
-    // than have all of Governance at its disposal. need-to-know for the win!
+    // Alternatively, we could have caller (Governance) pass the auxilliary data. Even better if
+    // this took a lambda (named is_neuron_inactive) that captures the necessary auxiliary data from
+    // Governance. need-to-know basis for the win!
     #[allow(dead_code)]
     pub(crate) fn batch_add_inactive_neurons_to_stable_memory(
         &mut self,
@@ -440,11 +453,11 @@ impl NeuronStore {
             let mut new_last_neuron_id = None; // result/work tracker
 
             // The actual/main work itself.
-            for (neuron, neuron_can_be_archived) in batch {
+            for (neuron, is_inactive) in batch {
                 // Track the work that is about to be performed.
                 new_last_neuron_id = neuron.id;
 
-                if !neuron_can_be_archived {
+                if !is_inactive {
                     // TODO(NNS1-2493): We could try to delete neuron from stable_neuron_store, but
                     // it should already not be there. A neuron might already be in
                     // stable_neuron_store if it was previously active, but is now
@@ -650,6 +663,52 @@ impl NeuronStore {
     // Returns whether the known neuron name already exists.
     pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
         self.known_neuron_name_set.contains(known_neuron_name)
+    }
+}
+
+fn write_through_to_stable_neuron_store(
+    is_neuron_inactive: impl Fn(&Neuron) -> bool,
+    neuron: &Neuron,
+) {
+    let neuron_id = match neuron.id {
+        Some(ok) => ok,
+        None => {
+            println!(
+                "{}ERROR: Tried to write through a Neuron that has no ID to \
+                 StableNeuronStore:\n{:#?}",
+                LOG_PREFIX, neuron,
+            );
+
+            // TODO(NNS1-2493): Increment some error metric.
+
+            return;
+        }
+    };
+
+    if is_neuron_inactive(neuron) {
+        // TODO(NNS1-2584): Once a full copy sweep of inactive Neuron copying has been
+        // performed, then we can use was_inactive_before to know precisely whether we
+        // should be calling create or update here (instead of upsert), and expect Ok is
+        // returned. Before a full copy sweep has been performed, we have to instead use
+        // more the "permissive" upsert method, because it is not necessary wrong that the
+        // Neuron was not already in stable_neuron_store.
+        let upsert_result = STABLE_NEURON_STORE
+            .with(|stable_neuron_store| stable_neuron_store.borrow_mut().upsert(neuron.clone()));
+        if let Err(err) = upsert_result {
+            // TODO(NNS1-2493): Increment some error metric.
+            println!(
+                "{}ERROR: Failed to update inactive Neuron in STABLE_NEURON_STORE: {}",
+                LOG_PREFIX, err,
+            );
+        }
+    // neuron is active. Therefore, it should not be in StableNeuronStore (anymore).
+    } else {
+        // TODO(NNS1-2584): Once a full sweep of inactive Neuron copying has been performed,
+        // then we can expect that delete returns Ok or Err, depending on
+        // was_inactive_before. Before a full copy sweep has been performed, it is not feasible
+        // to determine whether the Neuron should have been there or not.
+        let _ignore_result = STABLE_NEURON_STORE
+            .with(|stable_neuron_store| stable_neuron_store.borrow_mut().delete(neuron_id));
     }
 }
 

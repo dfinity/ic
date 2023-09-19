@@ -549,7 +549,9 @@ fn assert_clean_refund(
     let original_id_to_neuron = neuron_store.clone_neurons();
     let mut original_neuron_store = NeuronStore::new(original_id_to_neuron);
 
-    let failed_refunds = refund_community_fund_maturity(neuron_store, cf_participants);
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
+    let failed_refunds =
+        refund_community_fund_maturity(neuron_store, cf_participants, is_neuron_inactive);
     assert!(failed_refunds.is_empty(), "{:#?}", failed_refunds);
 
     // Assert that neurons have been restored to the way they were originally.
@@ -595,8 +597,13 @@ fn assert_clean_refund(
     extra_cf_participants.push(cf_participant.clone());
     expected_failed_refunds.push(cf_participant);
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     assert_eq!(
-        refund_community_fund_maturity(&mut original_neuron_store, &extra_cf_participants),
+        refund_community_fund_maturity(
+            &mut original_neuron_store,
+            &extra_cf_participants,
+            is_neuron_inactive
+        ),
         expected_failed_refunds,
     );
     assert_eq!(original_neuron_store, *expected_neuron_store);
@@ -617,11 +624,13 @@ fn draw_funds_from_the_community_fund_all_cf_neurons_have_zero_maturity() {
     ]);
     let original_neuron_store = neuron_store.clone();
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60,
         &PARAMS,
+        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -649,11 +658,13 @@ fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
     ]);
     let original_neuron_store = neuron_store.clone();
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 0,
         &PARAMS,
+        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -669,11 +680,13 @@ fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
 #[test]
 fn draw_funds_from_the_community_fund_typical() {
     let mut neuron_store = NEURON_STORE.clone();
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
+        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -723,11 +736,13 @@ fn draw_funds_from_the_community_fund_typical() {
 fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
     let mut neuron_store = NEURON_STORE.clone();
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         2 * *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
+        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -777,11 +792,13 @@ fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
 fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
     let mut neuron_store = NEURON_STORE.clone();
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT / 2,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
+        is_neuron_inactive,
     );
 
     // Inspect results. Same as typical (copy n' pasted).
@@ -832,11 +849,13 @@ fn draw_funds_from_the_community_fund_trivial() {
     let mut neuron_store = NeuronStore::new(btreemap! {});
     let original_total_community_fund_maturity_e8s_equivalent = 0;
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         original_total_community_fund_maturity_e8s_equivalent,
         /* withdrawal_amount_e8s = */ 60,
         &PARAMS,
+        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -854,11 +873,13 @@ fn draw_funds_from_the_community_fund_trivial() {
 fn draw_funds_from_the_community_fund_cf_not_large_enough() {
     let mut neuron_store = NEURON_STORE.clone();
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 1000 * E8,
         &PARAMS,
+        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -913,11 +934,13 @@ fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
     };
     let mut neuron_store = NEURON_STORE.clone();
 
+    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 600 * E8,
         &params,
+        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -1786,7 +1809,7 @@ mod neuron_archiving_tests {
     }
 
     #[test]
-    fn test_neuron_can_be_archived_involved_with_proposals() {
+    fn test_neuron_is_inactive_involved_with_proposals() {
         let inactive_neuron = empty_neuron_id_1();
 
         let neuron_2_is_proposer = ProposalData {
@@ -1846,32 +1869,44 @@ mod neuron_archiving_tests {
             Box::new(StubCMC {}),
         );
 
-        assert!(governance.neuron_can_be_archived(&inactive_neuron));
+        assert!(inactive_neuron.is_inactive(
+            &governance.heap_data.proposals,
+            &governance.heap_data.in_flight_commands,
+        ));
 
         let neuron_is_proposer = Neuron {
             id: Some(NeuronId { id: 2 }),
             ..inactive_neuron.clone()
         };
 
-        assert!(!governance.neuron_can_be_archived(&neuron_is_proposer));
+        assert!(!neuron_is_proposer.is_inactive(
+            &governance.heap_data.proposals,
+            &governance.heap_data.in_flight_commands,
+        ));
 
-        let id_is_managed_neuron_in_proposal = Neuron {
+        let managed_by_proposal_neuron = Neuron {
             id: Some(NeuronId { id: 3 }),
             ..inactive_neuron.clone()
         };
 
-        assert!(!governance.neuron_can_be_archived(&id_is_managed_neuron_in_proposal));
+        assert!(!managed_by_proposal_neuron.is_inactive(
+            &governance.heap_data.proposals,
+            &governance.heap_data.in_flight_commands,
+        ));
 
         let subaccount_is_managed_neuron_in_proposal = Neuron {
             account: vec![1, 2, 3],
             ..inactive_neuron
         };
 
-        assert!(!governance.neuron_can_be_archived(&subaccount_is_managed_neuron_in_proposal));
+        assert!(!subaccount_is_managed_neuron_in_proposal.is_inactive(
+            &governance.heap_data.proposals,
+            &governance.heap_data.in_flight_commands,
+        ));
     }
 
     #[test]
-    fn test_neuron_can_be_archived_neuron_locks() {
+    fn test_neuron_is_inactive_neuron_locks() {
         let inactive_neuron = empty_neuron_id_1();
 
         let governance = Governance::new(
@@ -1890,19 +1925,25 @@ mod neuron_archiving_tests {
             Box::new(StubCMC {}),
         );
 
-        assert!(governance.neuron_can_be_archived(&inactive_neuron));
+        assert!(inactive_neuron.is_inactive(
+            &governance.heap_data.proposals,
+            &governance.heap_data.in_flight_commands,
+        ));
 
         let has_neuron_lock = Neuron {
             id: Some(NeuronId { id: 4 }),
             ..inactive_neuron
         };
 
-        assert!(!governance.neuron_can_be_archived(&has_neuron_lock));
+        assert!(!has_neuron_lock.is_inactive(
+            &governance.heap_data.proposals,
+            &governance.heap_data.in_flight_commands,
+        ));
     }
 
     proptest! {
     #[test]
-    fn test_neuron_can_be_archived_stake_and_maturity(stake in 0u64..10_000,
+    fn test_neuron_is_inactive_stake_and_maturity(stake in 0u64..10_000,
                                               staked_maturity in 0u64..10_000,
                                               fees in 0u64..10_000,
                                               maturity in 0u64..10_000) {
@@ -1927,7 +1968,11 @@ mod neuron_archiving_tests {
             ..inactive_neuron
         };
 
-        assert_eq!(governance.neuron_can_be_archived(&neuron),
+        assert_eq!(
+            neuron.is_inactive(
+                &governance.heap_data.proposals,
+                &governance.heap_data.in_flight_commands,
+            ),
             neuron.stake_e8s() == 0 && neuron.maturity_e8s_equivalent == 0,
             "{:#?}",
             neuron,
