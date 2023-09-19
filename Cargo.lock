@@ -7872,6 +7872,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "ic-icrc1",
+ "ic-ledger-canister-core",
  "ic-ledger-core",
  "icrc-ledger-types",
  "num-traits",

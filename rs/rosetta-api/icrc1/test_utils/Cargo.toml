@@ -13,3 +13,4 @@ num-traits = "0.2.15"
 proptest = "1.0"
 rand = "0.8"
 serde_bytes = "0.11"
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
