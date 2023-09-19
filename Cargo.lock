@@ -13928,8 +13928,10 @@ dependencies = [
 name = "pocket-ic"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
  "base64 0.21.2",
  "candid",
+ "hex",
  "ic-cdk",
  "reqwest",
  "serde",

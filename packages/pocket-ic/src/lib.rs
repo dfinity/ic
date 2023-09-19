@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::{decode_args, encode_args, Principal};
 use ic_cdk::api::management_canister::main::{
@@ -498,6 +499,27 @@ pub struct CanisterCall {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Checkpoint {
     pub checkpoint_name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct BlobId(pub [u8; 32]);
+
+#[derive(Clone, Debug)]
+pub struct BinaryBlob {
+    pub data: Vec<u8>,
+    pub compression: BlobCompression,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlobCompression {
+    Gzip,
+    NoCompression,
+}
+
+#[async_trait]
+pub trait BlobStore: Send + Sync {
+    async fn store(&self, blob: BinaryBlob) -> BlobId;
+    async fn fetch(&self, blob_id: BlobId) -> Option<BinaryBlob>;
 }
 
 /// Call a canister candid query method, anonymous.

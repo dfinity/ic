@@ -101,6 +101,92 @@ fn test_checkpoint_nonexistent_instance() {
 }
 
 #[test]
+fn test_blob_store() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+    let blob_1 = "decafbad".as_bytes();
+    let blob_2 = "deadbeef".as_bytes();
+
+    let response = client
+        .post(url.join("blobstore/").unwrap())
+        .body(blob_1)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let blob_id_1 = response.text().unwrap();
+
+    let response = client
+        .post(url.join("blobstore/").unwrap())
+        .body(blob_2)
+        .header(reqwest::header::CONTENT_ENCODING, "gzip")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let blob_id_2 = response.text().unwrap();
+
+    let response = client
+        .get(url.join(&format!("blobstore/{blob_id_1}")).unwrap())
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    assert!(response
+        .headers()
+        .get(reqwest::header::CONTENT_ENCODING)
+        .is_none());
+
+    let blob = response.bytes().unwrap();
+    assert_eq!(blob, "decafbad".as_bytes());
+
+    let response = client
+        .get(url.join(&format!("blobstore/{blob_id_2}")).unwrap())
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let header = response
+        .headers()
+        .get(reqwest::header::CONTENT_ENCODING)
+        .unwrap()
+        .as_bytes();
+    assert_eq!(header, b"gzip");
+
+    let blob = response.bytes().unwrap();
+    assert_eq!(blob, "deadbeef".as_bytes());
+
+    let nonexistent_blob_id = "does not exist".to_owned();
+    let response = client
+        .get(
+            url.join(&format!("blobstore/{nonexistent_blob_id}"))
+                .unwrap(),
+        )
+        .send()
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[test]
+fn test_blob_store_wrong_encoding() {
+    let url = start_server();
+    let client = reqwest::blocking::Client::new();
+    let blob = "decafbad".as_bytes();
+
+    let response = client
+        .post(url.join("blobstore/").unwrap())
+        .body(blob)
+        .header(reqwest::header::CONTENT_ENCODING, "bad_encoding")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(response
+        .text()
+        .unwrap()
+        .to_lowercase()
+        .contains("bad encoding"));
+}
+
+#[test]
 fn test_restore_from_invalid_checkpoint() {
     let url = start_server();
     let client = reqwest::blocking::Client::new();

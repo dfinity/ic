@@ -1,10 +1,10 @@
 use axum::{
+    async_trait,
     body::HttpBody,
     extract::{DefaultBodyLimit, Path, State},
-    http,
-    http::StatusCode,
+    http::{self, HeaderMap, StatusCode},
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::{delete, get, post, MethodRouter},
     Router, Server,
 };
@@ -14,12 +14,16 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_iccsa::types::SignatureBytes;
 use ic_crypto_iccsa::{public_key_bytes_from_der, verify};
+use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use itertools::Itertools;
-use pocket_ic::{CanisterCall, Checkpoint, RawCanisterId, Request, Request::*};
+use pocket_ic::{
+    BinaryBlob, BlobCompression, BlobId, BlobStore, CanisterCall, Checkpoint, RawCanisterId,
+    Request, Request::*,
+};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
@@ -52,6 +56,7 @@ pub struct AppState {
     pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
     pub instances_sequence_counter: Arc<AtomicU64>,
     pub runtime: Arc<Runtime>,
+    pub blob_store: Arc<dyn BlobStore>,
 }
 
 impl axum::extract::FromRef<AppState> for InstanceMap {
@@ -133,6 +138,7 @@ async fn start(runtime: Arc<Runtime>) {
         checkpoints: Arc::new(RwLock::new(HashMap::new())),
         instances_sequence_counter: AtomicU64::new(0).into(),
         runtime,
+        blob_store: Arc::new(InMemoryBlobStore::new()),
     };
 
     let app = Router::new()
@@ -162,6 +168,12 @@ async fn start(runtime: Arc<Runtime>) {
             "/instances/:id/tick_and_create_checkpoint",
             post(tick_and_create_checkpoint),
         )
+        //
+        // Set a blob store entry.
+        .directory_route("/blobstore", post(set_blob_store_entry))
+        //
+        // Get a blob store entry.
+        .directory_route("/blobstore/:id", get(get_blob_store_entry))
         //
         // List all checkpoints.
         .directory_route("/checkpoints", get(list_checkpoints))
@@ -284,6 +296,7 @@ async fn create_instance(
         checkpoints,
         instances_sequence_counter: counter,
         runtime,
+        ..
     }): State<AppState>,
     body: Option<axum::extract::Json<Checkpoint>>,
 ) -> (StatusCode, String) {
@@ -396,6 +409,79 @@ async fn tick_and_create_checkpoint(
     }
 }
 
+async fn get_blob_store_entry(
+    State(AppState { blob_store, .. }): State<AppState>,
+    Path(id): Path<String>,
+) -> Response {
+    let hash = hex::decode(id);
+    if hash.is_err() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let hash: Result<[u8; 32], Vec<u8>> = hash.unwrap().try_into();
+    if hash.is_err() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    let blob = blob_store.fetch(BlobId(hash.unwrap())).await;
+    match blob {
+        Some(BinaryBlob {
+            compression: BlobCompression::Gzip,
+            ..
+        }) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_ENCODING, "gzip")],
+            blob.unwrap().data,
+        )
+            .into_response(),
+        Some(BinaryBlob {
+            compression: BlobCompression::NoCompression,
+            ..
+        }) => (StatusCode::OK, blob.unwrap().data).into_response(),
+        None => (StatusCode::NOT_FOUND).into_response(),
+    }
+}
+
+async fn set_blob_store_entry(
+    headers: HeaderMap,
+    State(AppState { blob_store, .. }): State<AppState>,
+    axum::extract::RawBody(mut body): axum::extract::RawBody,
+) -> (StatusCode, String) {
+    let data = body
+        .data()
+        .await
+        .expect("Request must contain blob data")
+        .expect("Failed to get bytes");
+    let content_encoding = headers.get(axum::http::header::CONTENT_ENCODING);
+
+    let blob = {
+        match content_encoding {
+            Some(content_encoding) => {
+                let encoding_type = content_encoding
+                    .to_str()
+                    .expect("Could not convert encoding to string");
+                match encoding_type {
+                    "gzip" => BinaryBlob {
+                        data: data.to_vec(),
+                        compression: BlobCompression::Gzip,
+                    },
+                    _ => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            "Bad encoding: Only 'gzip' content encoding is supported".to_owned(),
+                        );
+                    }
+                }
+            }
+            None => BinaryBlob {
+                data: data.to_vec(),
+                compression: BlobCompression::NoCompression,
+            },
+        }
+    };
+    let blob_id = hex::encode(blob_store.store(blob).await.0);
+    (StatusCode::OK, blob_id)
+}
+
 async fn delete_instance(
     State(instance_map): State<InstanceMap>,
     Path(id): Path<InstanceId>,
@@ -491,6 +577,35 @@ fn to_json_str<R: Serialize>(response: R) -> String {
 
 fn to_canister_id(raw_id: RawCanisterId) -> CanisterId {
     CanisterId::try_from(raw_id.canister_id).expect("invalid canister id")
+}
+
+struct InMemoryBlobStore {
+    map: RwLock<HashMap<BlobId, BinaryBlob>>,
+}
+
+impl InMemoryBlobStore {
+    pub fn new() -> Self {
+        InMemoryBlobStore {
+            map: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl BlobStore for InMemoryBlobStore {
+    async fn store(&self, blob: BinaryBlob) -> BlobId {
+        let mut hasher = Sha256::new();
+        hasher.write(&blob.data);
+        let key = BlobId(hasher.finish());
+        let mut m = self.map.write().await;
+        m.insert(key.clone(), blob);
+        key
+    }
+
+    async fn fetch(&self, blob_id: BlobId) -> Option<BinaryBlob> {
+        let m = self.map.read().await;
+        m.get(&blob_id).cloned()
+    }
 }
 
 pub struct ParsedCanisterCall {
