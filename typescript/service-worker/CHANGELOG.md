@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.8.8
+
+- Upgrade response verification package to version 1.2.0. Fixing an issue non-latin characters in the URL path.
+- Fix an issue where `/_/` paths on requests to non-raw domains was throwing an exception.
+
 ## 1.8.7
 
 - Upgrade response verification package to version 1.1.0. Fixing an issue with query param decoding on asset URLs.

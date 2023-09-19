@@ -1,5 +1,5 @@
 {
-  "checksum": "3316aeca4255b3f1fd17df6be5f84a0dd0343dc3249057c7f202b206be063fe5",
+  "checksum": "ac6a8a4a2c05721dd6cb587d65969dde87ab4dd028354f091bbc95641ed1cc46",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13210,7 +13210,7 @@
               "target": "ic_metrics_encoder"
             },
             {
-              "id": "ic-response-verification 1.1.0",
+              "id": "ic-response-verification 1.2.0",
               "target": "ic_response_verification"
             },
             {
@@ -21401,13 +21401,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-cbor 1.1.0": {
+    "ic-cbor 1.2.0": {
       "name": "ic-cbor",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cbor/1.1.0/download",
-          "sha256": "9ea3e22289cb2b7d8afa98f9a42d3ee559841edf84a2e9116a2971d89cf38d40"
+          "url": "https://crates.io/api/v1/crates/ic-cbor/1.2.0/download",
+          "sha256": "767fe244224c02f2adad1d43909de93d35d5caada28eed3f270d89735ba5bdd0"
         }
       },
       "targets": [
@@ -21433,7 +21433,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-certification 0.26.1",
+              "id": "ic-certification 1.2.0",
               "target": "ic_certification"
             },
             {
@@ -21452,7 +21452,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0"
     },
@@ -21634,13 +21634,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-certificate-verification 1.1.0": {
+    "ic-certificate-verification 1.2.0": {
       "name": "ic-certificate-verification",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-certificate-verification/1.1.0/download",
-          "sha256": "ff07d2f6f19f9a986a24234994fe3e76733fe760b2a63a3b515b785026c2f467"
+          "url": "https://crates.io/api/v1/crates/ic-certificate-verification/1.2.0/download",
+          "sha256": "07bc3fa76751b637bb0c0e37f4089d7f5a3fbacfed3c5fbcfef0d6797a54d63f"
         }
       },
       "targets": [
@@ -21666,11 +21666,11 @@
               "target": "candid"
             },
             {
-              "id": "ic-cbor 1.1.0",
+              "id": "ic-cbor 1.2.0",
               "target": "ic_cbor"
             },
             {
-              "id": "ic-certification 0.26.1",
+              "id": "ic-certification 1.2.0",
               "target": "ic_certification"
             },
             {
@@ -21693,50 +21693,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
-      },
-      "license": "Apache-2.0"
-    },
-    "ic-certification 0.26.1": {
-      "name": "ic-certification",
-      "version": "0.26.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-certification/0.26.1/download",
-          "sha256": "3d423020cc19ee52cb7fde4f64000d3dd6e8c5703947bf6d7911db5fb3428a8e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_certification",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "ic_certification",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "sha2 0.10.7",
-              "target": "sha2"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.26.1"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0"
     },
@@ -21796,6 +21753,49 @@
         },
         "edition": "2021",
         "version": "0.27.0"
+      },
+      "license": "Apache-2.0"
+    },
+    "ic-certification 1.2.0": {
+      "name": "ic-certification",
+      "version": "1.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ic-certification/1.2.0/download",
+          "sha256": "a59dc342d11b2067e19d0f146bdec3674de921303ffc762f114d201ebbe0e68a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_certification",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ic_certification",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "sha2 0.10.7",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.2.0"
       },
       "license": "Apache-2.0"
     },
@@ -21876,13 +21876,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-representation-independent-hash 1.1.0": {
+    "ic-representation-independent-hash 1.2.0": {
       "name": "ic-representation-independent-hash",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-representation-independent-hash/1.1.0/download",
-          "sha256": "ed17f7c50c497229594763c92a2f98fef73bdfe34c9c2210e557dbc90a00d97c"
+          "url": "https://crates.io/api/v1/crates/ic-representation-independent-hash/1.2.0/download",
+          "sha256": "410e3ccb16b86e8c4bca7270981370f6961492f1921f29f5dd1de621efb869ea"
         }
       },
       "targets": [
@@ -21915,17 +21915,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0"
     },
-    "ic-response-verification 1.1.0": {
+    "ic-response-verification 1.2.0": {
       "name": "ic-response-verification",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-response-verification/1.1.0/download",
-          "sha256": "fa988769b9f4586db83f3a57c4c074405700df67b6e7d70d5505ee84c5657fa9"
+          "url": "https://crates.io/api/v1/crates/ic-response-verification/1.2.0/download",
+          "sha256": "bc87254b89cea2b84fb2e3101527e457d01da1bdfdbf8b8699dcbc40ad11dcea"
         }
       },
       "targets": [
@@ -21967,19 +21967,19 @@
               "target": "http"
             },
             {
-              "id": "ic-cbor 1.1.0",
+              "id": "ic-cbor 1.2.0",
               "target": "ic_cbor"
             },
             {
-              "id": "ic-certificate-verification 1.1.0",
+              "id": "ic-certificate-verification 1.2.0",
               "target": "ic_certificate_verification"
             },
             {
-              "id": "ic-certification 0.26.1",
+              "id": "ic-certification 1.2.0",
               "target": "ic_certification"
             },
             {
-              "id": "ic-representation-independent-hash 1.1.0",
+              "id": "ic-representation-independent-hash 1.2.0",
               "target": "ic_representation_independent_hash"
             },
             {
@@ -22010,7 +22010,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0"
     },

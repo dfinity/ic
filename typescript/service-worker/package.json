@@ -1,7 +1,7 @@
 {
   "name": "@dfinity/service-worker",
   "description": "Service worker to check certification when loading assets from the Internet Computer.",
-  "version": "1.8.7",
+  "version": "1.8.8",
   "license": "Apache-2.0",
   "files": [
     "dist-dev",
@@ -18,7 +18,7 @@
     "@dfinity/agent": "~0.19.0",
     "@dfinity/candid": "~0.19.0",
     "@dfinity/principal": "~0.19.0",
-    "@dfinity/response-verification": "1.1.0",
+    "@dfinity/response-verification": "^1.2.0",
     "idb": "^7.1.1",
     "lit": "^2.8.0"
   },
