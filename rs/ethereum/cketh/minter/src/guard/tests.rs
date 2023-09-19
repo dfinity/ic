@@ -1,3 +1,5 @@
+use crate::numeric::wei_from_milli_ether;
+
 mod retrieve_eth_guard {
     use crate::guard::tests::init_state;
     use crate::guard::{retrieve_eth_guard, GuardError, MAX_CONCURRENT};
@@ -95,7 +97,6 @@ mod timer_guard {
 
 fn init_state() {
     use crate::lifecycle::init::InitArg;
-    use crate::numeric::Wei;
     use crate::state::State;
     use candid::Principal;
     crate::state::STATE.with(|s| {
@@ -107,7 +108,7 @@ fn init_state() {
                 ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                     .expect("BUG: invalid principal"),
                 ethereum_block_height: Default::default(),
-                minimum_withdrawal_amount: Wei::from_milliether(10).into(),
+                minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
                 next_transaction_nonce: Default::default(),
             })
             .expect("init args should be valid"),

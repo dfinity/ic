@@ -4,9 +4,10 @@ use std::str::FromStr;
 #[test]
 fn deserialize_block_spec() {
     use crate::eth_rpc::*;
+    use crate::numeric::BlockNumber;
 
     assert_eq!(
-        BlockSpec::Number(Quantity::new(0xffff)),
+        BlockSpec::Number(BlockNumber::new(0xffff)),
         serde_json::from_str("\"0xffff\"").unwrap()
     );
 
@@ -49,12 +50,11 @@ fn deserialize_json_reply() {
 
 mod eth_get_logs {
     use crate::address::Address;
-    use crate::eth_logs::{LogIndex, ReceivedEthEvent};
-    use crate::eth_rpc::{BlockNumber, FixedSizeData, LogEntry};
-    use crate::numeric::Wei;
+    use crate::eth_logs::ReceivedEthEvent;
+    use crate::eth_rpc::{FixedSizeData, LogEntry};
+    use crate::numeric::{BlockNumber, LogIndex, Wei};
     use assert_matches::assert_matches;
     use candid::Principal;
-    use ethnum::u256;
     use ic_crypto_sha3::Keccak256;
     use std::str::FromStr;
 
@@ -92,7 +92,7 @@ mod eth_get_logs {
                 transaction_hash: Some(hash_from_hex("5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154")),
                 transaction_index: Some(Quantity::new(0x06)),
                 block_hash: Some(hash_from_hex("908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2")),
-                log_index: Some(Quantity::new(0x08)),
+                log_index: Some(LogIndex::from(0x08_u8)),
                 removed: false,
             }]
         );
@@ -132,7 +132,7 @@ mod eth_get_logs {
                 .parse()
                 .unwrap(),
             block_number: BlockNumber::new(3974279),
-            log_index: LogIndex::new(u256::from(39u64)),
+            log_index: LogIndex::from(39_u8),
             from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
                 .parse()
                 .unwrap(),
@@ -341,7 +341,7 @@ mod rlp_encoding {
         };
         let transaction = Eip1559TransactionRequest {
             chain_id: SEPOLIA_TEST_CHAIN_ID,
-            nonce: TransactionNonce::from(6),
+            nonce: TransactionNonce::from(6_u8),
             max_priority_fee_per_gas: Wei::new(0x59682f00),
             max_fee_per_gas: Wei::new(0x598653cd),
             gas_limit: Quantity::new(56_511),
@@ -369,10 +369,8 @@ mod rlp_encoding {
 }
 
 mod eth_get_block_by_number {
-    use crate::eth_rpc::{
-        into_nat, Block, BlockNumber, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity,
-    };
-    use crate::numeric::Wei;
+    use crate::eth_rpc::{into_nat, Block, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity};
+    use crate::numeric::{BlockNumber, Wei};
 
     #[test]
     fn should_serialize_get_block_by_number_params_as_tuple() {
@@ -724,10 +722,8 @@ mod eth_get_block_by_number {
 }
 
 mod eth_fee_history {
-    use crate::eth_rpc::{
-        BlockNumber, BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity,
-    };
-    use crate::numeric::Wei;
+    use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
+    use crate::numeric::{BlockNumber, Wei};
 
     #[test]
     fn should_serialize_fee_history_params_as_tuple() {
@@ -836,8 +832,8 @@ mod eth_fee_history {
 
 mod eth_get_transaction_by_hash {
     use crate::address::Address;
-    use crate::eth_rpc::{BlockNumber, Data, Hash, Quantity, Transaction};
-    use crate::numeric::{TransactionNonce, Wei};
+    use crate::eth_rpc::{Data, Hash, Quantity, Transaction};
+    use crate::numeric::{BlockNumber, TransactionNonce, Wei};
     use std::str::FromStr;
 
     #[test]
@@ -887,7 +883,7 @@ mod eth_get_transaction_by_hash {
                     178, 20, 250, 165, 9, 239, 205, 171, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
                 ]),
-                nonce: TransactionNonce::from(0x5),
+                nonce: TransactionNonce::from(0x5_u8),
                 to: Some(Address::from_str("0xb44b5e756a894775fc32eddf3314bb1b1944dc34").unwrap()),
                 transaction_index: Some(Quantity::new(0x22)),
                 value: Wei::new(0x2386f26fc10000),

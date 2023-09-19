@@ -13,7 +13,7 @@ use std::collections::vec_deque::Iter;
 use std::collections::{BTreeMap, VecDeque};
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq, Encode, Decode)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct EthWithdrawalRequest {
     #[n(0)]
     pub withdrawal_amount: Wei,
@@ -27,20 +27,20 @@ pub struct EthWithdrawalRequest {
 /// - TxCreated: the request was created but is not signed yet
 /// - TxSigned: the request is signed and ready to be sent to Ethereum
 /// - TxSent: the request was sent to Ethereum
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct PendingEthTx<T> {
     request: EthWithdrawalRequest,
     transaction: T,
     status: RetrieveEthStatus,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct TxCreated(Eip1559TransactionRequest);
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct TxSigned(SignedEip1559TransactionRequest);
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct TxSent(SignedEip1559TransactionRequest);
 
 /// State machine holding Ethereum transactions issued by the minter.
@@ -54,7 +54,7 @@ struct TxSent(SignedEip1559TransactionRequest);
 /// * A transaction is no longer pending once it's confirmed. Overall the transaction lifecycle is:
 ///   Withdrawal request -> TxCreated -> TxSigned -> TxSent -> TxConfirmed
 /// * All transactions have unique ledger burn indexes and nonces
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct EthTransactions {
     withdrawal_requests: VecDeque<EthWithdrawalRequest>,
     pending_created_tx: Option<PendingEthTx<TxCreated>>,

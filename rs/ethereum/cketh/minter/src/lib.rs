@@ -1,5 +1,6 @@
 pub mod address;
 mod cbor;
+pub mod checked_amount;
 pub mod endpoints;
 pub mod eth_logs;
 pub mod eth_rpc;

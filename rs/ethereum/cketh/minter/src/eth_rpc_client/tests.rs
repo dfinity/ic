@@ -188,10 +188,10 @@ mod multi_call_results {
     }
 
     mod reduce_with_min_by_key {
-        use crate::eth_rpc::{Block, BlockNumber, JsonRpcResult};
+        use crate::eth_rpc::{Block, JsonRpcResult};
         use crate::eth_rpc_client::tests::multi_call_results::{ANKR, CLOUDFLARE};
         use crate::eth_rpc_client::MultiCallResults;
-        use crate::numeric::Wei;
+        use crate::numeric::{BlockNumber, Wei};
 
         #[test]
         fn should_get_minimum_block_number() {
@@ -227,9 +227,9 @@ mod multi_call_results {
 
 mod eth_get_transaction_receipt {
     use crate::address::Address;
-    use crate::eth_rpc::{BlockNumber, Hash, Quantity};
+    use crate::eth_rpc::{Hash, Quantity};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::numeric::Wei;
+    use crate::numeric::{BlockNumber, Wei};
     use assert_matches::assert_matches;
     use proptest::proptest;
     use std::str::FromStr;
@@ -327,6 +327,6 @@ mod eth_get_transaction_count {
     #[test]
     fn should_deserialize_transaction_count() {
         let count: TransactionCount = serde_json::from_str("\"0x3d8\"").unwrap();
-        assert_eq!(count, TransactionCount::from(0x3d8));
+        assert_eq!(count, TransactionCount::from(0x3d8_u32));
     }
 }

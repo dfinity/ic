@@ -8,12 +8,12 @@ use ic_cketh_minter::endpoints::WithdrawalError;
 use ic_cketh_minter::endpoints::{Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus};
 use ic_cketh_minter::eth_logs::report_transaction_error;
 use ic_cketh_minter::eth_rpc::FeeHistory;
-use ic_cketh_minter::eth_rpc::{BlockNumber, JsonRpcResult, SendRawTransactionResult};
+use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
-use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, Wei};
+use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, Wei};
 use ic_cketh_minter::state::{
     lazy_call_ecdsa_public_key, mutate_state, read_state, MintedEvent, State, TaskType, STATE,
 };
@@ -104,10 +104,13 @@ async fn scrap_eth_logs_between(
     from: BlockNumber,
     to: BlockNumber,
 ) -> BlockNumber {
-    const MAX_BLOCK_SPREAD: u128 = 1024;
+    const MAX_BLOCK_SPREAD: u16 = 1024;
     match from.cmp(&to) {
         Ordering::Less => {
-            let last_scraped_block_number = min(from + MAX_BLOCK_SPREAD, to);
+            let max_to = from
+                .checked_add(BlockNumber::from(MAX_BLOCK_SPREAD))
+                .unwrap_or(BlockNumber::MAX);
+            let last_scraped_block_number = min(max_to, to);
             log!(
                 DEBUG,
                 "Scrapping ETH logs from block {:?} to block {:?}...",

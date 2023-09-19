@@ -1,6 +1,6 @@
 use crate::address::Address;
-use crate::eth_rpc::{BlockNumber, Hash, HttpResponsePayload, Quantity, ResponseTransform};
-use crate::numeric::Wei;
+use crate::eth_rpc::{Hash, HttpResponsePayload, Quantity, ResponseTransform};
+use crate::numeric::{BlockNumber, Wei};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]

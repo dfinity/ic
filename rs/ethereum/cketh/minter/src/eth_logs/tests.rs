@@ -1,10 +1,9 @@
 mod mint_transaction {
     use crate::eth_logs::{EventSourceError, LogIndex, ReceivedEthEvent};
-    use crate::eth_rpc::BlockNumber;
     use crate::lifecycle::init::InitArg;
+    use crate::numeric::{wei_from_milli_ether, BlockNumber};
     use crate::numeric::{LedgerMintIndex, Wei};
     use crate::state::{MintedEvent, State};
-    use ethnum::u256;
 
     #[test]
     fn should_record_mint_task_from_event() {
@@ -35,11 +34,11 @@ mod mint_transaction {
     fn should_allow_minting_events_with_equal_txhash() {
         let mut state = dummy_state();
         let event_1 = ReceivedEthEvent {
-            log_index: LogIndex::new(u256::from(1u128)),
+            log_index: LogIndex::ONE,
             ..received_eth_event()
         };
         let event_2 = ReceivedEthEvent {
-            log_index: LogIndex::new(u256::from(2u128)),
+            log_index: LogIndex::TWO,
             ..received_eth_event()
         };
 
@@ -104,10 +103,10 @@ mod mint_transaction {
     fn should_have_readable_debug_representation() {
         let expected = "ReceivedEthEvent { \
           transaction_hash: 0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2, \
-          block_number: 3960623, \
+          block_number: 3_960_623, \
           log_index: 29, \
           from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
-          value: Wei(10_000_000_000_000_000), \
+          value: 10_000_000_000_000_000, \
           principal: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae \
         }";
         assert_eq!(format!("{:?}", received_eth_event()), expected);
@@ -122,7 +121,7 @@ mod mint_transaction {
             ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
                 .expect("BUG: invalid principal"),
             ethereum_block_height: Default::default(),
-            minimum_withdrawal_amount: Wei::from_milliether(10).into(),
+            minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
             next_transaction_nonce: Default::default(),
         })
         .expect("init args should be valid")
@@ -134,7 +133,7 @@ mod mint_transaction {
                 .parse()
                 .unwrap(),
             block_number: BlockNumber::new(3960623u128),
-            log_index: LogIndex::new(u256::from(29u128)),
+            log_index: LogIndex::from(29_u8),
             from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
                 .parse()
                 .unwrap(),

@@ -1,5 +1,5 @@
 use crate::lifecycle::init::InitArg;
-use crate::numeric::Wei;
+use crate::numeric::wei_from_milli_ether;
 use crate::state::State;
 
 mod next_request_id {
@@ -34,7 +34,7 @@ fn a_state() -> State {
         ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
         ethereum_block_height: Default::default(),
-        minimum_withdrawal_amount: Wei::from_milliether(10).into(),
+        minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
         next_transaction_nonce: Default::default(),
     })
     .expect("init args should be valid")

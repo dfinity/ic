@@ -6,10 +6,10 @@ use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
-use crate::numeric::{TransactionCount, TransactionNonce, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, TransactionNonce, Wei};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
-use ethnum::u256;
+use ethnum;
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
@@ -21,7 +21,6 @@ use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
-use std::ops::Add;
 
 #[cfg(test)]
 mod tests;
@@ -39,7 +38,7 @@ const HTTP_MAX_SIZE: u64 = 2_000_000;
 
 pub const MAX_PAYLOAD_SIZE: u64 = HTTP_MAX_SIZE - HEADER_SIZE_LIMIT;
 
-pub type Quantity = u256;
+pub type Quantity = ethnum::u256;
 
 pub fn into_nat(quantity: Quantity) -> candid::Nat {
     use num_bigint::BigUint;
@@ -169,12 +168,6 @@ impl std::str::FromStr for Hash {
 
 impl HttpResponsePayload for Hash {}
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct BlockResponse {
-    pub number: Quantity,
-    pub hash: Data,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
@@ -270,7 +263,7 @@ impl From<CandidBlockTag> for BlockTag {
 #[serde(untagged)]
 pub enum BlockSpec {
     /// Query the block with the specified index.
-    Number(Quantity),
+    Number(BlockNumber),
     /// Query the block with the specified tag.
     Tag(BlockTag),
 }
@@ -286,9 +279,9 @@ impl std::str::FromStr for BlockSpec {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with("0x") {
-            let quantity = Quantity::from_str_hex(s)
+            let block_number = BlockNumber::from_str_hex(s)
                 .map_err(|e| format!("failed to parse block number '{s}': {e}"))?;
-            return Ok(BlockSpec::Number(quantity));
+            return Ok(BlockSpec::Number(block_number));
         }
         Ok(BlockSpec::Tag(match s {
             "latest" => BlockTag::Latest,
@@ -358,7 +351,7 @@ pub struct LogEntry {
     pub block_hash: Option<Hash>,
     /// Integer of the log index position in the block.
     /// None if the log is pending.
-    pub log_index: Option<Quantity>,
+    pub log_index: Option<LogIndex>,
     /// "true" when the log was removed due to a chain reorganization.
     /// "false" if it's a valid log.
     #[serde(default)]
@@ -436,52 +429,9 @@ impl HttpResponsePayload for FeeHistory {
 
 impl HttpResponsePayload for Wei {}
 
-#[derive(
-    Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Ord, PartialOrd, Encode, Decode,
-)]
-#[serde(transparent)]
-#[cbor(transparent)]
-pub struct BlockNumber(#[cbor(n(0), with = "crate::cbor::u256")] pub Quantity);
-
 impl From<BlockNumber> for BlockSpec {
     fn from(value: BlockNumber) -> Self {
-        BlockSpec::Number(value.0)
-    }
-}
-
-impl BlockNumber {
-    pub fn new(value: u128) -> Self {
-        Self(Quantity::from(value))
-    }
-
-    pub fn as_f64(&self) -> f64 {
-        self.0.as_f64()
-    }
-}
-
-impl Add<u128> for BlockNumber {
-    type Output = BlockNumber;
-
-    fn add(self, rhs: u128) -> Self::Output {
-        BlockNumber(self.0 + rhs)
-    }
-}
-
-impl From<BlockNumber> for candid::Nat {
-    fn from(value: BlockNumber) -> Self {
-        into_nat(value.0)
-    }
-}
-
-impl fmt::Debug for BlockNumber {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl fmt::Display for BlockNumber {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        BlockSpec::Number(value)
     }
 }
 
