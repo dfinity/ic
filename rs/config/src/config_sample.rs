@@ -122,9 +122,10 @@ pub const SAMPLE_CONFIG: &str = r#"
         // Alternatives:
         // - EXAMPLE: csp_vault_type: "in_replica",
         //   CspVault is an internal structure of the replica process.
-        // - EXAMPLE: csp_vault_type: { unix_socket: "/some/path/to/socket" },
+        // - EXAMPLE: csp_vault_type: { unix_socket: { logic: "/some/path/to/socket", metrics: "/some/path/to/another_socket" } },
         //   CspVault is run as a separate process, which can be reached via a Unix socket.
-        csp_vault_type: { unix_socket: "/some/path/to/socket" },
+        //   It also has an optional Unix socket for exporting metrics.
+        csp_vault_type: { unix_socket: { logic: "/some/path/to/socket", metrics: "/some/path/to/another_socket" } },
     },
     // ========================================
     // Configuration of the message scheduling.
@@ -348,7 +349,7 @@ pub const SAMPLE_CONFIG: &str = r#"
       poll_delay_duration_ms: 5000
     },
     // ====================================
-    // Configuration of various adapters. 
+    // Configuration of various adapters.
     // ====================================
     adapters_config: {
         bitcoin_testnet_uds_path: "/tmp/bitcoin_uds",

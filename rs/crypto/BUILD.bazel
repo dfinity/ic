@@ -123,9 +123,11 @@ rust_binary(
     srcs = ["src/bin/ic-crypto-csp.rs"],
     crate_name = "ic_crypto_csp",
     deps = [
+        "//rs/async_utils",
         "//rs/config",
         "//rs/crypto/internal/crypto_service_provider",
         "//rs/crypto/internal/logmon",
+        "//rs/monitoring/adapter_metrics_server",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "@crate_index//:clap",

@@ -269,7 +269,10 @@ pub mod internal {
             let opt_remote_vault_environment = self.start_remote_vault.then(|| {
                 let vault_server =
                     TempCspVaultServer::start_with_local_csp_vault(Arc::clone(&local_vault));
-                config.csp_vault_type = CspVaultType::UnixSocket(vault_server.vault_socket_path());
+                config.csp_vault_type = CspVaultType::UnixSocket {
+                    logic: vault_server.vault_socket_path(),
+                    metrics: None,
+                };
                 RemoteVaultEnvironment {
                     vault_server,
                     vault_client_runtime: TokioRuntimeOrHandle::new(

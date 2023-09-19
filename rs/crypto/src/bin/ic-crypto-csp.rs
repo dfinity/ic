@@ -1,4 +1,6 @@
 use clap::Parser;
+use ic_adapter_metrics_server::start_metrics_grpc;
+use ic_async_utils::incoming_from_nth_systemd_socket;
 use ic_config::{Config, ConfigSource};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{info, new_replica_logger_from_config};
@@ -54,7 +56,28 @@ fn main() {
     // We abort the whole program with a core dump if a single thread panics.
     // This way we can capture all the context if a critical error happens.
     abort_on_panic();
-    let metrics = CryptoMetrics::new(Some(&MetricsRegistry::global()));
+    let global_metrics = MetricsRegistry::global();
+    let metrics = CryptoMetrics::new(Some(&global_metrics));
+
+    // The file descriptors of the process are:
+    //  - 0: stdin,
+    //  - 1: stdout,
+    //  - 2: stderr,
+    //  - 3: the logic communication socket (handled by `listener_from_first_systemd_socket`)
+    //  - 4: the metrics socket (handled by `incoming_from_nth_systemd_socket`)
+    // The file descriptors from 3 onwards correspond to the order the sockets are described in
+    // the systemd configuration file.
+    // `incoming_from_nth_systemd_socket` starts from FD(3) if the passed `socket_num` is 1, and
+    // for the case of the metrics socket, FD(4) corresponds to `socket_num` = 2.
+    // The `incoming_from_nth_systemd_socket` function shall only be called once per socket.
+    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.socket
+    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.service
+    {
+        const METRICS_SOCKET_NUM: i32 = 2;
+        let _enter_guard = rt.handle().enter();
+        let stream = unsafe { incoming_from_nth_systemd_socket(METRICS_SOCKET_NUM) };
+        start_metrics_grpc(global_metrics, logger.clone(), stream);
+    }
 
     rt.block_on(ic_crypto_internal_csp::run_csp_vault_server(
         sks_dir,

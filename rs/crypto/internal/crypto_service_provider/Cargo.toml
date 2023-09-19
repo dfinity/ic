@@ -9,6 +9,7 @@ edition = "2021"
 async-trait = "0.1.41"
 base64 = "0.11"
 hex = "0.4.2"
+ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256r1" }

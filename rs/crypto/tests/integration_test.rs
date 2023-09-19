@@ -70,7 +70,7 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new_with_fake_node_id(
         &config,
@@ -88,7 +88,7 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let socket_path = get_temp_file_path(); // no CSP vault server is running
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new_with_fake_node_id(
