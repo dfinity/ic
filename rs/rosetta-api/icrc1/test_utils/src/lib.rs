@@ -1,8 +1,9 @@
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::Tokens;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
@@ -11,7 +12,9 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const E8: u64 = 100_000_000;
@@ -91,6 +94,23 @@ fn operation_strategy<Tokens: TokensType>(
                 }),
         ]
     })
+}
+
+fn valid_created_at_time_strategy(now: SystemTime) -> impl Strategy<Value = Option<u64>> {
+    let day_in_sec = 24 * 60 * 60 - 60 * 5;
+    prop::option::of((0..=day_in_sec).prop_map(move |duration| {
+        let start = now - Duration::from_secs(day_in_sec);
+        // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
+        let random_time = start + Duration::from_secs(duration); // calculate the random time
+        random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
+    }))
+}
+
+fn valid_expires_at_strategy(now: SystemTime) -> impl Strategy<Value = Option<u64>> {
+    prop::option::of((0..=u32::MAX as u64).prop_map(move |duration| {
+        let random_time = now + Duration::from_secs(duration);
+        random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
+    }))
 }
 
 pub fn transaction_strategy<Tokens: TokensType>(
@@ -248,33 +268,114 @@ impl ArgWithCaller {
         };
         fee.as_ref().map(|fee| fee.0.to_u64().unwrap())
     }
+    pub fn to_transaction(&self, minter: Account) -> Transaction<Tokens> {
+        let from = self.from();
+        let (operation, created_at_time, memo) = match self.arg.clone() {
+            LedgerEndpointArg::ApproveArg(approve_arg) => {
+                let operation = Operation::<Tokens>::Approve {
+                    amount: Tokens::try_from(approve_arg.amount.clone()).unwrap(),
+                    expires_at: approve_arg
+                        .expires_at
+                        .map(TimeStamp::from_nanos_since_unix_epoch),
+                    fee: approve_arg
+                        .fee
+                        .clone()
+                        .map(|f| Tokens::try_from(f.clone()).unwrap()),
+                    expected_allowance: approve_arg
+                        .expected_allowance
+                        .clone()
+                        .map(|a| Tokens::try_from(a.clone()).unwrap()),
+                    spender: approve_arg.spender,
+                    from,
+                };
+                (operation, approve_arg.created_at_time, approve_arg.memo)
+            }
+            LedgerEndpointArg::TransferArg(transfer_arg) => {
+                let burn_operation = transfer_arg.to == minter;
+                let mint_operation = from == minter;
+                let operation = if mint_operation {
+                    Operation::Mint {
+                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        to: transfer_arg.to,
+                    }
+                } else if burn_operation {
+                    Operation::Burn {
+                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        from,
+                        spender: None,
+                    }
+                } else {
+                    Operation::Transfer {
+                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        to: transfer_arg.to,
+                        from,
+                        spender: None,
+                        fee: transfer_arg
+                            .fee
+                            .clone()
+                            .map(|f| Tokens::try_from(f).unwrap()),
+                    }
+                };
+
+                (operation, transfer_arg.created_at_time, transfer_arg.memo)
+            }
+        };
+        Transaction::<Tokens> {
+            operation,
+            created_at_time,
+            memo,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
 struct TransactionsAndBalances {
     transactions: Vec<ArgWithCaller>,
     balances: HashMap<Account, u64>,
-    // TODO: approvals
+    txs: HashSet<Transaction<Tokens>>,
+    allowances: HashMap<(Account, Account), Tokens>,
 }
 
 impl TransactionsAndBalances {
     pub fn apply(&mut self, minter: Account, default_fee: u64, tx: ArgWithCaller) {
-        let from = tx.from();
         let fee = tx.fee().unwrap_or(default_fee);
-        match &tx.arg {
-            LedgerEndpointArg::ApproveArg(_) => {
+        let transaction = tx.to_transaction(minter);
+        if self.duplicate(
+            transaction.operation.clone(),
+            transaction.created_at_time,
+            transaction.memo.clone(),
+        ) {
+            return;
+        };
+        match transaction.operation {
+            Operation::Mint { to, amount, .. } => {
+                self.credit(to, amount.get_e8s());
+            }
+            Operation::Burn { from, amount, .. } => {
+                self.debit(from, amount.get_e8s());
+            }
+            Operation::Transfer {
+                from, to, amount, ..
+            } => {
+                self.credit(to, amount.get_e8s());
+                self.debit(from, amount.get_e8s() + fee);
+            }
+            Operation::Approve {
+                from,
+                spender,
+                amount,
+                ..
+            } => {
+                self.allowances
+                    .entry((from, spender))
+                    .and_modify(|current_allowance| {
+                        *current_allowance =
+                            Tokens::from_e8s((*current_allowance).get_e8s() + amount.get_e8s())
+                    })
+                    .or_insert(amount);
                 self.debit(from, fee);
             }
-            LedgerEndpointArg::TransferArg(transfer_arg) => {
-                if transfer_arg.to != minter {
-                    self.credit(transfer_arg.to, transfer_arg.amount.0.to_u64().unwrap());
-                }
-                if from != minter {
-                    let amount = transfer_arg.amount.0.to_u64().unwrap();
-                    self.debit(from, amount + fee);
-                }
-            }
-        }
+        };
         self.transactions.push(tx);
     }
 
@@ -303,6 +404,26 @@ impl TransactionsAndBalances {
             .map(|(account, balance)| (*account, *balance))
             .collect()
     }
+
+    fn duplicate(
+        &mut self,
+        operation: Operation<Tokens>,
+        created_at_time: Option<u64>,
+        memo: Option<Memo>,
+    ) -> bool {
+        if created_at_time.is_some() {
+            let tx = Transaction {
+                operation,
+                created_at_time,
+                memo,
+            };
+            if self.txs.contains(&tx) {
+                return true;
+            }
+            self.txs.insert(tx);
+        }
+        false
+    }
 }
 
 fn amount_strategy() -> impl Strategy<Value = u64> {
@@ -313,7 +434,6 @@ fn amount_strategy() -> impl Strategy<Value = u64> {
 /// transaction args that the Ledger will accept and that have the
 /// Principal that should send them.
 ///
-/// TODO: generate the missing arguments created_at_time, fee and memo
 /// TODO: replace amount generation with something that makes sense,
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
@@ -321,48 +441,93 @@ pub fn valid_transactions_strategy(
     minter: Account,
     default_fee: u64,
     length: usize,
+    now: SystemTime,
 ) -> impl Strategy<Value = Vec<ArgWithCaller>> {
-    fn mint_strategy(minter: Account) -> impl Strategy<Value = ArgWithCaller> {
-        (account_strategy(), amount_strategy()).prop_filter_map(
-            "The minting account is not a valid target for a mint operation",
-            move |(to, amount)| {
-                if to == minter {
-                    None
-                } else {
-                    Some(ArgWithCaller {
-                        caller: minter.owner,
-                        arg: LedgerEndpointArg::TransferArg(TransferArg {
-                            from_subaccount: minter.subaccount,
-                            to,
-                            amount: amount.into(),
-                            created_at_time: None,
-                            fee: None,
-                            memo: None,
-                        }),
-                    })
-                }
-            },
+    fn mint_strategy(
+        minter: Account,
+        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
+        now: SystemTime,
+    ) -> impl Strategy<Value = ArgWithCaller> {
+        (
+            account_strategy(),
+            amount_strategy(),
+            valid_created_at_time_strategy(now),
+            arb_memo(),
         )
+            .prop_filter_map(
+                "The minting account is set as to account or tx is a duplicate",
+                move |(to, amount, created_at_time, memo)| {
+                    let tx = Transaction {
+                        operation: Operation::Mint::<Tokens> {
+                            amount: Tokens::from_e8s(amount),
+                            to,
+                        },
+                        created_at_time,
+                        memo: memo.clone(),
+                    };
+                    if to == minter || tx_dedup_set.contains(&tx) {
+                        None
+                    } else {
+                        Some(ArgWithCaller {
+                            caller: minter.owner,
+                            arg: LedgerEndpointArg::TransferArg(TransferArg {
+                                from_subaccount: minter.subaccount,
+                                to,
+                                amount: amount.into(),
+                                created_at_time,
+                                fee: None,
+                                memo,
+                            }),
+                        })
+                    }
+                },
+            )
     }
 
     fn burn_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter: Account,
         default_fee: u64,
+        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
+        now: SystemTime,
     ) -> impl Strategy<Value = ArgWithCaller> {
         account_balance.prop_flat_map(move |(from, balance)| {
-            // user can burn between the fee, i.e. the minimum, and the total balance
-            (default_fee..=balance).prop_map(move |amount| ArgWithCaller {
-                caller: from.owner,
-                arg: LedgerEndpointArg::TransferArg(TransferArg {
-                    from_subaccount: from.subaccount,
-                    to: minter,
-                    amount: amount.into(),
-                    created_at_time: None,
-                    fee: None,
-                    memo: None,
-                }),
-            })
+            let tx_hash_set = tx_dedup_set.clone();
+            (
+                default_fee..=balance,
+                valid_created_at_time_strategy(now),
+                arb_memo(),
+            )
+                .prop_filter_map(
+                    "Tx hash already exists",
+                    move |(amount, created_at_time, memo)| {
+                        let tx = Transaction {
+                            operation: Operation::Burn::<Tokens> {
+                                amount: Tokens::from_e8s(amount),
+                                from,
+                                spender: None,
+                            },
+                            created_at_time,
+                            memo: memo.clone(),
+                        };
+
+                        if tx_hash_set.contains(&tx) {
+                            None
+                        } else {
+                            Some(ArgWithCaller {
+                                caller: from.owner,
+                                arg: LedgerEndpointArg::TransferArg(TransferArg {
+                                    from_subaccount: from.subaccount,
+                                    to: minter,
+                                    amount: amount.into(),
+                                    created_at_time,
+                                    fee: None,
+                                    memo,
+                                }),
+                            })
+                        }
+                    },
+                )
         })
     }
 
@@ -370,28 +535,51 @@ pub fn valid_transactions_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter: Account,
         default_fee: u64,
+        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
+        now: SystemTime,
     ) -> impl Strategy<Value = ArgWithCaller> {
         account_balance.prop_flat_map(move |(from, balance)| {
-            (account_strategy(), 0..=(balance - default_fee)).prop_filter_map(
-                "Self transfers are disabled",
-                move |(to, amount)| {
-                    if to == from || to == minter || from == minter {
-                        None
-                    } else {
-                        Some(ArgWithCaller {
-                            caller: from.owner,
-                            arg: LedgerEndpointArg::TransferArg(TransferArg {
-                                from_subaccount: from.subaccount,
-                                to,
-                                amount: amount.into(),
-                                created_at_time: None,
-                                fee: Some(default_fee.into()),
-                                memo: None,
-                            }),
-                        })
-                    }
-                },
+            let tx_hash_set = tx_dedup_set.clone();
+            (
+                account_strategy(),
+                0..=(balance - default_fee),
+                valid_created_at_time_strategy(now),
+                arb_memo(),
+                prop::option::of(Just(default_fee)),
             )
+                .prop_filter_map(
+                    "Tx is a self transfer or duplicate",
+                    move |(to, amount, created_at_time, memo, fee)| {
+                        let tx = Transaction {
+                            operation: Operation::Transfer::<Tokens> {
+                                amount: Tokens::from_e8s(amount),
+                                from,
+                                fee: fee.map(Tokens::from_e8s),
+                                spender: None,
+                                to,
+                            },
+                            created_at_time,
+                            memo: memo.clone(),
+                        };
+
+                        if to == from || to == minter || from == minter || tx_hash_set.contains(&tx)
+                        {
+                            None
+                        } else {
+                            Some(ArgWithCaller {
+                                caller: from.owner,
+                                arg: LedgerEndpointArg::TransferArg(TransferArg {
+                                    from_subaccount: from.subaccount,
+                                    to,
+                                    amount: amount.into(),
+                                    created_at_time,
+                                    fee: fee.map(Nat::from),
+                                    memo,
+                                }),
+                            })
+                        }
+                    },
+                )
         })
     }
 
@@ -399,30 +587,73 @@ pub fn valid_transactions_strategy(
         account_balance: impl Strategy<Value = (Account, u64)>,
         minter: Account,
         default_fee: u64,
+        tx_dedup_set: Arc<HashSet<Transaction<Tokens>>>,
+        now: SystemTime,
+        allowance_map: Arc<HashMap<(Account, Account), Tokens>>,
     ) -> impl Strategy<Value = ArgWithCaller> {
         account_balance.prop_flat_map(move |(from, balance)| {
-            (account_strategy(), 0..=(balance - default_fee)).prop_filter_map(
-                "Self transfers are disabled",
-                move |(spender, amount)| {
-                    if spender == from || spender == minter || from == minter {
-                        None
-                    } else {
-                        Some(ArgWithCaller {
-                            caller: from.owner,
-                            arg: LedgerEndpointArg::ApproveArg(ApproveArgs {
-                                from_subaccount: from.subaccount,
-                                spender,
-                                amount: amount.into(),
-                                created_at_time: None,
-                                fee: None,
-                                memo: None,
-                                expected_allowance: None,
-                                expires_at: None,
-                            }),
-                        })
-                    }
-                },
+            let tx_hash_set = tx_dedup_set.clone();
+            let allowance_map_clone = allowance_map.clone();
+            (
+                account_strategy(),
+                0..=(balance - default_fee),
+                valid_created_at_time_strategy(now),
+                arb_memo(),
+                prop::option::of(Just(default_fee)),
+                valid_expires_at_strategy(now),
+                proptest::bool::ANY,
             )
+                .prop_filter_map(
+                    "Tx is a duplicate or self approve",
+                    move |(
+                        spender,
+                        amount,
+                        created_at_time,
+                        memo,
+                        fee,
+                        expires_at,
+                        expect_allowance,
+                    )| {
+                        let expected_allowance = allowance_map_clone.get(&(from, spender)).copied();
+                        let tx = Transaction {
+                            operation: Operation::Approve::<Tokens> {
+                                from,
+                                spender,
+                                fee: fee.map(Tokens::from_e8s),
+                                amount: Tokens::from_e8s(amount),
+                                expected_allowance: if expect_allowance {
+                                    expected_allowance
+                                } else {
+                                    None
+                                },
+                                expires_at: expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                            },
+                            created_at_time,
+                            memo: memo.clone(),
+                        };
+                        if spender == from
+                            || spender == minter
+                            || from == minter
+                            || tx_hash_set.contains(&tx)
+                        {
+                            None
+                        } else {
+                            Some(ArgWithCaller {
+                                caller: from.owner,
+                                arg: LedgerEndpointArg::ApproveArg(ApproveArgs {
+                                    from_subaccount: from.subaccount,
+                                    spender,
+                                    amount: amount.into(),
+                                    created_at_time,
+                                    fee: fee.map(Nat::from),
+                                    memo,
+                                    expected_allowance: expected_allowance.map(Nat::from),
+                                    expires_at,
+                                }),
+                            })
+                        }
+                    },
+                )
         })
     }
 
@@ -431,6 +662,7 @@ pub fn valid_transactions_strategy(
         minter: Account,
         default_fee: u64,
         additional_length: usize,
+        now: SystemTime,
     ) -> BoxedStrategy<TransactionsAndBalances> {
         if additional_length == 0 {
             return Just(state).boxed();
@@ -439,18 +671,34 @@ pub fn valid_transactions_strategy(
         // The next transaction is based on the non-dust balances in the state.
         // If there are no balances bigger than default_fees then the only next
         // transaction possible is minting, otherwise we can also burn or transfer.
-
         let balances = state.non_dust_balances(default_fee);
-        let mint_strategy = mint_strategy(minter).boxed();
+        let tx_hashes = Arc::new(state.txs.clone());
+        let mint_strategy = mint_strategy(minter, tx_hashes.clone(), now).boxed();
 
         let arb_tx = if balances.is_empty() {
             mint_strategy
         } else {
             let account_balance = Rc::new(select(balances));
-            let approve_strategy =
-                approve_strategy(account_balance.clone(), minter, default_fee).boxed();
-            let burn_strategy = burn_strategy(account_balance.clone(), minter, default_fee).boxed();
-            let transfer_strategy = transfer_strategy(account_balance, minter, default_fee).boxed();
+            let approve_strategy = approve_strategy(
+                account_balance.clone(),
+                minter,
+                default_fee,
+                tx_hashes.clone(),
+                now,
+                Arc::new(state.allowances.clone()),
+            )
+            .boxed();
+            let burn_strategy = burn_strategy(
+                account_balance.clone(),
+                minter,
+                default_fee,
+                tx_hashes.clone(),
+                now,
+            )
+            .boxed();
+            let transfer_strategy =
+                transfer_strategy(account_balance, minter, default_fee, tx_hashes.clone(), now)
+                    .boxed();
             proptest::strategy::Union::new_weighted(vec![
                 (10, approve_strategy),
                 (1, burn_strategy),
@@ -463,7 +711,7 @@ pub fn valid_transactions_strategy(
         (Just(state), arb_tx)
             .prop_flat_map(move |(mut state, tx)| {
                 state.apply(minter, default_fee, tx);
-                generate_strategy(state, minter, default_fee, additional_length - 1)
+                generate_strategy(state, minter, default_fee, additional_length - 1, now)
             })
             .boxed()
     }
@@ -473,20 +721,21 @@ pub fn valid_transactions_strategy(
         minter,
         default_fee,
         length,
+        now,
     )
     .prop_map(|res| res.transactions)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::valid_transactions_strategy;
     use candid::Principal;
     use icrc_ledger_types::icrc1::account::Account;
     use proptest::{
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
     };
-
-    use crate::valid_transactions_strategy;
+    use std::time::SystemTime;
 
     #[test]
     fn test_valid_transactions_strategy_generates_transaction() {
@@ -495,6 +744,7 @@ mod tests {
             Account::from(Principal::management_canister()),
             10_000,
             size,
+            SystemTime::now(),
         );
         let tree = strategy
             .new_tree(&mut TestRunner::default())

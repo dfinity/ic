@@ -26,7 +26,7 @@ use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock, GetBlocksRequest, GetBlocksResponse,
 };
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::Transaction;
 use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
@@ -742,72 +742,7 @@ fn encoded_block_bytes_to_flat_transaction(
             block_index, e
         ))
     });
-    let timestamp = block.timestamp;
-    let created_at_time = block.transaction.created_at_time;
-    let memo = block.transaction.memo;
-    match block.transaction.operation {
-        Operation::Burn {
-            from,
-            amount,
-            spender,
-        } => Transaction::burn(
-            Burn {
-                from,
-                spender,
-                amount: amount.into(),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Mint { to, amount } => Transaction::mint(
-            Mint {
-                to,
-                amount: amount.into(),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Transfer {
-            from,
-            to,
-            spender,
-            amount,
-            fee,
-        } => Transaction::transfer(
-            Transfer {
-                from,
-                to,
-                spender,
-                amount: amount.into(),
-                fee: fee.map(|fee| fee.into()),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Approve {
-            from,
-            spender,
-            amount,
-            expected_allowance,
-            expires_at,
-            fee,
-        } => Transaction::approve(
-            Approve {
-                from,
-                spender,
-                amount: amount.into(),
-                expected_allowance: expected_allowance.map(Into::into),
-                expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
-                fee: fee.map(|fee| fee.into()),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-    }
+    block.into()
 }
 
 fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {

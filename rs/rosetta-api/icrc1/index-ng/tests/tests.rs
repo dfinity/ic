@@ -1,6 +1,8 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_icrc1::blocks::generic_block_to_encoded_block;
+use ic_icrc1::Block;
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
@@ -12,7 +14,9 @@ use ic_icrc1_ledger::{
     UpgradeArgs as LedgerUpgradeArgs,
 };
 use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
+use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
@@ -26,7 +30,7 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -517,11 +521,23 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
     assert_eq!(ledger_blocks.len(), index_blocks.len());
 
     for idx in 0..ledger_blocks.len() {
+        let generic_block_ledger = ledger_blocks[idx].clone();
+        let generic_block_index = index_blocks[idx].clone();
+        let encoded_block_ledger =
+            generic_block_to_encoded_block(generic_block_ledger.clone()).unwrap();
+        let encoded_block_index =
+            generic_block_to_encoded_block(generic_block_index.clone()).unwrap();
+        let block_ledger = Block::<U64>::decode(encoded_block_ledger.clone()).unwrap();
+        let block_index = Block::<U64>::decode(encoded_block_index.clone()).unwrap();
+
         assert_eq!(
-            ledger_blocks[idx], index_blocks[idx],
+            generic_block_ledger, generic_block_index,
             "block_index: {}",
             idx
         );
+        assert_eq!(generic_block_ledger, generic_block_index);
+        assert_eq!(encoded_block_ledger, encoded_block_index);
+        assert_eq!(block_ledger, block_index);
     }
 }
 
@@ -662,7 +678,7 @@ fn test_get_account_transactions() {
                 to: account(2, 0),
                 spender: None,
                 amount: 1_000_000.into(),
-                fee: None,
+                fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
             },
@@ -677,7 +693,7 @@ fn test_get_account_transactions() {
                 to: account(2, 0),
                 spender: None,
                 amount: 2_000_000.into(),
-                fee: None,
+                fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
             },
@@ -692,7 +708,7 @@ fn test_get_account_transactions() {
                 to: account(1, 1),
                 spender: None,
                 amount: 1_000_000.into(),
-                fee: None,
+                fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
             },
@@ -882,11 +898,14 @@ fn test_get_account_transactions_pagination() {
 fn test_icrc1_balance_of() {
     // 1 case only because the test is expensive to run.
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            &(valid_transactions_strategy(MINTER, FEE, 100, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
                 let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
                 let index_id = install_index_ng(env, ledger_id);
 
@@ -1210,11 +1229,14 @@ fn test_fee_collector() {
 #[test]
 fn test_get_account_transactions_vs_old_index() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 10),),
+            &(valid_transactions_strategy(MINTER, FEE, 10, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
                 let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
@@ -1248,11 +1270,14 @@ fn test_upgrade_index_to_index_ng() {
         max_shrink_iters: 0,
         ..Default::default()
     });
+    let now = SystemTime::now();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 10),),
+            &(valid_transactions_strategy(MINTER, FEE, 10, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
                 let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
@@ -1286,6 +1311,31 @@ fn test_upgrade_index_to_index_ng() {
                         old_get_account_transactions(env, index_ng_id, account, None, u64::MAX),
                     );
                 }
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn test_index_ledger_coherence() {
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    runner
+        .run(
+            &(valid_transactions_strategy(MINTER, FEE, 50, now),),
+            |(transactions,)| {
+                let env = &StateMachine::new();
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
+                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                let index_id = install_index_ng(env, ledger_id);
+
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
+                }
+                wait_until_sync_is_completed(env, index_id, ledger_id);
+                assert_ledger_index_parity(env, ledger_id, index_id);
                 Ok(())
             },
         )
