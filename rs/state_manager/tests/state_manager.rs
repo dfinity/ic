@@ -523,8 +523,12 @@ fn query_stats_are_persisted() {
             egress_payload_size: 100002,
         };
 
+        let mut inner = BTreeMap::new();
+        inner.insert(proposer_id, test_query_stats.clone());
+
         let mut stats = BTreeMap::new();
-        stats.insert((canister_id, proposer_id), test_query_stats.clone());
+        stats.insert(canister_id, inner);
+
         state.epoch_query_stats = ReceivedEpochStats {
             epoch: Some(epoch),
             stats,
@@ -541,7 +545,9 @@ fn query_stats_are_persisted() {
         assert_eq!(
             recovered_stats
                 .stats
-                .get(&(canister_id, proposer_id))
+                .get(&canister_id)
+                .unwrap()
+                .get(&proposer_id)
                 .unwrap(),
             &test_query_stats
         );
