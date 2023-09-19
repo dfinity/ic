@@ -226,4 +226,71 @@ describe('Canister resolver lookups', () => {
 
     expect(lookup).toBeNull();
   });
+
+  describe('isAPICall', () => {
+    const gatewayURL = new URL('https://icp-api.io');
+
+    it.each([
+      'https://boundary.dfinity.network/api/v2/canister/xrfpr-ryaaa-aaaaj-aiq7q-cai/query',
+      'https://boundary.ic0.app/api/v2/canister/xrfpr-ryaaa-aaaaj-aiq7q-cai/query',
+      'https://ic0.app/api/v2/canister/xrfpr-ryaaa-aaaaj-aiq7q-cai/query',
+      'https://icp0.io/api/v2/canister/xrfpr-ryaaa-aaaaj-aiq7q-cai/query',
+      'https://icp-api.io/api/v2/canister/xrfpr-ryaaa-aaaaj-aiq7q-cai/query',
+    ])('should return true for a request to %s', async (url) => {
+      const request = new Request(url);
+      const resolver = await CanisterResolver.setup();
+
+      expect(resolver.isAPICall(request, gatewayURL, true)).toEqual(true);
+    });
+
+    it.each([
+      'https://boundary.dfinity.network/index.js',
+      'https://boundary.ic0.app/index.js',
+      'https://ic0.app/index.js',
+      'https://icp0.io/index.js',
+      'https://icp-api.io/index.js',
+      'https://evilcorp.com/index.js',
+      'https://evilcorp.com/api/v2/canister/xrfpr-ryaaa-aaaaj-aiq7q-cai/query',
+    ])('should return false for a request to %s', async (url) => {
+      const request = new Request(url);
+      const resolver = await CanisterResolver.setup();
+
+      expect(resolver.isAPICall(request, gatewayURL, true)).toEqual(false);
+    });
+  });
+
+  describe('isGatewayCall', () => {
+    const gatewayURL = new URL('https://icp-api.io');
+
+    it.each([
+      'https://boundary.dfinity.network/_/raw/index.js',
+      'https://boundary.ic0.app/_/raw/index.js',
+      'https://ic0.app/_/raw/index.js',
+      'https://icp0.io/_/raw/index.js',
+      'https://icp-api.io/_/raw/index.js',
+    ])('should return true for a request to %s', async (url) => {
+      const request = new Request(url);
+      const resolver = await CanisterResolver.setup();
+
+      expect(resolver.isUnderscoreRawCall(request, gatewayURL, true)).toEqual(
+        true
+      );
+    });
+
+    it.each([
+      'https://boundary.dfinity.network/index.js',
+      'https://boundary.ic0.app/index.js',
+      'https://ic0.app/index.js',
+      'https://icp0.io/index.js',
+      'https://icp-api.io/index.js',
+      'https://evilcorp.com/_/raw/index.js',
+    ])('should return false for a request to %s', async (url) => {
+      const request = new Request(url);
+      const resolver = await CanisterResolver.setup();
+
+      expect(resolver.isUnderscoreRawCall(request, gatewayURL, true)).toEqual(
+        false
+      );
+    });
+  });
 });

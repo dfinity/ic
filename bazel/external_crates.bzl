@@ -503,7 +503,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.0",
             ),
             "ic-response-verification": crate.spec(
-                version = "^1.1.0",
+                version = "^1.2.0",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
