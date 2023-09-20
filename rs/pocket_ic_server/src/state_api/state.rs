@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::{sync::RwLock, task::spawn_blocking, time};
+use tracing::debug;
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_millis(150);
@@ -325,10 +326,10 @@ where
                             let state_label = state_label.clone();
                             let st = self.inner.clone();
                             move || {
-                                println!("Starting computation");
+                                debug!("Starting computation");
                                 let result = op.compute(&mut mocket_ic);
                                 let new_state_label = mocket_ic.get_state_label();
-                                println!("Finished computation. Writing to graph.");
+                                debug!("Finished computation. Writing to graph.");
                                 // add result to graph
                                 let mut instances = st.instances.blocking_write();
                                 let mut guard = st.graph.blocking_write();
@@ -341,7 +342,7 @@ where
                                     guard.entry(state_label.clone()).or_insert(HashMap::new());
                                 cached_computations
                                     .insert(op_id.clone(), (new_state_label, result.clone()));
-                                println!("Finished writing to graph");
+                                debug!("Finished writing to graph");
                                 result
                             }
                         });

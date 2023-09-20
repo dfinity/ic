@@ -38,6 +38,9 @@ use tempfile::TempDir;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
+use tower_http::trace::TraceLayer;
+use tracing::{error, info};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 const TTL_SEC: u64 = 60;
 
@@ -117,6 +120,7 @@ fn main() {
 }
 
 async fn start(runtime: Arc<Runtime>) {
+    setup_tracing();
     let args = Args::parse();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
@@ -183,6 +187,9 @@ async fn start(runtime: Arc<Runtime>) {
             app_state.clone(),
             bump_last_request_timestamp,
         ))
+        // For examples on how to customize the logging spans:
+        // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs#L45
+        .layer(TraceLayer::new_for_http())
         .with_state(app_state.clone());
 
     // bind to port 0; the OS will give a specific port; communicate that to parent process
@@ -198,9 +205,9 @@ async fn start(runtime: Arc<Runtime>) {
         .create_new(true)
         .open(&ready_file_path);
     if ready_file.is_ok() {
-        println!("The PocketIC server is listening on port {}", real_port);
+        info!("The PocketIC server is listening on port {}", real_port);
     } else {
-        eprintln!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
+        error!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
     }
 
     // This is a safeguard against orphaning this child process.
@@ -213,13 +220,27 @@ async fn start(runtime: Arc<Runtime>) {
             drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        println!("The PocketIC server will terminate");
+        info!("The PocketIC server will terminate");
         // Clean up tmpfiles.
         let _ = std::fs::remove_file(ready_file_path);
         let _ = std::fs::remove_file(port_file_path);
     };
     let server = server.with_graceful_shutdown(shutdown_signal);
     server.await.expect("Failed to launch the PocketIC server");
+}
+
+// Registers a global subscriber that collects tracing events and spans.
+fn setup_tracing() {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                // axum logs rejections from built-in extractors with the `axum::rejection`
+                // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
+                "pocket_ic_server=debug,tower_http=debug,axum::rejection=trace".into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 }
 
 /// Returns the opened file if it was successfully created and is readable, writeable. Otherwise,
