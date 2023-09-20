@@ -11200,6 +11200,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-validator-ingress-message-test-canister"
+version = "0.1.0"
+dependencies = [
+ "build-info",
+ "build-info-build",
+ "candid",
+ "canister-test",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "ic-state-machine-tests",
+ "ic-types",
+ "ic-validator-ingress-message",
+ "tokio",
+]
+
+[[package]]
 name = "ic-verify-bls-signature"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
