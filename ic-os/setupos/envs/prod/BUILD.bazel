@@ -10,7 +10,6 @@ exports_files(["build_container_filesystem_config.txt"])
 icos_build(
     name = "prod",
     image_deps_func = image_deps,
-    nvme = True,
     upgrades = False,
     upload_prefix = "setup-os",
     vuln_scan = False,
