@@ -664,6 +664,26 @@ impl NeuronStore {
     pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
         self.known_neuron_name_set.contains(known_neuron_name)
     }
+
+    pub fn stable_indexes_lens(&self) -> NeuronIndexesLens {
+        NEURON_INDEXES.with(|indexes| {
+            let indexes = indexes.borrow();
+            NeuronIndexesLens {
+                subaccount: indexes.subaccount().num_entries(),
+                principal: indexes.principal().num_entries(),
+                following: indexes.following().num_entries(),
+                known_neuron: indexes.known_neuron().num_entries(),
+            }
+        })
+    }
+}
+
+/// Number of entries for each neuron indexes (in stable storage)
+pub struct NeuronIndexesLens {
+    pub subaccount: usize,
+    pub principal: usize,
+    pub following: usize,
+    pub known_neuron: usize,
 }
 
 fn write_through_to_stable_neuron_store(
