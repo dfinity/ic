@@ -409,3 +409,11 @@ p256 = { version = "0.13", default_features = false, features = [
 ic-stable-structures = "0.5.4"
 tonic = "0.9.2"
 tonic-build = "0.9.2"
+tower = { version = "0.4.13", features = [
+  "buffer",
+  "limit",
+  "load-shed",
+  "steer",
+  "timeout",
+  "util",
+] }

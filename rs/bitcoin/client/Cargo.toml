@@ -21,4 +21,4 @@ slog = { version = "2.5.2", features = [
 ] }
 tokio = { version = "1.32.0", features = ["full"] }
 tonic = { workspace = true }
-tower = { version = "0.4.11", features = ["util"] }
+tower = { workspace = true }

@@ -74,7 +74,7 @@ tempfile = "3.1.0"
 thread_profiler = { version = "0.3", optional = true }
 tokio = { version = "1.32.0", features = ["full"] }
 tracing = "0.1.13"
-tower = { version = "0.4.11", features = ["util"] }
+tower = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # this library uses libunwind, which is only applicable to Linux

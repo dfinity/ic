@@ -30,7 +30,7 @@ strum = "0.23.0"
 strum_macros = "0.23.0"
 threadpool = "1.8.1"
 tokio = { version = "1.32.0", features = ["full"] }
-tower = "0.4.12"
+tower = { workspace = true }
 
 [dev-dependencies]
 ic-artifact-manager = { path = "../artifact_manager" }

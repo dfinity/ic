@@ -17,7 +17,7 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 thiserror = "1.0.37"
 tokio = "1.32.0"
 tokio-io-timeout = "1.2.0"
-tower = "0.4.13"
+tower = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }

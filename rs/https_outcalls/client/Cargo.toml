@@ -25,7 +25,7 @@ prometheus = { version = "0.12.0", features = ["process"] }
 slog = "2.7.0"
 tokio = { version = "1.32.0", features = ["full"] }
 tonic = { workspace = true }
-tower = { version = "0.4.8", features = ["util"] }
+tower = { workspace = true }
 
 [dev-dependencies]
 tower-test = "0.4.0"
