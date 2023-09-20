@@ -22,6 +22,10 @@ if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 
+if [[ "$CI_COMMIT_REF_NAME" =~ ^hotfix-.+-rc--.+ ]]; then
+    ic_version_rc_only="${CI_COMMIT_SHA}"
+fi
+
 # Many actions seem to be using much more resources than bazel expects.
 # Running too many of them in parallel causes some tests that expect to get some resources within limited time to fail.
 # TODO(IDX-2225): reconsider limit when we will use Remute Execution.

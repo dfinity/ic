@@ -22,7 +22,7 @@ boundary-node-service-worker:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
     - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
   script:
@@ -81,7 +81,7 @@ boundary-node-service-worker:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   needs: []  # don't wait on other jobs
   script:
     - |
@@ -162,7 +162,7 @@ bazel-build-fuzzers-archives:
         BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
 
 .bazel-test-all:
   extends:
@@ -177,7 +177,7 @@ bazel-build-fuzzers-archives:
         BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   tags:
     - dfinity-ic
     - bazel
@@ -272,7 +272,7 @@ bazel-test-all-allow-to-fail:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
       when: manual
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
   allow_failure: true
@@ -518,7 +518,7 @@ python-gitlab-ci-tests:
     # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   needs: []
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
@@ -667,7 +667,7 @@ host-os-upgrade-test:
       when: manual
       allow_failure: true
     - if: '$SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   needs:
     - job: bazel-test-all
       artifacts: false

@@ -161,10 +161,10 @@ after_script:
 #    execution of prod hourly and nightly tests.
 .rules-rollout-pipeline-auto:
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i && $CI_PIPELINE_SOURCE != "trigger"'
+    - if: '$CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/ && $CI_COMMIT_MESSAGE =~ /hotfix/i && $CI_PIPELINE_SOURCE != "trigger"'
       when: manual
       allow_failure: true
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/ && $CI_PIPELINE_SOURCE != "trigger"'
+    - if: '$CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/ && $CI_PIPELINE_SOURCE != "trigger"'
       when: always
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
@@ -179,7 +179,7 @@ after_script:
 #  release qualification pipelines to ensure the hotfix tests are always working.
 .rules-prod-hotfix-pipeline:
   rules:
-    - if: $CI_COMMIT_BRANCH =~ /^rc--/
+    - if: $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
       when: always
     - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
       when: manual
@@ -201,13 +201,13 @@ after_script:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
 
 .rules-master-pipeline-and-merge-request:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
 
 .rules-post-master:
   rules:

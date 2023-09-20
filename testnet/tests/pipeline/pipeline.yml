@@ -2,7 +2,7 @@
   extends:
     - .ubuntu-cargo-k8s
   rules:
-    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
+    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
       when: manual
       allow_failure: true
     - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
