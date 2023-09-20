@@ -44,7 +44,8 @@
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -124,7 +125,8 @@
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -816,7 +818,8 @@ bazel-build-fuzzers:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -889,7 +892,8 @@ bazel-build-fuzzers-afl:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -962,7 +966,8 @@ bazel-build-fuzzers-archives:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1034,7 +1039,8 @@ bazel-build-fuzzers-weekly:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1106,7 +1112,8 @@ bazel-build-macos:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1178,7 +1185,8 @@ bazel-config-check-all-rebuild:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1251,7 +1259,8 @@ bazel-system-test-hotfix:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1327,7 +1336,8 @@ bazel-system-test-hourly:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1397,7 +1407,8 @@ bazel-system-test-nightly:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1474,7 +1485,8 @@ bazel-system-test-staging:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1551,7 +1563,8 @@ bazel-test-all:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1625,7 +1638,8 @@ bazel-test-all-allow-to-fail:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1694,7 +1708,8 @@ bazel-test-all-rebuild:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -1951,7 +1966,8 @@ benchmarks:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -4045,7 +4061,8 @@ linux-openssl-static-binaries:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
@@ -4117,7 +4134,8 @@ macos-openssl-static-binaries:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
