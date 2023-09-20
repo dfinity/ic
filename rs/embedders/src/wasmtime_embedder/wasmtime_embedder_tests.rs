@@ -142,8 +142,6 @@ fn test_wasmtime_system_api() {
 
 #[test]
 fn test_initial_wasmtime_config() {
-    // let config = WasmtimeEmbedder::initial_wasmtime_config(&EmbeddersConfig::default());
-
     // The following proposals should be disabled: tail_call, simd, relaxed_simd,
     // threads, multi_memory, exceptions, memory64, extended_const, component_model,
     // function_references, memory_control, gc

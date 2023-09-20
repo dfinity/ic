@@ -30,13 +30,13 @@ slog = { version = "2.5.2", features = [
     "release_max_level_debug",
 ] }
 slog-term = "2.6.0"
-wasmtime = { version = "9.0.4", default-features = false, features = [
+wasmtime = { version = "11.0.2", default-features = false, features = [
     'cranelift',
     'parallel-compilation',
     'posix-signals-on-macos',
 ] }
-wasmtime-environ = "9.0.4"
-wasmtime-runtime = "9.0.4"
+wasmtime-environ = "11.0.2"
+wasmtime-runtime = "11.0.2"
 wasm-encoder = "0.31.0"
 wasmparser = "0.109.0"
 rayon = "1.5.1"

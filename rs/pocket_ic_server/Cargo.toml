@@ -27,7 +27,7 @@ ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der"
 clap = { version = "3.1.6", features = ["derive"] }
 sha2 = "0.9.3"
 tempfile = "*"
-base64 = "*"
+base64 = "0.11.0"
 wat = "1.0.52"
 
 [dev-dependencies]
