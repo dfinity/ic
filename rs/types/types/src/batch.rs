@@ -95,7 +95,7 @@ pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
-    pub query_stats: EpochStatsMessages,
+    pub query_stats: Option<EpochStatsMessages>,
 }
 
 impl BatchPayload {
@@ -108,7 +108,7 @@ impl BatchPayload {
             signed_ingress_msgs: self.ingress.try_into()?,
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
-            query_stats: EpochStatsMessages::default(),
+            query_stats: None,
         })
     }
 
