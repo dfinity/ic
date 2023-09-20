@@ -6,6 +6,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData,
     },
     is_copy_inactive_neurons_to_stable_memory_enabled,
+    migrations::maybe_run_migrations,
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::LedgerParameters,
@@ -6409,6 +6410,13 @@ impl Governance {
         true
     }
 
+    fn maybe_run_migrations(&mut self) {
+        self.heap_data.migrations = Some(maybe_run_migrations(
+            self.heap_data.migrations.clone().unwrap_or_default(),
+            &mut self.neuron_store,
+        ));
+    }
+
     /// Triggers a reward distribution event if enough time has passed since
     /// the last one. This is intended to be called by a cron
     /// process.
@@ -6471,6 +6479,7 @@ impl Governance {
 
         self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
+        self.maybe_run_migrations();
     }
 
     fn should_copy_next_batch_of_inactive_neurons_to_stable_memory(&self) -> bool {

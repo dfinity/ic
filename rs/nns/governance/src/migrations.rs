@@ -3,20 +3,45 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::governance::{
         migration::{MigrationStatus, Progress},
-        Migration,
+        Migration, Migrations,
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
 
 pub const NEURON_INDEXES_MIGRATION_BATCH_SIZE: usize = 1000;
 
+pub fn neuron_stable_indexes_building_is_enabled() -> bool {
+    cfg! { any(test, feature = "test") }
+}
+
+pub(crate) fn maybe_run_migrations(
+    mut migrations: Migrations,
+    neuron_store: &mut NeuronStore,
+) -> Migrations {
+    if neuron_stable_indexes_building_is_enabled() {
+        migrations.neuron_indexes_migration = Some(maybe_run_neuron_index_migration(
+            migrations
+                .neuron_indexes_migration
+                .clone()
+                .unwrap_or_default(),
+            neuron_store,
+        ));
+    }
+    migrations
+}
+
 /// Runs neuron indexes migration when possible.
-#[allow(dead_code)]
-pub(crate) fn maybe_run_neuron_index_migration(
+fn maybe_run_neuron_index_migration(
     migration: Migration,
     neuron_store: &mut NeuronStore,
 ) -> Migration {
-    let migration_status = migration.status.and_then(MigrationStatus::from_i32);
+    if !neuron_stable_indexes_building_is_enabled() {
+        return migration;
+    }
+
+    let migration_status = migration
+        .status
+        .and_then(|status| MigrationStatus::from_i32(status));
 
     let last_neuron_id = match migration_status {
         // The first time running the migration, starting at 0.
