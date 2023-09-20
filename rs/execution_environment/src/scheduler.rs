@@ -1238,7 +1238,6 @@ impl SchedulerImpl {
         state: &ReplicatedState,
         current_round_type: ExecutionRoundType,
     ) {
-        let mut num_aborted_install_code_without_call_id = 0;
         let canisters_with_tasks = state
             .canister_states
             .iter()
@@ -1252,12 +1251,8 @@ impl SchedulerImpl {
         for (id, canister) in canisters_with_tasks {
             for task in canister.system_state.task_queue.iter() {
                 match task {
-                    ExecutionTask::AbortedExecution { .. } => {}
-                    ExecutionTask::AbortedInstallCode { call_id, .. } => {
-                        if call_id.is_none() {
-                            num_aborted_install_code_without_call_id += 1;
-                        }
-                    }
+                    ExecutionTask::AbortedExecution { .. }
+                    | ExecutionTask::AbortedInstallCode { .. } => {}
                     ExecutionTask::Heartbeat => {
                         panic!(
                             "Unexpected heartbeat task after a round in canister {:?}",
@@ -1289,9 +1284,6 @@ impl SchedulerImpl {
                 }
             }
         }
-        self.metrics
-            .aborted_install_code_calls_without_call_id
-            .set(num_aborted_install_code_without_call_id);
     }
 }
 

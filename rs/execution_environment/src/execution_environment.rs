@@ -72,6 +72,7 @@ use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::{convert::Into, convert::TryFrom, sync::Arc};
@@ -270,10 +271,22 @@ pub struct ExecutionEnvironment {
 
 /// This is a helper enum that indicates whether the current DTS execution of
 /// install_code is the first execution or not.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum DtsInstallCodeStatus {
     StartingFirstExecution,
     ResumingPausedOrAbortedExecution,
+}
+
+impl fmt::Display for DtsInstallCodeStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let status = match &self {
+            DtsInstallCodeStatus::StartingFirstExecution => "StartingFirstExecution",
+            DtsInstallCodeStatus::ResumingPausedOrAbortedExecution => {
+                "ResumingPausedOrAbortedExecution"
+            }
+        };
+        write!(f, "{}", status)
+    }
 }
 
 impl ExecutionEnvironment {
@@ -2014,21 +2027,28 @@ impl ExecutionEnvironment {
             }
         };
 
-        let call_id = match dts_status {
-            DtsInstallCodeStatus::StartingFirstExecution => {
+        let call_id = match call_id {
+            None => {
+                // Call ID is not provided only if the current
+                // DTS execution of install_code is the first execution.
+                debug_assert_eq!(
+                    dts_status,
+                    DtsInstallCodeStatus::StartingFirstExecution,
+                    "Dts status mismatch: expected StartingFirstExecution, got {}",
+                    dts_status
+                );
                 // Keep track of all existing long running install code messages.
                 // During a subnet split, the requests are rejected if the target canister moved to a new subnet.
-                let call_id = state
+                state
                     .metadata
                     .subnet_call_context_manager
                     .push_install_code_call(InstallCodeCall {
                         call: msg.clone(),
                         time: state.time(),
                         effective_canister_id: install_context.canister_id,
-                    });
-                Some(call_id)
+                    })
             }
-            DtsInstallCodeStatus::ResumingPausedOrAbortedExecution => call_id,
+            Some(call_id) => call_id,
         };
 
         // Check the precondition.
@@ -2140,19 +2160,17 @@ impl ExecutionEnvironment {
                 state.put_canister_state(canister);
                 let refund = message.take_cycles();
                 // The message can be removed because a response was produced.
-                if let Some(call_id) = call_id {
-                    let install_code_call = state
-                        .metadata
-                        .subnet_call_context_manager
-                        .remove_install_code_call(call_id);
-                    if install_code_call.is_none() {
-                        info!(
+                let install_code_call = state
+                    .metadata
+                    .subnet_call_context_manager
+                    .remove_install_code_call(call_id);
+                if install_code_call.is_none() {
+                    info!(
                                     self.log,
                                     "Could not remove call id {} for canister {} after execution of install_code",
                                     call_id,
                                     canister_id
                                     );
-                    }
                 }
                 let state =
                     self.finish_subnet_message_execution(state, message, result, refund, timer);
@@ -2247,7 +2265,7 @@ impl ExecutionEnvironment {
                 prepaid_execution_cycles,
             } => self.execute_install_code(
                 message,
-                call_id,
+                Some(call_id),
                 Some(prepaid_execution_cycles),
                 DtsInstallCodeStatus::ResumingPausedOrAbortedExecution,
                 state,

@@ -9,6 +9,7 @@ use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
     MAX_CANISTER_HISTORY_CHANGES,
 };
+use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::CallOrigin;
 use crate::Memory;
 use ic_base_types::NumSeconds;
@@ -781,7 +782,7 @@ fn drops_aborted_canister_install_after_split() {
         .task_queue
         .push_back(ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
-            call_id: None,
+            call_id: InstallCodeCallId::new(0),
             prepaid_execution_cycles: Cycles::from(0u128),
         });
 

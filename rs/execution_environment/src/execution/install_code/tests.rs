@@ -1386,7 +1386,7 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
                 message, call_id, ..
             }) = canister.next_task()
             {
-                Some((call_id.unwrap(), message))
+                Some((call_id, message))
             } else {
                 None
             }
@@ -1398,7 +1398,7 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
     let mut subnet_call_context_manager = state.metadata.subnet_call_context_manager.clone();
     for (call_id, call) in canister_install_code_contexts {
         subnet_call_context_manager
-            .remove_install_code_call(call_id)
+            .remove_install_code_call(*call_id)
             .unwrap_or_else(|| {
                 panic!(
                     "Canister AbortedInstallCode task without matching subnet InstallCodeCall: {} {:?}",

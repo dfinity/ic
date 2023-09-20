@@ -453,8 +453,7 @@ pub enum ExecutionTask {
         message: CanisterCall,
         // The call id used by the subnet to identify long running install
         // code messages.
-        // TODO(EXC-1454): Make call_id non-optional.
-        call_id: Option<InstallCodeCallId>,
+        call_id: InstallCodeCallId,
         // The execution cost that has already been charged from the canister.
         // Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
@@ -517,7 +516,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedInstallCode(
                         pb::execution_task::AbortedInstallCode {
                             message: Some(message),
-                            call_id: call_id.map(|call_id| call_id.get()),
+                            call_id: Some(call_id.get()),
                             prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
                         },
                     )),
@@ -596,9 +595,12 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .map(|c| c.try_into())
                     .transpose()?
                     .unwrap_or_else(Cycles::zero);
+                let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
+                    "AbortedInstallCode::call_id",
+                ))?;
                 ExecutionTask::AbortedInstallCode {
                     message,
-                    call_id: aborted.call_id.map(InstallCodeCallId::from),
+                    call_id: InstallCodeCallId::new(call_id),
                     prepaid_execution_cycles,
                 }
             }
