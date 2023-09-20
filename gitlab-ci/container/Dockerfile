@@ -49,9 +49,9 @@ ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
-ARG sw_node_version=18
+COPY typescript/service-worker/.nvmrc /tmp/sw.npmrc
 RUN . /opt/nvm/nvm.sh && \
-    nvm install ${sw_node_version}
+    nvm install $(cat /tmp/sw.npmrc)
 
 RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 
