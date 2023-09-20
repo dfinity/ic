@@ -2,3 +2,4 @@
 
 pub mod files;
 pub mod remote_csp_vault;
+pub mod types;

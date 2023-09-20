@@ -5,6 +5,9 @@ use crate::sign::tests::KEY_ID;
 use crate::sign::tests::KEY_ID_STRING;
 use crate::sign::threshold_sig::ThresholdSigDataStore;
 use ic_crypto_internal_csp::types::{CspPublicCoefficients, ThresBls12_381_Signature};
+use ic_crypto_internal_csp_test_utils::types::{
+    csp_sig_thres_bls12381_combined_from_array_of, csp_sig_thres_bls12381_indiv_from_array_of,
+};
 use ic_crypto_internal_threshold_sig_bls12381::types::{
     CombinedSignatureBytes, IndividualSignatureBytes,
 };
@@ -1575,12 +1578,12 @@ fn csp_public_key() -> CspThresholdSigPublicKey {
 }
 
 fn sig_share() -> ThresholdSigShareOf<SignableMock> {
-    let csp_sig = CspSignature::thres_bls12381_indiv_from_array_of(42);
+    let csp_sig = csp_sig_thres_bls12381_indiv_from_array_of(42);
     ThresholdSigShareOf::try_from(csp_sig).unwrap()
 }
 
 fn combined_sig() -> CombinedThresholdSigOf<SignableMock> {
-    let csp_sig = CspSignature::thres_bls12381_combined_from_array_of(42);
+    let csp_sig = csp_sig_thres_bls12381_combined_from_array_of(42);
     CombinedThresholdSigOf::try_from(csp_sig).unwrap()
 }
 

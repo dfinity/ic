@@ -5,6 +5,9 @@ use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_basic_sig_rsa_pkcs1::RsaPublicKey as IcRsaPublicKey;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_sig_types;
 use ic_crypto_internal_seed::Seed;
+use ic_crypto_internal_test_vectors::unhex::{
+    hex_to_32_bytes, hex_to_48_bytes, hex_to_64_bytes, hex_to_96_bytes,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types as ni_dkg_types;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionSecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_sig_types;
@@ -231,5 +234,63 @@ prop_compose! {
             EccScalarBytes::K256(Box::new(bytes_0)),
             EccScalarBytes::K256(Box::new(bytes_1)),
         ))
+    }
+}
+
+impl CspSecretKey {
+    pub fn ed25519_from_hex(hex: &str) -> Self {
+        CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+            SecretArray::new_and_dont_zeroize_argument(&hex_to_32_bytes(hex)),
+        ))
+    }
+
+    pub fn multi_bls12381_from_hex(hex: &str) -> Self {
+        CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
+            SecretArray::new_and_dont_zeroize_argument(&hex_to_32_bytes(hex)),
+        ))
+    }
+}
+
+impl CspPublicKey {
+    pub fn ed25519_from_hex(hex: &str) -> Self {
+        CspPublicKey::Ed25519(ed25519_types::PublicKeyBytes(hex_to_32_bytes(hex)))
+    }
+
+    pub fn multi_bls12381_from_hex(hex: &str) -> Self {
+        CspPublicKey::MultiBls12_381(multi_types::PublicKeyBytes(hex_to_96_bytes(hex)))
+    }
+}
+
+impl CspSignature {
+    pub fn ed25519_from_hex(hex: &str) -> Self {
+        CspSignature::Ed25519(ed25519_types::SignatureBytes(hex_to_64_bytes(hex)))
+    }
+
+    pub fn multi_bls12381_individual_from_hex(hex: &str) -> Self {
+        CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(
+            multi_types::IndividualSignatureBytes(hex_to_48_bytes(hex)),
+        ))
+    }
+
+    pub fn thres_bls12381_indiv_from_array_of(byte: u8) -> Self {
+        CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual(
+            threshold_types::IndividualSignatureBytes(
+                [byte; threshold_types::IndividualSignatureBytes::SIZE],
+            ),
+        ))
+    }
+
+    pub fn thres_bls12381_combined_from_array_of(byte: u8) -> Self {
+        CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(
+            threshold_types::CombinedSignatureBytes(
+                [byte; threshold_types::CombinedSignatureBytes::SIZE],
+            ),
+        ))
+    }
+}
+
+impl CspPop {
+    pub fn multi_bls12381_from_hex(hex: &str) -> Self {
+        CspPop::MultiBls12_381(multi_types::PopBytes(hex_to_48_bytes(hex)))
     }
 }

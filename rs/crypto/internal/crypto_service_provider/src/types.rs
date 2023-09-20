@@ -12,14 +12,10 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_secp256r1_types
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
-use ic_crypto_internal_test_vectors::unhex::{
-    hex_to_32_bytes, hex_to_48_bytes, hex_to_64_bytes, hex_to_96_bytes,
-};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpeningBytes, MEGaKeySetK256Bytes};
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
-use ic_crypto_secrets_containers::SecretArray;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
@@ -68,73 +64,6 @@ pub enum CspSecretKey {
     MEGaEncryptionK256(MEGaKeySetK256Bytes),
     #[cfg_attr(test, proptest(strategy(arbitrary_threshold_ecdsa_opening)))]
     IDkgCommitmentOpening(CommitmentOpeningBytes),
-}
-
-impl CspSecretKey {
-    /// This function is only used for tests
-    pub fn ed25519_from_hex(hex: &str) -> Self {
-        CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&hex_to_32_bytes(hex)),
-        ))
-    }
-
-    /// This function is only used for tests
-    pub fn multi_bls12381_from_hex(hex: &str) -> Self {
-        CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
-            SecretArray::new_and_dont_zeroize_argument(&hex_to_32_bytes(hex)),
-        ))
-    }
-}
-
-impl CspPublicKey {
-    /// This function is only used for tests
-    pub fn ed25519_from_hex(hex: &str) -> Self {
-        CspPublicKey::Ed25519(ed25519_types::PublicKeyBytes(hex_to_32_bytes(hex)))
-    }
-
-    /// This function is only used for tests
-    pub fn multi_bls12381_from_hex(hex: &str) -> Self {
-        CspPublicKey::MultiBls12_381(multi_types::PublicKeyBytes(hex_to_96_bytes(hex)))
-    }
-}
-
-impl CspSignature {
-    /// This function is only used for tests
-    pub fn ed25519_from_hex(hex: &str) -> Self {
-        CspSignature::Ed25519(ed25519_types::SignatureBytes(hex_to_64_bytes(hex)))
-    }
-
-    /// This function is only used for tests
-    pub fn multi_bls12381_individual_from_hex(hex: &str) -> Self {
-        CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(
-            multi_types::IndividualSignatureBytes(hex_to_48_bytes(hex)),
-        ))
-    }
-
-    /// This function is only used for tests
-    pub fn thres_bls12381_indiv_from_array_of(byte: u8) -> Self {
-        CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual(
-            threshold_types::IndividualSignatureBytes(
-                [byte; threshold_types::IndividualSignatureBytes::SIZE],
-            ),
-        ))
-    }
-
-    /// This function is only used for tests
-    pub fn thres_bls12381_combined_from_array_of(byte: u8) -> Self {
-        CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(
-            threshold_types::CombinedSignatureBytes(
-                [byte; threshold_types::CombinedSignatureBytes::SIZE],
-            ),
-        ))
-    }
-}
-
-impl CspPop {
-    /// This function is only used for tests
-    pub fn multi_bls12381_from_hex(hex: &str) -> Self {
-        CspPop::MultiBls12_381(multi_types::PopBytes(hex_to_48_bytes(hex)))
-    }
 }
 
 impl CspSecretKey {

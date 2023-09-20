@@ -7,6 +7,7 @@
 pub mod api;
 pub mod builder;
 pub mod canister_threshold;
+#[cfg(test)]
 pub mod imported_test_utils;
 pub mod imported_utilities;
 pub mod key_id;

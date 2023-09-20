@@ -2,8 +2,9 @@
 
 use super::*;
 use assert_matches::assert_matches;
-use ic_crypto_internal_csp::types::CspPop;
-use ic_crypto_internal_csp::types::CspPublicKey;
+use ic_crypto_internal_csp_test_utils::types::{
+    csp_pk_ed25519_from_hex, csp_pk_multi_bls12381_from_hex, csp_pop_multi_bls12381_from_hex,
+};
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPop;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPublicKey;
@@ -278,7 +279,7 @@ fn with_csp_gen_node_signing_key_pair(csp: &mut MockAllCryptoServiceProvider) ->
     let node_signing_public_key = valid_node_signing_public_key();
     csp.expect_gen_node_signing_key_pair()
         .times(1)
-        .return_const(Ok(CspPublicKey::ed25519_from_hex(&hex::encode(
+        .return_const(Ok(csp_pk_ed25519_from_hex(&hex::encode(
             node_signing_public_key.key_value.clone(),
         ))));
     node_signing_public_key
@@ -289,10 +290,10 @@ fn with_csp_gen_committee_signing_key_pair(csp: &mut MockAllCryptoServiceProvide
     csp.expect_gen_committee_signing_key_pair()
         .times(1)
         .return_const(Ok((
-            CspPublicKey::multi_bls12381_from_hex(&hex::encode(
+            csp_pk_multi_bls12381_from_hex(&hex::encode(
                 committee_signing_public_key.key_value.clone(),
             )),
-            CspPop::multi_bls12381_from_hex(&hex::encode(
+            csp_pop_multi_bls12381_from_hex(&hex::encode(
                 committee_signing_public_key
                     .proof_data
                     .clone()
