@@ -23,12 +23,12 @@ pub fn execute_query_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_data_certificate_copy()/1B",
             Module::QueryTest.from_ic0("data_certificate_copy", Params3(0, 0, 1), Result::No),
-            13_000_004,
+            14_000_004,
         ),
         common::Benchmark(
             "ic0_data_certificate_copy()/64B",
             Module::QueryTest.from_ic0("data_certificate_copy", Params3(0, 0, 64), Result::No),
-            13_000_004,
+            77_000_004,
         ),
     ];
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
