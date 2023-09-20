@@ -15,8 +15,8 @@ ARG BUILD_TYPE=
 
 # Service worker version and sha256; only if SW is `true` the service worker from npm is used
 ARG SW=
-ARG sw_version=1.8.7
-ARG sw_sha256=5fffe316a9e43c7d8d5e6298d51369bfc77587e1121ddc9276480604babcf788
+ARG sw_version=1.8.8
+ARG sw_sha256=0e997ba7efe03441b126dbe674beec6231b89d4a997b24df21fd32428170501b
 
 #
 # First build stage: download software (service worker) that frequently changes, build and verify it (such that it
@@ -167,7 +167,7 @@ RUN for SERVICE in /etc/systemd/system/*; do \
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
 # E.g., systemd-timesync/coredump
 RUN systemd-sysusers && \
-    # Fix reproducibility issue. Notes in guestos/rootfs/Dockerfile    
+    # Fix reproducibility issue. Notes in guestos/rootfs/Dockerfile
     usermod -p '!!' systemd-timesync && \
     usermod -p '!!' systemd-coredump && \
     # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
