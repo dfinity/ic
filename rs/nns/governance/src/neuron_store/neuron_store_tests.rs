@@ -26,11 +26,14 @@ fn simple_neuron(id: u64) -> Neuron {
 // allow reading from the stable indexes.
 #[test]
 fn test_batch_add_heap_neurons_to_stable_indexes_two_batches() {
-    let mut neuron_store = NeuronStore::new(btreemap! {
-        1 => simple_neuron(1),
-        3 => simple_neuron(3),
-        7 => simple_neuron(7),
-    });
+    let mut neuron_store = NeuronStore::new(
+        btreemap! {
+            1 => simple_neuron(1),
+            3 => simple_neuron(3),
+            7 => simple_neuron(7),
+        },
+        Migration::default(),
+    );
 
     assert_eq!(
         neuron_store.batch_add_heap_neurons_to_stable_indexes(NeuronId { id: 0 }, 2),
@@ -44,12 +47,15 @@ fn test_batch_add_heap_neurons_to_stable_indexes_two_batches() {
 
 #[test]
 fn test_batch_add_heap_neurons_to_stable_indexes_three_batches_last_empty() {
-    let mut neuron_store = NeuronStore::new(btreemap! {
-        1 => simple_neuron(1),
-        3 => simple_neuron(3),
-        7 => simple_neuron(7),
-        12 => simple_neuron(12),
-    });
+    let mut neuron_store = NeuronStore::new(
+        btreemap! {
+            1 => simple_neuron(1),
+            3 => simple_neuron(3),
+            7 => simple_neuron(7),
+            12 => simple_neuron(12),
+        },
+        Migration::default(),
+    );
 
     assert_eq!(
         neuron_store.batch_add_heap_neurons_to_stable_indexes(NeuronId { id: 0 }, 2),
@@ -66,22 +72,85 @@ fn test_batch_add_heap_neurons_to_stable_indexes_three_batches_last_empty() {
 }
 
 #[test]
-fn test_batch_add_heap_neurons_to_stable_indexes_failure() {
-    let mut neuron_store = NeuronStore::new(btreemap! {
-        1 => simple_neuron(1),
-    });
-
-    assert_eq!(
-        neuron_store.batch_add_heap_neurons_to_stable_indexes(NeuronId { id: 0 }, 2),
-        Ok(None)
+fn test_maybe_batch_add_heap_neurons_to_stable_indexes_succeed() {
+    let mut neuron_store = NeuronStore::new(
+        (0..10).map(|i| (i, simple_neuron(i))).collect(),
+        Migration::default(),
     );
 
-    // Calling it again ignoring the progress would cause a failure.
-    let result = neuron_store.batch_add_heap_neurons_to_stable_indexes(NeuronId { id: 0 }, 2);
-    assert!(result.is_err(), "{:?}", result);
-    let error = result.err().unwrap();
-    assert!(error.contains("Subaccount"), "{}", error);
-    assert!(error.contains("already exists in the index"), "{}", error);
+    assert_eq!(
+        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes(),
+        Migration {
+            status: Some(MigrationStatus::Succeeded as i32),
+            failure_reason: None,
+            progress: None,
+        }
+    );
+}
+
+#[test]
+fn test_maybe_batch_add_heap_neurons_to_stable_indexes_already_succeeded() {
+    let mut neuron_store = NeuronStore::new(
+        (0..10).map(|i| (i, simple_neuron(i))).collect(),
+        Migration {
+            status: Some(MigrationStatus::Failed as i32),
+            failure_reason: None,
+            progress: None,
+        },
+    );
+
+    assert_eq!(
+        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes(),
+        Migration {
+            status: Some(MigrationStatus::Failed as i32),
+            failure_reason: None,
+            progress: None,
+        }
+    );
+}
+
+#[test]
+fn test_maybe_batch_add_heap_neurons_to_stable_indexes_already_failed() {
+    let mut neuron_store = NeuronStore::new(
+        (0..10).map(|i| (i, simple_neuron(i))).collect(),
+        Migration {
+            status: Some(MigrationStatus::Succeeded as i32),
+            failure_reason: None,
+            progress: None,
+        },
+    );
+
+    assert_eq!(
+        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes(),
+        Migration {
+            status: Some(MigrationStatus::Succeeded as i32),
+            failure_reason: None,
+            progress: None,
+        }
+    );
+}
+
+#[test]
+fn test_maybe_batch_add_heap_neurons_to_stable_indexes_failure() {
+    let neuron_1 = simple_neuron(1);
+    let neuron_2 = Neuron {
+        account: neuron_1.account.clone(),
+        ..simple_neuron(2)
+    };
+
+    let mut neuron_store = NeuronStore::new(
+        btreemap! {
+            1 => neuron_1,
+            2 => neuron_2.clone(),
+        },
+        Migration::default(),
+    );
+
+    let migration = neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
+    assert_eq!(migration.status, Some(MigrationStatus::Failed as i32));
+    let failure_reason = migration.failure_reason.unwrap();
+    assert!(failure_reason.contains("Neuron indexes are corrupted"));
+    assert!(failure_reason.contains("Subaccount"));
 }
 
 #[test]
@@ -108,7 +177,7 @@ fn test_batch_add_inactive_neurons_to_stable_memory() {
     // own thread.
 
     // Step 2: Call the code under test.
-    let mut neuron_store = NeuronStore::new(id_to_neuron);
+    let mut neuron_store = NeuronStore::new(id_to_neuron, Migration::default());
     let batch_result = neuron_store.batch_add_inactive_neurons_to_stable_memory(batch);
 
     // Step 3: Verify.
@@ -173,12 +242,15 @@ fn test_batch_add_inactive_neurons_to_stable_memory() {
 
 #[test]
 fn test_heap_range_with_begin_and_limit() {
-    let neuron_store = NeuronStore::new(btreemap! {
-        1 => simple_neuron(1),
-        3 => simple_neuron(3),
-        7 => simple_neuron(7),
-        12 => simple_neuron(12),
-    });
+    let neuron_store = NeuronStore::new(
+        btreemap! {
+            1 => simple_neuron(1),
+            3 => simple_neuron(3),
+            7 => simple_neuron(7),
+            12 => simple_neuron(12),
+        },
+        Migration::default(),
+    );
 
     let observed_neurons: Vec<_> = neuron_store
         .range_heap_neurons(NeuronId { id: 3 }..)
