@@ -202,7 +202,8 @@ bazel-build-fuzzers-archives:
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
       echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
       echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
       echo -e "************************************************************************"
       echo -e "\033[0m"
