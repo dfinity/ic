@@ -28,6 +28,7 @@ BIN_DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:base64",
     "@crate_index//:wat",
+    "@crate_index//:flate2",
 ]
 
 TEST_DEPENDENCIES = [

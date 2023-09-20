@@ -13,6 +13,10 @@ DEPENDENCIES = [
     "@crate_index//:hex",
 ]
 
+TEST_DEPENDENCIES = [
+    "@crate_index//:flate2",
+]
+
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
@@ -37,5 +41,5 @@ rust_test(
         "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":pocket-ic"] + DEPENDENCIES,
+    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )

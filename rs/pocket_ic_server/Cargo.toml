@@ -29,6 +29,7 @@ sha2 = "0.9.3"
 tempfile = "*"
 base64 = "0.11.0"
 wat = "1.0.52"
+flate2 = "1.0.27"
 
 [dev-dependencies]
 reqwest = "*"
