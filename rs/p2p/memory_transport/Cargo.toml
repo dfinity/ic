@@ -15,5 +15,5 @@ ic-types = { path = "../../types/types" }
 ic-quic-transport = { path = "../quic_transport" }
 prost = "0.11.0"
 tokio = { version = "1.32.0", features = ["full"] }
-tower = "0.4.13"
+tower = { workspace = true }
 

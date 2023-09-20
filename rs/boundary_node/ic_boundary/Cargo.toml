@@ -62,14 +62,7 @@ tempfile = "3.6.0"
 thiserror = "1.0.40"
 tokio = { version = "1.32.0", features = ["full"] }
 tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
-tower = { version = "0.4.11", features = [
-    "buffer",
-    "limit",
-    "load-shed",
-    "steer",
-    "timeout",
-    "util",
-] }
+tower = { workspace = true }
 tower-http = { version = "0.4.3", features = ["trace", "request-id", "util"] }
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }

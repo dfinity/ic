@@ -44,7 +44,7 @@ prometheus = "0.13.3"
 rustls = { version = "0.21", features = ["dangerous_configuration"] }
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1"
-tower = "0.4"
+tower = { workspace = true }
 tower-http = { version = "0.3", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json"] }

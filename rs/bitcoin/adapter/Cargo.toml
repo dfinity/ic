@@ -30,7 +30,7 @@ thiserror = "1.0.26"
 tokio = { version = "1.32.0", features = ["full", "macros"] }
 tokio-socks = "0.5.1"
 tonic = { workspace = true }
-tower = { version = "0.4.11", features = ["util"], optional = true }
+tower = { workspace = true, optional = true }
 
 [dev-dependencies]
 bitcoind = "0.32.0"

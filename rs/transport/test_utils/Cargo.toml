@@ -21,5 +21,5 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-transport = { path = "../../transport" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 tokio = { version = "1.32.0", features = ["full"] }
-tower = "0.4.12"
+tower = { workspace = true }
 tower-test = "0.4.0"
