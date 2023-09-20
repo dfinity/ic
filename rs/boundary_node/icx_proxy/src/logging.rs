@@ -73,7 +73,7 @@ pub fn setup(opts: LoggingOpts) -> EnteredSpan {
         File::create(path.unwrap_or_else(|| "log.txt".into())).expect("Couldn't open log file")
     }
 
-    // The `layer_format` macro is used to uniformly customize the the format specific options for a layer
+    // The `layer_format` macro is used to uniformly customize the format specific options for a layer
     // (e.g. all json should be flattened)
     macro_rules! layer_format {
         (json, $writer:expr) => {
@@ -90,7 +90,7 @@ pub fn setup(opts: LoggingOpts) -> EnteredSpan {
             layer().compact().with_writer($writer)
         };
     }
-    // The `writer` macro is used to uniformly customize the the writer specific options for a layer
+    // The `writer` macro is used to uniformly customize the writer specific options for a layer
     // (e.g. files don't use ANSI terminal colors)
     macro_rules! writer {
         (file, $format:ident) => {
@@ -100,7 +100,7 @@ pub fn setup(opts: LoggingOpts) -> EnteredSpan {
             layer_format!($format, stderr)
         };
     }
-    // The `layer` macro is used to uniformly customize the the writer-format specific options for a layer
+    // The `layer` macro is used to uniformly customize the writer-format specific options for a layer
     // (e.g. file-json includes the current span [we don't actually do this, it's just an hypothetical example])
     macro_rules! layer {
         ($writer:ident, $format:ident) => {
