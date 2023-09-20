@@ -9,6 +9,8 @@ pub struct CallContext {
     pub deleted: bool,
     #[prost(uint64, optional, tag = "9")]
     pub time_nanos: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "10")]
+    pub instructions_executed: u64,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }

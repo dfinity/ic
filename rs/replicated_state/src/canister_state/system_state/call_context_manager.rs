@@ -7,6 +7,7 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types::NumInstructions;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Response},
@@ -43,6 +44,10 @@ pub struct CallContext {
     /// optional to accommodate contexts that were created before this field was
     /// added.
     time: Option<Time>,
+
+    /// The total number of instructions executed in the given call context.
+    /// This value is used for the `ic0.performance_counter` type 1.
+    instructions_executed: NumInstructions,
 }
 
 impl CallContext {
@@ -59,6 +64,7 @@ impl CallContext {
             deleted,
             available_cycles,
             time: Some(time),
+            instructions_executed: NumInstructions::default(),
         }
     }
 
@@ -110,6 +116,12 @@ impl CallContext {
     pub fn time(&self) -> Option<Time> {
         self.time
     }
+
+    /// Return the total number of instructions executed in the given call context.
+    /// This value is used for the `ic0.performance_counter` type 1.
+    pub fn instructions_executed(&self) -> NumInstructions {
+        self.instructions_executed
+    }
 }
 
 impl From<&CallContext> for pb::CallContext {
@@ -121,6 +133,7 @@ impl From<&CallContext> for pb::CallContext {
             deleted: item.deleted,
             available_funds: Some((&funds).into()),
             time_nanos: item.time.map(|t| t.as_nanos_since_unix_epoch()),
+            instructions_executed: item.instructions_executed.get(),
         }
     }
 }
@@ -137,6 +150,7 @@ impl TryFrom<pb::CallContext> for CallContext {
             deleted: value.deleted,
             available_cycles: funds.cycles(),
             time: value.time_nanos.map(Time::from_nanos_since_unix_epoch),
+            instructions_executed: value.instructions_executed.into(),
         })
     }
 }
@@ -322,6 +336,7 @@ impl CallContextManager {
                 deleted: false,
                 available_cycles: cycles,
                 time: Some(time),
+                instructions_executed: NumInstructions::default(),
             },
         );
         id
