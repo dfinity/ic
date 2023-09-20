@@ -339,6 +339,7 @@ members = [
   "rs/utils/rustfmt",
   "rs/validator",
   "rs/validator/ingress_message",
+  "rs/validator/ingress_message/test_canister",
   "rs/workload_generator",
   "rs/xnet/endpoint",
   "rs/xnet/hyper",
