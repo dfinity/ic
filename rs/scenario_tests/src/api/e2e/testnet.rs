@@ -125,7 +125,7 @@ pub fn load_testnet_topology(
         subnet.node_ids = node_ids.clone();
         for node_id in node_ids {
             let node_record = registry_client
-                .get_transport_info(node_id, registry_version)
+                .get_node_record(node_id, registry_version)
                 .map_err(|e| e.to_string())?
                 .ok_or(format!("node {} has no transport info", node_id))?;
 

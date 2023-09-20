@@ -1048,14 +1048,14 @@ async fn get_random_node_from_nns_subnet(
         "Failed to choose random nns node. NNS node list: {:?}",
         nns_nodes
     ))?;
-    match registry_client.get_transport_info(*nns_node, registry_client.get_latest_version()) {
+    match registry_client.get_node_record(*nns_node, registry_client.get_latest_version()) {
         Ok(Some(node)) => Ok((*nns_node, node.http.ok_or("No http endpoint for node")?)),
         Ok(None) => Err(format!(
             "No transport info found for nns node. {}",
             nns_node
         )),
         Err(err) => Err(format!(
-            "Failed to get transport info for nns node {}. Err: {}",
+            "failed to get node record for nns node {}. Err: {}",
             nns_node, err
         )),
     }

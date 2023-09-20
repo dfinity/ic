@@ -156,7 +156,7 @@ where
         // Read seed_id, peer_tls_certificate, my tls_certificate from registry.
         let transport_info = self
             .registry
-            .get_transport_info(peer, registry_version)
+            .get_node_record(peer, registry_version)
             .map_err(ValidateAttestationError::RegistryError)?
             .ok_or(ValidateAttestationError::RegistryDataMissing {
                 node_id: peer,

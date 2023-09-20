@@ -359,7 +359,7 @@ impl BackupHelper {
                 .into_iter()
                 .filter_map(|node_id| {
                     self.registry_client
-                        .get_transport_info(node_id, version)
+                        .get_node_record(node_id, version)
                         .unwrap_or_default()
                 })
                 .collect::<Vec<_>>()),

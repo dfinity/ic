@@ -184,7 +184,7 @@ impl ProximityMap {
         let node = nodes[node_index];
         let node_record = self
             .registry
-            .get_transport_info(node, version)
+            .get_node_record(node, version)
             .map_err(|e| Error::RegistryGetNodeInfoFailed(node, e))?;
 
         match node_record {

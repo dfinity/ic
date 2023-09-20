@@ -457,7 +457,7 @@ impl InternalState {
     ) -> Result<Vec<Url>, String> {
         let t_infos = match self
             .registry_client
-            .get_subnet_transport_infos(subnet_id, version)
+            .get_subnet_node_records(subnet_id, version)
         {
             Ok(Some(v)) => v,
             Ok(None) => {

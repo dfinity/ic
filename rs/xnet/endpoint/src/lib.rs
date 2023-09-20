@@ -596,7 +596,7 @@ impl XNetEndpointConfig {
     fn try_from(registry: Arc<dyn RegistryClient>, node_id: NodeId) -> Option<XNetEndpointConfig> {
         let version = registry.get_latest_version();
         let node_record = registry
-            .get_transport_info(node_id, version)
+            .get_node_record(node_id, version)
             .unwrap_or_else(|e| {
                 panic!(
                     "Could not retrieve registry record for node {}: {}",
