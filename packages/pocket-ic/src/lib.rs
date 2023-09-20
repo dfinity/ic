@@ -8,7 +8,6 @@ use ic_cdk::api::management_canister::main::{
 use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_bytes::ByteBuf;
 use std::fmt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -25,6 +24,7 @@ pub struct PocketIc {
     // The PocketIC server's base address plus "/instances/<instance_id>/".
     // All communication with this IC instance goes through this endpoint.
     instance_url: Url,
+    server_url: Url,
     reqwest_client: reqwest::blocking::Client,
 }
 
@@ -47,6 +47,7 @@ impl PocketIc {
         Self {
             instance_id,
             instance_url,
+            server_url,
             reqwest_client,
         }
     }
@@ -77,6 +78,7 @@ impl PocketIc {
                 Ok(Self {
                     instance_id,
                     instance_url,
+                    server_url,
                     reqwest_client,
                 })
             }
@@ -140,6 +142,25 @@ impl PocketIc {
             .expect("Failed to get result")
             .text()
             .expect("Failed to get text")
+    }
+
+    fn set_blob_store(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
+        let mut request = self
+            .reqwest_client
+            .post(self.server_url.join("blobstore/").unwrap())
+            .body(blob);
+        if compression == BlobCompression::Gzip {
+            request = request.header(reqwest::header::CONTENT_ENCODING, "gzip");
+        }
+        let blob_id = request
+            .send()
+            .expect("Failed to get response")
+            .text()
+            .expect("Failed to get text");
+
+        let hash_vec = hex::decode(blob_id).expect("Failed to decode hex");
+        let hash: Result<[u8; 32], Vec<u8>> = hash_vec.try_into();
+        BlobId(hash.expect("Invalid hash"))
     }
 
     // TODO: Add a function that separates those two
@@ -351,20 +372,28 @@ impl PocketIc {
         self.call_state_machine(Request::Tick)
     }
 
+    // TODO: There have been complains that this function is misleading.
+    // We should consider removing it from the interface or refactoring it.
     pub fn run_until_completion(&self, max_ticks: u64) {
         self.call_state_machine(Request::RunUntilCompletion(RunUntilCompletionArg {
             max_ticks,
         }))
     }
 
-    pub fn stable_memory(&self, canister_id: Principal) -> Vec<u8> {
+    pub fn get_stable_memory(&self, canister_id: Principal) -> Vec<u8> {
         self.call_state_machine(Request::ReadStableMemory(RawCanisterId::from(canister_id)))
     }
 
-    pub fn set_stable_memory(&self, canister_id: Principal, data: ByteBuf) {
+    pub fn set_stable_memory(
+        &self,
+        canister_id: Principal,
+        data: Vec<u8>,
+        compression: BlobCompression,
+    ) {
+        let blob_id = self.set_blob_store(data, compression);
         self.call_state_machine(Request::SetStableMemory(SetStableMemoryArg {
             canister_id: canister_id.as_slice().to_vec(),
-            data,
+            blob_id,
         }))
     }
 
@@ -467,7 +496,7 @@ pub struct SetStableMemoryArg {
     // raw bytes of the principal
     #[serde(with = "base64")]
     pub canister_id: Vec<u8>,
-    pub data: ByteBuf,
+    pub blob_id: BlobId,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -501,7 +530,7 @@ pub struct Checkpoint {
     pub checkpoint_name: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct BlobId(pub [u8; 32]);
 
 #[derive(Clone, Debug)]

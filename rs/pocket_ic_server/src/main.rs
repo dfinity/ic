@@ -27,6 +27,7 @@ use pocket_ic::{
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Read;
 use std::io::Write;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -353,13 +354,17 @@ async fn list_checkpoints(
 // Call the IC instance with the given InstanceId
 async fn call_instance(
     State(inst_map): State<InstanceMap>,
+    State(AppState { blob_store, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
     axum::extract::Json(request): axum::extract::Json<Request>,
 ) -> (StatusCode, String) {
     let guard_map = inst_map.read().await;
     if let Some(rw_lock) = guard_map.get(&id) {
         let guard_sm = rw_lock.write().await;
-        (StatusCode::OK, call_sm(&guard_sm, request))
+        (
+            StatusCode::OK,
+            call_sm(&guard_sm, request, blob_store).await,
+        )
     } else {
         (
             StatusCode::NOT_FOUND,
@@ -494,8 +499,8 @@ async fn delete_instance(
 // ----------------------------------------------------------------------------------------------------------------- //
 // Code borrowed and adapted from rs/state_machine_tests/src/main.rs
 
-fn call_sm(sm: &StateMachine, data: Request) -> String {
-    match data {
+async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobStore>) -> String {
+    match request {
         RootKey => to_json_str(threshold_sig_public_key_to_der(sm.root_key()).unwrap()),
         Time => to_json_str(sm.time()),
         SetTime(time) => {
@@ -523,7 +528,24 @@ fn call_sm(sm: &StateMachine, data: Request) -> String {
         CanisterExists(canister_id) => to_json_str(sm.canister_exists(to_canister_id(canister_id))),
         SetStableMemory(arg) => {
             let canister_id = CanisterId::try_from(arg.canister_id).expect("invalid canister id");
-            sm.set_stable_memory(canister_id, arg.data.as_ref());
+            let blob = blob_store
+                .fetch(arg.blob_id)
+                .await
+                .expect("Could not find data in blob store");
+            let data = {
+                match blob.compression {
+                    BlobCompression::Gzip => {
+                        let mut decoder = flate2::read::GzDecoder::new(&blob.data[..]);
+                        let mut data = Vec::new();
+                        decoder
+                            .read_to_end(&mut data)
+                            .expect("Failed to decompress blob");
+                        data
+                    }
+                    BlobCompression::NoCompression => blob.data,
+                }
+            };
+            sm.set_stable_memory(canister_id, &data);
             to_json_str(())
         }
         ReadStableMemory(canister_id) => to_json_str(sm.stable_memory(to_canister_id(canister_id))),
