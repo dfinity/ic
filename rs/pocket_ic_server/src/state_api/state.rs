@@ -160,7 +160,7 @@ impl std::fmt::Debug for OpOut {
             OpOut::IcUserErr(x) => write!(f, "{}", x),
             OpOut::WasmResult(WasmResult::Reject(x)) => write!(f, "Reject({})", x),
             OpOut::WasmResult(WasmResult::Reply(bytes)) => {
-                write!(f, "Reply({})", base64::encode(&bytes))
+                write!(f, "Reply({})", base64::encode(bytes))
             }
         }
     }
