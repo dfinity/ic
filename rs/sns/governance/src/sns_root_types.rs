@@ -23,7 +23,7 @@ pub struct RegisterDappCanisterRequest {
     ::prost::Message,
 )]
 pub struct RegisterDappCanisterResponse {}
-/// This message has an identical message defined in governace.proto, both need to be changed together
+/// This message has an identical message defined in governance.proto, both need to be changed together
 /// TODO(NNS1-1589)
 #[derive(
     candid::CandidType,
