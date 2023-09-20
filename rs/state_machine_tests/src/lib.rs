@@ -69,7 +69,6 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::batch::EpochStatsMessages;
 pub use ic_types::canister_http::CanisterHttpRequestContext;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
@@ -872,7 +871,7 @@ impl StateMachine {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
                 bitcoin_adapter_responses: vec![],
-                query_stats: EpochStatsMessages::default(),
+                query_stats: None,
             },
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),

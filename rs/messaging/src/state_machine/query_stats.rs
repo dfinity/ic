@@ -108,25 +108,25 @@ pub fn deliver_query_stats(
     }
 
     let epoch_query_stats = &mut state.epoch_query_stats;
-    for (canister_id, stats) in &query_stats.stats {
+    for message in &query_stats.stats {
         let previous_value = epoch_query_stats
             .stats
-            .entry(*canister_id)
+            .entry(message.canister_id)
             .or_default()
             .insert(
                 query_stats.proposer,
                 CanisterQueryStats {
-                    num_calls: stats.num_calls,
-                    num_instructions: stats.num_instructions,
-                    ingress_payload_size: stats.ingress_payload_size,
-                    egress_payload_size: stats.egress_payload_size,
+                    num_calls: message.stats.num_calls,
+                    num_instructions: message.stats.num_instructions,
+                    ingress_payload_size: message.stats.ingress_payload_size,
+                    egress_payload_size: message.stats.egress_payload_size,
                 },
             );
         if previous_value.is_some() {
             error!(
                     logger,
                     "Received duplicate query stats for canister {} from same proposer {}. This is a bug, possibly in the payload builder.",
-                    canister_id, query_stats.proposer
+                    message.canister_id, query_stats.proposer
                 );
         }
     }

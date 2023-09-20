@@ -11044,6 +11044,7 @@ dependencies = [
  "proptest-derive",
  "prost",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "rusty-fork",
  "serde",
  "serde_bytes",

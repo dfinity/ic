@@ -80,12 +80,9 @@ impl StateMachine for StateMachineImpl {
         let phase_timer = Timer::start();
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
-        deliver_query_stats(
-            &self.log,
-            &batch.messages.query_stats,
-            &mut state,
-            batch.batch_number,
-        );
+        if let Some(query_stats) = &batch.messages.query_stats {
+            deliver_query_stats(&self.log, query_stats, &mut state, batch.batch_number);
+        }
 
         if batch.time >= state.metadata.batch_time {
             state.metadata.batch_time = batch.time;

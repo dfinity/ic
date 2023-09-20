@@ -1,15 +1,16 @@
 use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
-use ic_base_types::{CanisterId, NodeId};
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
-use ic_protobuf::state::canister_state_bits::v1::{
-    TotalQueryStats as TotalQueryStatsProto, Unsigned128,
+use ic_base_types::{CanisterId, NodeId, NumBytes};
+use ic_protobuf::{
+    proxy::{try_from_option_field, ProxyDecodeError},
+    state::{
+        canister_state_bits::v1::{TotalQueryStats as TotalQueryStatsProto, Unsigned128},
+        stats::v1::{QueryStats, QueryStatsInner},
+    },
+    types::v1::{self as pb},
 };
-use ic_protobuf::state::stats::v1::{QueryStats, QueryStatsInner};
-use ic_protobuf::types::v1::{self as pb};
-
+use prost::{bytes::BufMut, Message};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::hash::Hash;
+use std::{collections::BTreeMap, hash::Hash};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterQueryStats {
@@ -155,16 +156,128 @@ impl TryFrom<QueryStats> for ReceivedEpochStats {
 /// the query stats part is self contained.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EpochStatsMessages {
+    pub epoch: QueryStatsEpoch,
     pub proposer: NodeId,
-    pub stats: Vec<(CanisterId, CanisterQueryStats)>,
+    pub stats: Vec<QueryStatsMessage>,
 }
 
-impl Default for EpochStatsMessages {
-    fn default() -> Self {
-        Self {
-            proposer: NodeId::try_from(ic_base_types::PrincipalId::default()).unwrap(),
-            stats: Default::default(),
+impl EpochStatsMessages {
+    /// Serialize this payload into a vector
+    ///
+    /// This function will drop trailing stats to guarantee, that the
+    /// payload will fit into the `byte_limit`
+    pub fn serialize_with_limit(&self, byte_limit: NumBytes) -> Vec<u8> {
+        if self.stats.is_empty() {
+            return vec![];
         }
+
+        let mut buffer = vec![].limit(byte_limit.get() as usize);
+
+        // Encode the metadata about the messages
+        match self
+            .epoch
+            .get()
+            .encode_length_delimited(&mut buffer)
+            .and_then(|()| self.proposer.get().encode_length_delimited(&mut buffer))
+        {
+            Ok(()) => (),
+            // Return immidiately, if there is not enough space to fit the metadata
+            Err(_) => return vec![],
+        }
+
+        let mut num_stats_included = 0;
+        for entry in &self.stats {
+            if pb::QueryStatsPayloadInner::from(entry)
+                .encode_length_delimited(&mut buffer)
+                .is_err()
+            {
+                break;
+            }
+
+            num_stats_included += 1;
+        }
+
+        // If there is enough space for the metadata but not for stats,
+        // return an empty payload.
+        if num_stats_included == 0 {
+            vec![]
+        } else {
+            buffer.into_inner()
+        }
+    }
+
+    /// Deserializes a [`EpochStatsMessages`]
+    ///
+    /// Allows to filter for node id and epoch.
+    /// If the filters are set, the deserializer will check whether the node_id
+    /// respectively epoch match, and if not skip the rest of the deserialization.
+    pub fn deserialize(mut data: &[u8]) -> Result<Option<Self>, ProxyDecodeError> {
+        if data.is_empty() {
+            return Ok(None);
+        }
+
+        // Deserialize epoch and proposer
+        let epoch = QueryStatsEpoch::new(
+            u64::decode_length_delimited(&mut data).map_err(ProxyDecodeError::DecodeError)?,
+        );
+        let proposer = NodeId::new(
+            pb::PrincipalId::decode_length_delimited(&mut data)
+                .map_err(ProxyDecodeError::DecodeError)?
+                .try_into()?,
+        );
+
+        let mut messages = Self {
+            epoch,
+            proposer,
+            stats: vec![],
+        };
+
+        // Deserialize the stats
+        while !data.is_empty() {
+            let stat = pb::QueryStatsPayloadInner::decode_length_delimited(&mut data)
+                .map_err(ProxyDecodeError::DecodeError)?;
+            messages.stats.push(QueryStatsMessage::try_from(&stat)?);
+        }
+
+        Ok(Some(messages))
+    }
+}
+
+/// A message about the statistics of a specific canister.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct QueryStatsMessage {
+    pub canister_id: CanisterId,
+    pub stats: CanisterQueryStats,
+}
+
+impl From<&QueryStatsMessage> for pb::QueryStatsPayloadInner {
+    fn from(entry: &QueryStatsMessage) -> Self {
+        Self {
+            canister_id: Some(pb::CanisterId::from(entry.canister_id)),
+            num_calls: entry.stats.num_calls,
+            num_instructions: entry.stats.num_instructions,
+            ingress_payload_size: entry.stats.ingress_payload_size,
+            egress_payload_size: entry.stats.egress_payload_size,
+        }
+    }
+}
+
+impl TryFrom<&pb::QueryStatsPayloadInner> for QueryStatsMessage {
+    type Error = ProxyDecodeError;
+
+    fn try_from(entry: &pb::QueryStatsPayloadInner) -> Result<Self, Self::Error> {
+        Ok(Self {
+            canister_id: try_from_option_field(
+                entry.canister_id.clone(),
+                "QueryStatsInner::canister_id",
+            )?,
+            stats: CanisterQueryStats {
+                num_calls: entry.num_calls,
+                num_instructions: entry.num_instructions,
+                ingress_payload_size: entry.ingress_payload_size,
+                egress_payload_size: entry.egress_payload_size,
+            },
+        })
     }
 }
 
@@ -173,41 +286,71 @@ pub struct QueryStatsPayload {
     pub canister_stats: BTreeMap<CanisterId, CanisterQueryStats>,
 }
 
-impl From<&QueryStatsPayload> for pb::QueryStatsPayload {
-    // Encode protobuf representation of query stats
-    fn from(payload: &QueryStatsPayload) -> Self {
-        let mut container = pb::QueryStatsPayload::default();
-        for (key, value) in &payload.canister_stats {
-            let inner = pb::QueryStatsPayloadInner {
-                canister_id: Some(pb::CanisterId::from(*key)),
-                num_calls: value.num_calls,
-                num_instructions: value.num_instructions,
-                ingress_payload_size: value.ingress_payload_size,
-                egress_payload_size: value.egress_payload_size,
-            };
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_base_types::PrincipalId;
+    use rand::{Rng, RngCore, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
 
-            container.canister_stats.push(inner);
-        }
-        container
+    /// Empty serialization test
+    #[test]
+    fn empty_serialization() {
+        let original_stats = test_message(1000);
+        let serialized_stats = original_stats.serialize_with_limit(NumBytes::new(4));
+        assert!(serialized_stats.is_empty());
+        assert!(EpochStatsMessages::deserialize(&serialized_stats)
+            .unwrap()
+            .is_none());
     }
-}
 
-impl TryFrom<pb::QueryStatsPayload> for QueryStatsPayload {
-    type Error = ProxyDecodeError;
-    // Decode protobuf representation of query stats
-    fn try_from(payload: pb::QueryStatsPayload) -> Result<Self, Self::Error> {
-        let mut canister_stats = BTreeMap::new();
-        for entry in payload.canister_stats {
-            canister_stats.insert(
-                try_from_option_field(entry.canister_id, "QueryStatsPayloadInner::canister_id")?,
-                CanisterQueryStats {
-                    num_calls: entry.num_calls,
-                    num_instructions: entry.num_instructions,
-                    ingress_payload_size: entry.ingress_payload_size,
-                    egress_payload_size: entry.egress_payload_size,
-                },
-            );
+    /// Serialization and deserialization test
+    #[test]
+    fn serialization_roundtrip() {
+        let original_stats = test_message(1000);
+        let serialized_stats = original_stats.serialize_with_limit(NumBytes::new(2 * 1024 * 1024));
+        let deserialized_stats = EpochStatsMessages::deserialize(&serialized_stats)
+            .unwrap()
+            .unwrap();
+        assert_eq!(&original_stats, &deserialized_stats);
+    }
+
+    /// Test serialization with space limit
+    #[test]
+    fn serialization_with_byte_limit() {
+        let original_stats = test_message(1000);
+        let serialized_stats = original_stats.serialize_with_limit(NumBytes::new(2 * 1024));
+        assert!(serialized_stats.len() < 2 * 1024);
+        let deserialized_stats = EpochStatsMessages::deserialize(&serialized_stats)
+            .unwrap()
+            .unwrap();
+        assert!(original_stats.stats.len() > deserialized_stats.stats.len());
+    }
+
+    fn test_message(num_stats: u64) -> EpochStatsMessages {
+        let mut rng = ChaCha8Rng::seed_from_u64(1454);
+
+        EpochStatsMessages {
+            epoch: QueryStatsEpoch::new(1),
+            proposer: NodeId::from(PrincipalId::new_node_test_id(1)),
+            stats: (0..num_stats)
+                .map(|idx| QueryStatsMessage {
+                    canister_id: CanisterId::from(idx),
+                    stats: rng_epoch_stats(&mut rng),
+                })
+                .collect(),
         }
-        Ok(Self { canister_stats })
+    }
+
+    fn rng_epoch_stats<R>(rng: &mut R) -> CanisterQueryStats
+    where
+        R: RngCore,
+    {
+        CanisterQueryStats {
+            num_calls: rng.gen(),
+            num_instructions: rng.gen(),
+            ingress_payload_size: rng.gen(),
+            egress_payload_size: rng.gen(),
+        }
     }
 }
