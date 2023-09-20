@@ -29,8 +29,10 @@ use {
 
 use crate::{http::HttpClient, persist::Routes, snapshot::Node};
 
+const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
+
 // Type of IC request
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq)]
 pub enum RequestType {
     #[default]
     Status,
@@ -121,7 +123,13 @@ pub struct RequestContext {
     pub request_size: u32,
 }
 
-// This is a subset of the fields.
+impl RequestContext {
+    pub fn is_anonymous(&self) -> Option<bool> {
+        self.sender.map(|x| x == ANONYMOUS_PRINCIPAL)
+    }
+}
+
+// This is the subset of the request fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ICRequestContent {
     sender: Principal,

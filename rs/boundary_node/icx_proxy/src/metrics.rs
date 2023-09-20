@@ -17,8 +17,8 @@ use bytes::Buf;
 use candid::Principal;
 use clap::Args;
 use futures::task::{Context as FutContext, Poll};
+use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH};
 use http_body::Body as HttpBody;
-use hyper::http::header::HeaderMap;
 use hyper::{self, StatusCode};
 use ic_agent::Agent;
 use opentelemetry::{
@@ -207,28 +207,51 @@ impl Runner {
 // A wrapper for http::Body implementations that tracks the number of bytes sent
 pub struct MetricsBody<D, E> {
     inner: Pin<Box<dyn HttpBody<Data = D, Error = E> + Send + 'static>>,
-    callback: Box<dyn Fn(u64, bool) + Send + 'static>,
+    callback: Box<dyn Fn(u64, Result<(), String>) + Send + 'static>,
+    content_length: Option<u64>,
     bytes_sent: u64,
 }
 
 impl<D, E> MetricsBody<D, E> {
-    pub fn new<B>(body: B, callback: impl Fn(u64, bool) + Send + 'static) -> Self
+    pub fn new<B>(
+        body: B,
+        content_length: Option<HeaderValue>,
+        callback: impl Fn(u64, Result<(), String>) + Send + 'static,
+    ) -> Self
     where
         B: HttpBody<Data = D, Error = E> + Send + 'static,
         D: Buf,
     {
+        // Try to parse header if provided
+        let content_length =
+            content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()));
+
         Self {
             inner: Box::pin(body),
             callback: Box::new(callback),
+            content_length,
             bytes_sent: 0,
         }
     }
 }
 
+// According to the research, the users of HttpBody can determine the time when
+// there's no more data to fetch in several ways:
+//
+// 1) When there's no Content-Length header they just call poll_data() until it yields Poll::Ready(None)
+// 2) When there's such header - they call poll_data() until they get advertised in the header number of bytes
+//    and don't call poll_data() anymore so Poll::Ready(None) variant is never reached
+// 3) They call is_end_stream() and if it returns true then they don't call poll_data() anymore
+//
+// So we have to cover all these:
+// * We don't implement is_end_stream() (default impl in Trait just returns false) so that
+//   the caller will have to use poll_data()
+// * We have to have a Content-Length stored to check if we got already that much data
+
 impl<D, E> HttpBody for MetricsBody<D, E>
 where
     D: Buf,
-    E: std::fmt::Debug,
+    E: std::string::ToString,
 {
     type Data = D;
     type Error = E;
@@ -240,16 +263,33 @@ where
         let poll = self.inner.as_mut().poll_data(cx);
 
         match &poll {
+            // There is still some data available
             Poll::Ready(Some(v)) => match v {
-                Ok(v) => self.bytes_sent += v.remaining() as u64,
-                Err(_) => (self.callback)(self.bytes_sent, false),
+                Ok(buf) => {
+                    self.bytes_sent += buf.remaining() as u64;
+
+                    // Check if we already got what was expected
+                    if let Some(v) = self.content_length {
+                        if self.bytes_sent >= v {
+                            (self.callback)(self.bytes_sent, Ok(()));
+                        }
+                    }
+                }
+
+                // Error occured, execute callback
+                Err(e) => {
+                    // Error is not Copy/Clone so use string instead
+                    (self.callback)(self.bytes_sent, Err(e.to_string()));
+                }
             },
 
+            // Nothing left, execute callback
             Poll::Ready(None) => {
-                (self.callback)(self.bytes_sent, true);
+                (self.callback)(self.bytes_sent, Ok(()));
             }
 
-            _ => {}
+            // Do nothing
+            Poll::Pending => {}
         }
 
         poll
@@ -260,10 +300,6 @@ where
         cx: &mut FutContext<'_>,
     ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
         self.inner.as_mut().poll_trailers(cx)
-    }
-
-    fn is_end_stream(&self) -> bool {
-        self.inner.is_end_stream()
     }
 
     fn size_hint(&self) -> http_body::SizeHint {
@@ -329,19 +365,32 @@ pub async fn with_metrics_middleware(
 
     let status = response.status().as_u16();
 
-    let (parts, body) = response.into_parts();
-    let body = MetricsBody::new(body, move |bytes_sent, fully_read| {
+    let record_metrics = move |bytes_sent: u64, body_result: Result<(), String>| {
         let labels = &[
             KeyValue::new("status", status.to_string()),
             KeyValue::new("streaming", request_ctx.streaming_request.to_string()),
-            KeyValue::new("body_fully_read", fully_read.to_string()),
+            KeyValue::new(
+                "body_error",
+                {
+                    if body_result.is_err() {
+                        "yes"
+                    } else {
+                        "no "
+                    }
+                }
+                .to_string(),
+            ),
         ];
 
         request_sizer.record(request_ctx.request_size, labels);
         response_sizer.record(bytes_sent, labels);
         durationer.record(proc_duration, labels);
         durationer_full.record(start.elapsed().as_secs_f64(), labels);
-    });
+    };
+
+    let (parts, body) = response.into_parts();
+    let content_length = parts.headers.get(CONTENT_LENGTH).cloned();
+    let body = MetricsBody::new(body, content_length, record_metrics);
 
     Response::from_parts(parts, body)
 }

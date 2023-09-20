@@ -26,6 +26,7 @@ futures = "0.3.21"
 futures-util = "0.3.28"
 hex = "0.4.3"
 http = "0.2.6"
+http-body = "0.4"
 hyper = "0.14.18"
 hyper-rustls = "0.24.0"
 ic-config = { path = "../../config" }
