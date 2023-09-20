@@ -412,15 +412,6 @@ impl SchedulerTest {
             .unwrap();
     }
 
-    /// Aborts all paused executions.
-    pub fn abort_all_paused_executions(&mut self) {
-        let mut state = self.state.take().unwrap();
-        self.scheduler
-            .exec_env
-            .abort_all_paused_executions(&mut state, &no_op_logger());
-        self.state = Some(state);
-    }
-
     /// Returns all responses from the management canister to
     /// `self.xnet_canister_id()`.
     pub fn get_responses_to_injected_calls(&mut self) -> Vec<Response> {

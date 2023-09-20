@@ -203,7 +203,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
             prepaid_execution_cycles: Cycles::new(1),
-            call_id: None,
+            call_id: InstallCodeCallId::new(0),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::clone(&request))),
@@ -212,7 +212,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
             prepaid_execution_cycles: Cycles::new(3),
-            call_id: Some(InstallCodeCallId::new(3u64)),
+            call_id: InstallCodeCallId::new(3u64),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(&response))),

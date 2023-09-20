@@ -714,8 +714,7 @@ pub(crate) struct OriginalContext {
     pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
-    // TODO(EXC-1454): Make call_id non-optional.
-    pub call_id: Option<InstallCodeCallId>,
+    pub call_id: InstallCodeCallId,
     pub prepaid_execution_cycles: Cycles,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,

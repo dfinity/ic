@@ -398,10 +398,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         }
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_init) execution of canister {}.", self.original.canister_id
@@ -498,10 +495,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         }
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id,

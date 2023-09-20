@@ -561,10 +561,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         }
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_pre_upgrade) execution of canister {}.",
@@ -663,10 +660,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         }
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id
@@ -761,10 +755,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         }
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_post_upgrade) execution of canister {}.",

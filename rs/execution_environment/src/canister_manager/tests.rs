@@ -35,6 +35,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::CyclesUseCase,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::{self, TestPageAllocatorFileDescriptorImpl},
     testing::CanisterQueuesTesting,
     testing::SystemStateTesting,
@@ -336,6 +337,7 @@ fn install_code(
     let (result, instructions_used, canister) = canister_manager.install_code(
         context,
         CanisterCall::Ingress(Arc::new(ingress)),
+        InstallCodeCallId::new(0),
         state,
         execution_parameters,
         round_limits,

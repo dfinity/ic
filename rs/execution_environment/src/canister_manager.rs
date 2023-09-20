@@ -68,7 +68,7 @@ pub(crate) enum DtsInstallCodeResult {
     Finished {
         canister: CanisterState,
         message: CanisterCall,
-        call_id: Option<InstallCodeCallId>,
+        call_id: InstallCodeCallId,
         instructions_used: NumInstructions,
         result: Result<InstallCodeResult, CanisterManagerError>,
     },
@@ -645,6 +645,7 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         message: CanisterCall,
+        call_id: InstallCodeCallId,
         state: &mut ReplicatedState,
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
@@ -676,7 +677,7 @@ impl CanisterManager {
         let dts_result = self.install_code_dts(
             context,
             message,
-            None,
+            call_id,
             None,
             old_canister,
             time,
@@ -734,7 +735,7 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         message: CanisterCall,
-        call_id: Option<InstallCodeCallId>,
+        call_id: InstallCodeCallId,
         prepaid_execution_cycles: Option<Cycles>,
         mut canister: CanisterState,
         time: Time,
@@ -1818,10 +1819,7 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
     /// Aborts the paused execution.
     /// Returns the original message, the cycles prepaid for execution,
     /// and a call id that exist only for inter-canister messages.
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles);
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles);
 }
 
 #[cfg(test)]
