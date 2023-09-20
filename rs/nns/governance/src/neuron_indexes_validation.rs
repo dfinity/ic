@@ -1,8 +1,6 @@
 #![allow(dead_code)] // TODO(NNS1-2413): remove after calling it in heartbeat.
 use crate::neuron_store::{NeuronStore, NeuronStoreError};
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_nns_common::pb::v1::NeuronId;
 use std::{collections::VecDeque, marker::PhantomData};
 
@@ -459,7 +457,7 @@ mod tests {
     use ic_base_types::PrincipalId;
     use maplit::{btreemap, hashmap};
 
-    use crate::pb::v1::{neuron::Followees, KnownNeuronData, Neuron};
+    use crate::pb::v1::{governance::Migration, neuron::Followees, KnownNeuronData, Neuron};
 
     thread_local! {
         static NEXT_TEST_NEURON_ID: RefCell<u64> = RefCell::new(1);
@@ -512,14 +510,17 @@ mod tests {
 
     #[test]
     fn test_finish_validation() {
-        let neuron_store = NeuronStore::new(btreemap! {
-            1 => Neuron {
-                id: Some(NeuronId { id: 1 }),
-                account: [1u8; 32].to_vec(),
-                controller: Some(PrincipalId::new_user_test_id(1)),
-                ..Default::default()
+        let neuron_store = NeuronStore::new(
+            btreemap! {
+                1 => Neuron {
+                    id: Some(NeuronId { id: 1 }),
+                    account: [1u8; 32].to_vec(),
+                    controller: Some(PrincipalId::new_user_test_id(1)),
+                    ..Default::default()
+                },
             },
-        });
+            Migration::default(),
+        );
         let mut validation = NeuronIndexesValidator::new(0);
 
         // Each index use 2 rounds and we have 4 indexes.
@@ -550,7 +551,7 @@ mod tests {
         };
         btree_map.insert(non_idle.id.unwrap().id, non_idle);
 
-        let neuron_store = NeuronStore::new(btree_map);
+        let neuron_store = NeuronStore::new(btree_map, Migration::default());
 
         STABLE_NEURON_STORE.with(|stable_neuron_store| {
             for neuron in idle_neurons {
@@ -594,7 +595,7 @@ mod tests {
         btree_map.get_mut(&2).unwrap().cached_neuron_stake_e8s += 1;
         btree_map.remove(&3);
 
-        let neuron_store = NeuronStore::new(btree_map);
+        let neuron_store = NeuronStore::new(btree_map, Migration::default());
 
         STABLE_NEURON_STORE.with(|stable_neuron_store| {
             for neuron in idle_neurons {

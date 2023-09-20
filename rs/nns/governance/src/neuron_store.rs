@@ -2,7 +2,14 @@ use crate::{
     governance::{Environment, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
     is_copy_inactive_neurons_to_stable_memory_enabled,
     neuron::neuron_id_range_to_u64_range,
-    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
+    pb::v1::{
+        governance::{
+            migration::{MigrationStatus, Progress},
+            Migration,
+        },
+        governance_error::ErrorType,
+        GovernanceError, Neuron, NeuronState, Topic,
+    },
     storage::{neuron_indexes::CorruptedNeuronIndexes, NEURON_INDEXES, STABLE_NEURON_STORE},
 };
 #[cfg(target_arch = "wasm32")]
@@ -22,8 +29,12 @@ use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
+    fmt::{Display, Formatter},
     ops::RangeBounds,
 };
+
+// TODO(NNS1-2417): tune this before starting migration.
+const NEURON_INDEXES_MIGRATION_BATCH_SIZE: usize = 1000;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
@@ -78,59 +89,59 @@ pub struct NeuronNotFound {
     neuron_id: NeuronId,
 }
 
-impl From<NeuronStoreError> for GovernanceError {
-    fn from(value: NeuronStoreError) -> Self {
-        match value {
+impl Display for NeuronStoreError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
             NeuronStoreError::NeuronNotFound(neuron_not_found) => {
-                GovernanceError::new_with_message(
-                    ErrorType::NotFound,
-                    format!("Neuron not found: {:?}", neuron_not_found.neuron_id),
-                )
+                write!(f, "Neuron not found: {:?}", neuron_not_found.neuron_id)
             }
             NeuronStoreError::CorruptedNeuronIndexes(corrupted_neuron_indexes) => {
-                GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!(
-                        "Neuron indexes are corrupted: {:?}",
-                        corrupted_neuron_indexes
-                    ),
+                write!(
+                    f,
+                    "Neuron indexes are corrupted: {:?}",
+                    corrupted_neuron_indexes
                 )
             }
-            NeuronStoreError::NeuronIdIsNone => GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Neuron id is none",
-            ),
+            NeuronStoreError::NeuronIdIsNone => write!(f, "Neuron id is none"),
             NeuronStoreError::InvalidSubaccount {
                 neuron_id,
                 subaccount_bytes,
-            } => GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "Neuron {:?} has an invalid subaccount {:?}",
-                    neuron_id, subaccount_bytes
-                ),
+            } => write!(
+                f,
+                "Neuron {:?} has an invalid subaccount {:?}",
+                neuron_id, subaccount_bytes
             ),
             NeuronStoreError::NeuronIdModified {
                 old_neuron_id,
                 new_neuron_id,
-            } => GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "Attempting to modify neuron id from {} to {}",
-                    old_neuron_id.id, new_neuron_id.id
-                ),
+            } => write!(
+                f,
+                "Attempting to modify neuron id from {} to {}",
+                old_neuron_id.id, new_neuron_id.id
             ),
             NeuronStoreError::SubaccountModified {
                 old_subaccount,
                 new_subaccount,
-            } => GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "Attempting to modify neuron subaccount from {:?} to {:?}",
-                    old_subaccount, new_subaccount
-                ),
+            } => write!(
+                f,
+                "Attempting to modify neuron subaccount from {:?} to {:?}",
+                old_subaccount, new_subaccount
             ),
         }
+    }
+}
+
+impl From<NeuronStoreError> for GovernanceError {
+    fn from(value: NeuronStoreError) -> Self {
+        let error_type = match &value {
+            NeuronStoreError::NeuronNotFound(_) => ErrorType::NotFound,
+            NeuronStoreError::CorruptedNeuronIndexes(_) => ErrorType::PreconditionFailed,
+            NeuronStoreError::NeuronIdIsNone => ErrorType::PreconditionFailed,
+            NeuronStoreError::InvalidSubaccount { .. } => ErrorType::PreconditionFailed,
+            NeuronStoreError::NeuronIdModified { .. } => ErrorType::PreconditionFailed,
+            NeuronStoreError::SubaccountModified { .. } => ErrorType::PreconditionFailed,
+        };
+        GovernanceError::new_with_message(error_type, value.to_string())
     }
 }
 
@@ -160,18 +171,23 @@ pub struct NeuronStore {
     ///
     /// This set is cached and will be removed and recreated when the state is saved and restored.
     pub known_neuron_name_set: HashSet<String>,
+
+    /// Neuron indexes migration state.
+    indexes_migration: Migration,
 }
 
 impl NeuronStore {
-    pub fn new(heap_neurons: BTreeMap<u64, Neuron>) -> Self {
+    pub fn new(heap_neurons: BTreeMap<u64, Neuron>, indexes_migration: Migration) -> Self {
         let topic_followee_index = build_topic_followee_index(&heap_neurons);
         let principal_to_neuron_ids_index = build_principal_to_neuron_ids_index(&heap_neurons);
         let known_neuron_name_set = build_known_neuron_name_index(&heap_neurons);
+
         Self {
             heap_neurons,
             topic_followee_index,
             principal_to_neuron_ids_index,
             known_neuron_name_set,
+            indexes_migration,
         }
     }
 
@@ -387,6 +403,47 @@ impl NeuronStore {
         Ok(f(neuron))
     }
 
+    pub(crate) fn maybe_batch_add_heap_neurons_to_stable_indexes(&mut self) -> Migration {
+        let migration = &self.indexes_migration;
+        let last_neuron_id = match migration.migration_status() {
+            MigrationStatus::Unspecified => NeuronId { id: 0 },
+            MigrationStatus::InProgress => match migration.progress {
+                Some(Progress::LastNeuronId(last_neuron_id)) => last_neuron_id,
+                None => {
+                    eprintln!("{}Neuron index migration progress is wrong", LOG_PREFIX);
+                    return migration.clone();
+                }
+            },
+            _ => return migration.clone(),
+        };
+
+        let result = self.batch_add_heap_neurons_to_stable_indexes(
+            last_neuron_id,
+            NEURON_INDEXES_MIGRATION_BATCH_SIZE,
+        );
+
+        let new_migration = match result {
+            Err(failure_reason) => Migration {
+                status: Some(MigrationStatus::Failed as i32),
+                failure_reason: Some(failure_reason),
+                progress: None,
+            },
+            Ok(Some(new_last_neuron_id)) => Migration {
+                status: Some(MigrationStatus::InProgress as i32),
+                failure_reason: None,
+                progress: Some(Progress::LastNeuronId(new_last_neuron_id)),
+            },
+            Ok(None) => Migration {
+                status: Some(MigrationStatus::Succeeded as i32),
+                failure_reason: None,
+                progress: None,
+            },
+        };
+
+        self.indexes_migration = new_migration.clone();
+        new_migration
+    }
+
     /// For heap neurons starting from `last_neuron_id + 1` where `last_neuron_id` is the last
     /// neuron id that has been migrated, and it adds at most `batch_size` of them into stable
     /// storage indexes. It is an undefined behavior if `last_neuron_id` passed in was not returned
@@ -396,9 +453,7 @@ impl NeuronStore {
     /// returns `Ok(last_neuron_id)` if the cursor has not reached the end.
     ///
     /// Note that a Neuron with id 0 will never be scan, and it's OK because it is not a valid id.
-    ///
-    #[allow(dead_code)] // TODO(NNS1-2409): Re-enable clippy.
-    pub(crate) fn batch_add_heap_neurons_to_stable_indexes(
+    fn batch_add_heap_neurons_to_stable_indexes(
         &mut self,
         last_neuron_id: NeuronId,
         batch_size: usize,

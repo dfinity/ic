@@ -538,6 +538,7 @@ fn craft_neuron_store(
                 (id, neuron)
             })
             .collect(),
+        Migration::default(),
     )
 }
 
@@ -547,7 +548,7 @@ fn assert_clean_refund(
     expected_neuron_store: &NeuronStore,
 ) {
     let original_id_to_neuron = neuron_store.clone_neurons();
-    let mut original_neuron_store = NeuronStore::new(original_id_to_neuron);
+    let mut original_neuron_store = NeuronStore::new(original_id_to_neuron, Migration::default());
 
     let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let failed_refunds =
@@ -846,7 +847,7 @@ fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
 
 #[test]
 fn draw_funds_from_the_community_fund_trivial() {
-    let mut neuron_store = NeuronStore::new(btreemap! {});
+    let mut neuron_store = NeuronStore::new(btreemap! {}, Migration::default());
     let original_total_community_fund_maturity_e8s_equivalent = 0;
 
     let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
@@ -860,12 +861,15 @@ fn draw_funds_from_the_community_fund_trivial() {
 
     // Inspect results.
     assert_eq!(observed_cf_neurons, vec![]);
-    assert_eq!(neuron_store, NeuronStore::new(btreemap! {}));
+    assert_eq!(
+        neuron_store,
+        NeuronStore::new(btreemap! {}, Migration::default())
+    );
 
     assert_clean_refund(
         &mut neuron_store,
         &observed_cf_neurons,
-        &NeuronStore::new(btreemap! {}),
+        &NeuronStore::new(btreemap! {}, Migration::default()),
     );
 }
 

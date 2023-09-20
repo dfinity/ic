@@ -1502,9 +1502,14 @@ impl Governance {
 
         let (heap_neurons, heap_governance_proto) = split_governance_proto(governance_proto);
 
+        let neuron_indexes_migration = heap_governance_proto
+            .migrations
+            .as_ref()
+            .and_then(|migrations| migrations.neuron_indexes_migration.clone())
+            .unwrap_or_default();
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(heap_neurons),
+            neuron_store: NeuronStore::new(heap_neurons, neuron_indexes_migration),
             env,
             ledger,
             cmc,
