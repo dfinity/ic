@@ -81,7 +81,9 @@ pub(crate) enum RegistryInvariantError {
         registry_version: RegistryVersion,
     },
 
-    #[error("failed to get transport info for node {node_id} from registry {registry_version}: {source}")]
+    #[error(
+        "failed to get node record for node {node_id} from registry {registry_version}: {source}"
+    )]
     GetTransportInfoFailed {
         node_id: NodeId,
         registry_version: RegistryVersion,
@@ -161,7 +163,7 @@ fn get_ic_topology(
 
         for node_id in node_ids {
             let node_record = registry_client
-                .get_transport_info(node_id, registry_version)
+                .get_node_record(node_id, registry_version)
                 .map_err(|source| RegistryInvariantError::GetTransportInfoFailed {
                     node_id,
                     registry_version,

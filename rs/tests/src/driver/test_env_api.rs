@@ -642,7 +642,7 @@ impl IcNodeSnapshot {
 
     fn raw_node_record(&self) -> pb_node::NodeRecord {
         self.local_registry
-            .get_transport_info(self.node_id, self.registry_version)
+            .get_node_record(self.node_id, self.registry_version)
             .unwrap_result()
     }
 

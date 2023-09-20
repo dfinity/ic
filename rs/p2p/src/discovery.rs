@@ -83,7 +83,7 @@ impl GossipImpl {
             let version = RegistryVersion::from(version);
             let node_records = self
                 .registry_client
-                .get_subnet_transport_infos(self.subnet_id, version)
+                .get_subnet_node_records(self.subnet_id, version)
                 .unwrap_or(None)
                 .unwrap_or_default();
             for node in node_records {

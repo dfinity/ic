@@ -948,7 +948,7 @@ pub fn get_member_ips(
         .filter_map(|node_id| {
             registry_helper
                 .registry_client()
-                .get_transport_info(node_id, registry_version)
+                .get_node_record(node_id, registry_version)
                 .unwrap_or_default()
         })
         .filter_map(|node_record| {

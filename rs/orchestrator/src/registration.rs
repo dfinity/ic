@@ -453,11 +453,11 @@ impl NodeRegistration {
 
         let t_infos = match self
             .registry_client
-            .get_subnet_transport_infos(root_subnet_id, version)
+            .get_subnet_node_records(root_subnet_id, version)
         {
             Ok(Some(infos)) => infos,
             err => {
-                warn!(self.log, "Failed to get transport infos: {:?}", err);
+                warn!(self.log, "failed to get node records: {:?}", err);
                 return None;
             }
         };

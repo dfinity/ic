@@ -146,8 +146,8 @@ impl Runner {
                     .map(|node_id| {
                         let transport_info = self
                             .registry_client
-                            .get_transport_info(node_id, version)
-                            .context("failed to get transport info")? // Result
+                            .get_node_record(node_id, version)
+                            .context("failed to get node record")? // Result
                             .context("transport info not available")?; // Option
 
                         let http_endpoint =

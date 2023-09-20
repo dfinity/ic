@@ -117,7 +117,7 @@ impl PeerManager {
 
             let transport_info = match self
                 .registry_client
-                .get_subnet_transport_infos(self.subnet_id, version)
+                .get_subnet_node_records(self.subnet_id, version)
             {
                 Ok(Some(transport_info)) => transport_info,
                 Ok(None) => {
@@ -130,9 +130,7 @@ impl PeerManager {
                 Err(e) => {
                     warn!(
                         self.log,
-                        "Failed to get transport information from registry at version {} : {}",
-                        version,
-                        e
+                        "failed to get node record from registry at version {} : {}", version, e
                     );
                     Vec::new()
                 }

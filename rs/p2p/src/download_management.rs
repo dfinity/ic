@@ -1320,7 +1320,7 @@ pub mod tests {
         registry_client.update_to_latest_version();
         let registry_version = registry_client.get_latest_version();
         let node_records = registry_client
-            .get_subnet_transport_infos(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
+            .get_subnet_node_records(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
             .unwrap_or(None)
             .unwrap_or_default();
         assert_eq!((num_replicas - 1) as usize, node_records.len());

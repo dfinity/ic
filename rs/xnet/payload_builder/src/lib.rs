@@ -1062,7 +1062,7 @@ fn get_node_operator_id(
     log: &ReplicaLogger,
 ) -> Option<Vec<u8>> {
     registry
-        .get_transport_info(*node_id, *registry_version)
+        .get_node_record(*node_id, *registry_version)
         .unwrap_or_else(|_| {
             info!(
                 log,

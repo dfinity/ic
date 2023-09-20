@@ -200,8 +200,8 @@ impl LocalRegistry {
     ) -> Result<Vec<Url>, LocalRegistryError> {
         let t_infos = registry_result_to_local_registry_error(
             version,
-            "get_subnet_transport_infos",
-            reg_client.get_subnet_transport_infos(subnet_id, version),
+            "get_subnet_node_records",
+            reg_client.get_subnet_node_records(subnet_id, version),
         )?;
         let mut urls: Vec<Url> = t_infos
             .iter()
