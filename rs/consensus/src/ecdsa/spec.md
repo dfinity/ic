@@ -151,7 +151,7 @@ unless the
 `transcript_id` appears in an object contained in the ECDSA 
 payload of the finalized tip.
 This does not apply when we are doing xnet resharing on the target subnet,
-as the `source_height` field refers to a a height on the source subnet,
+as the `source_height` field refers to a height on the source subnet,
 not the target subnet.
 
 ````rust
@@ -491,7 +491,7 @@ fn move_dealings_to_validated_pool(
 ) -> (Set<Dealing>, Set<Dealing>, Set<Dealing>) 
 // Returns (V, I, R), where 
 //    V is the set of dealings to be moved from the unvalidated pool to the validated pool,
-//    I is the set of dealings to be be removed from the unvalidated pool and processed as HandleInvalid,
+//    I is the set of dealings to be removed from the unvalidated pool and processed as HandleInvalid,
 //    R is the set of dealings to be removed from the unvalidated pool and processed as RemoveFromUnvalidated.
 // Some deduplication is performed.
 // INVARIANT: after V is added to the validated pool, there are no dealings with duplicate key() values.
@@ -717,7 +717,7 @@ fn move_support_shares_to_validated_pool(
 ) -> (Set<SupportShare>, Set<SupportShare>, Set<SupportShare>)
 // Returns (V, I, R), where 
 //    V is the set of support shares to be moved from the unvalidated pool to the validated pool,
-//    I is the set of support shares to be be removed from the unvalidated pool and processed as HandleInvalid,
+//    I is the set of support shares to be removed from the unvalidated pool and processed as HandleInvalid,
 //    R is the set of support shares to be removed from the unvalidated pool and processed as RemoveFromUnvalidated.
 // Some deduplication is performed.
 // INVARIANT: after V is added to the validated pool, there are no support shares with duplicate (key(),signer()) values.
@@ -1017,7 +1017,7 @@ fn move_sig_shares_to_validated_pool(
 ) -> (Set<EcdsaSigShare>, Set<EcdsaSigShare>, Set<EcdsaSigShare>)
 // Returns (V, I, R), where 
 //    V is the set of signature shares to be moved from the unvalidated pool to the validated pool,
-//    I is the set of signature shares to be be removed from the unvalidated pool and processed as HandleInvalid,
+//    I is the set of signature shares to be removed from the unvalidated pool and processed as HandleInvalid,
 //    R is the set of signature shares to be removed from the unvalidated pool and processed as RemoveFromUnvalidated.
 // Some deduplication is performed.
 // INVARIANT: after V is added to the validated pool, there are no signature shares with duplicate key() values.
@@ -1121,7 +1121,7 @@ fn move_complaints_to_validated_pool(
 ) -> (Set<Complaint>, Set<Complaint>, Set<Complaint>)
 // Returns (V, I, R), where 
 //    V is the set of complaints to be moved from the unvalidated pool to the validated pool,
-//    I is the set of complaints to be be removed from the unvalidated pool and processed as HandleInvalid,
+//    I is the set of complaints to be removed from the unvalidated pool and processed as HandleInvalid,
 //    R is the set of complaints to be removed from the unvalidated pool and processed as RemoveFromUnvalidated.
 // Some deduplication is performed.
 // INVARIANT: after V is added to the validated pool, there are no complaints with duplicate key() values.
@@ -1263,13 +1263,13 @@ fn move_openings_to_validated_pool(
 ) -> (Set<Opening>, Set<Opening>, Set<Opening>)
 // Returns (V, I, R), where 
 //    V is the set of openings to be moved from the unvalidated pool to the validated pool,
-//    I is the set of openings to be be removed from the unvalidated pool and processed as HandleInvalid,
+//    I is the set of openings to be removed from the unvalidated pool and processed as HandleInvalid,
 //    R is the set of openings to be removed from the unvalidated pool and processed as RemoveFromUnvalidated.
 // Some deduplication is performed.
 // INVARIANT: after V is added to the validated pool, there are no openings with duplicate key() values.
 // NOTE: since deduplication is done locally, different replicas may end up
 // with different openings in their validated pools.  Openings in I are patently invalid, and receipt 
-// of such a opening from a replica implicates that replica as corrupt. 
+// of such an opening from a replica implicates that replica as corrupt. 
 // Openings in R are valid except that adding them to the validated pool would invalidate the above invariant.
 // DIFF: all of this logic is likely different from the code base.
 {
@@ -1541,7 +1541,7 @@ enum CompletedSignature {
 // When a signature is freshly constructed, it is added a block as Unreported.
 // However, it may appear in some number of subsequent blocks as Reported. 
 // When the block containing the reported signature is finalized, execution layer may pass the signature along.
-// We leave the reported signature in subsequent block so long as the the call context still contains the 
+// We leave the reported signature in subsequent block so long as the call context still contains the 
 // the corresponding signing request.
 // All of this achieves two goals: (1) a signature will be reported just once to execution, and (2)
 // consensus will not attempt to generate another signature if the signing request persists in the call context.
@@ -2529,7 +2529,7 @@ fn build_ecdsa_summary_payload(
     // *** test for subnet membership change
     // The logic is that if we have a key that is not being reshared, then we initiate reshare
     // if the receiver set of that key is not equal to the subnet membership of next_registry_version.
-    // With this logic ,if a resharig attempt has not succeeded at the end of a CUP interval,
+    // With this logic, if a resharing attempt has not succeeded at the end of a CUP interval,
     // that resharing attempt will simply continue as long as it takes.
 
     match (current_key_state, next_key_state) {
