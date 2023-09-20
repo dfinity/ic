@@ -8,6 +8,8 @@ rust_library(
     crate_name = "ic_crypto_internal_csp_test_utils",
     version = "0.8.0",
     deps = [
+        "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+        "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/internal/crypto_service_provider",
         "//rs/crypto/internal/logmon",
@@ -22,6 +24,7 @@ rust_library(
         "@crate_index//:rand_chacha_0_3_1",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
     ],

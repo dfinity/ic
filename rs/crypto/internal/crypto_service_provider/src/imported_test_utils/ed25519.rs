@@ -4,7 +4,6 @@ use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use ic_crypto_internal_test_vectors::ed25519::*;
 use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
 
-/// TODO(CRP-995): This function is only used for testing and should be removed
 pub fn csp_testvec(
     test_vec: Ed25519TestVector,
 ) -> (CspSecretKey, CspPublicKey, Vec<u8>, CspSignature) {

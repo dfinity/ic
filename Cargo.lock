@@ -6284,8 +6284,10 @@ dependencies = [
 name = "ic-crypto-internal-csp-test-utils"
 version = "0.8.0"
 dependencies = [
+ "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-logmon",
+ "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-logger",
@@ -6298,6 +6300,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "serde_bytes",
+ "serde_cbor",
  "tempfile",
  "tokio",
 ]
