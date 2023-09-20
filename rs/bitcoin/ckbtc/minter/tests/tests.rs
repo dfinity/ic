@@ -657,7 +657,7 @@ impl CkBtcSetup {
         let response = Decode!(
             &assert_reply(
                 self.env
-                    .execute_ingress(self.minter_id, "http_request", Encode!(&request).unwrap(),)
+                    .query(self.minter_id, "http_request", Encode!(&request).unwrap(),)
                     .expect("failed to get minter info")
             ),
             HttpResponse
@@ -1569,7 +1569,7 @@ fn test_filter_logs() {
         &assert_reply(
             ckbtc
                 .env
-                .execute_ingress(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
+                .query(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
                 .expect("failed to get minter info")
         ),
         HttpResponse
@@ -1588,7 +1588,7 @@ fn test_filter_logs() {
         &assert_reply(
             ckbtc
                 .env
-                .execute_ingress(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
+                .query(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
                 .expect("failed to get minter info")
         ),
         HttpResponse
