@@ -61,7 +61,7 @@ To add a new configuration file/directory:
 *Values and defaults*: Please ensure that the system is operational even in the absence of specific configuration bits, and fall back to sane production defaults. Already deployed nodes will by definition lack new configuration variables and need to behave properly. And defaults unsuitable for tests need to be overridden in tests (not the other way around).
 
 *Format*: The configuration files are "free-form". In principle, any format will work. But please use simple formats (e.g. files containing key=value pair lines). Parsing is done inside shell scripts and safely parsing "fancy" formats may be tricky.
-Consider that values may be controlled by an attacker on boot. Bootstrapping a node with bogus values can cause the node to malfunction. Our security goal is to disallow an Node Technician to gain control over the node via code injection or similar.
+Consider that values may be controlled by an attacker on boot. Bootstrapping a node with bogus values can cause the node to malfunction. Our security goal is to disallow a Node Technician to gain control over the node via code injection or similar.
 
 *Configuration files*: New configuration bits might be added to either existing configuration files that have a suitable structure (e.g. key=value pairs), or new files. If in doubt, opt for adding additional configuration files.
 
