@@ -9,7 +9,7 @@ The Ubuntu-based IC OS is built by:
 * converting this root filesystem into filesystem images for +/+ and +/boot+
   via +mke2fs+
 
-The build instructions in the Dockerfile itself should be straight-forward
+The build instructions in the Dockerfile itself should be straightforward
 to read; required additional steps can simply be amended.
 
 The following template directories are simply copied verbatim onto the target
@@ -83,7 +83,7 @@ units and scripts:
 * Systemd opens and activates all logical volumes
 
 * The service +setup-shared-data+ creates a filesystem in the +store/shared-data+
-  logical volume (unless it contain a filesystem already). Similarly,
+  logical volume (unless it contains a filesystem already). Similarly,
   services +setup-shared-crypto+ and +setup-shared-backup+ creates
   filesystems in the +store/shared-crypto+ and +store/shared-backup+.
 
