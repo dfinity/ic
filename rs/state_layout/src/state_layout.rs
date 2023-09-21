@@ -2,7 +2,7 @@ use crate::error::LayoutError;
 use crate::utils::do_copy;
 
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -329,13 +329,26 @@ impl TipHandler {
 
         debug_assert!(cp.root.exists());
 
+        let file_copy_instruction = |path: &Path| {
+            if path.extension() == Some(OsStr::new("pbuf")) {
+                // Do not copy protobufs
+                CopyInstruction::Skip
+            } else if path.extension() == Some(OsStr::new("bin")) {
+                // PageMap files need to be modified in the tip
+                CopyInstruction::ReadWrite
+            } else {
+                // Everything else should be readonly
+                CopyInstruction::ReadOnly
+            }
+        };
+
         match copy_recursively(
             &state_layout.log,
+            &state_layout.metrics,
             cp.root.as_path(),
             &tip,
-            FilePermissions::ReadWrite,
             FSync::No,
-            |path| path.extension() != Some(OsStr::new("pbuf")),
+            file_copy_instruction,
             thread_pool,
         ) {
             Ok(()) => Ok(()),
@@ -1002,7 +1015,9 @@ impl StateLayout {
         self.raw_path().join("tip")
     }
 
-    fn checkpoints(&self) -> PathBuf {
+    /// Returns the directory containing checkpoints.
+    /// Pub for testing.
+    pub fn checkpoints(&self) -> PathBuf {
         self.root.join(CHECKPOINTS_DIR)
     }
 
@@ -1044,11 +1059,11 @@ impl StateLayout {
         let copy_atomically = || {
             copy_recursively(
                 &self.log,
+                &self.metrics,
                 src,
                 scratchpad.as_path(),
-                FilePermissions::ReadOnly,
                 FSync::Yes,
-                |_| true,
+                |_| CopyInstruction::ReadOnly,
                 thread_pool,
             )?;
             std::fs::rename(&scratchpad, dst)?;
@@ -1386,6 +1401,19 @@ fn open_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
         })
 }
 
+fn create_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .truncate(true)
+        .open(path)
+        .map_err(|err| LayoutError::IoError {
+            path: path.to_path_buf(),
+            message: "Failed to open file for write".to_string(),
+            io_err: err,
+        })
+}
+
 fn open_for_read(path: &Path) -> Result<std::fs::File, LayoutError> {
     OpenOptions::new()
         .read(true)
@@ -1440,14 +1468,17 @@ where
     P: WritePolicy,
 {
     pub fn serialize(&self, value: T) -> Result<(), LayoutError> {
+        // There should be no existing file, due to how we initialize the tip.
+        // We delete just in case.
+        self.try_remove_file()?;
+
         let serialized = value.encode_to_vec();
 
         if serialized.is_empty() {
-            self.try_remove_file()?;
             return Ok(());
         }
 
-        let file = open_for_write(&self.path)?;
+        let file = create_for_write(&self.path)?;
         let mut writer = std::io::BufWriter::new(file);
         writer
             .write_all(&serialized)
@@ -1533,6 +1564,11 @@ impl<T> WasmFile<T> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
+
+    /// Removes the file if it exists, else does nothing.
+    pub fn try_remove_file(&self) -> Result<(), LayoutError> {
+        try_remove_file(&self.path)
+    }
 }
 
 impl<T> WasmFile<T>
@@ -1558,7 +1594,10 @@ where
     T: WritePolicy,
 {
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
-        let mut file = open_for_write(&self.path)?;
+        // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
+        self.try_remove_file()?;
+
+        let mut file = create_for_write(&self.path)?;
         file.write_all(wasm.as_slice())
             .map_err(|err| LayoutError::IoError {
                 path: self.path.clone(),
@@ -1845,7 +1884,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum FilePermissions {
     ReadOnly,
     ReadWrite,
@@ -1855,17 +1894,19 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
     let metadata = path.metadata()?;
     if !metadata.is_dir() {
         let mut permissions = metadata.permissions();
-        permissions.set_readonly(true);
-        std::fs::set_permissions(path, permissions).map_err(|e| {
-            Error::new(
-                e.kind(),
-                format!(
-                    "failed to set readonly permissions for file {}: {}",
-                    path.display(),
-                    e
-                ),
-            )
-        })?;
+        if !permissions.readonly() {
+            permissions.set_readonly(true);
+            std::fs::set_permissions(path, permissions).map_err(|e| {
+                Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to set readonly permissions for file {}: {}",
+                        path.display(),
+                        e
+                    ),
+                )
+            })?;
+        }
     }
     Ok(())
 }
@@ -1946,22 +1987,22 @@ enum FSync {
 /// system applied by this function are not undone.
 fn copy_recursively<P>(
     log: &ReplicaLogger,
+    metrics: &StateLayoutMetrics,
     root_src: &Path,
     root_dst: &Path,
-    dst_permissions: FilePermissions,
     fsync: FSync,
-    file_predicate: P,
+    file_copy_instruction: P,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()>
 where
-    P: Fn(&Path) -> bool,
+    P: Fn(&Path) -> CopyInstruction,
 {
     let mut copy_plan = CopyPlan {
         create_and_sync_dir: vec![],
         copy_and_sync_file: vec![],
     };
 
-    build_copy_plan(root_src, root_dst, &file_predicate, &mut copy_plan)?;
+    build_copy_plan(root_src, root_dst, &file_copy_instruction, &mut copy_plan)?;
 
     // Ensure that the target root directory exists.
     // Note: all the files and directories below the target root (including the
@@ -1983,7 +2024,14 @@ where
             });
             results.into_iter().try_for_each(identity)?;
             let results = parallel_map(thread_pool, copy_plan.copy_and_sync_file.iter(), |op| {
-                copy_file_and_set_permissions(log, &op.src, &op.dst, dst_permissions, fsync)
+                copy_file_and_set_permissions(
+                    log,
+                    metrics,
+                    &op.src,
+                    &op.dst,
+                    op.dst_permissions,
+                    fsync,
+                )
             });
             results.into_iter().try_for_each(identity)?;
             if let FSync::Yes = fsync {
@@ -1999,7 +2047,14 @@ where
                 std::fs::create_dir_all(&op.dst)?;
             }
             for op in copy_plan.copy_and_sync_file.into_iter() {
-                copy_file_and_set_permissions(log, &op.src, &op.dst, dst_permissions, fsync)?;
+                copy_file_and_set_permissions(
+                    log,
+                    metrics,
+                    &op.src,
+                    &op.dst,
+                    op.dst_permissions,
+                    fsync,
+                )?;
             }
             if let FSync::Yes = fsync {
                 for op in copy_plan.create_and_sync_dir.iter() {
@@ -2016,23 +2071,54 @@ where
 /// Syncs the target file if `fsync` is true.
 fn copy_file_and_set_permissions(
     log: &ReplicaLogger,
+    metrics: &StateLayoutMetrics,
     src: &Path,
     dst: &Path,
     dst_permissions: FilePermissions,
     fsync: FSync,
 ) -> std::io::Result<()> {
-    do_copy(log, src, dst)?;
+    // We don't expect to copy anything that isn't readonly, but just in case we handle it correctly below.
+    if !src.metadata()?.permissions().readonly() {
+        warn!(every_n_seconds => 5, log, "Copying writable file {:?}", src);
+        metrics
+            .state_layout_error_count
+            .with_label_values(&["copy_writable_checkpoint"])
+            .inc();
+        debug_assert!(false);
+    }
+
+    if src.metadata()?.permissions().readonly() && dst_permissions == FilePermissions::ReadOnly {
+        std::fs::hard_link(src, dst)?
+    } else {
+        do_copy(log, src, dst)?;
+        let dst_metadata = dst.metadata()?;
+        // We don't want to change the readonly flag of any files that are hardlinked somewhere else
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::MetadataExt;
+            debug_assert_eq!(dst_metadata.nlink(), 1);
+        }
+        let mut permissions = dst_metadata.permissions();
+        match dst_permissions {
+            FilePermissions::ReadOnly => permissions.set_readonly(true),
+            FilePermissions::ReadWrite => {
+                #[cfg(target_os = "linux")]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    permissions.set_mode(0o640); // Read/write for owner and read for group.
+                }
+
+                #[cfg(not(target_os = "linux"))]
+                #[allow(clippy::permissions_set_readonly_false)]
+                permissions.set_readonly(false)
+            }
+        }
+        std::fs::set_permissions(dst, permissions)?;
+    }
 
     // We keep the directory writable though to make sure we can rename
     // them or delete the files.
-    let dst_metadata = dst.metadata()?;
-    let mut permissions = dst_metadata.permissions();
-    match dst_permissions {
-        FilePermissions::ReadOnly => permissions.set_readonly(true),
-        #[allow(clippy::permissions_set_readonly_false)]
-        FilePermissions::ReadWrite => permissions.set_readonly(false),
-    }
-    std::fs::set_permissions(dst, permissions)?;
+
     match fsync {
         FSync::Yes => sync_path(dst),
         FSync::No => Ok(()),
@@ -2059,6 +2145,16 @@ struct CreateAndSyncDir {
 struct CopyAndSyncFile {
     src: PathBuf,
     dst: PathBuf,
+    dst_permissions: FilePermissions,
+}
+
+enum CopyInstruction {
+    /// The file doesn't need to be copied
+    Skip,
+    /// The file needs to be copied and should be writeable at the destination
+    ReadWrite,
+    /// The file needs to be copied and should be readonly at the destination
+    ReadOnly,
 }
 
 /// Traverse the source file tree and constructs a copy-plan:
@@ -2067,11 +2163,11 @@ struct CopyAndSyncFile {
 fn build_copy_plan<P>(
     src: &Path,
     dst: &Path,
-    file_predicate: &P,
+    file_copy_instruction: &P,
     plan: &mut CopyPlan,
 ) -> std::io::Result<()>
 where
-    P: Fn(&Path) -> bool,
+    P: Fn(&Path) -> CopyInstruction,
 {
     let src_metadata = src.metadata()?;
 
@@ -2086,12 +2182,20 @@ where
         for entry_result in entries {
             let entry = entry_result?;
             let dst_entry = dst.join(entry.file_name());
-            build_copy_plan(&entry.path(), &dst_entry, file_predicate, plan)?;
+            build_copy_plan(&entry.path(), &dst_entry, file_copy_instruction, plan)?;
         }
-    } else if file_predicate(src) {
+    } else {
+        let dst_permissions = match file_copy_instruction(src) {
+            CopyInstruction::Skip => {
+                return Ok(());
+            }
+            CopyInstruction::ReadWrite => FilePermissions::ReadWrite,
+            CopyInstruction::ReadOnly => FilePermissions::ReadOnly,
+        };
         plan.copy_and_sync_file.push(CopyAndSyncFile {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
+            dst_permissions,
         });
     }
     Ok(())
