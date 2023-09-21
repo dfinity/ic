@@ -946,3 +946,43 @@ impl TryFrom<(Time, pb_metadata::StopCanisterCall)> for StopCanisterCall {
         })
     }
 }
+
+mod testing {
+    use super::*;
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing replicated state fields to think about and/or ask the Message
+    /// Routing team to think about any repercussions to the subnet splitting logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the replicated state to also require changes
+    /// to the subnet splitting logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `ReplicatedState::split()` and `ReplicatedState::after_split()` for more
+    /// context.
+    #[allow(dead_code)]
+    fn subnet_splitting_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let canister_management_calls = CanisterManagementCalls {
+            install_code_call_manager: Default::default(),
+            stop_canister_call_manager: Default::default(),
+        };
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _subnet_call_context_manager = SubnetCallContextManager {
+            next_callback_id: 0,
+            setup_initial_dkg_contexts: Default::default(),
+            sign_with_ecdsa_contexts: Default::default(),
+            canister_http_request_contexts: Default::default(),
+            ecdsa_dealings_contexts: Default::default(),
+            bitcoin_get_successors_contexts: Default::default(),
+            bitcoin_send_transaction_internal_contexts: Default::default(),
+            canister_management_calls,
+        };
+    }
+}

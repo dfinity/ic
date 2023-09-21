@@ -1886,7 +1886,7 @@ impl IngressHistoryState {
 }
 
 pub(crate) mod testing {
-    use super::{StreamMap, Streams};
+    use super::*;
 
     /// Testing only: Exposes `Streams` internals for use in other modules'
     /// tests.
@@ -1903,5 +1903,57 @@ pub(crate) mod testing {
             // Recompute stats from scratch.
             self.responses_size_bytes = Streams::calculate_stats(&self.streams);
         }
+    }
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing replicated state fields to think about and/or ask the Message
+    /// Routing team to think about any repercussions to the subnet splitting logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the replicated state to also require changes
+    /// to the subnet splitting logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `ReplicatedState::split()` and `ReplicatedState::after_split()` for more
+    /// context.
+    #[allow(dead_code)]
+    fn subnet_splitting_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let ingress_history = IngressHistoryState {
+            statuses: Default::default(),
+            pruning_times: Default::default(),
+            next_terminal_time: UNIX_EPOCH,
+            memory_usage: Default::default(),
+        };
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _system_metadata = SystemMetadata {
+            own_subnet_id: SubnetId::new(PrincipalId::new_subnet_test_id(13)),
+            own_subnet_type: SubnetType::Application,
+            ingress_history,
+            // No need to cover streams, they always stay with the subnet.
+            streams: Default::default(),
+            canister_allocation_ranges: Default::default(),
+            last_generated_canister_id: None,
+            batch_time: UNIX_EPOCH,
+            // Not relevant, gets populated every round.
+            network_topology: Default::default(),
+            // Covered in `super::subnet_call_context_manager::testing`.
+            subnet_call_context_manager: Default::default(),
+            own_subnet_features: SubnetFeatures::default(),
+            node_public_keys: Default::default(),
+            split_from: None,
+            prev_state_hash: Default::default(),
+            state_sync_version: CURRENT_STATE_SYNC_VERSION,
+            certification_version: CertificationVersion::V0,
+            heap_delta_estimate: Default::default(),
+            subnet_metrics: Default::default(),
+            expected_compiled_wasms: Default::default(),
+            bitcoin_get_successors_follow_up_responses: Default::default(),
+        };
     }
 }

@@ -987,7 +987,8 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 
 pub mod testing {
     use super::*;
-    use crate::{metadata_state::testing::StreamsTesting, testing::CanisterQueuesTesting};
+    use crate::metadata_state::testing::StreamsTesting;
+    use crate::testing::CanisterQueuesTesting;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1043,5 +1044,36 @@ pub mod testing {
                 .sum::<usize>()
                 + self.subnet_queues.output_message_count()
         }
+    }
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing replicated state fields to think about and/or ask the Message
+    /// Routing team to think about any repercussions to the subnet splitting logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the replicated state to also require changes
+    /// to the subnet splitting logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `ReplicatedState::split()` and `ReplicatedState::after_split()` for more
+    /// context.
+    #[allow(dead_code)]
+    fn subnet_splitting_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _state = ReplicatedState {
+            // No need to cover canister states, they get split based on the routing table.
+            canister_states: Default::default(),
+            // Covered in `crate::metadata_state::testing`.
+            metadata: SystemMetadata::new(
+                SubnetId::new(PrincipalId::new_subnet_test_id(13)),
+                SubnetType::Application,
+            ),
+            subnet_queues: Default::default(),
+            consensus_queue: Default::default(),
+            epoch_query_stats: Default::default(),
+        };
     }
 }
