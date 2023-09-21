@@ -378,19 +378,17 @@ async fn call_instance(
     State(AppState { blob_store, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
     axum::extract::Json(request): axum::extract::Json<Request>,
-) -> (StatusCode, String) {
+) -> Response {
     let guard_map = inst_map.read().await;
     if let Some(rw_lock) = guard_map.get(&id) {
         let guard_sm = rw_lock.write().await;
-        (
-            StatusCode::OK,
-            call_sm(&guard_sm, request, blob_store).await,
-        )
+        call_sm(&guard_sm, request, blob_store).await
     } else {
         (
             StatusCode::NOT_FOUND,
             format!("Instance with ID {} was not found.", &id),
         )
+            .into_response()
     }
 }
 
@@ -470,24 +468,16 @@ async fn get_blob_store_entry(
 async fn set_blob_store_entry(
     headers: HeaderMap,
     State(AppState { blob_store, .. }): State<AppState>,
-    axum::extract::RawBody(mut body): axum::extract::RawBody,
+    body: axum::body::Bytes,
 ) -> (StatusCode, String) {
-    let data = body
-        .data()
-        .await
-        .expect("Request must contain blob data")
-        .expect("Failed to get bytes");
     let content_encoding = headers.get(axum::http::header::CONTENT_ENCODING);
-
     let blob = {
         match content_encoding {
             Some(content_encoding) => {
-                let encoding_type = content_encoding
-                    .to_str()
-                    .expect("Could not convert encoding to string");
+                let encoding_type = content_encoding.to_str();
                 match encoding_type {
-                    "gzip" => BinaryBlob {
-                        data: data.to_vec(),
+                    Ok("gzip") => BinaryBlob {
+                        data: body.to_vec(),
                         compression: BlobCompression::Gzip,
                     },
                     _ => {
@@ -499,7 +489,7 @@ async fn set_blob_store_entry(
                 }
             }
             None => BinaryBlob {
-                data: data.to_vec(),
+                data: body.to_vec(),
                 compression: BlobCompression::NoCompression,
             },
         }
@@ -520,17 +510,19 @@ async fn delete_instance(
 // ----------------------------------------------------------------------------------------------------------------- //
 // Code borrowed and adapted from rs/state_machine_tests/src/main.rs
 
-async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobStore>) -> String {
+async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobStore>) -> Response {
     match request {
-        RootKey => to_json_str(threshold_sig_public_key_to_der(sm.root_key()).unwrap()),
-        Time => to_json_str(sm.time()),
+        RootKey => {
+            to_json_str(threshold_sig_public_key_to_der(sm.root_key()).unwrap()).into_response()
+        }
+        Time => to_json_str(sm.time()).into_response(),
         SetTime(time) => {
             sm.set_time(time);
-            to_json_str(())
+            to_json_str(()).into_response()
         }
         AdvanceTime(amount) => {
             sm.advance_time(amount);
-            to_json_str(())
+            to_json_str(()).into_response()
         }
         CanisterUpdateCall(call) => {
             let mut call = ParsedCanisterCall::from(call);
@@ -539,49 +531,62 @@ async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobSt
             }
             let result =
                 sm.execute_ingress_as(call.sender, call.canister_id, call.method, call.arg);
-            to_json_str(result)
+            to_json_str(result).into_response()
         }
         CanisterQueryCall(call) => {
             let call = ParsedCanisterCall::from(call);
             let result = sm.query_as(call.sender, call.canister_id, call.method, call.arg);
-            to_json_str(result)
+            to_json_str(result).into_response()
         }
-        CanisterExists(canister_id) => to_json_str(sm.canister_exists(to_canister_id(canister_id))),
+        CanisterExists(canister_id) => {
+            to_json_str(sm.canister_exists(to_canister_id(canister_id))).into_response()
+        }
         SetStableMemory(arg) => {
             let canister_id = CanisterId::try_from(arg.canister_id).expect("invalid canister id");
-            let blob = blob_store
-                .fetch(arg.blob_id)
-                .await
-                .expect("Could not find data in blob store");
+            let blob = blob_store.fetch(arg.blob_id.clone()).await;
+            if blob.is_none() {
+                return (StatusCode::NOT_FOUND, "Could not find blob".to_owned()).into_response();
+            }
+            let blob = blob.unwrap();
             let data = {
                 match blob.compression {
                     BlobCompression::Gzip => {
                         let mut decoder = flate2::read::GzDecoder::new(&blob.data[..]);
                         let mut data = Vec::new();
-                        decoder
-                            .read_to_end(&mut data)
-                            .expect("Failed to decompress blob");
+                        let result = decoder.read_to_end(&mut data);
+                        if result.is_err() {
+                            return (
+                                StatusCode::BAD_REQUEST,
+                                format!("Failed to decompress blob: {:?}", result.err()),
+                            )
+                                .into_response();
+                        }
                         data
                     }
                     BlobCompression::NoCompression => blob.data,
                 }
             };
             sm.set_stable_memory(canister_id, &data);
-            to_json_str(())
+            to_json_str(()).into_response()
         }
-        ReadStableMemory(canister_id) => to_json_str(sm.stable_memory(to_canister_id(canister_id))),
-        CyclesBalance(canister_id) => to_json_str(sm.cycle_balance(to_canister_id(canister_id))),
+        ReadStableMemory(canister_id) => {
+            to_json_str(sm.stable_memory(to_canister_id(canister_id))).into_response()
+        }
+        CyclesBalance(canister_id) => {
+            to_json_str(sm.cycle_balance(to_canister_id(canister_id))).into_response()
+        }
         AddCycles(arg) => to_json_str(sm.add_cycles(
             CanisterId::try_from(arg.canister_id).expect("invalid canister id"),
             arg.amount,
-        )),
+        ))
+        .into_response(),
         Tick => {
             sm.tick();
-            to_json_str(())
+            to_json_str(()).into_response()
         }
         RunUntilCompletion(arg) => {
             sm.run_until_completion(arg.max_ticks as usize);
-            to_json_str(())
+            to_json_str(()).into_response()
         }
         VerifyCanisterSig(arg) => {
             type VerificationResult = Result<(), String>;
@@ -591,7 +596,8 @@ async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobSt
                     return to_json_str(VerificationResult::Err(format!(
                         "failed to parse DER encoded public key: {:?}",
                         err
-                    )));
+                    )))
+                    .into_response();
                 }
             };
             let root_pubkey = match parse_threshold_sig_key_from_der(&arg.root_pubkey) {
@@ -600,15 +606,17 @@ async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobSt
                     return to_json_str(VerificationResult::Err(format!(
                         "failed to parse DER encoded root public key: {:?}",
                         err
-                    )));
+                    )))
+                    .into_response();
                 }
             };
             match verify(&arg.msg, SignatureBytes(arg.sig), pubkey, &root_pubkey) {
-                Ok(()) => to_json_str(VerificationResult::Ok(())),
+                Ok(()) => to_json_str(VerificationResult::Ok(())).into_response(),
                 Err(err) => to_json_str(VerificationResult::Err(format!(
                     "canister signature verification failed: {:?}",
                     err
-                ))),
+                )))
+                .into_response(),
             }
         }
     }
