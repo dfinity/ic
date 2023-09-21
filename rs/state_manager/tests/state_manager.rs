@@ -17,7 +17,7 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NetworkTopology, NumWasmPages,
     PageMap, ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE};
+use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
@@ -71,6 +71,13 @@ fn make_mutable(path: &Path) -> std::io::Result<()> {
     let mut perms = std::fs::metadata(path)?.permissions();
     #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
+    std::fs::set_permissions(path, perms)?;
+    Ok(())
+}
+
+fn make_readonly(path: &Path) -> std::io::Result<()> {
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_readonly(true);
     std::fs::set_permissions(path, perms)?;
     Ok(())
 }
@@ -2914,16 +2921,19 @@ fn can_recover_from_corruption_on_state_sync() {
             let canister_90_memory = canister_90_layout.vmemory_0();
             make_mutable(&canister_90_memory).unwrap();
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
+            make_readonly(&canister_90_memory).unwrap();
 
             let canister_90_raw_pb = canister_90_layout.canister().raw_path().to_path_buf();
             make_mutable(&canister_90_raw_pb).unwrap();
             write_all_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
+            make_readonly(&canister_90_raw_pb).unwrap();
 
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
             let canister_100_memory = canister_100_layout.vmemory_0();
             make_mutable(&canister_100_memory).unwrap();
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
+            make_readonly(&canister_100_memory).unwrap();
 
             let canister_100_stable_memory = canister_100_layout.stable_memory_blob();
             make_mutable(&canister_100_stable_memory).unwrap();
@@ -2933,10 +2943,12 @@ fn can_recover_from_corruption_on_state_sync() {
                 PAGE_SIZE as u64,
             )
             .unwrap();
+            make_readonly(&canister_100_stable_memory).unwrap();
 
             let canister_100_raw_pb = canister_100_layout.canister().raw_path().to_path_buf();
             make_mutable(&canister_100_raw_pb).unwrap();
             std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
+            make_readonly(&canister_100_raw_pb).unwrap();
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
@@ -4601,6 +4613,75 @@ fn can_recover_ingress_history() {
         let (_height, state2) = state_manager.take_tip();
         state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
         assert_eq!(state2, state);
+    });
+}
+
+fn assert_directory_is_readonly(path: &Path) {
+    if path.is_dir() {
+        for entry in path.read_dir().unwrap() {
+            assert_directory_is_readonly(&entry.unwrap().path());
+        }
+    } else {
+        assert!(path.metadata().unwrap().permissions().readonly());
+    }
+}
+
+/// Check that all checkpoints in `layout` are readonly in the sense that all non-directories are marked readonly.
+fn assert_checkpoints_are_readonly(layout: &StateLayout) {
+    assert_directory_is_readonly(&layout.checkpoints())
+}
+
+#[test]
+fn checkpoints_are_readonly() {
+    state_manager_test(|_metrics, state_manager| {
+        // We flush the tip channel so that asychronous tip initialization cannot hide the issue
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Add a canister
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[1u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Modify the canister
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[2u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Modify the canister again
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[4u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
     });
 }
 
