@@ -263,9 +263,11 @@ message Swap {
   // on this parameter.
   optional FinalizeSwapResponse auto_finalize_swap_response = 18;
 
+  // Amount of contributions from direct participants committed to this SNS so far.
+  optional uint64 direct_participation_icp_e8s = 19;
+
   // Amount of contributions from the Neurons' Fund committed to this SNS so far.
-  // TODO[NNS1-2570]: Update this field with the current value.
-  optional uint64 current_neurons_fund_contribution_icp_e8s = 19;
+  optional uint64 neurons_fund_participation_icp_e8s = 20;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -391,7 +393,7 @@ message Init {
   optional bool should_auto_finalize = 28;
 
   // Constraints for the Neurons' Fund participation in this swap.
-  // TODO[NNS1-2570]: Use this data to compute current_neurons_fund_contribution_icp_e8s.
+  // TODO[NNS1-2570]: Use this data to compute neurons_fund_participation_icp_e8s.
   optional NeuronsFundParticipationConstraints neurons_fund_participation_constraints = 29;
 }
 
@@ -727,6 +729,10 @@ message DerivedState {
   optional uint64 cf_neuron_count = 5;
   // Current approximate rate SNS tokens per ICP.
   float sns_tokens_per_icp = 2;
+  // Current amount of contributions from direct swap participants.
+  optional uint64 direct_participation_icp_e8s = 6;
+  // Current amount of contributions from the Neurons' Fund.
+  optional uint64 neurons_fund_participation_icp_e8s = 7;
 }
 
 message SetOpenTimeWindowRequest {
@@ -1082,6 +1088,10 @@ message GetDerivedStateResponse {
   // the Neurons' Fund have the same controller.
   optional uint64 cf_neuron_count = 5;
   optional double sns_tokens_per_icp = 2;
+  // Current amount of contributions from direct swap participants.
+  optional uint64 direct_participation_icp_e8s = 6;
+  // Current amount of contributions from the Neurons' Fund.
+  optional uint64 neurons_fund_participation_icp_e8s = 7;
 }
 
 // ICRC-1 Account. See https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1

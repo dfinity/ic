@@ -26,6 +26,8 @@ type DerivedState = record {
   sns_tokens_per_icp : float32;
   buyer_total_icp_e8s : nat64;
   cf_participant_count : opt nat64;
+  neurons_fund_participation_icp_e8s : opt nat64;
+  direct_participation_icp_e8s : opt nat64;
   direct_participant_count : opt nat64;
   cf_neuron_count : opt nat64;
 };
@@ -64,6 +66,8 @@ type GetDerivedStateResponse = record {
   sns_tokens_per_icp : opt float64;
   buyer_total_icp_e8s : opt nat64;
   cf_participant_count : opt nat64;
+  neurons_fund_participation_icp_e8s : opt nat64;
+  direct_participation_icp_e8s : opt nat64;
   direct_participant_count : opt nat64;
   cf_neuron_count : opt nat64;
 };
@@ -215,8 +219,9 @@ type Swap = record {
   cf_participants : vec CfParticipant;
   init : opt Init;
   already_tried_to_auto_finalize : opt bool;
+  neurons_fund_participation_icp_e8s : opt nat64;
   purge_old_tickets_last_completion_timestamp_nanoseconds : opt nat64;
-  current_neurons_fund_contribution_icp_e8s : opt nat64;
+  direct_participation_icp_e8s : opt nat64;
   lifecycle : int32;
   purge_old_tickets_next_principal : opt vec nat8;
   buyers : vec record { text; BuyerState };
