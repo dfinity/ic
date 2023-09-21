@@ -166,7 +166,7 @@ rust_test_suite_with_extra_srcs(
         "tests/common/doubles.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":swap"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":swap--test_feature"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(

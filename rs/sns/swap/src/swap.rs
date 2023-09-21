@@ -277,6 +277,8 @@ impl From<DerivedState> for GetDerivedStateResponse {
             cf_participant_count: state.cf_participant_count,
             cf_neuron_count: state.cf_neuron_count,
             sns_tokens_per_icp: Some(state.sns_tokens_per_icp as f64),
+            direct_participation_icp_e8s: state.direct_participation_icp_e8s,
+            neurons_fund_participation_icp_e8s: state.neurons_fund_participation_icp_e8s,
         }
     }
 }
@@ -563,7 +565,8 @@ impl Swap {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
-            current_neurons_fund_contribution_icp_e8s: None,
+            direct_participation_icp_e8s: None,
+            neurons_fund_participation_icp_e8s: None,
         };
         if init.is_swap_init_for_one_proposal_flow() {
             // Automatically fill out the fields that the (legacy) open request
@@ -619,16 +622,16 @@ impl Swap {
         let current_direct_participation_e8s = self.current_direct_participation_e8s();
         let current_neurons_fund_participation_e8s = self.current_neurons_fund_participation_e8s();
         current_direct_participation_e8s
-        .checked_add(current_neurons_fund_participation_e8s)
-        .unwrap_or_else(|| {
-            log!(
-                ERROR,
-                "current_direct_participation_e8s ({current_direct_participation_e8s}) \
-                + current_neurons_fund_participation_e8s ({current_neurons_fund_participation_e8s}) \
-                > u64::MAX",
-            );
-            u64::MAX
-        })
+            .checked_add(current_neurons_fund_participation_e8s)
+            .unwrap_or_else(|| {
+                log!(
+                    ERROR,
+                    "current_direct_participation_e8s ({current_direct_participation_e8s}) \
+                    + current_neurons_fund_participation_e8s ({current_neurons_fund_participation_e8s}) \
+                    > u64::MAX",
+                );
+                u64::MAX
+            })
     }
 
     /// The maximum overall amount (in ICP e8s) that can be collected in this swap.
@@ -641,8 +644,7 @@ impl Swap {
 
     /// The total amount of ICP e8s contributed by the Neurons' Fund.
     pub fn current_neurons_fund_participation_e8s(&self) -> u64 {
-        // TODO(NNS1-2521): Make NF participation dependent on direct participation.
-        self.max_neurons_fund_participation_e8s()
+        self.neurons_fund_participation_icp_e8s.unwrap_or(0)
     }
 
     /// The maximum Neurons' Fund participation amount (in ICP e8s).
@@ -655,10 +657,7 @@ impl Swap {
 
     /// The total amount of ICP e8s contributed by direct participants.
     pub fn current_direct_participation_e8s(&self) -> u64 {
-        self.buyers
-            .values()
-            .map(|x| x.amount_icp_e8s())
-            .fold(0, |sum, v| sum.saturating_add(v))
+        self.direct_participation_icp_e8s.unwrap_or(0)
     }
 
     /// The maximum direct participation amount (in ICP e8s).
@@ -691,6 +690,38 @@ impl Swap {
                 );
                 0
             })
+    }
+
+    /// This function updates the current contribution from direct and Neurons' Fund participants.
+    ///
+    /// Calling this function in `Swap.refresh_buyer_token_e8s` should be the only way that the
+    /// fields `direct_participation_icp_e8s` and `neurons_fund_participation_icp_e8s`
+    /// are updated.
+    fn update_participation_amounts(&mut self) {
+        self.direct_participation_icp_e8s = Some(
+            self.buyers
+                .values()
+                .map(|x| x.amount_icp_e8s())
+                .fold(0, |sum, v| sum.saturating_add(v)),
+        );
+        // TODO(NNS1-2521): Make NF participation dependent on direct participation.
+        self.neurons_fund_participation_icp_e8s = Some(self.max_neurons_fund_participation_e8s());
+    }
+
+    /// Update cached fields:
+    /// - direct_participation_icp_e8s
+    /// - neurons_fund_participation_icp_e8s
+    ///
+    /// This function helps unit testing the Swap canister. Normally, the cached fields should be
+    /// updated as soon as the old values are invalid. However, in unit testing, we cannot rely on
+    /// all the right functions being called. For example, refresh_buyer_token_e8s is
+    /// responsible for calling update_participation_amounts. While writing a unit test expressing
+    /// consistency between several fields of Swap, we might not want to also call
+    /// refresh_buyer_token_e8s. Thus, in such scenarios we need update_cached_fields to ensure
+    /// that the cached fields are updated.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn update_cached_fields(&mut self) {
+        self.update_participation_amounts()
     }
 
     /// The count of unique CommunityFund Neurons.
@@ -1270,6 +1301,10 @@ impl Swap {
                 }),
             })
             .set_amount_icp_e8s(new_balance_e8s);
+        // We compute the current participation amounts once and store the result in Swap's state,
+        // for efficiency reasons.
+        self.update_participation_amounts();
+
         log!(
             INFO,
             "Refresh_buyer_tokens for buyer {}; old e8s {}; new e8s {}",
@@ -2390,8 +2425,7 @@ impl Swap {
             Result::Committed(Committed {
                 sns_governance_canister_id: Some(sns_governance.get()),
                 total_direct_contribution_icp_e8s: Some(self.current_direct_participation_e8s()),
-                total_neurons_fund_contribution_icp_e8s: self
-                    .current_neurons_fund_contribution_icp_e8s,
+                total_neurons_fund_contribution_icp_e8s: self.neurons_fund_participation_icp_e8s,
             })
         } else {
             Result::Aborted(Aborted {})
@@ -2836,9 +2870,9 @@ impl Swap {
     /// `sns_tokens_per_icp` will be 0 if `participant_total_icp_e8s` is 0.
     pub fn derived_state(&self) -> DerivedState {
         let participant_total_icp_e8s = self.current_total_participation_e8s();
-        let direct_participant_count = self.buyers.len() as u64;
-        let cf_participant_count = self.cf_participants.len() as u64;
-        let cf_neuron_count = self.cf_neuron_count();
+        let direct_participant_count = Some(self.buyers.len() as u64);
+        let cf_participant_count = Some(self.cf_participants.len() as u64);
+        let cf_neuron_count = Some(self.cf_neuron_count());
         let tokens_available_for_swap = match self.sns_token_e8s() {
             Ok(tokens) => tokens,
             Err(err) => {
@@ -2850,12 +2884,17 @@ impl Swap {
             .checked_div(i2d(participant_total_icp_e8s))
             .and_then(|d| d.to_f32())
             .unwrap_or(0.0);
+        let direct_participation_icp_e8s = Some(self.current_direct_participation_e8s());
+        let neurons_fund_participation_icp_e8s =
+            Some(self.current_neurons_fund_participation_e8s());
         DerivedState {
             buyer_total_icp_e8s: participant_total_icp_e8s,
-            direct_participant_count: Some(direct_participant_count),
-            cf_participant_count: Some(cf_participant_count),
-            cf_neuron_count: Some(cf_neuron_count),
+            direct_participant_count,
+            cf_participant_count,
+            cf_neuron_count,
             sns_tokens_per_icp,
+            direct_participation_icp_e8s,
+            neurons_fund_participation_icp_e8s,
         }
     }
 
@@ -3448,7 +3487,8 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             cf_participants,
             buyers,
             neuron_recipes,
-            current_neurons_fund_contribution_icp_e8s,
+            direct_participation_icp_e8s,
+            neurons_fund_participation_icp_e8s,
         } = self.swap;
 
         formatter
@@ -3489,9 +3529,10 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             )
             .field("buyers", &format!("<len={}>", buyers.len()))
             .field("neuron_recipes", &format!("<len={}>", neuron_recipes.len()))
+            .field("direct_participation_icp_e8s", direct_participation_icp_e8s)
             .field(
-                "current_neurons_fund_contribution_icp_e8s",
-                current_neurons_fund_contribution_icp_e8s,
+                "neurons_fund_participation_icp_e8s",
+                neurons_fund_participation_icp_e8s,
             )
             .finish()
     }
@@ -3605,6 +3646,8 @@ mod tests {
             direct_participant_count: Some(1000),
             cf_participant_count: Some(100),
             cf_neuron_count: Some(200),
+            direct_participation_icp_e8s: Some(500_000_000),
+            neurons_fund_participation_icp_e8s: Some(300_000_000),
         };
 
         let response: GetDerivedStateResponse = derived_state.into();
@@ -3613,6 +3656,11 @@ mod tests {
         assert_eq!(response.direct_participant_count, Some(1000));
         assert_eq!(response.cf_participant_count, Some(100));
         assert_eq!(response.cf_neuron_count, Some(200));
+        assert_eq!(response.direct_participation_icp_e8s, Some(500_000_000));
+        assert_eq!(
+            response.neurons_fund_participation_icp_e8s,
+            Some(300_000_000)
+        );
     }
 
     #[test]
@@ -4190,7 +4238,8 @@ mod tests {
                 purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
                 already_tried_to_auto_finalize: Some(false),
                 auto_finalize_swap_response: None,
-                current_neurons_fund_contribution_icp_e8s: None,
+                direct_participation_icp_e8s: None,
+                neurons_fund_participation_icp_e8s: None,
             };
             let mut ticket_ids = HashSet::new();
             for pid in pids {
@@ -4325,6 +4374,7 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
+        swap.update_cached_fields();
 
         // test try_commit
         {
@@ -4414,6 +4464,7 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
+        swap.update_cached_fields();
 
         // test try_commit
         {
@@ -4497,7 +4548,8 @@ mod tests {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
-            current_neurons_fund_contribution_icp_e8s: None,
+            direct_participation_icp_e8s: None,
+            neurons_fund_participation_icp_e8s: None,
         };
 
         let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {

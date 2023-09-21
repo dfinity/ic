@@ -174,7 +174,8 @@ fn create_generic_committed_swap() -> Swap {
         purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
         already_tried_to_auto_finalize: Some(false),
         auto_finalize_swap_response: None,
-        current_neurons_fund_contribution_icp_e8s: None,
+        direct_participation_icp_e8s: None,
+        neurons_fund_participation_icp_e8s: None,
     }
 }
 
@@ -1181,8 +1182,10 @@ async fn test_finalize_swap_ok() {
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
         auto_finalize_swap_response: None,
-        current_neurons_fund_contribution_icp_e8s: None,
+        direct_participation_icp_e8s: None,
+        neurons_fund_participation_icp_e8s: None,
     };
+    swap.update_cached_fields();
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
     // the swap is open. Not only should it not work, it should do nothing.
@@ -1464,7 +1467,7 @@ async fn test_finalize_swap_ok() {
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: Some(SNS_GOVERNANCE_CANISTER_ID.into()),
                         total_direct_contribution_icp_e8s: Some(100 * E8),
-                        total_neurons_fund_contribution_icp_e8s: None,
+                        total_neurons_fund_contribution_icp_e8s: Some(0),
                     })),
                 }
             )]
@@ -1543,7 +1546,8 @@ async fn test_finalize_swap_abort() {
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
         auto_finalize_swap_response: None,
-        current_neurons_fund_contribution_icp_e8s: None,
+        direct_participation_icp_e8s: None,
+        neurons_fund_participation_icp_e8s: None,
     };
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
@@ -3378,6 +3382,8 @@ fn test_derived_state() {
         direct_participant_count: Some(0),
         cf_participant_count: Some(0),
         cf_neuron_count: Some(0),
+        direct_participation_icp_e8s: Some(0),
+        neurons_fund_participation_icp_e8s: Some(0),
     };
     let actual_derived_state1 = swap.derived_state();
     assert_eq!(expected_derived_state1, actual_derived_state1);
@@ -3394,6 +3400,8 @@ fn test_derived_state() {
         direct_participant_count: Some(0),
         cf_participant_count: Some(0),
         cf_neuron_count: Some(0),
+        direct_participation_icp_e8s: Some(0),
+        neurons_fund_participation_icp_e8s: Some(0),
     };
     let actual_derived_state2 = swap.derived_state();
     assert_eq!(expected_derived_state2, actual_derived_state2);
@@ -3411,6 +3419,7 @@ fn test_derived_state() {
     };
 
     swap.buyers = buyers;
+    swap.update_cached_fields();
 
     let expected_derived_state3 = DerivedState {
         buyer_total_icp_e8s: 100_000_000,
@@ -3418,6 +3427,8 @@ fn test_derived_state() {
         direct_participant_count: Some(1),
         cf_participant_count: Some(0),
         cf_neuron_count: Some(0),
+        direct_participation_icp_e8s: Some(100_000_000),
+        neurons_fund_participation_icp_e8s: Some(0),
     };
     let actual_derived_state3 = swap.derived_state();
     assert_eq!(expected_derived_state3, actual_derived_state3);
@@ -3435,6 +3446,7 @@ fn test_derived_state() {
             },
         ],
     }];
+    swap.update_cached_fields();
 
     let expected_derived_state4 = DerivedState {
         buyer_total_icp_e8s: 800_000_000,
@@ -3442,9 +3454,27 @@ fn test_derived_state() {
         direct_participant_count: Some(1),
         cf_participant_count: Some(1),
         cf_neuron_count: Some(2),
+        direct_participation_icp_e8s: Some(100_000_000),
+        neurons_fund_participation_icp_e8s: Some(700_000_000),
     };
     let actual_derived_state4 = swap.derived_state();
     assert_eq!(expected_derived_state4, actual_derived_state4);
+
+    swap.direct_participation_icp_e8s = Some(500_000_000);
+    swap.neurons_fund_participation_icp_e8s = Some(400_000_000);
+    let expected_derived_state5 = DerivedState {
+        buyer_total_icp_e8s: 800_000_000,
+        sns_tokens_per_icp: 1.25f32,
+        direct_participant_count: Some(1),
+        cf_participant_count: Some(1),
+        cf_neuron_count: Some(2),
+        direct_participation_icp_e8s: Some(100_000_000),
+        neurons_fund_participation_icp_e8s: Some(700_000_000),
+    };
+    swap.update_cached_fields();
+
+    let actual_derived_state5 = swap.derived_state();
+    assert_eq!(expected_derived_state5, actual_derived_state5);
 }
 
 /// Test that claim_swap_neurons is called with the correct preconditions
@@ -4713,7 +4743,7 @@ fn test_swap_participation_confirmation() {
 #[test]
 fn test_get_state_bounds_data_sources() {
     // Prepare the canister with multiple buyers
-    let swap = Swap {
+    let mut swap = Swap {
         lifecycle: Committed as i32,
         params: Some(params()),
         init: Some(init()),
@@ -4724,6 +4754,7 @@ fn test_get_state_bounds_data_sources() {
         cf_participants: create_generic_cf_participants(1),
         ..Default::default()
     };
+    swap.update_cached_fields();
 
     let get_state_response = swap.get_state();
     let derived_state = get_state_response.derived.unwrap();

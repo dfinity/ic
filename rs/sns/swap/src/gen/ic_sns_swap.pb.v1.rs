@@ -215,10 +215,12 @@ pub struct Swap {
     /// on this parameter.
     #[prost(message, optional, tag = "18")]
     pub auto_finalize_swap_response: ::core::option::Option<FinalizeSwapResponse>,
-    /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
-    /// TODO\[NNS1-2570\]: Update this field with the current value.
+    /// Amount of contributions from direct participants committed to this SNS so far.
     #[prost(uint64, optional, tag = "19")]
-    pub current_neurons_fund_contribution_icp_e8s: ::core::option::Option<u64>,
+    pub direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
+    #[prost(uint64, optional, tag = "20")]
+    pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -346,7 +348,7 @@ pub struct Init {
     #[prost(bool, optional, tag = "28")]
     pub should_auto_finalize: ::core::option::Option<bool>,
     /// Constraints for the Neurons' Fund participation in this swap.
-    /// TODO\[NNS1-2570\]: Use this data to compute current_neurons_fund_contribution_icp_e8s.
+    /// TODO\[NNS1-2570\]: Use this data to compute neurons_fund_participation_icp_e8s.
     #[prost(message, optional, tag = "29")]
     pub neurons_fund_participation_constraints:
         ::core::option::Option<NeuronsFundParticipationConstraints>,
@@ -814,6 +816,12 @@ pub struct DerivedState {
     /// Current approximate rate SNS tokens per ICP.
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,
+    /// Current amount of contributions from direct swap participants.
+    #[prost(uint64, optional, tag = "6")]
+    pub direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Current amount of contributions from the Neurons' Fund.
+    #[prost(uint64, optional, tag = "7")]
+    pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1460,6 +1468,12 @@ pub struct GetDerivedStateResponse {
     pub cf_neuron_count: ::core::option::Option<u64>,
     #[prost(double, optional, tag = "2")]
     pub sns_tokens_per_icp: ::core::option::Option<f64>,
+    /// Current amount of contributions from direct swap participants.
+    #[prost(uint64, optional, tag = "6")]
+    pub direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Current amount of contributions from the Neurons' Fund.
+    #[prost(uint64, optional, tag = "7")]
+    pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
 }
 /// ICRC-1 Account. See <https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1>
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

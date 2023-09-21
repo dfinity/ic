@@ -111,6 +111,10 @@ fn finalize_swap(env: TestEnv) {
         cf_neuron_count: Some(nns_nf_neurons().len() as u64),
         buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s,
         sns_tokens_per_icp: Some(sns_tokens_per_icp),
+        // TODO[NNS1-2612]: make this expected value parametric.
+        direct_participation_icp_e8s: Some(14_990_000_000_000),
+        // TODO[NNS1-2612]: make this expected value parametric.
+        neurons_fund_participation_icp_e8s: Some(10_000_000_000),
     };
 
     block_on(finalize_aborted_swap_and_check_success(
