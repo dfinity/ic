@@ -11,7 +11,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IS_MATCHED_FUNDING_ENABLED,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
 use ic_sns_governance::{
@@ -24,7 +24,10 @@ use ic_sns_governance::{
     types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
-use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
+use ic_sns_swap::{
+    pb::v1::{Init as SwapInit, LinearScalingCoefficient, NeuronBasketConstructionParameters},
+    swap::LinearScalingCoefficientValidationError,
+};
 use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
 use isocountry::CountryCode;
 use lazy_static::lazy_static;
@@ -72,6 +75,195 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 pub const MAX_TOTAL_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
 
 pub const ICRC1_TOKEN_LOGO_KEY: &str = "icrc1:logo";
+
+enum MinDirectParticipationThresholdValidationError {
+    // This value must be specified.
+    Unspecified,
+    // Needs to be greater or equal the minimum amount of ICP collected from direct participants.
+    // TODO[NNS1-2608]: Validate this case
+    // BelowSwapDirectIcpMin {
+    //     min_direct_participation_threshold_icp_e8s: u64,
+    //     min_direct_icp_e8s: u64,
+    // },
+    // Needs to be less than the maximum amount of ICP collected from direct participants.
+    // TODO[NNS1-2608]: Validate this case
+    // AboveSwapDirectIcpMax {
+    //     min_direct_participation_threshold_icp_e8s: u64,
+    //     max_direct_icp_e8s: u64,
+    // },
+}
+
+impl ToString for MinDirectParticipationThresholdValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "MinDirectParticipationThresholdValidationError: ";
+        match self {
+            Self::Unspecified => {
+                format!("{prefix}min_direct_participation_threshold_icp_e8s must be specified.")
+            } // TODO[NNS1-2608]
+              // Self::BelowSwapDirectIcpMin {
+              //     min_direct_participation_threshold_icp_e8s,
+              //     min_direct_icp_e8s,
+              // } => {
+              //     format!(
+              //         "{prefix}min_direct_participation_threshold_icp_e8s ({}) should be greater \
+              //         than or equal min_direct_icp_e8s ({}).",
+              //         min_direct_participation_threshold_icp_e8s, min_direct_icp_e8s,
+              //     )
+              // }
+              // TODO[NNS1-2608]
+              // Self::AboveSwapDirectIcpMax {
+              //     min_direct_participation_threshold_icp_e8s,
+              //     max_direct_icp_e8s,
+              // } => {
+              //     format!(
+              //         "{prefix}min_direct_participation_threshold_icp_e8s ({}) should be less \
+              //         than or equal max_direct_icp_e8s ({}).",
+              //         min_direct_participation_threshold_icp_e8s, max_direct_icp_e8s,
+              //     )
+              // }
+        }
+    }
+}
+
+enum MaxNeuronsFundParticipationValidationError {
+    // This value must be specified.
+    Unspecified,
+    // Does not make sense if no SNS neurons can be created.
+    BelowSingleParticipationLimit {
+        max_neurons_fund_participation_icp_e8s: u64,
+        min_participant_icp_e8s: u64,
+    },
+    // The Neuron's Fund should never provide over 50% of the collected funds.
+    AboveHalfOfSwapIcpMax {
+        max_neurons_fund_participation_icp_e8s: u64,
+        half_of_max_icp_e8s: u64,
+    },
+}
+
+impl ToString for MaxNeuronsFundParticipationValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "MaxNeuronsFundParticipationValidationError: ";
+        match self {
+            Self::Unspecified => {
+                format!("{prefix}max_neurons_fund_participation_icp_e8s must be specified.")
+            }
+            Self::BelowSingleParticipationLimit {
+                max_neurons_fund_participation_icp_e8s,
+                min_participant_icp_e8s,
+            } => {
+                format!(
+                    "{prefix}max_neurons_fund_participation_icp_e8s ({}) \
+                    should be greater than or equal min_participant_icp_e8s ({}).",
+                    max_neurons_fund_participation_icp_e8s, min_participant_icp_e8s,
+                )
+            }
+            Self::AboveHalfOfSwapIcpMax {
+                max_neurons_fund_participation_icp_e8s,
+                half_of_max_icp_e8s,
+            } => {
+                format!(
+                    "{prefix}max_neurons_fund_participation_icp_e8s ({}) \
+                    should be less than or equal half_of_max_icp_e8s ({}).",
+                    max_neurons_fund_participation_icp_e8s, half_of_max_icp_e8s,
+                )
+            }
+        }
+    }
+}
+
+// The maximum number of intervals for scaling ideal Neurons' Fund participation down to effective
+// participation. Theoretically, this number should be greater than double the number of neurons
+// participating in the Neurons' Fund. Although the currently chosen value is quite high, it is
+// still significantly smaller than `usize::MAX`, allowing to reject an misformed
+// SnsInitPayload.coefficient_intervals structure with obviously too many elements.
+const MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN: usize = 100_000;
+
+enum LinearScalingCoefficientVecValidationError {
+    EmptyLinearScalingCoefficients,
+    TooManyLinearScalingCoefficients(usize),
+    LinearScalingCoefficientsUnordered(LinearScalingCoefficient, LinearScalingCoefficient),
+    LinearScalingCoefficientValidationError(LinearScalingCoefficientValidationError),
+}
+
+impl ToString for LinearScalingCoefficientVecValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "LinearScalingCoefficientVecValidationError: ";
+        match self {
+            Self::EmptyLinearScalingCoefficients => {
+                format!("{prefix}coefficient_intervals must not be empty.")
+            }
+            Self::TooManyLinearScalingCoefficients(num_elements) => {
+                format!(
+                    "{prefix}coefficient_intervals (len={}) must not contain more than {} elements.",
+                    num_elements,
+                    MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
+                )
+            }
+            Self::LinearScalingCoefficientsUnordered(left, right) => {
+                format!(
+                    "{prefix}The intervals {:?} and {:?} are ordered incorrectly.",
+                    left, right
+                )
+            }
+            Self::LinearScalingCoefficientValidationError(error) => {
+                format!("{prefix}{}", error.to_string())
+            }
+        }
+    }
+}
+
+impl From<LinearScalingCoefficientVecValidationError> for Result<(), String> {
+    fn from(value: LinearScalingCoefficientVecValidationError) -> Self {
+        Err(value.to_string())
+    }
+}
+
+enum NeuronsFundParticipationConstraintsValidationError {
+    FeatureDisabled,
+    SetBeforeProposalExecution,
+    RelatedFieldUnspecified(String),
+    MinDirectParticipationThresholdValidationError(MinDirectParticipationThresholdValidationError),
+    MaxNeuronsFundParticipationValidationError(MaxNeuronsFundParticipationValidationError),
+    LinearScalingCoefficientVecValidationError(LinearScalingCoefficientVecValidationError),
+}
+
+impl ToString for NeuronsFundParticipationConstraintsValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
+        match self {
+            Self::FeatureDisabled => {
+                format!(
+                    "{prefix}Error: field SnsInitPayload.neurons_fund_participation_constraints is \
+                    not supported yet."
+                )
+            }
+            Self::SetBeforeProposalExecution => {
+                format!(
+                    "{prefix}neurons_fund_participation_constraints must not be set before \
+                    the CreateServiceNervousSystem proposal is executed."
+                )
+            }
+            Self::RelatedFieldUnspecified(related_field_name) => {
+                format!("{prefix}{} must be specified.", related_field_name,)
+            }
+            Self::MinDirectParticipationThresholdValidationError(error) => {
+                format!("{prefix}{}", error.to_string())
+            }
+            Self::MaxNeuronsFundParticipationValidationError(error) => {
+                format!("{prefix}{}", error.to_string())
+            }
+            Self::LinearScalingCoefficientVecValidationError(error) => {
+                format!("{prefix}{}", error.to_string())
+            }
+        }
+    }
+}
+
+impl From<NeuronsFundParticipationConstraintsValidationError> for Result<(), String> {
+    fn from(value: NeuronsFundParticipationConstraintsValidationError) -> Self {
+        Err(value.to_string())
+    }
+}
 
 pub enum RestrictedCountriesValidationError {
     EmptyList,
@@ -276,6 +468,20 @@ impl SnsInitPayload {
     /// in a real world scenario. They are only meant to validate, not be sensible.
     pub fn with_valid_legacy_values_for_testing() -> Self {
         Self::with_valid_values_for_testing().strip_non_legacy_parameters()
+    }
+
+    /// This gives us some values that work for testing but would not be useful
+    /// in a real world scenario. They are only meant to validate, not be sensible.
+    /// These values are "pre-execution", meaning they cannot be used as-is to
+    /// create an SNS.
+    pub fn with_valid_values_for_testing_pre_execution() -> Self {
+        Self {
+            nns_proposal_id: None,
+            neurons_fund_participants: None,
+            swap_start_timestamp_seconds: None,
+            swap_due_timestamp_seconds: None,
+            ..Self::with_valid_values_for_testing()
+        }
     }
 
     /// This gives us some values that work for testing but would not be useful
@@ -683,6 +889,7 @@ impl SnsInitPayload {
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
             self.validate_parameters_are_legacy(),
+            self.validate_neurons_fund_participation_constraints(true),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -731,6 +938,7 @@ impl SnsInitPayload {
             self.validate_neurons_fund_participants_pre_execution(),
             self.validate_swap_start_timestamp_seconds_pre_execution(),
             self.validate_swap_due_timestamp_seconds_pre_execution(),
+            self.validate_neurons_fund_participation_constraints(true),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -775,6 +983,7 @@ impl SnsInitPayload {
             self.validate_neurons_fund_participants(),
             self.validate_swap_start_timestamp_seconds(),
             self.validate_swap_due_timestamp_seconds(),
+            self.validate_neurons_fund_participation_constraints(false),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -1693,6 +1902,154 @@ impl SnsInitPayload {
         }
     }
 
+    pub fn validate_neurons_fund_participation_constraints(
+        &self,
+        is_pre_execution: bool,
+    ) -> Result<(), String> {
+        // Currently disabled on mainnet.
+        if !IS_MATCHED_FUNDING_ENABLED && self.neurons_fund_participation_constraints.is_some() {
+            return NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into();
+        }
+
+        // This field must be set by NNS Governance at proposal execution time, not before.
+        // This will also catch the situation in which we are in the legacy (pre-1-prop) flow,
+        // in which the neurons_fund_participation_constraints field must not be set.
+        if is_pre_execution && self.neurons_fund_participation_constraints.is_some() {
+            return NeuronsFundParticipationConstraintsValidationError::SetBeforeProposalExecution
+                .into();
+        }
+
+        // This is an optional field
+        if self.neurons_fund_participation_constraints.is_none() {
+            // TODO[NNS1-2569]: Check that this coincides with `!self.neurons_fund_participation`
+            return Ok(());
+        }
+
+        let neurons_fund_participation_constraints = self
+            .neurons_fund_participation_constraints
+            .as_ref()
+            .unwrap();
+
+        // Validate min_direct_participation_threshold_icp_e8s
+        if let Some(_min_direct_participation_threshold_icp_e8s) =
+            neurons_fund_participation_constraints.min_direct_participation_threshold_icp_e8s
+        {
+            // TODO[NNS1-2608]: enable the following check when min_direct_icp_e8s is added the SnsInitPayload
+            // let min_direct_icp_e8s = self
+            //     .min_direct_icp_e8s
+            //     .ok_or_else(|| NeuronsFundParticipationConstraintsValidationError::RelatedFieldUnspecified("min_direct_icp_e8s".to_string()))?;
+            // if min_direct_participation_threshold_icp_e8s < min_direct_icp_e8s {
+            //     return NeuronsFundParticipationConstraintsValidationError::MinDirectParticipationThresholdValidationError(
+            //         MinDirectParticipationThresholdValidationError::BelowSwapDirectIcpMin {
+            //             min_direct_participation_threshold_icp_e8s,
+            //             min_direct_icp_e8s,
+            //         }
+            //     ).into()
+            // }
+            //
+            // TODO[NNS1-2608]: enable the following check when max_direct_icp_e8s is added the SnsInitPayload
+            // let max_direct_icp_e8s = self
+            //     .max_direct_icp_e8s
+            //     .ok_or_else(|| NeuronsFundParticipationConstraintsValidationError::RelatedFieldUnspecified("max_direct_icp_e8s".to_string()))?;
+            // if min_direct_participation_threshold_icp_e8s > max_direct_icp_e8s {
+            //     return NeuronsFundParticipationConstraintsValidationError::MinDirectParticipationThresholdValidationError(
+            //         MinDirectParticipationThresholdValidationError::AboveSwapDirectIcpMax {
+            //             min_direct_participation_threshold_icp_e8s,
+            //             max_direct_icp_e8s,
+            //         }
+            //     ).into();
+            // }
+        } else {
+            return NeuronsFundParticipationConstraintsValidationError::MinDirectParticipationThresholdValidationError(
+                MinDirectParticipationThresholdValidationError::Unspecified
+            ).into();
+        }
+
+        // Validate max_neurons_fund_participation_icp_e8s
+        if let Some(max_neurons_fund_participation_icp_e8s) =
+            neurons_fund_participation_constraints.max_neurons_fund_participation_icp_e8s
+        {
+            let min_participant_icp_e8s = self.min_participant_icp_e8s.ok_or_else(|| {
+                NeuronsFundParticipationConstraintsValidationError::RelatedFieldUnspecified(
+                    "min_participant_icp_e8s".to_string(),
+                )
+                .to_string()
+            })?;
+            if max_neurons_fund_participation_icp_e8s < min_participant_icp_e8s {
+                return NeuronsFundParticipationConstraintsValidationError::MaxNeuronsFundParticipationValidationError(
+                    MaxNeuronsFundParticipationValidationError::BelowSingleParticipationLimit {
+                        max_neurons_fund_participation_icp_e8s,
+                        min_participant_icp_e8s,
+                    }
+                ).into();
+            }
+            // Not more than 50% of total contributions should come from the Neurons' Fund.
+            let half_of_max_icp_e8s = self
+                .max_icp_e8s
+                .ok_or_else(|| {
+                    NeuronsFundParticipationConstraintsValidationError::RelatedFieldUnspecified(
+                        "max_icp_e8s".to_string(),
+                    )
+                    .to_string()
+                })?
+                .saturating_div(2); // 50%
+            if max_neurons_fund_participation_icp_e8s > half_of_max_icp_e8s {
+                return NeuronsFundParticipationConstraintsValidationError::MaxNeuronsFundParticipationValidationError(
+                    MaxNeuronsFundParticipationValidationError::AboveHalfOfSwapIcpMax {
+                        max_neurons_fund_participation_icp_e8s,
+                        half_of_max_icp_e8s,
+                    }
+                ).into();
+            }
+        } else {
+            return NeuronsFundParticipationConstraintsValidationError::MaxNeuronsFundParticipationValidationError(
+                MaxNeuronsFundParticipationValidationError::Unspecified
+            ).into();
+        }
+
+        // Validate coefficient_intervals
+        if neurons_fund_participation_constraints
+            .coefficient_intervals
+            .is_empty()
+        {
+            return NeuronsFundParticipationConstraintsValidationError::LinearScalingCoefficientVecValidationError(
+                LinearScalingCoefficientVecValidationError::EmptyLinearScalingCoefficients
+            ).into();
+        }
+
+        let num_coefficient_intervals = neurons_fund_participation_constraints
+            .coefficient_intervals
+            .len();
+        if num_coefficient_intervals > MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN {
+            return NeuronsFundParticipationConstraintsValidationError::LinearScalingCoefficientVecValidationError(
+                LinearScalingCoefficientVecValidationError::TooManyLinearScalingCoefficients(num_coefficient_intervals)
+            ).into();
+        }
+
+        let intervals = &neurons_fund_participation_constraints.coefficient_intervals;
+        for (prev_interval, interval) in intervals.iter().zip(intervals.iter().skip(1)) {
+            if prev_interval.to_direct_participation_icp_e8s
+                != interval.from_direct_participation_icp_e8s
+            {
+                return NeuronsFundParticipationConstraintsValidationError::LinearScalingCoefficientVecValidationError(
+                    LinearScalingCoefficientVecValidationError::LinearScalingCoefficientsUnordered(
+                        prev_interval.clone(),
+                        interval.clone(),
+                    )
+                ).into();
+            }
+            interval
+                .validate()
+                .map_err(|err| {
+                    NeuronsFundParticipationConstraintsValidationError::LinearScalingCoefficientVecValidationError(
+                        LinearScalingCoefficientVecValidationError::LinearScalingCoefficientValidationError(err)
+                    ).to_string()
+                })?
+        }
+
+        Ok(())
+    }
+
     /// Checks that all parameters whose values can only be known after the CreateServiceNervousSystem proposal is executed are present.
     pub fn validate_all_post_execution_swap_parameters_are_set(&self) -> Result<(), String> {
         let mut missing_one_proposal_fields = vec![];
@@ -1781,10 +2138,10 @@ mod test {
             FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
         },
         FractionalDeveloperVotingPower, NeuronBasketConstructionParametersValidationError,
-        RestrictedCountriesValidationError, SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY,
-        MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
-        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MAX_TOKEN_NAME_LENGTH,
-        MAX_TOKEN_SYMBOL_LENGTH,
+        NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
+        SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
+        MAX_DAPP_CANISTERS_COUNT, MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
+        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
@@ -1792,7 +2149,11 @@ mod test {
     use ic_sns_governance::{
         governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
     };
-    use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
+    #[cfg(feature = "test")]
+    use ic_sns_swap::pb::v1::LinearScalingCoefficient;
+    use ic_sns_swap::pb::v1::{
+        NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
+    };
     use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
     use std::{
@@ -3114,5 +3475,116 @@ mod test {
                 errors
             );
         }
+    }
+
+    #[cfg(not(feature = "test"))]
+    #[test]
+    fn test_neurons_fund_participation_constraints_validation_for_mainnet_legacy_flow() {
+        let sns_init_payload = SnsInitPayload {
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(1_000),
+                max_neurons_fund_participation_icp_e8s: Some(10_000),
+                coefficient_intervals: vec![],
+            }),
+            ..SnsInitPayload::with_valid_legacy_values_for_testing()
+        };
+        assert_eq!(
+            sns_init_payload.validate_legacy_init().map(|_| ()),
+            NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into(),
+        );
+    }
+
+    #[cfg(not(feature = "test"))]
+    #[test]
+    fn test_neurons_fund_participation_constraints_validation_for_mainnet_pre_execution() {
+        let sns_init_payload = SnsInitPayload {
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(1_000),
+                max_neurons_fund_participation_icp_e8s: Some(10_000),
+                coefficient_intervals: vec![],
+            }),
+            ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+        };
+        assert_eq!(
+            sns_init_payload.validate_pre_execution().map(|_| ()),
+            NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into(),
+        );
+    }
+
+    #[cfg(not(feature = "test"))]
+    #[test]
+    fn test_neurons_fund_participation_constraints_validation_for_mainnet_post_execution() {
+        let sns_init_payload = SnsInitPayload {
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(1_000),
+                max_neurons_fund_participation_icp_e8s: Some(10_000),
+                coefficient_intervals: vec![],
+            }),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+        assert_eq!(
+            sns_init_payload.validate_post_execution().map(|_| ()),
+            NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into(),
+        );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn test_neurons_fund_participation_constraints_validation_for_legacy_flow() {
+        // The concrete values are irrelevant, as we just want to make sure that the validation
+        // fails.
+        let sns_init_payload = SnsInitPayload {
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(1_000),
+                max_neurons_fund_participation_icp_e8s: Some(10_000),
+                coefficient_intervals: vec![],
+            }),
+            ..SnsInitPayload::with_valid_legacy_values_for_testing()
+        };
+        assert_eq!(
+            sns_init_payload.validate_legacy_init().map(|_| ()),
+            NeuronsFundParticipationConstraintsValidationError::SetBeforeProposalExecution.into(),
+        );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn test_neurons_fund_participation_constraints_validation_for_pre_execution() {
+        let sns_init_payload = SnsInitPayload {
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(1_000),
+                max_neurons_fund_participation_icp_e8s: Some(10_000),
+                coefficient_intervals: vec![],
+            }),
+            ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+        };
+        assert_eq!(
+            sns_init_payload.validate_pre_execution().map(|_| ()),
+            NeuronsFundParticipationConstraintsValidationError::SetBeforeProposalExecution.into(),
+        );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn test_neurons_fund_participation_constraints_validation_for_post_execution() {
+        let sns_init_payload = SnsInitPayload {
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(6_500_000_000),
+                max_neurons_fund_participation_icp_e8s: Some(6_500_000_000),
+                coefficient_intervals: vec![LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(0),
+                    to_direct_participation_icp_e8s: Some(1),
+                    slope_numerator: Some(2),
+                    slope_denominator: Some(3),
+                    intercept_icp_e8s: Some(4),
+                }],
+            }),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+        assert_eq!(
+            sns_init_payload.validate_post_execution().map(|_| ()),
+            Ok(())
+        );
+        // TODO[NNS1-2558]: Add more tests for neurons_fund_participation_constraints validators.
     }
 }
