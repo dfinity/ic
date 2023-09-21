@@ -29,8 +29,10 @@ use ic_nns_governance::pb::v1::{
         self, configure::Operation, AddHotKey, Configure, Follow, JoinCommunityFund,
         LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
-    Empty, Governance, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Proposal, ProposalInfo, Vote,
+    Empty, Governance, GovernanceError, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Proposal, ProposalInfo,
+    RewardNodeProviders, Vote,
 };
 use ic_sns_governance::{
     pb::v1::{
@@ -778,6 +780,72 @@ pub fn nns_list_proposals(state_machine: &mut StateMachine) -> ListProposalInfoR
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
+}
+
+/// Return the monthly Node Provider rewards
+pub fn nns_get_monthly_node_provider_rewards(
+    state_machine: &mut StateMachine,
+) -> Result<RewardNodeProviders, GovernanceError> {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "get_monthly_node_provider_rewards",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to get_monthly_node_provider_rewards failed: {:#?}", s)
+        }
+    };
+
+    Decode!(&result, Result<RewardNodeProviders, GovernanceError>).unwrap()
+}
+
+/// Return the most recent monthly Node Provider rewards
+pub fn nns_get_most_recent_monthly_node_provider_rewards(
+    state_machine: &mut StateMachine,
+) -> Option<MostRecentMonthlyNodeProviderRewards> {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "get_most_recent_monthly_node_provider_rewards",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!(
+                "Call to get_most_recent_monthly_node_provider_rewards failed: {:#?}",
+                s
+            )
+        }
+    };
+
+    Decode!(&result, Option<MostRecentMonthlyNodeProviderRewards>).unwrap()
+}
+
+pub fn nns_get_network_economics_parameters(state_machine: &mut StateMachine) -> NetworkEconomics {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "get_network_economics_parameters",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to get_network_economics_parameters failed: {:#?}", s)
+        }
+    };
+
+    Decode!(&result, NetworkEconomics).unwrap()
 }
 
 pub fn list_deployed_snses(state_machine: &mut StateMachine) -> ListDeployedSnsesResponse {

@@ -4,7 +4,7 @@
 //! tests are run.
 
 use crate::fake::{
-    DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, SNS_GOVERNANCE_CANISTER_ID,
+    DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, NODE_PROVIDER_REWARD, SNS_GOVERNANCE_CANISTER_ID,
     SNS_LEDGER_ARCHIVE_CANISTER_ID, SNS_LEDGER_CANISTER_ID, SNS_LEDGER_INDEX_CANISTER_ID,
     SNS_ROOT_CANISTER_ID, TARGET_SWAP_CANISTER_ID,
 };
@@ -35,6 +35,7 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance::governance::get_node_provider_reward;
 use ic_nns_governance::{
     governance::{
         test_data::CREATE_SERVICE_NERVOUS_SYSTEM, validate_proposal_title, Environment, Governance,
@@ -1371,6 +1372,48 @@ async fn test_minimum_icp_xdr_conversion_rate() {
 }
 
 #[tokio::test]
+async fn test_minimum_icp_xdr_conversion_rate_limits_monthly_node_provider_rewards() {
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_following(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+    // Set minimum conversion rate.
+    let minimum_icp_xdr_rate = 100;
+    gov.heap_data
+        .economics
+        .as_mut()
+        .unwrap()
+        .minimum_icp_xdr_rate = minimum_icp_xdr_rate;
+
+    let node_provider_pid = PrincipalId::new_user_test_id(1);
+    let node_provider = NodeProvider {
+        id: Some(node_provider_pid),
+        reward_account: None,
+    };
+
+    gov.heap_data.node_providers = vec![node_provider.clone()];
+
+    let monthly_node_provider_rewards = gov.get_monthly_node_provider_rewards().await.unwrap();
+    let actual_node_provider_reward = monthly_node_provider_rewards
+        .rewards
+        .iter()
+        .find(|reward| reward.node_provider.as_ref().unwrap().id == Some(node_provider_pid))
+        .unwrap()
+        .clone();
+
+    let expected_node_provider_reward = get_node_provider_reward(
+        &node_provider,
+        NODE_PROVIDER_REWARD,
+        minimum_icp_xdr_rate * NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER,
+    )
+    .unwrap();
+    assert_eq!(actual_node_provider_reward, expected_node_provider_reward);
+}
+
+#[tokio::test]
 async fn test_node_provider_must_be_registered() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
@@ -1506,7 +1549,7 @@ async fn test_sufficient_stake() {
 }
 
 /// In this scenario, we configure neurons 5 and 6 to follow neuron 1.
-/// When neuron 1 now votes, this should result in the propsal being
+/// When neuron 1 now votes, this should result in the proposal being
 /// immediately acceptable.
 #[tokio::test]
 async fn test_all_follow_proposer() {
