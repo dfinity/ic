@@ -84,6 +84,7 @@ build-info-build = { version = "0.0.26", default-features = false, features = [
 
 [dev-dependencies]
 criterion = "0.5"
+cycles-minting-canister = { path = "../cmc" }
 futures = "0.3.13"
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }

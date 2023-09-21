@@ -696,7 +696,7 @@ fn get_monthly_node_provider_rewards() {
 
 #[candid_method(update, rename = "get_monthly_node_provider_rewards")]
 async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
-    governance().get_monthly_node_provider_rewards().await
+    governance_mut().get_monthly_node_provider_rewards().await
 }
 
 #[export_name = "canister_query list_known_neurons"]

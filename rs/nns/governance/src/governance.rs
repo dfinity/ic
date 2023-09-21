@@ -46,7 +46,6 @@ use crate::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
-use dfn_candid::candid_one;
 use dfn_core::api::spawn;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -81,7 +80,7 @@ use registry_canister::{
 };
 use std::{
     borrow::Cow,
-    cmp::Ordering,
+    cmp::{max, Ordering},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
@@ -241,6 +240,9 @@ impl Drop for MakeProposalLock {
 // The default values for network economics (until we initialize it).
 // Can't implement Default since it conflicts with Prost's.
 impl NetworkEconomics {
+    /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
+    pub const ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER: u64 = 100;
+
     pub const fn with_default_values() -> Self {
         Self {
             reject_cost_e8s: E8S_PER_ICP,                               // 1 ICP
@@ -7276,18 +7278,27 @@ impl Governance {
     /// the last 30 days, then applies this conversion rate to convert each
     /// node provider's XDR rewards to ICP.
     pub async fn get_monthly_node_provider_rewards(
-        &self,
+        &mut self,
     ) -> Result<RewardNodeProviders, GovernanceError> {
         let mut rewards = RewardNodeProviders::default();
 
         // Maps node providers to their rewards in XDR
-        let xdr_permyriad_rewards = get_node_providers_monthly_xdr_rewards().await?;
+        let xdr_permyriad_rewards = self.get_node_providers_monthly_xdr_rewards().await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
-        let xdr_permyriad_per_icp = get_average_icp_xdr_conversion_rate()
+        let avg_xdr_permyriad_per_icp = self
+            .get_average_icp_xdr_conversion_rate()
             .await?
             .data
             .xdr_permyriad_per_icp;
+
+        // Convert minimum_icp_xdr_rate to basis points for comparison with avg_xdr_permyriad_per_icp
+        let minimum_xdr_permyriad_per_icp = self
+            .economics()
+            .minimum_icp_xdr_rate
+            .saturating_mul(NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER);
+
+        let xdr_permyriad_per_icp = max(avg_xdr_permyriad_per_icp, minimum_xdr_permyriad_per_icp);
 
         // Iterate over all node providers, calculate their rewards, and append them to
         // `rewards`
@@ -7306,6 +7317,73 @@ impl Governance {
         }
 
         Ok(rewards)
+    }
+
+    /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
+    async fn get_node_providers_monthly_xdr_rewards(
+        &mut self,
+    ) -> Result<NodeProvidersMonthlyXdrRewards, GovernanceError> {
+        let registry_response:
+            Vec<u8> = self
+            .env
+            .call_canister_method(
+                REGISTRY_CANISTER_ID,
+                "get_node_providers_monthly_xdr_rewards",
+                Encode!().unwrap(),
+            )
+            .await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
+                        code, msg
+                    ),
+                )
+            })?;
+
+        Decode!(&registry_response, Result<NodeProvidersMonthlyXdrRewards, String>)
+            .map_err(|err| GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Cannot decode return type from get_node_providers_monthly_xdr_rewards'. Error: {}",
+                    err,
+                ),
+            ))?
+            .map_err(|msg| GovernanceError::new_with_message(ErrorType::External, msg))
+    }
+
+    /// A helper for the CMC's get_average_icp_xdr_conversion_rate method
+    async fn get_average_icp_xdr_conversion_rate(
+        &mut self,
+    ) -> Result<IcpXdrConversionRateCertifiedResponse, GovernanceError> {
+        let cmc_response:
+            Vec<u8> = self
+            .env
+            .call_canister_method(
+                CYCLES_MINTING_CANISTER_ID,
+                "get_average_icp_xdr_conversion_rate",
+                Encode!().unwrap(),
+            )
+            .await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling 'get_average_icp_xdr_conversion_rate': code: {:?}, message: {}",
+                        code, msg
+                    ),
+                )
+            })?;
+
+        Decode!(&cmc_response, IcpXdrConversionRateCertifiedResponse)
+            .map_err(|err| GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Cannot decode return type from get_average_icp_xdr_conversion_rate'. Error: {}",
+                    err,
+                ),
+            ))
     }
 
     /// Return the cached governance metrics.
@@ -8089,56 +8167,6 @@ pub async fn is_caller_authorized_to_settle_neurons_fund_participation(
     Ok(())
 }
 
-/// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
-async fn get_node_providers_monthly_xdr_rewards(
-) -> Result<NodeProvidersMonthlyXdrRewards, GovernanceError> {
-    let registry_response: Result<
-        Result<NodeProvidersMonthlyXdrRewards, String>,
-        (Option<i32>, String),
-    > = dfn_core::api::call_with_cleanup(
-        REGISTRY_CANISTER_ID,
-        "get_node_providers_monthly_xdr_rewards",
-        candid_one,
-        (),
-    )
-    .await;
-
-    registry_response
-        .map_err(|(code, msg)| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
-                code, msg
-            ),
-            )
-        })?
-        .map_err(|msg| GovernanceError::new_with_message(ErrorType::External, msg))
-}
-
-/// A helper for the CMC's get_average_icp_xdr_conversion_rate method
-async fn get_average_icp_xdr_conversion_rate(
-) -> Result<IcpXdrConversionRateCertifiedResponse, GovernanceError> {
-    let cmc_response: Result<IcpXdrConversionRateCertifiedResponse, (Option<i32>, String)> =
-        dfn_core::api::call_with_cleanup(
-            CYCLES_MINTING_CANISTER_ID,
-            "get_average_icp_xdr_conversion_rate",
-            candid_one,
-            (),
-        )
-        .await;
-
-    cmc_response.map_err(|(code, msg)| {
-        GovernanceError::new_with_message(
-            ErrorType::External,
-            format!(
-                "Error calling 'get_average_icp_xdr_conversion_rate': code: {:?}, message: {}",
-                code, msg
-            ),
-        )
-    })
-}
-
 /// Given the XDR amount that the given node provider should be rewarded, and a
 /// conversion rate from XDR to ICP, returns the ICP amount and wallet address
 /// that should be awarded on behalf of the given node provider.
@@ -8159,7 +8187,7 @@ async fn get_average_icp_xdr_conversion_rate(
 /// $reward_amount XDR * (TOKEN_SUBDIVIDABLE_BY e8s / $rate XDR)
 /// ==
 /// (($reward_amount * TOKEN_SUBDIVIDABLE_BY) / $rate) e8s
-fn get_node_provider_reward(
+pub fn get_node_provider_reward(
     np: &NodeProvider,
     xdr_permyriad_reward: u64,
     xdr_permyriad_per_icp: u64,
