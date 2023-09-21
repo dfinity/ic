@@ -81,8 +81,9 @@ fn test_wasmtime_system_api() {
     let mut store = Store::new(
         &engine,
         StoreData {
-            system_api,
+            system_api: Some(system_api),
             num_instructions_global: None,
+            log: no_op_logger(),
         },
     );
 
@@ -110,10 +111,10 @@ fn test_wasmtime_system_api() {
     let module = Module::new(&engine, instrumentation_output.binary.as_slice())
         .expect("failed to instantiate module");
 
-    let linker = system_api::syscalls(
-        no_op_logger(),
-        canister_id,
-        &store,
+    let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
+
+    system_api::syscalls(
+        &mut linker,
         config.feature_flags,
         config.stable_memory_dirty_page_limit,
         config.stable_memory_accessed_page_limit,

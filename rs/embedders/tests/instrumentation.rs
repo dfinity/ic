@@ -220,16 +220,16 @@ fn test_exports_only_reserved_symbols() {
     }
 }
 
-fn instr_used(instance: &mut WasmtimeInstance<impl SystemApi>) -> u64 {
+fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
     let instruction_counter = instance.instruction_counter();
-    let system_api = &instance.store_data().system_api;
+    let system_api = instance.store_data().system_api().unwrap();
     system_api
         .slice_instructions_executed(instruction_counter)
         .get()
 }
 
 #[allow(clippy::field_reassign_with_default)]
-fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance<impl SystemApi> {
+fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = ic_config::embedders::Config::default();
     config.metering_type = MeteringType::New;
     config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
@@ -722,7 +722,7 @@ fn charge_for_dirty_stable() {
         },
     });
 
-    let system_api = &instance.store_data().system_api;
+    let system_api = instance.store_data().system_api().unwrap();
 
     let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead

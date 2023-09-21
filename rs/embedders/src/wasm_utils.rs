@@ -15,9 +15,8 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
-use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
-
 use self::{instrumentation::instrument, validation::validate_wasm_binary};
+use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
 
 pub mod decoding;
 pub mod instrumentation;

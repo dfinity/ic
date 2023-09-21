@@ -45,7 +45,8 @@ fn run_test(wat: &str) -> HypervisorResult<Option<WasmResult>> {
     let run_result = instance.run(FuncRef::Method(WasmMethod::Update("go".to_string())));
     instance
         .store_data_mut()
-        .system_api
+        .system_api_mut()
+        .unwrap()
         .take_execution_result(run_result.as_ref().err())
 }
 

@@ -184,6 +184,8 @@ pub enum WasmEngineError {
     FailedToSerializeModule(String),
     FailedToDeserializeModule(String),
     FailedToApplySystemChanges(String),
+    Other(String),
+    Unexpected(String),
 }
 
 impl std::fmt::Display for WasmEngineError {
@@ -209,6 +211,12 @@ impl std::fmt::Display for WasmEngineError {
             }
             Self::FailedToApplySystemChanges(s) => {
                 write!(f, "Failed to apply system changes: {}", s)
+            }
+            Self::Other(s) => {
+                write!(f, "WasmEngineError: {}", s)
+            }
+            Self::Unexpected(s) => {
+                write!(f, "Unexpected WasmEngineError: {}", s)
             }
         }
     }
