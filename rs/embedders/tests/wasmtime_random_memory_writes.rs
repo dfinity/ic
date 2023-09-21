@@ -466,7 +466,7 @@ mod tests {
                         &Memory::new(page_map.clone(), NumWasmPages::from(0)),
                         &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                         modification_tracking,
-                        api,
+                        Some(api),
                     )
                     .map_err(|r| r.0)
                     .expect("Failed to create instance");
@@ -646,7 +646,7 @@ mod tests {
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Ignore,
-                    api,
+                    Some(api),
                 )
                 .map_err(|r| r.0)
                 .expect("Failed to create instance");
@@ -659,7 +659,8 @@ mod tests {
             let instruction_counter = inst.instruction_counter();
             let instructions_executed = inst
                 .store_data()
-                .system_api
+                .system_api()
+                .unwrap()
                 .slice_instructions_executed(instruction_counter);
             assert_eq!(
                 instructions_executed.get(),
@@ -1045,7 +1046,7 @@ mod tests {
                 &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 ModificationTracking::Track,
-                api,
+                Some(api),
             )
             .map_err(|r| r.0)
             .expect("Failed to create instance");
@@ -1056,7 +1057,8 @@ mod tests {
         let instruction_counter = inst.instruction_counter();
         let instructions_executed = inst
             .store_data()
-            .system_api
+            .system_api()
+            .unwrap()
             .slice_instructions_executed(instruction_counter);
 
         Ok((instructions_executed, res))
@@ -1329,7 +1331,7 @@ mod tests {
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Track,
-                    api,
+                    Some(api),
                 )
                 .map_err(|r| r.0)
                 .expect("Failed to create instance");

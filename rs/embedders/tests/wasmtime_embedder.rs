@@ -97,7 +97,7 @@ mod test {
             .unwrap();
 
         let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api;
+        let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
         let call_msg_arg_data_copy_with_3_const = 4;
@@ -249,7 +249,7 @@ mod test {
             _ => panic!("Error getting performance_counter2"),
         };
         let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api;
+        let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
         assert_eq!(performance_counter1, expected_instructions_counter1);
         assert_eq!(performance_counter2, expected_instructions_counter2);
@@ -366,7 +366,7 @@ mod test {
             .unwrap();
 
         let instruction_counter = instance.instruction_counter();
-        let system_api = &instance.store_data().system_api;
+        let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
         let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
@@ -381,11 +381,7 @@ mod test {
             + system_api_complexity::overhead::old::CALL_PERFORM.get();
         assert_eq!(instructions_used.get(), expected_instructions);
 
-        let total_cpu_complexity = instance
-            .into_store_data()
-            .system_api
-            .execution_complexity()
-            .cpu;
+        let total_cpu_complexity = system_api.execution_complexity().cpu;
         let expected_cpu_complexity =
             system_api_complexity::cpu::CALL_NEW + system_api_complexity::cpu::CALL_PERFORM;
         assert_eq!(total_cpu_complexity, expected_cpu_complexity);

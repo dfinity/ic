@@ -3,7 +3,6 @@ mod request_in_prep;
 mod routing;
 pub mod sandbox_safe_system_state;
 mod stable_memory;
-pub mod system_api_empty;
 
 use ic_base_types::PrincipalIdBlobParseError;
 use ic_config::flag_status::FlagStatus;
@@ -1333,6 +1332,10 @@ impl SystemApi for SystemApiImpl {
             .saturating_sub(instruction_counter)
             .max(0) as u64;
         NumInstructions::from(result)
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        self.sandbox_safe_system_state.canister_id
     }
 
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {

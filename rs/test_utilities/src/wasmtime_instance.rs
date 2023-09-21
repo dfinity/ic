@@ -107,9 +107,7 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn try_build(
-        self,
-    ) -> Result<WasmtimeInstance<SystemApiImpl>, (HypervisorError, SystemApiImpl)> {
+    pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
         let wasm = if !self.wat.is_empty() {
@@ -183,16 +181,16 @@ impl WasmtimeInstanceBuilder {
                     ic_replicated_state::NumWasmPages::from(0),
                 ),
                 ModificationTracking::Track,
-                api,
+                Some(api),
             )
             .map(|mut result| {
                 result.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
                 result
             });
-        instance
+        instance.map_err(|(h, s)| (h, s.unwrap()))
     }
 
-    pub fn build(self) -> WasmtimeInstance<SystemApiImpl> {
+    pub fn build(self) -> WasmtimeInstance {
         let instance = self.try_build();
         instance
             .map_err(|r| r.0)

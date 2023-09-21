@@ -11,9 +11,10 @@ use std::{
     sync::{atomic::Ordering, Arc, Mutex},
 };
 
-use ic_system_api::ModificationTracking;
+use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, Memory, Module, Mutability, OptLevel, Store, Val, ValType,
+    unix::StoreExt, Engine, Instance, Linker, Memory, Module, Mutability, OptLevel, Store, Val,
+    ValType,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -310,7 +311,7 @@ impl WasmtimeEmbedder {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn new_instance<S: SystemApi>(
+    pub fn new_instance(
         &self,
         canister_id: CanisterId,
         cache: &EmbedderCache,
@@ -318,13 +319,13 @@ impl WasmtimeEmbedder {
         heap_memory: &execution_state::Memory,
         stable_memory: &execution_state::Memory,
         modification_tracking: ModificationTracking,
-        system_api: S,
-    ) -> Result<WasmtimeInstance<S>, (HypervisorError, S)> {
+        system_api: Option<SystemApiImpl>,
+    ) -> Result<WasmtimeInstance, (HypervisorError, Option<SystemApiImpl>)> {
         let module = match cache
             .downcast::<HypervisorResult<wasmtime::Module>>()
             .expect("incompatible embedder cache, expected HypervisorResult<wasmtime::Module>")
         {
-            Ok(module) => module,
+            Ok(x) => x,
             Err(err) => return Err((err.clone(), system_api)),
         };
 
@@ -333,13 +334,13 @@ impl WasmtimeEmbedder {
             StoreData {
                 system_api,
                 num_instructions_global: None,
+                log: self.log.clone(),
             },
         );
 
-        let linker = system_api::syscalls(
-            self.log.clone(),
-            canister_id,
-            &store,
+        let mut linker = Linker::new(store.engine());
+        system_api::syscalls(
+            &mut linker,
             self.config.feature_flags,
             self.config.stable_memory_dirty_page_limit,
             self.config.stable_memory_accessed_page_limit,
@@ -434,10 +435,12 @@ impl WasmtimeEmbedder {
         }
 
         let mut memories = HashMap::new();
-        for memory_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory)
-        {
-            store =
-                self.instantiate_memory(memory_info, &instance, store, &mut memories, canister_id)?;
+        for mem_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory) {
+            if let Err(e) =
+                self.instantiate_memory(mem_info, &instance, &mut store, &mut memories, canister_id)
+            {
+                return Err((e, store.into_data().system_api));
+            }
         }
 
         let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
@@ -460,14 +463,14 @@ impl WasmtimeEmbedder {
         })
     }
 
-    fn instantiate_memory<S>(
+    fn instantiate_memory(
         &self,
         memory_info: WasmMemoryInfo,
         instance: &Instance,
-        mut store: Store<StoreData<S>>,
+        mut store: &mut Store<StoreData>,
         memories_to_track: &mut HashMap<CanisterMemoryType, MemorySigSegvInfo>,
         canister_id: CanisterId,
-    ) -> Result<Store<StoreData<S>>, (HypervisorError, S)> {
+    ) -> HypervisorResult<()> {
         if let Some(instance_memory) = instance.get_memory(&mut store, memory_info.name) {
             let current_size = instance_memory.size(&store);
             let requested_size = memory_info.memory.size.get() as u64;
@@ -486,13 +489,10 @@ impl WasmtimeEmbedder {
                         self.log,
                         "Unable to find memory for canister {} when instantiating", canister_id
                     );
-                    return Err((
-                        HypervisorError::WasmEngineError(
-                            WasmEngineError::FailedToInstantiateModule(
-                                "Unable to find memory when instantiating".to_string(),
-                            ),
+                    return Err(HypervisorError::WasmEngineError(
+                        WasmEngineError::FailedToInstantiateModule(
+                            "Unable to find memory when instantiating".to_string(),
                         ),
-                        store.into_data().system_api,
                     ));
                 }
                 Some(current_memory_size_in_pages) => current_memory_size_in_pages,
@@ -514,26 +514,23 @@ impl WasmtimeEmbedder {
                     store,
                     &mut created_memories,
                     canister_id,
-                )
-            } else {
-                Ok(store)
+                )?;
             }
-        } else {
-            Ok(store)
         }
+        Ok(())
     }
 
     /// We don't need to track changes to the bytemap so it can
     /// be immediately read/write permissioned and we don't have
     /// to register it with the sigsegv tracker.
-    fn bytemap_protect_read_write<S>(
+    fn bytemap_protect_read_write(
         &self,
         bytemap_name: &str,
         instance: &Instance,
-        mut store: Store<StoreData<S>>,
+        mut store: &mut Store<StoreData>,
         created_memories: &mut HashMap<MemoryStart, MemoryPageSize>,
         canister_id: CanisterId,
-    ) -> Result<Store<StoreData<S>>, (HypervisorError, S)> {
+    ) -> HypervisorResult<()> {
         match instance
             .get_memory(&mut store, bytemap_name)
             .and_then(|bytemap_instance_memory| {
@@ -547,15 +544,14 @@ impl WasmtimeEmbedder {
                     self.log,
                     "Unable to find memory bytemap for canister {} when instantiating", canister_id
                 );
-                Err((
-                    HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
+                Err(HypervisorError::WasmEngineError(
+                    WasmEngineError::FailedToInstantiateModule(
                         "Unable to find bytemap memory when instantiating".to_string(),
-                    )),
-                    store.into_data().system_api,
+                    ),
                 ))
             }
             Some((instance_memory, current_memory_size_in_pages)) => {
-                let addr = instance_memory.data_ptr(&mut store) as usize;
+                let addr = instance_memory.data_ptr(store) as usize;
                 let size_in_bytes =
                     current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES;
                 use nix::sys::mman;
@@ -568,7 +564,7 @@ impl WasmtimeEmbedder {
                     )
                     .unwrap();
                 }
-                Ok(store)
+                Ok(())
             }
         }
     }
@@ -647,9 +643,37 @@ fn sigsegv_memory_tracker<S>(
 }
 
 /// Additional types that need to be owned by the `wasmtime::Store`.
-pub struct StoreData<S> {
-    pub system_api: S,
+pub struct StoreData {
+    pub system_api: Option<SystemApiImpl>,
     pub num_instructions_global: Option<wasmtime::Global>,
+    pub log: ReplicaLogger,
+}
+
+impl StoreData {
+    pub fn system_api(&self) -> HypervisorResult<&SystemApiImpl> {
+        self.system_api.as_ref().ok_or_else(|| {
+            HypervisorError::WasmEngineError(WasmEngineError::Other(
+                "System api not present in data store".to_string(),
+            ))
+        })
+    }
+
+    pub fn system_api_mut(&mut self) -> HypervisorResult<&mut SystemApiImpl> {
+        self.system_api.as_mut().ok_or_else(|| {
+            HypervisorError::WasmEngineError(WasmEngineError::Other(
+                "System api not present in data store".to_string(),
+            ))
+        })
+    }
+
+    pub fn system_api_mut_log(&mut self) -> HypervisorResult<(&mut SystemApiImpl, &ReplicaLogger)> {
+        let api = self.system_api.as_mut().ok_or_else(|| {
+            HypervisorError::WasmEngineError(WasmEngineError::Other(
+                "System api not present in data store".to_string(),
+            ))
+        })?;
+        Ok((api, &self.log))
+    }
 }
 
 pub struct PageAccessResults {
@@ -665,13 +689,13 @@ pub struct PageAccessResults {
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
-pub struct WasmtimeInstance<S: SystemApi> {
+pub struct WasmtimeInstance {
     instance: wasmtime::Instance,
     memory_trackers: HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>>,
     signal_stack: WasmtimeSignalStack,
     log: ReplicaLogger,
     instance_stats: InstanceStats,
-    store: wasmtime::Store<StoreData<S>>,
+    store: wasmtime::Store<StoreData>,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
     modification_tracking: ModificationTracking,
@@ -681,16 +705,16 @@ pub struct WasmtimeInstance<S: SystemApi> {
     stable_memory_dirty_page_limit: ic_types::NumPages,
 }
 
-impl<S: SystemApi> WasmtimeInstance<S> {
-    pub fn into_store_data(self) -> StoreData<S> {
+impl WasmtimeInstance {
+    pub fn into_store_data(self) -> StoreData {
         self.store.into_data()
     }
 
-    pub fn store_data_mut(&mut self) -> &mut StoreData<S> {
+    pub fn store_data_mut(&mut self) -> &mut StoreData {
         self.store.data_mut()
     }
 
-    pub fn store_data(&self) -> &StoreData<S> {
+    pub fn store_data(&self) -> &StoreData {
         self.store.data()
     }
 
@@ -822,12 +846,22 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 .map_err(wasmtime_error_to_hypervisor_error),
         }
         .map_err(|e| {
-            self.store
-                .data_mut()
-                .system_api
-                .get_execution_error()
-                .cloned()
-                .unwrap_or(e)
+            let exec_err = self
+                .store
+                .data()
+                .system_api()
+                .map(|api| api.get_execution_error().cloned());
+            match exec_err {
+                Ok(Some(HypervisorError::WasmEngineError(WasmEngineError::Unexpected(err)))) => {
+                    // safe to unwrap because previous line succeeded
+                    let cid = self.store.data().system_api().unwrap().canister_id();
+                    error!(self.log, "[EXC-BUG] Canister {}: {}", cid, err);
+                    HypervisorError::WasmEngineError(WasmEngineError::Unexpected(err))
+                }
+                Ok(Some(err)) => err,
+                Ok(None) => e,
+                Err(_) => e,
+            }
         });
 
         if let Err(HypervisorError::Aborted) = result {
@@ -879,11 +913,15 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             FlagStatus::Disabled => self
                 .store
                 .data()
-                .system_api
-                .stable_memory_dirty_pages()
-                .into_iter()
-                .map(|(i, _p)| i)
-                .collect(),
+                .system_api()
+                .map(|sys_api| {
+                    sys_api
+                        .stable_memory_dirty_pages()
+                        .into_iter()
+                        .map(|(i, _p)| i)
+                        .collect()
+                })
+                .unwrap_or_else(|_| Vec::new()),
         };
         self.instance_stats.dirty_pages += stable_memory_dirty_pages.len();
 

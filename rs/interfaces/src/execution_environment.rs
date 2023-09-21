@@ -524,6 +524,9 @@ pub trait SystemApi {
     /// Returns the number of instructions executed in the current slice.
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions;
 
+    /// Canister id of the executing canister.
+    fn canister_id(&self) -> ic_types::CanisterId;
+
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
     /// id in case of requests or the user id in case of an ingress message.

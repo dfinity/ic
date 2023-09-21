@@ -173,7 +173,8 @@ impl Execution {
                             // process.
                             Ok(mut instance) => instance
                                 .store_data_mut()
-                                .system_api
+                                .system_api_mut()
+                                .expect("System api not present in the wasmtime instance")
                                 .take_system_state_changes(),
                             Err(system_api) => system_api.into_system_state_changes(),
                         };
