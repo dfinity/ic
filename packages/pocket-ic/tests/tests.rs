@@ -72,7 +72,8 @@ fn test_set_and_get_stable_memory_not_compressed() {
         canister_id,
         data.clone(),
         pocket_ic::BlobCompression::NoCompression,
-    );
+    )
+    .unwrap();
 
     let read_data = pic.get_stable_memory(canister_id);
     assert_eq!(data, read_data[..8]);
@@ -96,7 +97,8 @@ fn test_set_and_get_stable_memory_compressed() {
         canister_id,
         compressed_data.clone(),
         pocket_ic::BlobCompression::Gzip,
-    );
+    )
+    .unwrap();
 
     let read_data = pic.get_stable_memory(canister_id);
     assert_eq!(data, read_data[..8]);

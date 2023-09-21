@@ -389,12 +389,26 @@ impl PocketIc {
         canister_id: Principal,
         data: Vec<u8>,
         compression: BlobCompression,
-    ) {
+    ) -> Result<(), String> {
         let blob_id = self.set_blob_store(data, compression);
-        self.call_state_machine(Request::SetStableMemory(SetStableMemoryArg {
-            canister_id: canister_id.as_slice().to_vec(),
-            blob_id,
-        }))
+        let res = self
+            .reqwest_client
+            .post(self.instance_url.clone())
+            .json(&Request::SetStableMemory(SetStableMemoryArg {
+                canister_id: canister_id.as_slice().to_vec(),
+                blob_id,
+            }))
+            .send()
+            .expect("Failed to get result");
+        let status = res.status();
+        let text = res.text().expect("Failed to get text");
+        match status {
+            reqwest::StatusCode::OK => Ok(()),
+            _ => Err(format!(
+                "The PocketIC server returned status code {}: {:?}!",
+                status, text
+            )),
+        }
     }
 
     pub fn cycle_balance(&self, canister_id: Principal) -> u128 {
