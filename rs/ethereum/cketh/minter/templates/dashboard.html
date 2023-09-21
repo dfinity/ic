@@ -10,9 +10,9 @@
 {% macro etherscan_block_link(block_number) %}
 {% match ethereum_network %}
   {% when Sepolia %}
-  <a href="https://sepolia.etherscan.io/block/{{block_number}}"><code>{{block_number}}</code></a>
+  <a href="https://sepolia.etherscan.io/block/{{block_number.to_string_inner()}}"><code>{{block_number.to_string_inner()}}</code></a>
   {% when Mainnet %}
-  <a href="https://etherscan.io/block/{{block_number}}"><code>{{block_number}}</code></a>
+  <a href="https://etherscan.io/block/{{block_number.to_string_inner()}}"><code>{{block_number.to_string_inner()}}</code></a>
 {% endmatch %}
 {% endmacro %}
 

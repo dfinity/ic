@@ -84,6 +84,21 @@ impl<Unit> CheckedAmountOf<Unit> {
     pub fn as_f64(&self) -> f64 {
         self.0.as_f64()
     }
+
+    /// Returns the display implementation of the inner value.
+    /// Useful to avoid thousands separators if value is used for example in URLs.
+    /// ```
+    /// use ic_cketh_minter::checked_amount::CheckedAmountOf;
+    ///
+    /// enum MetricApple{}
+    /// type Apples = CheckedAmountOf<MetricApple>;
+    /// let many_apples = Apples::from(4_332_415_u32);
+    ///
+    /// assert_eq!(many_apples.to_string_inner(), "4332415".to_string());
+    /// ```
+    pub fn to_string_inner(&self) -> String {
+        self.0.to_string()
+    }
 }
 
 macro_rules! impl_from {
