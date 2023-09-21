@@ -285,22 +285,6 @@ symlink_dirs(
     },
 )
 
-uvm_config_image(
-    name = "nns_dapp_specs_uvm_config_image",
-    srcs = [
-        ":activate-systest-uvm-config",
-        "//rs/tests/replicated_tests:nns_dapp_specs_image.tar",
-    ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
-    remap_paths = {
-        "/activate-systest-uvm-config": "/activate",
-    },
-    tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
-
 copy_file(
     name = "coredns_image",
     src = "@coredns//image",
