@@ -111,7 +111,6 @@ proptest! {
                 // Any payload generated should pass verification.
                 // If not, we have an issue with the payload builder
                 assert!(ingress_manager.validate_ingress_payload(&payload, &HashSet::new(), &validation_context).is_ok());
-
             },
         )
     }

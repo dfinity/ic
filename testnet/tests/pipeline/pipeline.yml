@@ -64,14 +64,3 @@
   variables:
     # we need debug-level logs from the following components for IC policy monitoring
     REPLICA_LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
-
-ingress-manager-proptests-nightly:
-  extends:
-    - .prod-test
-  variables:
-    cd_target_env: "NIGHTLY"
-  timeout: 70 minutes
-  script:
-    - |
-      cd "${CI_PROJECT_DIR}/rs"
-      $SHELL_WRAPPER cargo test --release -p ic-ingress-manager proptest
