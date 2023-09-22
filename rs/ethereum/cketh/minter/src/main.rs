@@ -4,8 +4,9 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableWriter;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, Address};
-use ic_cketh_minter::endpoints::WithdrawalError;
-use ic_cketh_minter::endpoints::{Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus};
+use ic_cketh_minter::endpoints::{
+    Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
+};
 use ic_cketh_minter::eth_logs::report_transaction_error;
 use ic_cketh_minter::eth_rpc::FeeHistory;
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
@@ -21,7 +22,10 @@ use ic_cketh_minter::transactions::EthWithdrawalRequest;
 use ic_cketh_minter::tx::{
     estimate_transaction_price, AccessList, ConfirmedEip1559Transaction, Eip1559TransactionRequest,
 };
-use ic_cketh_minter::{eth_logs, eth_rpc};
+use ic_cketh_minter::{
+    eth_logs, eth_rpc, MINT_RETRY_DELAY, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL,
+    SCRAPPING_ETH_LOGS_INTERVAL,
+};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use std::cmp::{min, Ordering};
@@ -29,11 +33,6 @@ use std::str::FromStr;
 use std::time::Duration;
 
 mod dashboard;
-
-const SCRAPPING_ETH_LOGS_INTERVAL: Duration = Duration::from_secs(3 * 60);
-const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(15);
-const MINT_RETRY_DELAY: Duration = Duration::from_secs(3 * 60);
-
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
 #[init]
@@ -432,7 +431,9 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 
 #[update]
 #[candid_method(update)]
-async fn withdraw(amount: Nat, recipient: String) -> Result<RetrieveEthRequest, WithdrawalError> {
+async fn withdraw_eth(
+    WithdrawalArg { amount, recipient }: WithdrawalArg,
+) -> Result<RetrieveEthRequest, WithdrawalError> {
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_eth_guard(caller).unwrap_or_else(|e| {
         ic_cdk::trap(&format!(
