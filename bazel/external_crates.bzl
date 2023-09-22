@@ -815,7 +815,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.10.0",
+                version = "^0.10.2",
                 features = [
                     "ring",
                 ],
