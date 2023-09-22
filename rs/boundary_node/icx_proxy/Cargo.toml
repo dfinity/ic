@@ -26,7 +26,7 @@ candid = { workspace = true, features = ["mute_warnings"] }
 clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
 form_urlencoded = "1"
-futures = "0.3"
+futures = { workspace = true }
 h2 = "0.3.19"
 hex = "0.4"
 http = "0.2.6"

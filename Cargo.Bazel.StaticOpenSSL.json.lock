@@ -1,5 +1,5 @@
 {
-  "checksum": "1c12322c1d621ed358c2c9a0158d2477a4096122d0d36edef21a6d82d2203914",
+  "checksum": "74adeabd59450743321b78edf82202e03c08e8df899eafe7d1d22997f0351ad5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13095,10 +13095,6 @@
               "target": "futures"
             },
             {
-              "id": "futures-core 0.3.28",
-              "target": "futures_core"
-            },
-            {
               "id": "futures-util 0.3.28",
               "target": "futures_util"
             },
@@ -19510,6 +19506,49 @@
         "version": "0.8.3"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "hdrhistogram 7.5.2": {
+      "name": "hdrhistogram",
+      "version": "7.5.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/hdrhistogram/7.5.2/download",
+          "sha256": "7f19b9f54f7c7f55e31401bb647626ce0cf0f67b0004982ce815b3ee72a02aa8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hdrhistogram",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "hdrhistogram",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "byteorder 1.4.3",
+              "target": "byteorder"
+            },
+            {
+              "id": "num-traits 0.2.15",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "7.5.2"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "headers 0.3.8": {
       "name": "headers",
@@ -50910,8 +50949,12 @@
             "buffer",
             "default",
             "discover",
+            "filter",
+            "full",
             "futures-core",
             "futures-util",
+            "hdrhistogram",
+            "hedge",
             "indexmap",
             "limit",
             "load",
@@ -50922,7 +50965,10 @@
             "pin-project-lite",
             "rand",
             "ready-cache",
+            "reconnect",
+            "retry",
             "slab",
+            "spawn-ready",
             "steer",
             "timeout",
             "tokio",
@@ -50941,6 +50987,10 @@
             {
               "id": "futures-util 0.3.28",
               "target": "futures_util"
+            },
+            {
+              "id": "hdrhistogram 7.5.2",
+              "target": "hdrhistogram"
             },
             {
               "id": "indexmap 1.9.3",

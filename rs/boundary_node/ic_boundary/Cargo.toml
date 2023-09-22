@@ -22,7 +22,7 @@ candid = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 dashmap = "5.3.4"
 ethnum = { workspace = true }
-futures = "0.3.21"
+futures = { workspace = true }
 futures-util = "0.3.28"
 hex = "0.4.3"
 http = "0.2.6"

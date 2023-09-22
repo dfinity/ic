@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 crossbeam-channel = "0.5.5"
-futures = "0.3.13"
+futures = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-service = { path = "../bitcoin/service" }
 ic-btc-interface = { workspace = true }

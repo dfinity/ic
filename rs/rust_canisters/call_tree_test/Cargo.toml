@@ -13,4 +13,4 @@ dfn_json = { path = "../dfn_json" }
 dfn_macro = { path = "../dfn_macro" }
 serde = "1.0"
 serde_json = "1.0.40"
-futures = "0.3.21"
+futures = { workspace = true }

@@ -16,7 +16,7 @@ askama = "0.11"
 candid = { workspace = true }
 ciborium = { workspace = true }
 ethnum = { workspace = true }
-futures = "0.3"
+futures = { workspace = true }
 hex = "0.4"
 ic-ic00-types = { path = "../../../types/ic00_types" }
 hex-literal = "0.4.1"

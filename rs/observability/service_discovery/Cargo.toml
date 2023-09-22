@@ -33,7 +33,7 @@ url = "2.2.2"
 ic-registry-client-fake = { path = "../../registry/fake" }
 registry-canister = { path = "../../registry/canister" }
 ic-registry-common-proto = { path = "../../registry/proto" }
-futures = "0.3.16"
+futures = { workspace = true }
 regex = "1.7.0"
 
 [dev-dependencies]

@@ -14,7 +14,7 @@ axum = "0.6.1"
 candid = { workspace = true }
 clap = { version = "3.1.8", features = ["derive"] }
 dashmap = "5.3.4"
-futures = "0.3.21"
+futures = { workspace = true }
 humantime = "2.1.0"
 hyper = "0.14.18"
 ic-agent = { workspace = true }

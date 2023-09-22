@@ -15,7 +15,7 @@ build-info = { version = "0.0.26", default-features = false, features = [] }
 
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
-futures = "0.3.21"
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
