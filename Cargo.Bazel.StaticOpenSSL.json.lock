@@ -1,5 +1,5 @@
 {
-  "checksum": "5be7adec814ed0dba9a4dfcdade24a159f989c81dc2a07abff2790a30a1bdd15",
+  "checksum": "a152ad57e0462733ed2894a34e338f7fd7347dc84b2a0f0e263422feeae4d04f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13549,7 +13549,7 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.10.1",
+              "id": "quinn 0.10.2",
               "target": "quinn"
             },
             {
@@ -37290,13 +37290,13 @@
       },
       "license": "Unlicense/MIT"
     },
-    "quinn 0.10.1": {
+    "quinn 0.10.2": {
       "name": "quinn",
-      "version": "0.10.1",
+      "version": "0.10.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/quinn/0.10.1/download",
-          "sha256": "21252f1c0fc131f1b69182db8f34837e8a69737b8251dff75636a9be0518c324"
+          "url": "https://crates.io/api/v1/crates/quinn/0.10.2/download",
+          "sha256": "8cc2c5017e4b43d5995dcea317bc46c1e09404c0a9664d2908f7f02dfe943d75"
         }
       },
       "targets": [
@@ -37338,7 +37338,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "quinn-proto 0.10.1",
+              "id": "quinn-proto 0.10.5",
               "target": "quinn_proto",
               "alias": "proto"
             },
@@ -37371,17 +37371,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.1"
+        "version": "0.10.2"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "quinn-proto 0.10.1": {
+    "quinn-proto 0.10.5": {
       "name": "quinn-proto",
-      "version": "0.10.1",
+      "version": "0.10.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/quinn-proto/0.10.1/download",
-          "sha256": "85af4ed6ee5a89f26a26086e9089a6643650544c025158449a3626ebf72884b3"
+          "url": "https://crates.io/api/v1/crates/quinn-proto/0.10.5/download",
+          "sha256": "2c78e758510582acc40acb90458401172d41f1016f8c9dde89e49677afb7eec1"
         }
       },
       "targets": [
@@ -37457,7 +37457,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.1"
+        "version": "0.10.5"
       },
       "license": "MIT OR Apache-2.0"
     },
