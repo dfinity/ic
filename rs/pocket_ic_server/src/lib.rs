@@ -56,6 +56,7 @@ pub trait Operation {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct OpId(String);
 
+// Index into a vector of PocketIc instances
 pub type InstanceId = usize;
 
 pub struct Computation<T> {
@@ -74,6 +75,26 @@ impl<T: Operation + 'static> BindOperation for T {
             instance_id,
         }
     }
+}
+
+// ================================================================================================================= //
+// Helpers
+
+pub fn copy_dir(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
 /// A mock implementation of PocketIC, primarily for testing purposes.
@@ -228,7 +249,7 @@ mod tests {
 
         let get_time = GetTime {};
         let res = rt
-            .block_on(api_state.issue(get_time.on_instance(instance_id)))
+            .block_on(api_state.update(get_time.on_instance(instance_id)))
             .unwrap();
         println!("result is: {:?}", res);
         println!("{api_state:?}");
@@ -237,7 +258,7 @@ mod tests {
             payload: Time::from_nanos_since_unix_epoch(21),
         };
         let res = rt
-            .block_on(api_state.issue(set_time.on_instance(instance_id)))
+            .block_on(api_state.update(set_time.on_instance(instance_id)))
             .unwrap();
         println!("result is: {:?}", res);
         println!("{api_state:?}");
@@ -250,7 +271,7 @@ mod tests {
 
         let query = QueryOp { payload: 13 };
         let res = rt
-            .block_on(api_state.issue(query.on_instance(instance_id)))
+            .block_on(api_state.update(query.on_instance(instance_id)))
             .unwrap();
         println!("result is: {:?}", res);
         println!("{api_state:?}");
@@ -271,7 +292,7 @@ mod tests {
     #[test]
     fn test_pocket_ic() {
         let rt = Runtime::new().unwrap();
-        let pocket_ic = PocketIc::new();
+        let pocket_ic = PocketIc::default();
         let api_state = PocketIcApiStateBuilder::new()
             .add_initial_instance(pocket_ic)
             .build();
@@ -285,19 +306,18 @@ mod tests {
         let res = rt
             .block_on(
                 api_state
-                    .issue_with_timeout(msg1.on_instance(instance_id), Duration::from_secs(30)),
+                    .update_with_timeout(msg1.on_instance(instance_id), Duration::from_secs(30)),
             )
             .unwrap();
 
-        use IssueOutcome::*;
         use WasmResult::*;
         match res {
-            Output(OpOut::WasmResult(Reply(bytes))) => {
+            UpdateReply::Output(OpOut::WasmResult(Reply(bytes))) => {
                 println!("wasm result bytes {:?}", bytes);
                 let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
                 println!("result: {}", canister_id);
             }
-            Output(OpOut::WasmResult(Reject(x))) => {
+            UpdateReply::Output(OpOut::WasmResult(Reject(x))) => {
                 println!("wasm reject {:?}", x);
             }
             e => {
@@ -315,9 +335,9 @@ mod tests {
         let delay = Delay {
             duration: Duration::from_secs(1),
         };
-        let IssueOutcome::Output(OpOut::NoOutput) = rt
+        let UpdateReply::Output(OpOut::NoOutput) = rt
             .block_on(
-                api_state.issue_with_timeout(delay.on_instance(instance_id), sync_wait_timeout),
+                api_state.update_with_timeout(delay.on_instance(instance_id), sync_wait_timeout),
             )
             .unwrap()
         else {

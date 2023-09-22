@@ -2,103 +2,46 @@ use axum::{
     async_trait,
     body::HttpBody,
     extract::{DefaultBodyLimit, Path, State},
-    http::{self, HeaderMap, StatusCode},
+    http,
+    http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{delete, get, post, MethodRouter},
     Router, Server,
 };
 use clap::Parser;
-use ic_config::execution_environment;
-use ic_config::subnet_config::SubnetConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
-use ic_crypto_iccsa::types::SignatureBytes;
-use ic_crypto_iccsa::{public_key_bytes_from_der, verify};
+use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_state_machine_tests::StateMachine;
+use ic_types::{CanisterId, PrincipalId};
 use itertools::Itertools;
 use pocket_ic::{
-    BinaryBlob, BlobCompression, BlobId, BlobStore, CanisterCall, Checkpoint, RawCanisterId,
-    Request, Request::*,
+    BinaryBlob, BlobCompression, BlobId, BlobStore, CanisterCall, RawCanisterId, Request,
 };
+use pocket_ic_server::pocket_ic::create_state_machine;
+use pocket_ic_server::state_api::{
+    rest_types::Checkpoint,
+    routes::{instances_routes, status, AppState},
+    state::PocketIcApiStateBuilder,
+};
+use pocket_ic_server::{copy_dir, InstanceId};
 use serde::Serialize;
-use std::collections::HashMap;
-use std::fs::File;
 use std::io::Read;
 use std::io::Write;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
-use std::time::Instant;
+use std::sync::Arc;
+use std::{collections::HashMap, sync::atomic::AtomicU64};
+use std::{fs::File, sync::atomic::Ordering};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
-use tokio::time::Duration;
+use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 const TTL_SEC: u64 = 60;
-
-pub type InstanceId = String;
-// The shared, mutable state of the PocketIC process.
-// In essence, a Map<InstanceId, StateMachine>, but due to shared mutability, some extra layers are needed.
-//
-// The outer RwLock is for concurrent read access to the Map (such as calls to different instances),
-// and exclusive write access (when a new instance is created or destroyed).
-// The inner RwLock should allow safe concurrent calls to the same instance. TODO: Confirm this.
-pub type InstanceMap = Arc<RwLock<HashMap<InstanceId, RwLock<StateMachine>>>>;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub instance_map: InstanceMap,
-    pub last_request: Arc<RwLock<Instant>>,
-    pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
-    pub instances_sequence_counter: Arc<AtomicU64>,
-    pub runtime: Arc<Runtime>,
-    pub blob_store: Arc<dyn BlobStore>,
-}
-
-impl axum::extract::FromRef<AppState> for InstanceMap {
-    fn from_ref(app_state: &AppState) -> InstanceMap {
-        app_state.instance_map.clone()
-    }
-}
-
-impl axum::extract::FromRef<AppState> for Arc<RwLock<Instant>> {
-    fn from_ref(app_state: &AppState) -> Arc<RwLock<Instant>> {
-        app_state.last_request.clone()
-    }
-}
-
-impl axum::extract::FromRef<AppState> for Arc<RwLock<HashMap<String, Arc<TempDir>>>> {
-    fn from_ref(app_state: &AppState) -> Arc<RwLock<HashMap<String, Arc<TempDir>>>> {
-        app_state.checkpoints.clone()
-    }
-}
-
-trait RouterExt<S, B>
-where
-    B: HttpBody + Send + 'static,
-    S: Clone + Send + Sync + 'static,
-{
-    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self;
-}
-
-impl<S, B> RouterExt<S, B> for Router<S, B>
-where
-    B: HttpBody + Send + 'static,
-    S: Clone + Send + Sync + 'static,
-{
-    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self {
-        self.route(path, method_router.clone())
-            .route(&format!("{path}/"), method_router)
-    }
-}
 
 // Command line arguments to PocketIC server.
 #[derive(Parser)]
@@ -133,23 +76,27 @@ async fn start(runtime: Arc<Runtime>) {
     // This process is the one to start PocketIC.
 
     // The shared, mutable state of the PocketIC process.
-    let instance_map: InstanceMap = Arc::new(RwLock::new(HashMap::new()));
+    let api_state = PocketIcApiStateBuilder::default().build();
+    let instance_map = Arc::new(RwLock::new(HashMap::new()));
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while
     let last_request = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
         instance_map,
-        last_request,
+        instances_sequence_counter: Arc::new(AtomicU64::from(0)),
+        api_state,
         checkpoints: Arc::new(RwLock::new(HashMap::new())),
-        instances_sequence_counter: AtomicU64::new(0).into(),
+        last_request,
         runtime,
         blob_store: Arc::new(InMemoryBlobStore::new()),
     };
 
     let app = Router::new()
         //
-        // Get health of service.
+        // Get server health.
         .directory_route("/status", get(status))
+        // ==========================================================
+        // temporary
         //
         // List all IC instances.
         .directory_route("/instances", get(list_instances))
@@ -173,12 +120,17 @@ async fn start(runtime: Arc<Runtime>) {
             "/instances/:id/tick_and_create_checkpoint",
             post(tick_and_create_checkpoint),
         )
+        // ===========================================================
         //
         // Set a blob store entry.
         .directory_route("/blobstore", post(set_blob_store_entry))
         //
         // Get a blob store entry.
         .directory_route("/blobstore/:id", get(get_blob_store_entry))
+        //
+        //
+        // All instance routes.
+        .nest("/v2/instances", instances_routes::<AppState>())
         //
         // List all checkpoints.
         .directory_route("/checkpoints", get(list_checkpoints))
@@ -255,68 +207,36 @@ fn is_first_server<P: AsRef<std::path::Path>>(port_file_path: P) -> std::io::Res
 }
 
 async fn bump_last_request_timestamp<B>(
-    State(last_update): State<Arc<RwLock<Instant>>>,
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints: _,
+        last_request,
+        ..
+    }): State<AppState>,
     request: http::Request<B>,
     next: Next<B>,
 ) -> Response {
-    *last_update.write().await = Instant::now();
+    *last_request.write().await = Instant::now();
     next.run(request).await
 }
 
-fn create_state_machine(state_dir: Option<TempDir>, runtime: Arc<Runtime>) -> StateMachine {
-    let hypervisor_config = execution_environment::Config {
-        default_provisional_cycles_balance: Cycles::new(0),
-        ..Default::default()
-    };
-    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
-    if let Some(state_dir) = state_dir {
-        StateMachineBuilder::new()
-            .with_config(Some(config))
-            .with_checkpoints_enabled(false)
-            .with_state_dir(state_dir)
-            .with_runtime(runtime)
-            .build()
-    } else {
-        StateMachineBuilder::new()
-            .with_config(Some(config))
-            .with_checkpoints_enabled(false)
-            .with_runtime(runtime)
-            .build()
-    }
-}
-
-fn copy_dir(
-    src: impl AsRef<std::path::Path>,
-    dst: impl AsRef<std::path::Path>,
-) -> std::io::Result<()> {
-    std::fs::create_dir_all(&dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
-}
+// =====================================================================================
+// temporary
 
 // ----------------------------------------------------------------------------------------------------------------- //
 // Route handlers
-
-async fn status() -> StatusCode {
-    StatusCode::OK
-}
 
 /// Create a new empty IC instance or restore from checkpoint
 /// The new InstanceId will be returned
 async fn create_instance(
     State(AppState {
         instance_map,
-        last_request: _,
-        checkpoints,
         instances_sequence_counter: counter,
+        api_state: _,
+        checkpoints,
+        last_request: _,
         runtime,
         ..
     }): State<AppState>,
@@ -343,30 +263,36 @@ async fn create_instance(
             .await
             .expect("Failed to launch a state machine");
             let mut instance_map = instance_map.write().await;
-            let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
-            instance_map.insert(instance_id.clone(), RwLock::new(sm));
-            (StatusCode::CREATED, instance_id)
+            let instance_id = counter.fetch_add(1, Ordering::Relaxed);
+            instance_map.insert(instance_id as usize, RwLock::new(sm));
+            (StatusCode::CREATED, format!("{}", instance_id))
         }
         None => {
             let sm = tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
                 .await
                 .expect("Failed to launch a state machine");
             let mut guard = instance_map.write().await;
-            let instance_id = counter.fetch_add(1, Ordering::Relaxed).to_string();
-            guard.insert(instance_id.clone(), RwLock::new(sm));
-            (StatusCode::CREATED, instance_id)
+            let instance_id = counter.fetch_add(1, Ordering::Relaxed);
+            guard.insert(instance_id as usize, RwLock::new(sm));
+            (StatusCode::CREATED, format!("{}", instance_id))
         }
     }
 }
 
-async fn list_instances(State(inst_map): State<InstanceMap>) -> String {
-    let map_guard = inst_map.read().await;
+async fn list_instances(State(AppState { instance_map, .. }): State<AppState>) -> String {
+    let map_guard = instance_map.read().await;
     map_guard.keys().join(", ")
 }
 
 #[allow(clippy::type_complexity)]
 async fn list_checkpoints(
-    State(checkpoints): State<Arc<RwLock<HashMap<String, Arc<TempDir>>>>>,
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints,
+        ..
+    }): State<AppState>,
 ) -> String {
     let checkpoints = checkpoints.read().await;
     checkpoints.keys().join(", ")
@@ -374,12 +300,19 @@ async fn list_checkpoints(
 
 // Call the IC instance with the given InstanceId
 async fn call_instance(
-    State(inst_map): State<InstanceMap>,
-    State(AppState { blob_store, .. }): State<AppState>,
+    State(AppState {
+        instance_map,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store,
+    }): State<AppState>,
     Path(id): Path<InstanceId>,
     axum::extract::Json(request): axum::extract::Json<Request>,
 ) -> Response {
-    let guard_map = inst_map.read().await;
+    let guard_map = instance_map.read().await;
     if let Some(rw_lock) = guard_map.get(&id) {
         let guard_sm = rw_lock.write().await;
         call_sm(&guard_sm, request, blob_store).await
@@ -396,7 +329,8 @@ async fn call_instance(
 async fn tick_and_create_checkpoint(
     State(AppState {
         instance_map,
-        last_request: _,
+        instances_sequence_counter: _,
+        api_state: _,
         checkpoints,
         ..
     }): State<AppState>,
@@ -431,6 +365,15 @@ async fn tick_and_create_checkpoint(
             format!("Instance with ID {} was not found.", &id),
         )
     }
+}
+
+async fn delete_instance(
+    State(AppState { instance_map, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> StatusCode {
+    let mut guard = instance_map.write().await;
+    let _ = guard.remove(&id);
+    StatusCode::OK
 }
 
 async fn get_blob_store_entry(
@@ -471,6 +414,7 @@ async fn set_blob_store_entry(
     body: axum::body::Bytes,
 ) -> (StatusCode, String) {
     let content_encoding = headers.get(axum::http::header::CONTENT_ENCODING);
+
     let blob = {
         match content_encoding {
             Some(content_encoding) => {
@@ -498,19 +442,11 @@ async fn set_blob_store_entry(
     (StatusCode::OK, blob_id)
 }
 
-async fn delete_instance(
-    State(instance_map): State<InstanceMap>,
-    Path(id): Path<InstanceId>,
-) -> StatusCode {
-    let mut guard = instance_map.write().await;
-    let _ = guard.remove(&id);
-    StatusCode::OK
-}
-
 // ----------------------------------------------------------------------------------------------------------------- //
 // Code borrowed and adapted from rs/state_machine_tests/src/main.rs
 
 async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobStore>) -> Response {
+    use Request::*;
     match request {
         RootKey => {
             to_json_str(threshold_sig_public_key_to_der(sm.root_key()).unwrap()).into_response()
@@ -569,6 +505,7 @@ async fn call_sm(sm: &StateMachine, request: Request, blob_store: Arc<dyn BlobSt
             sm.set_stable_memory(canister_id, &data);
             to_json_str(()).into_response()
         }
+
         ReadStableMemory(canister_id) => {
             to_json_str(sm.stable_memory(to_canister_id(canister_id))).into_response()
         }
@@ -686,5 +623,24 @@ impl From<CanisterCall> for ParsedCanisterCall {
             method: call.method,
             arg: call.arg,
         }
+    }
+}
+
+trait RouterExt<S, B>
+where
+    B: HttpBody + Send + 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self;
+}
+
+impl<S, B> RouterExt<S, B> for Router<S, B>
+where
+    B: HttpBody + Send + 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self {
+        self.route(path, method_router.clone())
+            .route(&format!("{path}/"), method_router)
     }
 }

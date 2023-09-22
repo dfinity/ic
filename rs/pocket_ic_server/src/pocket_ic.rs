@@ -1,3 +1,4 @@
+use crate::state_api::rest_types::RawCanisterCall;
 use crate::state_api::state::HasStateLabel;
 use crate::state_api::state::OpOut;
 use crate::state_api::state::StateLabel;
@@ -13,7 +14,12 @@ use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::StateMachineBuilder;
 use ic_state_machine_tests::StateMachineConfig;
 use ic_state_machine_tests::Time;
+use ic_types::CanisterIdBlobParseError;
+use ic_types::PrincipalIdBlobParseError;
 use ic_types::{CanisterId, PrincipalId};
+use std::sync::Arc;
+use tempfile::TempDir;
+use tokio::runtime::Runtime;
 
 pub struct PocketIc {
     subnet: StateMachine,
@@ -23,24 +29,24 @@ pub struct PocketIc {
 
 #[allow(clippy::new_without_default)]
 impl PocketIc {
-    pub fn new() -> Self {
+    pub fn new(sm: StateMachine) -> Self {
+        Self {
+            subnet: sm,
+            nonce: 0,
+            time: Time::from_nanos_since_unix_epoch(0),
+        }
+    }
+}
+impl Default for PocketIc {
+    fn default() -> Self {
         let hypervisor_config = execution_environment::Config {
             default_provisional_cycles_balance: Cycles::new(0),
             ..Default::default()
         };
         let config =
             StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
-        let sm = StateMachineBuilder::new()
-            .with_config(Some(config))
-            // essential for calculating state hashes
-            // TODO: this degrades performance. enable only on demand.
-            .with_checkpoints_enabled(true)
-            .build();
-        Self {
-            subnet: sm,
-            nonce: 0,
-            time: Time::from_nanos_since_unix_epoch(0),
-        }
+        let sm = StateMachineBuilder::new().with_config(Some(config)).build();
+        Self::new(sm)
     }
 }
 
@@ -167,6 +173,41 @@ pub struct CanisterCall {
     pub method: String,
     pub payload: Vec<u8>,
 }
+pub struct CanisterCallConversionError;
+
+impl From<PrincipalIdBlobParseError> for CanisterCallConversionError {
+    fn from(_t: PrincipalIdBlobParseError) -> Self {
+        CanisterCallConversionError
+    }
+}
+
+impl From<CanisterIdBlobParseError> for CanisterCallConversionError {
+    fn from(_t: CanisterIdBlobParseError) -> Self {
+        CanisterCallConversionError
+    }
+}
+
+impl TryFrom<RawCanisterCall> for CanisterCall {
+    type Error = CanisterCallConversionError;
+    fn try_from(
+        RawCanisterCall {
+            sender,
+            canister_id,
+            method,
+            payload,
+        }: RawCanisterCall,
+    ) -> Result<Self, Self::Error> {
+        let sender = PrincipalId::try_from(sender)?;
+        let pid = PrincipalId::try_from(canister_id)?;
+        let canister_id = CanisterId::new(pid)?;
+        Ok(Self {
+            sender,
+            canister_id,
+            method,
+            payload,
+        })
+    }
+}
 
 impl CanisterCall {
     fn id(&self) -> OpId {
@@ -261,6 +302,29 @@ impl std::fmt::Display for Digest {
     }
 }
 
+// ================================================================================================================= //
+// Helpers
+
+pub fn create_state_machine(state_dir: Option<TempDir>, runtime: Arc<Runtime>) -> StateMachine {
+    let hypervisor_config = execution_environment::Config {
+        default_provisional_cycles_balance: Cycles::new(0),
+        ..Default::default()
+    };
+    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
+    if let Some(state_dir) = state_dir {
+        StateMachineBuilder::new()
+            .with_config(Some(config))
+            .with_state_dir(state_dir)
+            .with_runtime(runtime)
+            .build()
+    } else {
+        StateMachineBuilder::new()
+            .with_config(Some(config))
+            .with_runtime(runtime)
+            .build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,7 +332,7 @@ mod tests {
 
     #[test]
     fn state_label_test() {
-        let pic = PocketIc::new();
+        let pic = PocketIc::default();
 
         let state0 = pic.get_state_label();
         let canister_id = pic.subnet.create_canister(None);
@@ -283,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_time() {
-        let mut pic = PocketIc::new();
+        let mut pic = PocketIc::default();
 
         let time = Time::from_nanos_since_unix_epoch(21);
         compute_assert_state_change(&mut pic, SetTime { time });
@@ -382,7 +446,7 @@ mod tests {
     }
 
     fn new_pic_counter_installed() -> (PocketIc, CanisterId) {
-        let mut pic = PocketIc::new();
+        let mut pic = PocketIc::default();
         let canister_id = pic.subnet.create_canister(None);
 
         let module = counter_wasm();

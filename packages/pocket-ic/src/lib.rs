@@ -372,8 +372,9 @@ impl PocketIc {
         self.call_state_machine(Request::Tick)
     }
 
-    // TODO: There have been complains that this function is misleading.
+    // TODO: There have been complaints that this function is misleading.
     // We should consider removing it from the interface or refactoring it.
+
     pub fn run_until_completion(&self, max_ticks: u64) {
         self.call_state_machine(Request::RunUntilCompletion(RunUntilCompletionArg {
             max_ticks,
