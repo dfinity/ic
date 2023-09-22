@@ -26,6 +26,9 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "monitoring")]
     pub monitoring: MonitoringConfig,
+
+    #[command(flatten, next_help_heading = "rate_limiting")]
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Args)]
@@ -129,4 +132,14 @@ pub struct MonitoringConfig {
     /// The socket used to export metrics.
     #[clap(long, default_value = "127.0.0.1:9090")]
     pub metrics_addr: SocketAddr,
+}
+
+#[derive(Args)]
+pub struct RateLimitingConfig {
+    /// Allowed number of update calls per second per subnet per boundary node. Panics if 0 is passed!
+    #[clap(long)]
+    pub rate_limit_per_second_per_subnet: Option<u32>,
+    /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
+    #[clap(long)]
+    pub rate_limit_per_second_per_ip: Option<u32>,
 }

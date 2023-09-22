@@ -43,6 +43,7 @@ use crate::{
     metrics::{self, HttpMetricParams, MetricParams, WithMetrics, HTTP_DURATION_BUCKETS},
     nns::{Load, Loader},
     persist,
+    rate_limiting::RateLimit,
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     snapshot::Runner as SnapshotRunner,
     tls_verify::TlsVerifier,
@@ -236,16 +237,34 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     let routers_https = {
-        let r1 = Router::new()
-            .route("/api/v2/canister/:canister_id/query", {
-                post(routes::query).with_state(p.clone())
-            })
-            .route("/api/v2/canister/:canister_id/call", {
+        let query_route = Router::new().route("/api/v2/canister/:canister_id/query", {
+            post(routes::query).with_state(p.clone())
+        });
+
+        let update_call_route = {
+            let mut route = Router::new().route("/api/v2/canister/:canister_id/call", {
                 post(routes::call).with_state(p.clone())
-            })
-            .route("/api/v2/canister/:canister_id/read_state", {
-                post(routes::read_state).with_state(p.clone())
-            })
+            });
+            // will panic if ip_rate_limit is Some(0)
+            if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
+                route = RateLimit::try_from(rl).unwrap().add_ip_rate_limiting(route);
+            }
+            // will panic if subnet_rate_limit is Some(0)
+            if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_subnet {
+                route = RateLimit::try_from(rl)
+                    .unwrap()
+                    .add_subnet_rate_limiting(route)
+            }
+            route
+        };
+
+        let read_state_route = Router::new().route("/api/v2/canister/:canister_id/read_state", {
+            post(routes::read_state).with_state(p.clone())
+        });
+
+        let r1 = query_route
+            .merge(update_call_route)
+            .merge(read_state_route)
             .layer(
                 ServiceBuilder::new()
                     .layer(DefaultBodyLimit::max(2 * MB))
@@ -255,11 +274,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                     )),
             );
 
-        let r2 = Router::new().route("/api/v2/status", {
+        let status_route = Router::new().route("/api/v2/status", {
             get(routes::status).with_state((rk.clone(), h.clone()))
         });
 
-        r1.merge(r2).layer(
+        r1.merge(status_route).layer(
             ServiceBuilder::new()
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()

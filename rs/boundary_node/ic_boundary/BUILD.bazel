@@ -53,6 +53,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio-rustls",
     "@crate_index//:tokio",
     "@crate_index//:tower",
+    "@crate_index//:tower_governor",
     "@crate_index//:tower-http",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
