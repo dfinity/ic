@@ -25,6 +25,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext},
     methods::SystemMethod,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use maplit::btreemap;
 
@@ -39,7 +40,7 @@ pub fn execution_parameters() -> ExecutionParameters {
             NumInstructions::from(5_000_000_000),
             NumInstructions::from(5_000_000_000),
         ),
-        canister_memory_limit: NumBytes::new(4 << 30),
+        canister_memory_limit: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
         memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
