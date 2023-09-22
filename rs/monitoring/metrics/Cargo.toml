@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-futures = "0.3.21"
+futures = { workspace = true }
 ic-adapter-metrics = { path = "../adapter_metrics" }
 ic-logger = { path = "../logger" }
 libc = "0.2.91"

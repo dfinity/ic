@@ -10,7 +10,7 @@ byte-unit = "4.0.14"
 crossbeam = "0.8.2"
 hex = "0.4.2"
 http = "0.2.5"
-futures = "0.3.13"
+futures ={ workspace = true }
 futures-util = "0.3.13"
 hyper = { version = "0.14.18", features = ["full"] }
 hyper-tls = "0.5.0"

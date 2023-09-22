@@ -12,7 +12,7 @@ async-trait = "0.1.53"
 candid = { workspace = true }
 ciborium = { workspace = true }
 dfn_http_metrics = {path = "../../../../rust_canisters/dfn_http_metrics"}
-futures = "0.3.25"
+futures = { workspace = true }
 # !!!! IMPORTANT FOR CANISTERS !!!
 getrandom = { version = "0.2", features = ["custom"] }
 hex = "0.4.2"

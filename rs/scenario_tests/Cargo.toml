@@ -11,7 +11,7 @@ chrono = "0.4.19"
 colored = "2.0.0"
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
-futures = "0.3.6"
+futures = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-canister-client = { path = "../canister_client" }
 ic-metrics = { path = "../monitoring/metrics" }

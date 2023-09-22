@@ -13,7 +13,7 @@ async-trait = "0.1.53"
 axum = "0.6.1"
 candid = { workspace = true }
 clap = { version = "3.1.8", features = ["derive"] }
-futures = "0.3.21"
+futures = { workspace = true }
 glob = "0.3.0"
 humantime = "2.1.0"
 hyper = "0.14.18"

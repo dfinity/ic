@@ -42,7 +42,7 @@ yansi = "0.5.0"
 
 [dev-dependencies]
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-futures = "0.3.13"
+futures = { workspace = true }
 
 [[bin]]
 name = "cycles-minting-canister"

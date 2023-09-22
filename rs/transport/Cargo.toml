@@ -14,7 +14,7 @@ ic-icos-sev-interfaces = { path = "../ic_os/sev_interfaces" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-futures = "0.3.25"
+futures = { workspace = true }
 h2 = "0.3.14"
 http = "0.2.8"
 prometheus = { version = "0.12.0", features = ["process"] }

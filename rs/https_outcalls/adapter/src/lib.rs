@@ -15,8 +15,7 @@ pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
 
-use futures::Future;
-use futures_core::stream::Stream;
+use futures::{Future, Stream};
 use hyper::{client::connect::HttpConnector, Client};
 use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;

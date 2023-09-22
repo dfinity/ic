@@ -85,7 +85,7 @@ build-info-build = { version = "0.0.26", default-features = false, features = [
 [dev-dependencies]
 criterion = "0.5"
 cycles-minting-canister = { path = "../cmc" }
-futures = "0.3.13"
+futures = { workspace = true }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }

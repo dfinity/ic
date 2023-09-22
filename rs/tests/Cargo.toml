@@ -28,7 +28,7 @@ dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 flate2 = "1.0.22"
-futures = "0.3.10"
+futures = { workspace = true }
 humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
 hex = "0.4.2"

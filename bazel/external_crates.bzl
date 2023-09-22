@@ -372,13 +372,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.2.0",
             ),
             "futures": crate.spec(
-                version = "^0.3.6",
+                version = "^0.3.28",
             ),
             "futures-util": crate.spec(
                 version = "^0.3.8",
-            ),
-            "futures-core": crate.spec(
-                version = "^0.3.21",
             ),
             "getrandom": crate.spec(
                 version = "^0.2",
@@ -1174,14 +1171,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "tower": crate.spec(
                 version = "^0.4.13",
-                features = [
-                    "buffer",
-                    "limit",
-                    "load-shed",
-                    "steer",
-                    "timeout",
-                    "util",
-                ],
+                features = ["full"],
             ),
             "tower-http": crate.spec(
                 version = "^0.4.4",
