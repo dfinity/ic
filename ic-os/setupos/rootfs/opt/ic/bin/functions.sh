@@ -56,3 +56,7 @@ function log_end() {
 function find_first_drive() {
     lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*' | sort | head -n 1
 }
+
+function get_large_drives() {
+    lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'
+}

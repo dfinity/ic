@@ -190,7 +190,7 @@ function verify_memory() {
 
 function verify_gen1_disks() {
     aggregate_size=0
-    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
+    large_drives=($(get_large_drives))
     for drive in $(echo "${large_drives[@]}"); do
         test -b "/dev/${drive}"
         log_and_reboot_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
@@ -217,7 +217,7 @@ function verify_gen1_disks() {
 
 function verify_gen2_disks() {
     aggregate_size=0
-    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
+    large_drives=($(get_large_drives))
     for drive in $(echo "${large_drives[@]}"); do
 
         echo "* Verifying disk ${drive}"
