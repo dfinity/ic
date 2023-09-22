@@ -7,7 +7,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
+    BoxError, Extension,
 };
 use candid::Principal;
 use http::{header, request::Parts, Method};
@@ -15,6 +15,7 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr, sync::Arc};
+use tower_governor::errors::GovernorError;
 use url::Url;
 
 #[cfg(feature = "tls")]
@@ -65,6 +66,7 @@ pub enum ErrorCause {
     SubnetNotFound,
     NoHealthyNodes,
     ReplicaUnreachable(String),
+    TooManyRequests,
     Other(String),
 }
 
@@ -80,6 +82,7 @@ impl ErrorCause {
             Self::SubnetNotFound => StatusCode::BAD_REQUEST, // TODO change to 404?
             Self::NoHealthyNodes => StatusCode::INTERNAL_SERVER_ERROR,
             Self::ReplicaUnreachable(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
         }
     }
 
@@ -89,6 +92,7 @@ impl ErrorCause {
             Self::UnableToParseCBOR(x) => Some(x.clone()),
             Self::MalformedRequest(x) => Some(x.clone()),
             Self::ReplicaUnreachable(x) => Some(x.clone()),
+            Self::TooManyRequests => Some(String::from("rate_limited")),
             _ => None,
         }
     }
@@ -106,6 +110,7 @@ impl fmt::Display for ErrorCause {
             Self::SubnetNotFound => write!(f, "subnet_not_found"),
             Self::NoHealthyNodes => write!(f, "no_healthy_nodes"),
             Self::ReplicaUnreachable(_) => write!(f, "replica_unreachable"),
+            Self::TooManyRequests => write!(f, "rate_limited"),
         }
     }
 }
@@ -360,6 +365,23 @@ impl IntoResponse for ApiError {
 impl From<ErrorCause> for ApiError {
     fn from(c: ErrorCause) -> Self {
         ApiError::ProxyError(c)
+    }
+}
+
+impl From<BoxError> for ApiError {
+    fn from(item: BoxError) -> Self {
+        if !item.is::<GovernorError>() {
+            return ApiError::Unspecified(anyhow!(item.to_string()));
+        }
+        // it's a GovernorError
+        let error = item.downcast_ref::<GovernorError>().unwrap().to_owned();
+        match error {
+            GovernorError::TooManyRequests { .. } => ApiError::from(ErrorCause::TooManyRequests),
+            GovernorError::UnableToExtractKey => {
+                ApiError::Unspecified(anyhow!("unable to extract rate-limiting key"))
+            }
+            GovernorError::Other { .. } => ApiError::Unspecified(anyhow!("GovernorError")),
+        }
     }
 }
 

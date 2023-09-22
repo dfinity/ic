@@ -14,6 +14,7 @@ mod http;
 mod metrics;
 mod nns;
 mod persist;
+mod rate_limiting;
 mod routes;
 mod snapshot;
 mod tls_verify;

@@ -1191,6 +1191,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "util",
                 ],
             ),
+            "tower_governor": crate.spec(
+                version = "^0.1",
+            ),
             "tower-request-id": crate.spec(
                 version = "^0.2.1",
             ),
