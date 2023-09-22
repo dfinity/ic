@@ -1,8 +1,11 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
+mod bounded_vec;
 mod http;
 mod provisional;
+
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
+use bounded_vec::{BoundedVec, DataSize, UNBOUNDED};
 use candid::{CandidType, Decode, Deserialize, Encode};
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
@@ -21,7 +24,7 @@ use ic_protobuf::types::v1::{
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
-use serde::{Deserializer, Serialize};
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::mem::size_of;
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
@@ -102,281 +105,6 @@ pub trait Payload<'a>: Sized + CandidType + Deserialize<'a> {
 
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         Decode!(blob, Self).map_err(candid_error_to_user_error)
-    }
-}
-
-/// Trait to reasonably estimate the memory usage of a value in bytes.
-///
-/// It does not take alignment or memory layouts into account,
-/// or unusual behavior or optimizations of allocators.
-/// It is depending entirely on the data inside the type.
-///
-/// Default implementation returns zero.
-pub trait DataSize {
-    /// Default implementation returns zero.
-    fn data_size(&self) -> usize {
-        0
-    }
-}
-
-impl DataSize for u8 {
-    fn data_size(&self) -> usize {
-        std::mem::size_of::<u8>()
-    }
-}
-
-impl DataSize for [u8] {
-    fn data_size(&self) -> usize {
-        std::mem::size_of_val(self)
-    }
-}
-
-impl DataSize for &str {
-    fn data_size(&self) -> usize {
-        self.as_bytes().data_size()
-    }
-}
-
-impl DataSize for String {
-    fn data_size(&self) -> usize {
-        self.as_bytes().data_size()
-    }
-}
-
-impl<T: DataSize> DataSize for Vec<T> {
-    fn data_size(&self) -> usize {
-        self.iter().map(|x| x.data_size()).sum()
-    }
-}
-
-#[test]
-fn test_data_size() {
-    // u8.
-    assert_eq!(0_u8.data_size(), 1);
-    assert_eq!(42_u8.data_size(), 1);
-
-    // [u8].
-    let a: [u8; 0] = [];
-    assert_eq!(a.data_size(), 0);
-    assert_eq!([1_u8].data_size(), 1);
-    assert_eq!([1_u8, 2_u8].data_size(), 2);
-
-    // Vec<u8>.
-    assert_eq!(Vec::<u8>::from([]).data_size(), 0);
-    assert_eq!(Vec::<u8>::from([1]).data_size(), 1);
-    assert_eq!(Vec::<u8>::from([1, 2]).data_size(), 2);
-
-    // &str.
-    assert_eq!("a".data_size(), 1);
-    assert_eq!("ab".data_size(), 2);
-
-    // String.
-    assert_eq!(String::from("a").data_size(), 1);
-    assert_eq!(String::from("ab").data_size(), 2);
-    for size_bytes in 0..1_024 {
-        assert_eq!(
-            String::from_utf8(vec![b'x'; size_bytes])
-                .unwrap()
-                .data_size(),
-            size_bytes
-        );
-    }
-}
-
-const MAX_ALLOWED_ELEMENTS_EXCEEDED_MESSAGE_PREFIX: &str =
-    "The number of elements exceeds maximum allowed ";
-const MAX_ALLOWED_TOTAL_DATA_SIZE_EXCEEDED_MESSAGE_PREFIX: &str =
-    "The total data size exceeds maximum allowed ";
-
-/// Indicates that `BoundedVec<...>` template parameter (eg. length or data size) is unbounded.
-pub const UNBOUNDED: usize = usize::MAX;
-
-/// Struct for bounding vector either by number of elements or by total data size.
-#[derive(CandidType, Debug, Clone, PartialEq, Eq)]
-pub struct BoundedVec<const MAX_ALLOWED_LEN: usize, const MAX_ALLOWED_TOTAL_DATA_SIZE: usize, T>(
-    Vec<T>,
-);
-
-impl<const MAX_ALLOWED_LEN: usize, const MAX_ALLOWED_TOTAL_DATA_SIZE: usize, T>
-    BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, T>
-{
-    pub fn new(data: Vec<T>) -> Self {
-        assert!(
-            MAX_ALLOWED_LEN != UNBOUNDED || MAX_ALLOWED_TOTAL_DATA_SIZE != UNBOUNDED,
-            "BoundedVec must be bounded either by length or by data size."
-        );
-
-        Self(data)
-    }
-
-    pub fn get(&self) -> &Vec<T> {
-        &self.0
-    }
-}
-
-impl<
-        'de,
-        const MAX_ALLOWED_LEN: usize,
-        const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-        T: Deserialize<'de> + DataSize,
-    > Deserialize<'de> for BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, T>
-{
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct SeqVisitor<const MAX_ALLOWED_LEN: usize, const MAX_ALLOWED_TOTAL_DATA_SIZE: usize, T> {
-            _marker: std::marker::PhantomData<T>,
-        }
-
-        use serde::de::{SeqAccess, Visitor};
-
-        impl<
-                'de,
-                const MAX_ALLOWED_LEN: usize,
-                const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-                T: Deserialize<'de> + DataSize,
-            > Visitor<'de> for SeqVisitor<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, T>
-        {
-            type Value = BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, T>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                let len_msg = if MAX_ALLOWED_LEN == UNBOUNDED {
-                    "unbounded elements".to_string()
-                } else {
-                    format!("no more than {} elements", MAX_ALLOWED_LEN)
-                };
-                let size_msg = if MAX_ALLOWED_TOTAL_DATA_SIZE == UNBOUNDED {
-                    "unbounded total bytes size".to_string()
-                } else {
-                    format!(
-                        "no more than {} bytes total size",
-                        MAX_ALLOWED_TOTAL_DATA_SIZE
-                    )
-                };
-                write!(formatter, "a sequence with {} and {}", len_msg, size_msg)
-            }
-
-            fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
-            where
-                S: SeqAccess<'de>,
-            {
-                let mut total_data_size = 0;
-                let mut elements = if MAX_ALLOWED_LEN == UNBOUNDED {
-                    Vec::new()
-                } else {
-                    Vec::with_capacity(MAX_ALLOWED_LEN)
-                };
-                while let Some(element) = seq.next_element::<T>()? {
-                    if elements.len() >= MAX_ALLOWED_LEN {
-                        return Err(serde::de::Error::custom(format!(
-                            "{}{}",
-                            MAX_ALLOWED_ELEMENTS_EXCEEDED_MESSAGE_PREFIX, MAX_ALLOWED_LEN
-                        )));
-                    }
-                    // Check that the new total data size (including new element data size)
-                    // is below the maximum allowed limit.
-                    let new_total_data_size = total_data_size + element.data_size();
-                    if new_total_data_size > MAX_ALLOWED_TOTAL_DATA_SIZE {
-                        return Err(serde::de::Error::custom(format!(
-                            "{}{}",
-                            MAX_ALLOWED_TOTAL_DATA_SIZE_EXCEEDED_MESSAGE_PREFIX,
-                            MAX_ALLOWED_TOTAL_DATA_SIZE
-                        )));
-                    }
-                    total_data_size = new_total_data_size;
-                    elements.push(element);
-                }
-                Ok(BoundedVec::new(elements))
-            }
-        }
-
-        deserializer.deserialize_seq(
-            SeqVisitor::<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, T> {
-                _marker: std::marker::PhantomData,
-            },
-        )
-    }
-}
-
-#[test]
-#[should_panic]
-fn test_not_bounded_vector_fails() {
-    type NotBoundedVec = BoundedVec<UNBOUNDED, UNBOUNDED, u8>;
-
-    let _ = NotBoundedVec::new(vec![1, 2, 3]);
-}
-
-#[test]
-fn test_bounded_vector_lengths() {
-    // This test verifies that the structures containing BoundedVec correctly
-    // throw an error when the number of elements exceeds the maximum allowed.
-    type BoundedLen = BoundedVec<MAX_ALLOWED_LEN, UNBOUNDED, u8>;
-
-    impl Payload<'_> for BoundedLen {}
-
-    const MAX_ALLOWED_LEN: usize = 30;
-    const TEST_START: usize = 20;
-    const TEST_END: usize = 40;
-    for i in TEST_START..=TEST_END {
-        // Arrange.
-        let data = BoundedLen::new(vec![42; i]);
-
-        // Act.
-        let result = BoundedLen::decode(&data.encode());
-
-        // Assert.
-        if i <= MAX_ALLOWED_LEN {
-            // Verify decoding without errors for allowed sizes.
-            assert_eq!(result.unwrap(), data);
-        } else {
-            // Verify decoding with errors for disallowed sizes.
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAX_ALLOWED_LEN
-                )),
-                "Actual: {}",
-                error.description()
-            );
-        }
-    }
-}
-
-#[test]
-fn test_bounded_vector_total_data_sizes() {
-    // This test verifies that the structures containing BoundedVec correctly
-    // throw an error when the total data size exceeds the maximum allowed.
-    type BoundedSize = BoundedVec<UNBOUNDED, MAX_ALLOWED_TOTAL_DATA_SIZE, u8>;
-
-    impl Payload<'_> for BoundedSize {}
-
-    const MAX_ALLOWED_TOTAL_DATA_SIZE: usize = 30;
-    const TEST_START: usize = 20;
-    const TEST_END: usize = 40;
-    for i in TEST_START..=TEST_END {
-        // Arrange.
-        let data = BoundedSize::new(vec![42; i]);
-
-        // Act.
-        let result = BoundedSize::decode(&data.encode());
-
-        // Assert.
-        if i <= MAX_ALLOWED_TOTAL_DATA_SIZE {
-            // Verify decoding without errors for allowed sizes.
-            assert_eq!(result.unwrap(), data);
-        } else {
-            // Verify decoding with errors for disallowed sizes.
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error.description().contains(&format!(
-                    "Deserialize error: The total data size exceeds maximum allowed {}",
-                    MAX_ALLOWED_TOTAL_DATA_SIZE
-                )),
-                "Actual: {}",
-                error.description()
-            );
-        }
     }
 }
 
@@ -1621,7 +1349,8 @@ impl Payload<'_> for UpdateSettingsArgs {}
 /// Maximum number of controllers allowed in a request (specified in the interface spec).
 const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 
-pub type BoundedControllers = BoundedVec<MAX_ALLOWED_CONTROLLERS_COUNT, UNBOUNDED, PrincipalId>;
+pub type BoundedControllers =
+    BoundedVec<MAX_ALLOWED_CONTROLLERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
 
 impl Payload<'_> for BoundedControllers {}
 
@@ -1821,7 +1550,7 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
         match Decode!(blob, Self) {
             Err(err) => {
                 // First check if deserialization failed due to exceeding the maximum allowed limit.
-                if format!("{err:?}").contains(MAX_ALLOWED_ELEMENTS_EXCEEDED_MESSAGE_PREFIX) {
+                if format!("{err:?}").contains("The number of elements exceeds maximum allowed") {
                     Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
                         format!("Payload deserialization error: {err:?}"),
@@ -2158,7 +1887,7 @@ fn ecdsa_key_id_round_trip() {
     }
 }
 
-pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, ByteBuf>;
+pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, UNBOUNDED, ByteBuf>;
 
 impl Payload<'_> for DerivationPath {}
 

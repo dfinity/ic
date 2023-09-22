@@ -44,11 +44,20 @@ const HTTP_HEADERS_MAX_NUMBER: usize = 64;
 /// Maximum size of all the HTTP headers in the request.
 ///
 /// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
-const HTTP_HEADERS_MAX_SIZE: usize = 48 * KIB;
+const HTTP_HEADERS_TOTAL_MAX_SIZE: usize = 48 * KIB;
+
+/// Maximum size of a single HTTP header in the request.
+///
+/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+const HTTP_HEADERS_ELEMENT_MAX_SIZE: usize = 16 * KIB; // name + value = 8KiB + 8KiB
 
 /// HTTP headers bounded by total size.
-pub type BoundedHttpHeaders =
-    BoundedVec<HTTP_HEADERS_MAX_NUMBER, HTTP_HEADERS_MAX_SIZE, HttpHeader>;
+pub type BoundedHttpHeaders = BoundedVec<
+    HTTP_HEADERS_MAX_NUMBER,
+    HTTP_HEADERS_TOTAL_MAX_SIZE,
+    HTTP_HEADERS_ELEMENT_MAX_SIZE,
+    HttpHeader,
+>;
 
 /// Struct used for encoding/decoding
 /// `(http_request : (record {
@@ -112,9 +121,11 @@ fn test_http_headers_max_number() {
         // Assert.
         if headers_count <= THRESHOLD {
             // Verify decoding without errors for allowed sizes.
+            assert!(result.is_ok());
             assert_eq!(result.unwrap(), args);
         } else {
             // Verify decoding with errors for disallowed sizes.
+            assert!(result.is_err());
             let error = result.unwrap_err();
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
@@ -173,6 +184,53 @@ fn test_http_headers_max_total_size() {
             assert!(
                 error.description().contains(&format!(
                     "Deserialize error: The total data size exceeds maximum allowed {}",
+                    THRESHOLD
+                )),
+                "Actual: {}",
+                error.description()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_http_headers_max_element_size() {
+    // This test verifies the size of any single HTTP header in headers stays within the allowed limit.
+    use ic_error_types::ErrorCode;
+
+    const THRESHOLD: usize = 16 * KIB;
+    for single_header_size in (4 * KIB..=24 * KIB).step_by(2 * KIB) {
+        // Arrange.
+        let header = HttpHeader {
+            name: String::from_utf8(vec![b'x'; single_header_size]).unwrap(),
+            value: String::new(),
+        };
+        let headers = BoundedHttpHeaders::new(vec![header; 2]);
+        let args = CanisterHttpRequestArgs {
+            url: "http://example.com".to_string(),
+            max_response_bytes: None,
+            headers,
+            body: None,
+            method: HttpMethod::GET,
+            transform: None,
+        };
+
+        // Act.
+        let result = CanisterHttpRequestArgs::decode(&args.encode());
+
+        // Assert.
+        if single_header_size <= THRESHOLD {
+            // Verify decoding without errors for allowed sizes.
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), args);
+        } else {
+            // Verify decoding with errors for disallowed sizes.
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                error.description().contains(&format!(
+                    "Deserialize error: The single element data size exceeds maximum allowed {}",
                     THRESHOLD
                 )),
                 "Actual: {}",
