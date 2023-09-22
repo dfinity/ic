@@ -61,10 +61,9 @@ impl DashboardTemplate {
 
         let mut confirmed_transactions: Vec<_> = state
             .eth_transactions
-            .confirmed_transactions_by_burn_index()
-            .into_iter()
-            .map(|(index, tx)| DashboardConfirmedTransaction {
-                ledger_burn_index: index,
+            .confirmed_transactions_iter()
+            .map(|(_tx_nonce, index, tx)| DashboardConfirmedTransaction {
+                ledger_burn_index: *index,
                 destination: tx.transaction().destination,
                 transaction_amount: tx.transaction().amount,
                 block_number: tx.block_number(),

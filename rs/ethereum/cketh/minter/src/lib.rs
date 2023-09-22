@@ -11,6 +11,7 @@ pub mod guard;
 pub mod lifecycle;
 pub mod logs;
 pub mod management;
+pub mod map;
 pub mod numeric;
 mod serde_data;
 pub mod state;

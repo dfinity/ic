@@ -3,6 +3,7 @@ mod tests;
 
 use crate::address::Address;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus};
+use crate::map::MultiKeyMap;
 use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
 use crate::tx::{
     ConfirmedEip1559Transaction, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
@@ -10,7 +11,7 @@ use crate::tx::{
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::vec_deque::Iter;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 
 /// Ethereum withdrawal request issued by the user.
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
@@ -60,8 +61,8 @@ pub struct EthTransactions {
     pending_created_tx: Option<PendingEthTx<TxCreated>>,
     pending_signed_tx: Option<PendingEthTx<TxSigned>>,
     pending_sent_tx: Option<PendingEthTx<TxSent>>,
-    confirmed_transactions_by_nonce: BTreeMap<TransactionNonce, ConfirmedEip1559Transaction>,
-    confirmed_transactions_by_burn_index: BTreeMap<LedgerBurnIndex, TransactionNonce>,
+    confirmed_transactions:
+        MultiKeyMap<TransactionNonce, LedgerBurnIndex, ConfirmedEip1559Transaction>,
     next_nonce: TransactionNonce,
 }
 
@@ -72,8 +73,7 @@ impl EthTransactions {
             pending_created_tx: None,
             pending_signed_tx: None,
             pending_sent_tx: None,
-            confirmed_transactions_by_nonce: BTreeMap::new(),
-            confirmed_transactions_by_burn_index: BTreeMap::new(),
+            confirmed_transactions: MultiKeyMap::default(),
             next_nonce,
         }
     }
@@ -119,8 +119,8 @@ impl EthTransactions {
             )
         }
         if self
-            .confirmed_transactions_by_burn_index
-            .contains_key(&request.ledger_burn_index)
+            .confirmed_transactions
+            .contains_alt(&request.ledger_burn_index)
         {
             panic!(
                 "BUG: A confirmed transaction with burn index {:?} already exists",
@@ -172,7 +172,7 @@ impl EthTransactions {
         );
         let tx_nonce = transaction.nonce;
         assert!(
-            !self.confirmed_transactions_by_nonce.contains_key(&tx_nonce),
+            !self.confirmed_transactions.contains(&tx_nonce),
             "BUG: a confirmed transaction with nonce {:?} already exists",
             tx_nonce
         );
@@ -282,19 +282,13 @@ impl EthTransactions {
         );
 
         let tx_nonce = confirmed_transaction.signed_transaction().nonce();
+        let index = sent_tx.request.ledger_burn_index;
         assert_eq!(
-            self.confirmed_transactions_by_nonce
-                .insert(tx_nonce, confirmed_transaction,),
-            None,
-            "BUG: a confirmed transaction with nonce {:?} already exists",
-            tx_nonce
-        );
-        assert_eq!(
-            self.confirmed_transactions_by_burn_index
-                .insert(sent_tx.request.ledger_burn_index, tx_nonce,),
-            None,
-            "BUG: a confirmed transaction with burn index {:?} already exists",
-            sent_tx.request.ledger_burn_index
+            self.confirmed_transactions
+                .try_insert(tx_nonce, index, confirmed_transaction),
+            Ok(()),
+            "BUG: a confirmed transaction with nonce {:?} or index ledger burn index {:?} already exists",
+            tx_nonce, index
         );
     }
 
@@ -313,11 +307,7 @@ impl EthTransactions {
             }
         }
 
-        if let Some(confirmed_tx) = self
-            .confirmed_transactions_by_burn_index
-            .get(burn_index)
-            .and_then(|nonce| self.confirmed_transactions_by_nonce.get(nonce))
-        {
+        if let Some(confirmed_tx) = self.confirmed_transactions.get_alt(burn_index) {
             return RetrieveEthStatus::TxConfirmed(EthTransaction {
                 transaction_hash: confirmed_tx.signed_transaction().hash().to_string(),
             });
@@ -329,12 +319,15 @@ impl EthTransactions {
         self.withdrawal_requests.iter()
     }
 
-    pub fn confirmed_transactions_by_burn_index(
+    pub fn confirmed_transactions_iter(
         &self,
-    ) -> BTreeMap<LedgerBurnIndex, &ConfirmedEip1559Transaction> {
-        self.confirmed_transactions_by_burn_index
-            .iter()
-            .map(|(burn_index, nonce)| (*burn_index, &self.confirmed_transactions_by_nonce[nonce]))
-            .collect()
+    ) -> impl Iterator<
+        Item = (
+            &TransactionNonce,
+            &LedgerBurnIndex,
+            &ConfirmedEip1559Transaction,
+        ),
+    > {
+        self.confirmed_transactions.iter()
     }
 }
