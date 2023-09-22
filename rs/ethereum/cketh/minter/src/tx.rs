@@ -262,12 +262,22 @@ impl Eip1559TransactionRequest {
 
 async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
     let ecdsa_public_key = lazy_call_ecdsa_public_key().await;
+    debug_assert!(
+        ecdsa_public_key.verify_signature_prehashed(&digest.0, signature),
+        "failed to verify signature prehashed, digest: {:?}, signature: {:?}, public_key: {:?}",
+        hex::encode(digest.0),
+        hex::encode(signature),
+        hex::encode(ecdsa_public_key.serialize_sec1(true)),
+    );
     ecdsa_public_key
         .try_recovery_from_digest(&digest.0, signature)
         .unwrap_or_else(|e| {
             panic!(
                 "BUG: failed to recover public key {:?} from digest {:?} and signature {:?}: {:?}",
-                ecdsa_public_key, digest, signature, e
+                hex::encode(ecdsa_public_key.serialize_sec1(true)),
+                hex::encode(digest.0),
+                hex::encode(signature),
+                e
             )
         })
 }

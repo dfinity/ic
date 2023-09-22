@@ -99,7 +99,7 @@ type RetrieveEthStatus = variant {
     // Ethereum transaction is confirmed.
     TxConfirmed : record {transaction_hash : text};
 };
-
+type WithdrawalArg = record { recipient : text; amount : nat };
 type RetrieveEthRequest = record { block_index : nat };
 type WithdrawalError = variant {
     // The withdrawal amount is too low.
@@ -134,7 +134,7 @@ service : (MinterArg) -> {
 
     // Withdraw the specified amount in Wei to the given Ethereum address.
     // IMPORTANT: The current gas limit is set to 21,000 for a transaction so withdrawals to smart contract addresses will likely fail.
-    withdraw : (nat, text) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
+    withdraw_eth : (WithdrawalArg) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
 
     // Retrieve the status of a withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
