@@ -36,8 +36,8 @@ fn test_snapshot() {
 
     let reply = call_counter_can(&pic, can_id, "write");
     assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
-    pic.tick_and_create_checkpoint("my_cp");
-
+    let _res = pic.tick_and_create_checkpoint("my_cp");
+    // println!("snapshot reply: {:?}", res);
     let fail = PocketIc::new_from_snapshot("does not exist").err().unwrap();
     assert!(fail
         .to_string()

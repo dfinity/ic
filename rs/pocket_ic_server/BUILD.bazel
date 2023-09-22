@@ -1,8 +1,8 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-BIN_DEPENDENCIES = [
+LIB_DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/iccsa",
@@ -51,14 +51,27 @@ rust_binary(
     name = "pocket-ic-server",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = BIN_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+)
+
+rust_library(
+    name = "pocket-ic-server-lib",
+    srcs = [
+        "src/lib.rs",
+        "src/pocket_ic.rs",
+    ] + glob([
+        "src/state_api/**",
+    ]),
+    crate_name = "pocket_ic_server",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES,
 )
 
 rust_test(
     name = "pic_test",
     srcs = glob(["src/**"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = BIN_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES,
 )
 
 rust_test(

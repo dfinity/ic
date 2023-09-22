@@ -1,0 +1,472 @@
+/// This module contains the route handlers for the PocketIc server.
+///
+/// A handler may receive a representation of a PocketIc Operation in the request
+/// body. This has to be canonicalized into a PocketIc Operation before we can
+/// deterministically update the PocketIc state machine.
+///
+use super::state::{InstanceState, UpdateReply};
+use super::{rest_types::Checkpoint, state::PocketIcApiState};
+use crate::pocket_ic::{ExecuteIngressMessage, Query};
+use crate::{
+    copy_dir,
+    pocket_ic::{create_state_machine, PocketIc},
+    InstanceId,
+};
+use crate::{BindOperation, Operation};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    routing::{delete, get, post},
+    Router,
+};
+use ic_state_machine_tests::StateMachine;
+use pocket_ic::BlobStore;
+use std::sync::atomic::AtomicU64;
+use std::{collections::HashMap, sync::Arc};
+use tempfile::TempDir;
+use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+
+pub type InstanceMap = Arc<RwLock<HashMap<InstanceId, RwLock<StateMachine>>>>;
+
+pub type ApiState = PocketIcApiState<PocketIc>;
+
+#[derive(Clone)]
+pub struct AppState {
+    // temporary
+    pub instance_map: InstanceMap,
+    pub instances_sequence_counter: Arc<AtomicU64>,
+    //
+    pub api_state: ApiState,
+    pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
+    pub last_request: Arc<RwLock<Instant>>,
+    pub runtime: Arc<Runtime>,
+    pub blob_store: Arc<dyn BlobStore>,
+}
+
+pub fn instance_read_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: axum::extract::FromRef<S>,
+{
+    Router::new()
+        // .route("root_key", get(handler_root_key))
+        .route("/query", post(handler_query))
+        .route("/get_time", get(handler_get_time))
+        .route("/get_cycles", post(handler_get_cycles))
+        .route("/get_stable_memory", post(handler_get_stable_memory))
+}
+
+pub fn instance_update_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: axum::extract::FromRef<S>,
+{
+    Router::new()
+        .route(
+            "/execute_ingress_message",
+            post(handler_execute_ingress_message),
+        )
+        .route("/set_time", post(handler_set_time))
+        .route("/add_cycles", post(handler_add_cycles))
+        .route("/set_stable_memory", post(handler_set_stable_memory))
+        .route(
+            "/install_canister_as_controller",
+            post(handler_install_canister_as_controller),
+        )
+}
+
+pub fn instances_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: axum::extract::FromRef<S>,
+{
+    Router::new()
+        //
+        // List all IC instances.
+        .route("/", get(list_instances))
+        //
+        // Create a new IC instance. Returns an InstanceId.
+        // If the body contains an existing checkpoint name, the instance is restored from that,
+        // otherwise a new instance is created.
+        .route("/", post(create_instance))
+        //
+        // Deletes an instance.
+        .route("/:id", delete(delete_instance))
+        //
+        // All the read-only endpoints
+        .nest("/:id/read", instance_read_routes())
+        //
+        // All the state-changing endpoints
+        .nest("/:id/update", instance_update_routes())
+        //
+        // Save this instance to a checkpoint with the given name.
+        // Takes a name:String in the request body.
+        // TODO: Add a function that separates those two.
+        .route(
+            "/:id/tick_and_create_checkpoint",
+            post(tick_and_create_checkpoint),
+        )
+    // .nest("/:id/read", instances_read_routes::<S>())
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+// Read handlers
+
+pub async fn handler_query(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state,
+        ..
+    }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_canister_call): axum::extract::Json<super::rest_types::RawCanisterCall>,
+) -> (StatusCode, String) {
+    match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
+        Err(_) => (StatusCode::BAD_REQUEST, "Badly formatted Query".to_string()),
+        Ok(canister_call) => {
+            let query_op = Query(canister_call);
+            let desired_op_id = query_op.id();
+            match api_state.update(query_op.on_instance(instance_id)).await {
+                Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+                Ok(update_reply) => match update_reply {
+                    // If the op_id of the ongoing operation is the requested one, we return code 201.
+                    // Otherwise, the instance is busy with a different computation, so we return 409.
+                    UpdateReply::Busy { state_label, op_id } => {
+                        let code = if op_id == desired_op_id {
+                            StatusCode::CREATED
+                        } else {
+                            StatusCode::CONFLICT
+                        };
+                        (
+                            code,
+                            format!("{:?}", UpdateReply::Busy { state_label, op_id }),
+                        )
+                    }
+                    UpdateReply::Output(op_out) => {
+                        (StatusCode::OK, serde_json::to_string(&op_out).unwrap())
+                    }
+                },
+            }
+        }
+    }
+}
+
+pub async fn handler_get_time(
+    State(AppState { .. }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(()): axum::extract::Json<()>,
+) -> (StatusCode, ()) {
+    (StatusCode::NOT_FOUND, ())
+}
+
+pub async fn handler_get_cycles(
+    State(AppState { .. }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(()): axum::extract::Json<()>,
+) -> (StatusCode, ()) {
+    (StatusCode::NOT_FOUND, ())
+}
+
+pub async fn handler_get_stable_memory(
+    State(AppState { .. }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(()): axum::extract::Json<()>,
+) -> (StatusCode, ()) {
+    (StatusCode::NOT_FOUND, ())
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+// Update handlers
+
+pub async fn handler_execute_ingress_message(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state,
+        ..
+    }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_canister_call): axum::extract::Json<super::rest_types::RawCanisterCall>,
+) -> (StatusCode, String) {
+    match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
+        Err(_) => (
+            StatusCode::BAD_REQUEST,
+            "Badly formatted IngressMessage".to_string(),
+        ),
+        Ok(canister_call) => {
+            let ingress_op = ExecuteIngressMessage(canister_call);
+            let desired_op_id = ingress_op.id();
+            match api_state.update(ingress_op.on_instance(instance_id)).await {
+                Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+                Ok(update_reply) => match update_reply {
+                    // If the op_id of the ongoing operation is the requested one, we return code 201.
+                    // Otherwise, the instance is busy with a different computation, so we return 409.
+                    UpdateReply::Busy { state_label, op_id } => {
+                        let code = if op_id == desired_op_id {
+                            StatusCode::CREATED
+                        } else {
+                            StatusCode::CONFLICT
+                        };
+                        (
+                            code,
+                            format!("{:?}", UpdateReply::Busy { state_label, op_id }),
+                        )
+                    }
+                    UpdateReply::Output(op_out) => {
+                        (StatusCode::OK, serde_json::to_string(&op_out).unwrap())
+                    }
+                },
+            }
+        }
+    }
+}
+
+pub async fn handler_set_time(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(()): axum::extract::Json<()>,
+) -> (StatusCode, ()) {
+    (StatusCode::NOT_FOUND, ())
+}
+
+pub async fn handler_add_cycles(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(()): axum::extract::Json<()>,
+) -> (StatusCode, ()) {
+    (StatusCode::NOT_FOUND, ())
+}
+
+pub async fn handler_set_stable_memory(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(()): axum::extract::Json<()>,
+) -> (StatusCode, ()) {
+    (StatusCode::NOT_FOUND, ())
+}
+
+pub async fn handler_install_canister_as_controller(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(()): axum::extract::Json<()>,
+) -> (StatusCode, ()) {
+    (StatusCode::NOT_FOUND, ())
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+// Other handlers
+
+pub async fn status() -> StatusCode {
+    StatusCode::OK
+}
+
+/// Create a new empty IC instance or restore from checkpoint
+/// The new InstanceId will be returned
+pub async fn create_instance(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state,
+        checkpoints,
+        last_request: _,
+        runtime,
+        blob_store: _,
+    }): State<AppState>,
+    body: Option<axum::extract::Json<Checkpoint>>,
+) -> (StatusCode, String) {
+    let sm = match body {
+        None => tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
+            .await
+            .expect("Failed to launch a state machine"),
+        Some(body) => {
+            let checkpoints = checkpoints.read().await;
+            if !checkpoints.contains_key(&body.checkpoint_name) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("Checkpoint '{}' does not exist.", body.checkpoint_name),
+                );
+            }
+            let proto_dir = checkpoints.get(&body.checkpoint_name).unwrap();
+            let new_instance_dir = TempDir::new().expect("Failed to create tempdir");
+            copy_dir(proto_dir.path(), new_instance_dir.path())
+                .expect("Failed to copy state directory");
+            drop(checkpoints);
+            // create instance
+            tokio::task::spawn_blocking(|| create_state_machine(Some(new_instance_dir), runtime))
+                .await
+                .expect("Failed to launch a state machine")
+        }
+    };
+    let pocket_ic = PocketIc::new(sm);
+    let instance_id = api_state.add_instance(pocket_ic).await;
+    (
+        StatusCode::CREATED,
+        serde_json::to_string(&super::rest_types::InstanceId { instance_id }).unwrap(),
+    )
+}
+
+pub async fn list_instances(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+) -> String {
+    let instances = api_state.list_instances().await;
+    let instances: Vec<String> = instances
+        .iter()
+        .map(|instance_state| match instance_state {
+            InstanceState::Busy { state_label, op_id } => {
+                format!("Busy({:?}, {:?})", state_label, op_id)
+            }
+            InstanceState::Available(_) => "Available".to_string(),
+            InstanceState::Deleted => "Deleted".to_string(),
+        })
+        .collect();
+    serde_json::to_string(&instances).unwrap()
+}
+
+pub async fn list_checkpoints(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+) -> String {
+    let checkpoints = checkpoints
+        .read()
+        .await
+        .keys()
+        .cloned()
+        .collect::<Vec<String>>();
+    serde_json::to_string(&checkpoints).unwrap()
+}
+
+// Call the IC instance with the given InstanceId
+// pub async fn call_instance(
+//     State(AppState {
+//         api_state,
+//         checkpoints: _,
+//         last_request: _,
+//         runtime: _,
+//     }): State<AppState>,
+//     Path(id): Path<InstanceId>,
+//     axum::extract::Json(request): axum::extract::Json<Request>,
+// ) -> (StatusCode, String) {
+//     let guard_map = todo!();
+// let guard_map = inst_map.read().await;
+// if let Some(rw_lock) = guard_map.get(&id) {
+//     let guard_sm = rw_lock.write().await;
+//     (StatusCode::OK, call_sm(&guard_sm, request))
+// } else {
+//     (
+//         StatusCode::NOT_FOUND,
+//         format!("Instance with ID {} was not found.", &id),
+//     )
+// }
+// }
+
+// TODO: Add a function that separates those two.
+pub async fn tick_and_create_checkpoint(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state: _,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+    Path(_id): Path<InstanceId>,
+    axum::extract::Json(Checkpoint { checkpoint_name: _ }): axum::extract::Json<Checkpoint>,
+) -> (StatusCode, ()) {
+    // Needs an Operation type
+    (StatusCode::NOT_FOUND, ())
+    // let mut checkpoints = checkpoints.write().await;
+    // if checkpoints.contains_key(&payload.checkpoint_name) {
+    //     return (
+    //         StatusCode::CONFLICT,
+    //         format!("Checkpoint {} already exists.", payload.checkpoint_name),
+    //     );
+    // }
+    // let guard_map = instance_map.read().await;
+    // if let Some(rw_lock) = guard_map.get(&id) {
+    //     let guard_sm = rw_lock.write().await;
+    //     // Enable checkpoints and make a tick to write a checkpoint.
+    //     guard_sm.set_checkpoints_enabled(true);
+    //     guard_sm.tick();
+    //     guard_sm.set_checkpoints_enabled(false);
+    //     // Copy state directory to named location.
+    //     let checkpoint_dir = TempDir::new().expect("Failed to create tempdir");
+    //     copy_dir(guard_sm.state_dir.path(), checkpoint_dir.path())
+    //         .expect("Failed to copy state directory");
+    //     checkpoints.insert(payload.checkpoint_name, Arc::new(checkpoint_dir));
+    //     (StatusCode::CREATED, "Checkpoint created.".to_string())
+    // } else {
+    //     // id not found in map; return error
+    //     // TODO: Result Type for this call
+    //     (
+    //         StatusCode::NOT_FOUND,
+    //         format!("Instance with ID {} was not found.", &id),
+    //     )
+    // }
+}
+
+pub async fn delete_instance(
+    State(AppState {
+        instance_map: _,
+        instances_sequence_counter: _,
+        api_state,
+        checkpoints: _,
+        last_request: _,
+        runtime: _,
+        blob_store: _,
+    }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> StatusCode {
+    match api_state.delete_instance(id).await {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::NOT_FOUND,
+    }
+}

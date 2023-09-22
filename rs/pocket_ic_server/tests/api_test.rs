@@ -63,11 +63,10 @@ fn test_call_nonexistent_instance() {
     let url = start_server();
     let client = reqwest::blocking::Client::new();
     let response = client
-        .post(url.join("instances/this_instance_does_not_exist").unwrap())
+        .post(url.join("instances/999").unwrap())
         .json("Time")
         .send()
         .unwrap();
-
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert!(response
         .text()
@@ -85,7 +84,7 @@ fn test_checkpoint_nonexistent_instance() {
     };
     let response = client
         .post(
-            url.join("instances/this_instance_does_not_exist/tick_and_create_checkpoint")
+            url.join("instances/999/tick_and_create_checkpoint")
                 .unwrap(),
         )
         .json(&cp)

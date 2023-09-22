@@ -1,3 +1,8 @@
+/// This module contains the core state of the PocketIc server.
+/// Axum handlers operate on a global state of type PocketIcApiState, whose
+/// interface guarantees consistency and determinism.
+///
+use crate::InstanceId;
 use crate::{Computation, OpId, Operation};
 use base64;
 use ic_state_machine_tests::UserError;
@@ -48,10 +53,18 @@ pub struct InvalidSize;
 /// The state of the PocketIc-API.
 ///
 /// The struct is Send + Sync and cloneable and can thus be shared between threads.
-#[derive(Clone)]
 pub struct PocketIcApiState<T> {
     // todo: this should become private at some point, pub for testing for now.
     inner: Arc<InnerApiState<T>>,
+}
+
+// We cannot derive Clone, as that would require the bound T: Clone, which we don't want.
+impl<T> Clone for PocketIcApiState<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 struct InnerApiState<T> {
@@ -75,7 +88,7 @@ where
     }
 
     /// Computations are dispatched into background tasks. If a computation takes longer than
-    /// [sync_wait_time], the issue-operation returns, indicating that the given instance is busy.
+    /// [sync_wait_time], the update-operation returns, indicating that the given instance is busy.
     pub fn with_sync_wait_time(self, sync_wait_time: Duration) -> Self {
         Self {
             sync_wait_time: Some(sync_wait_time),
@@ -181,16 +194,17 @@ pub enum InstanceState<T> {
         op_id: OpId,
     },
     Available(T),
+    Deleted,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum IssueError {
+pub enum UpdateError {
     InstanceNotFound,
 }
 
-pub type IssueResult = std::result::Result<IssueOutcome, IssueError>;
+pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
 
-/// An operation bound to an instance can be issued, that is, executed on the instance.
+/// An operation bound to an instance can be dispatched, which updates the instance.
 /// If the instance is already busy with an operation, the initial state and that operation
 /// are returned.
 /// If the result can be read from a cache, or if the computation is a fast read, an Output is
@@ -200,7 +214,7 @@ pub type IssueResult = std::result::Result<IssueOutcome, IssueError>;
 /// TODO: The description implies three variants; two are currently represented as busy. We may
 /// distinguish them with an additional HTTP response code, or maybe better as a third variant.
 #[derive(Debug, PartialEq, Eq)]
-pub enum IssueOutcome {
+pub enum UpdateReply {
     /// The requested instance is busy executing this op on this state.
     Busy {
         state_label: StateLabel,
@@ -211,7 +225,7 @@ pub enum IssueOutcome {
     Output(OpOut),
 }
 
-impl IssueOutcome {
+impl UpdateReply {
     pub fn get_busy(&self) -> Option<(StateLabel, OpId)> {
         match self {
             Self::Busy { state_label, op_id } => Some((state_label.clone(), op_id.clone())),
@@ -251,35 +265,60 @@ where
         }
     }
 
-    /// An operation bound to an instance (a Computation) can be issued.
+    pub async fn add_instance(&self, instance: T) -> InstanceId {
+        let mut instances = self.inner.instances.write().await;
+        instances.push(InstanceState::Available(instance));
+        instances.len() - 1
+    }
+
+    pub async fn delete_instance(&self, _instance_id: InstanceId) -> Result<(), ()> {
+        todo!();
+    }
+
+    pub async fn list_instances(&self) -> Vec<InstanceState<()>> {
+        let instances = self.inner.instances.read().await;
+        instances
+            .iter()
+            .map(|instance_state| match instance_state {
+                InstanceState::Busy { state_label, op_id } => InstanceState::Busy {
+                    state_label: state_label.clone(),
+                    op_id: op_id.clone(),
+                },
+                InstanceState::Available(_) => InstanceState::Available(()),
+                InstanceState::Deleted => InstanceState::Deleted,
+            })
+            .collect()
+    }
+
+    /// An operation bound to an instance (a Computation) can update the PocketIC state.
     ///
-    /// * If the instance is busy executing an operation, the call returns [IssueOutcome::Busy]
+    /// * If the instance is busy executing an operation, the call returns [UpdateReply::Busy]
     /// immediately. In that case, the state label and operation id contained in the result
     /// indicate that the instance is busy with a previous operation.
     ///
     /// * If the instance is available and the computation exceeds a (short) timeout,
-    /// [IssueOutcome::Busy] is returned.
+    /// [UpdateReply::Busy] is returned.
     ///
-    /// * If the computation finished within the timeout, [IssueOutcome::Output] is returned
+    /// * If the computation finished within the timeout, [UpdateReply::Output] is returned
     /// containing the result.
     ///
     /// Operations are _not_ queued. Thus, if the instance is busy with an existing operation, the
     /// client has to retry until the operation is accepted.
-    pub async fn issue<S>(&self, computation: Computation<S>) -> IssueResult
+    pub async fn update<S>(&self, computation: Computation<S>) -> UpdateResult
     where
         S: Operation<TargetType = T> + Send + 'static,
     {
-        self.issue_with_timeout(computation, self.inner.sync_wait_time)
+        self.update_with_timeout(computation, self.inner.sync_wait_time)
             .await
     }
 
-    /// Same as [Self::issue] except that the timeout can be specified manually. This is useful in
+    /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
     /// cases when clients want to enforce a long-running blocking call.
-    pub async fn issue_with_timeout<S>(
+    pub async fn update_with_timeout<S>(
         &self,
         computation: Computation<S>,
         sync_wait_time: Duration,
-    ) -> IssueResult
+    ) -> UpdateResult
     where
         S: Operation<TargetType = T> + Send + 'static,
     {
@@ -289,9 +328,12 @@ where
             if let Some(instance_state) = instances.get(computation.instance_id) {
                 // If this instance is busy, return the running op and initial state
                 match instance_state {
+                    InstanceState::Deleted => {
+                        return Err(UpdateError::InstanceNotFound);
+                    }
                     // TODO: cache lookup possible with this state_label and our own op_id
                     InstanceState::Busy { state_label, op_id } => {
-                        return Ok(IssueOutcome::Busy {
+                        return Ok(UpdateReply::Busy {
                             state_label: state_label.clone(),
                             op_id: op_id.clone(),
                         });
@@ -316,9 +358,9 @@ where
                         // blocking workers are busy, the task is put on a queue (which is what we want).
                         //
                         // Note: One issue here is that we drop the join handle "on the floor". Threads
-                        // that are not awaited upon before exiting the process are known to cause spurious
+                        // that are not awaited upon before exiting the process are known to cause spurios
                         // issues. This should not be a problem as the tokio Executor will wait
-                        // indefinitely for threads to return, unless a shutdown timeout is configured.
+                        // indefinitively for threads to return, unless a shutdown timeout is configured.
                         //
                         // See: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
                         let bg_task = spawn_blocking({
@@ -348,11 +390,11 @@ where
                         });
 
                         // cache miss: replace pocket_ic instance in the vector with Busy
-                        (bg_task, IssueOutcome::Busy { state_label, op_id })
+                        (bg_task, UpdateReply::Busy { state_label, op_id })
                     }
                 }
             } else {
-                return Err(IssueError::InstanceNotFound);
+                return Err(UpdateError::InstanceNotFound);
             };
         // drop lock, otherwise we end up with a deadlock
         std::mem::drop(instances);
@@ -364,7 +406,7 @@ where
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
         if let Ok(o) = time::timeout(sync_wait_time, bg_task).await {
-            return Ok(IssueOutcome::Output(o.expect("join failed!")));
+            return Ok(UpdateReply::Output(o.expect("join failed!")));
         }
         Ok(busy_outcome)
     }
@@ -377,6 +419,7 @@ impl<T: HasStateLabel> std::fmt::Debug for InstanceState<T> {
                 write!(f, "Busy {{ {state_label:?}, {op_id:?} }}")?
             }
             Self::Available(pic) => write!(f, "Available({:?})", pic.get_state_label())?,
+            Self::Deleted => write!(f, "Deleted")?,
         }
         Ok(())
     }

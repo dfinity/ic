@@ -13,12 +13,12 @@ DEPENDENCIES = [
     "@crate_index//:hex",
 ]
 
-TEST_DEPENDENCIES = [
-    "@crate_index//:flate2",
-]
-
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
+]
+
+TEST_DEPENDENCIES = [
+    "@crate_index//:flate2",
 ]
 
 rust_library(
