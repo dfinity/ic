@@ -65,10 +65,6 @@ struct Opts {
     #[clap(long, value_parser = ValueParser::new(parse_canister_alias))]
     canister_alias: Vec<CanisterAlias>,
 
-    /// Whether or not to ignore `canisterId=` when locating the canister.
-    #[clap(long)]
-    ignore_url_canister_param: bool,
-
     /// The list of custom root HTTPS certificates to use to talk to the replica. This can be used
     /// to connect to an IC that has a self-signed certificate, or to limit the certificates. Do not use this
     /// when talking to the Internet Computer blockchain mainnet unless you know what you're doing.
@@ -112,7 +108,6 @@ fn main() -> Result<(), anyhow::Error> {
         replica,
         domain,
         canister_alias,
-        ignore_url_canister_param,
         ssl_root_certificate,
         fetch_root_key,
         danger_accept_invalid_ssl,
@@ -138,7 +133,6 @@ fn main() -> Result<(), anyhow::Error> {
     let resolver = canister_id::setup(canister_id::CanisterIdOpts {
         canister_alias,
         domain,
-        ignore_url_canister_param,
     })?;
 
     // Setup Validator

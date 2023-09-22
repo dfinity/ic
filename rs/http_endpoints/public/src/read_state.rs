@@ -2,7 +2,7 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{cbor_response, into_cbor, make_plaintext_response},
+    common::{cbor_response, into_cbor, make_plaintext_response, remove_effective_canister_id},
     metrics::LABEL_UNKNOWN,
     state_reader_executor::StateReaderExecutor,
     types::ApiReqType,
@@ -110,16 +110,12 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
         }
         let (mut parts, body) = request.into_parts();
         // By removing the canister id we get ownership and avoid having to clone it when creating the future.
-        let effective_canister_id = match parts.extensions.remove::<CanisterId>() {
-            Some(canister_id) => canister_id,
-            _ => {
+        let effective_canister_id = match remove_effective_canister_id(&mut parts) {
+            Ok(canister_id) => canister_id,
+            Err(res) => {
                 error!(
                     self.log,
                     "Effective canister ID is not attached to read state request. This is a bug."
-                );
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    "Malformed request".to_string(),
                 );
                 return Box::pin(async move { Ok(res) });
             }
@@ -153,12 +149,13 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
         };
 
         let read_state = request.content().clone();
-        let registry_client = self.registry_client.get_latest_version();
+        let registry_version = self.registry_client.get_latest_version();
         let state_reader_executor = self.state_reader_executor.clone();
         let validator_executor = self.validator_executor.clone();
         let metrics = self.metrics.clone();
         Box::pin(async move {
-            let targets_fut = validator_executor.validate_request(request.clone(), registry_client);
+            let targets_fut =
+                validator_executor.validate_request(request.clone(), registry_version);
 
             let targets = match targets_fut.await {
                 Ok(targets) => targets,
@@ -167,17 +164,29 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                     return Ok(res);
                 }
             };
+            let make_service_unavailable_response = || {
+                make_plaintext_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Certified state is not available yet. Please try again...".to_string(),
+                )
+            };
+            let certified_state_reader =
+                match state_reader_executor.get_certified_state_reader().await {
+                    Ok(Some(reader)) => reader,
+                    Ok(None) => return Ok(make_service_unavailable_response()),
+                    Err(HttpError { status, message }) => {
+                        return Ok(make_plaintext_response(status, message))
+                    }
+                };
+
             // Verify authorization for requested paths.
             if let Err(HttpError { status, message }) = verify_paths(
-                &state_reader_executor,
+                certified_state_reader.get_state(),
                 &read_state.source,
                 &read_state.paths,
                 &targets,
                 effective_canister_id,
-                &metrics,
-            )
-            .await
-            {
+            ) {
                 return Ok(make_plaintext_response(status, message));
             }
 
@@ -198,52 +207,38 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                 }
             };
 
-            let res = match state_reader_executor
-                .read_certified_state(&labeled_tree)
-                .await
-            {
-                Ok(r) => r,
-                Err(e) => return Ok(make_plaintext_response(e.status, e.message)),
-            };
+            let (tree, certification) =
+                match certified_state_reader.read_certified_state(&labeled_tree) {
+                    Some(r) => r,
+                    None => return Ok(make_service_unavailable_response()),
+                };
 
-            let res = match res {
-                Some((_state, tree, certification)) => {
-                    let signature = certification.signed.signature.signature.get().0;
-                    let res = HttpReadStateResponse {
-                        certificate: Blob(into_cbor(&Certificate {
-                            tree,
-                            signature: Blob(signature),
-                            delegation: delegation_from_nns,
-                        })),
-                    };
-                    let (resp, body_size) = cbor_response(&res);
-                    metrics
-                        .response_body_size_bytes
-                        .with_label_values(&[ApiReqType::ReadState.into()])
-                        .observe(body_size as f64);
-                    resp
-                }
-                None => make_plaintext_response(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "Certified state is not available yet. Please try again...".to_string(),
-                ),
+            let signature = certification.signed.signature.signature.get().0;
+            let res = HttpReadStateResponse {
+                certificate: Blob(into_cbor(&Certificate {
+                    tree,
+                    signature: Blob(signature),
+                    delegation: delegation_from_nns,
+                })),
             };
-
-            Ok(res)
+            let (resp, body_size) = cbor_response(&res);
+            metrics
+                .response_body_size_bytes
+                .with_label_values(&[ApiReqType::ReadState.into()])
+                .observe(body_size as f64);
+            Ok(resp)
         })
     }
 }
 
 // Verifies that the `user` is authorized to retrieve the `paths` requested.
-async fn verify_paths(
-    state_reader_executor: &StateReaderExecutor,
+fn verify_paths(
+    state: &ReplicatedState,
     user: &UserId,
     paths: &[Path],
     targets: &CanisterIdSet,
     effective_canister_id: CanisterId,
-    metrics: &HttpHandlerMetrics,
 ) -> Result<(), HttpError> {
-    let state = state_reader_executor.get_latest_state().await?.take();
     let mut request_status_id: Option<MessageId> = None;
 
     // Convert the paths to slices to make it easier to match below.
@@ -255,11 +250,6 @@ async fn verify_paths(
     for path in paths {
         match path.as_slice() {
             [b"time"] => {}
-            [b"canister", canister_id, b"controller"] => {
-                let canister_id = parse_canister_id(canister_id)?;
-                verify_canister_ids(&canister_id, &effective_canister_id)?;
-                metrics.read_state_canister_controller_total.inc();
-            }
             [b"canister", canister_id, b"controllers" | b"module_hash"] => {
                 let canister_id = parse_canister_id(canister_id)?;
                 verify_canister_ids(&canister_id, &effective_canister_id)?;
@@ -274,10 +264,13 @@ async fn verify_paths(
                 let canister_id = parse_canister_id(canister_id)?;
                 // Verify that canister id and effective canister id match.
                 verify_canister_ids(&canister_id, &effective_canister_id)?;
-                can_read_canister_metadata(user, &canister_id, &name, &state)?
+                can_read_canister_metadata(user, &canister_id, &name, state)?
             }
             [b"subnet"] => {}
-            [b"subnet", _subnet_id, b"public_key" | b"canister_ranges"] => {}
+            [b"subnet", _subnet_id] => {}
+            [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            [b"subnet", _subnet_id, b"node", _node_id] => {}
+            [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
             {
@@ -364,23 +357,20 @@ fn can_read_canister_metadata(
     custom_section_name: &str,
     state: &ReplicatedState,
 ) -> Result<(), HttpError> {
-    let canister = state
-        .canister_states
-        .get(canister_id)
-        .ok_or_else(|| HttpError {
-            status: StatusCode::NOT_FOUND,
-            message: format!("Canister {} not found.", canister_id),
-        })?;
+    let canister = match state.canister_states.get(canister_id) {
+        Some(canister) => canister,
+        None => return Ok(()),
+    };
 
     match &canister.execution_state {
         Some(execution_state) => {
-            let custom_section = execution_state
+            let custom_section = match execution_state
                 .metadata
                 .get_custom_section(custom_section_name)
-                .ok_or_else(|| HttpError {
-                    status: StatusCode::NOT_FOUND,
-                    message: format!("Custom section {:.100} not found.", custom_section_name),
-                })?;
+            {
+                Some(section) => section,
+                None => return Ok(()),
+            };
 
             // Only the controller can request this custom section.
             if custom_section.visibility() == CustomSectionType::Private
@@ -394,31 +384,22 @@ fn can_read_canister_metadata(
                     ),
                 });
             }
+
+            Ok(())
         }
-        None => {
-            return Err(HttpError {
-                status: StatusCode::NOT_FOUND,
-                message: format!("Canister {} has no module.", canister_id),
-            })
-        }
+        None => Ok(()),
     }
-    Ok(())
 }
 
 #[cfg(test)]
 mod test {
     use crate::{
         common::test::{array, assert_cbor_ser_equal, bytes, int},
-        metrics::HttpHandlerMetrics,
         read_state::{can_read_canister_metadata, verify_paths},
-        state_reader_executor::StateReaderExecutor,
         HttpError,
     };
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
-    use ic_interfaces_state_manager::Labeled;
-    use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
@@ -426,9 +407,8 @@ mod test {
         state::insert_dummy_canister,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
-    use ic_types::Height;
     use ic_validator::CanisterIdSet;
-    use std::{collections::BTreeMap, sync::Arc};
+    use std::collections::BTreeMap;
 
     #[test]
     fn encoding_read_state_tree_empty() {
@@ -534,49 +514,33 @@ mod test {
         // Non existent public custom section.
         assert_eq!(
             can_read_canister_metadata(&non_controller, &canister_id, "unknown-name", &state),
-            Err(HttpError {
-                status: StatusCode::NOT_FOUND,
-                message: "Custom section unknown-name not found.".to_string()
-            })
+            Ok(())
         );
     }
 
-    #[tokio::test]
-    async fn async_verify_path() {
+    #[test]
+    fn test_verify_path() {
         let subnet_id = subnet_test_id(1);
-        let mut mock_state_manager = MockStateManager::new();
-        mock_state_manager
-            .expect_get_latest_state()
-            .returning(move || {
-                let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
-                metadata.batch_time = mock_time();
-                Labeled::new(
-                    Height::from(1),
-                    Arc::new(ReplicatedState::new_from_checkpoint(
-                        BTreeMap::new(),
-                        metadata,
-                        CanisterQueues::default(),
-                    )),
-                )
-            });
-
-        let state_manager = Arc::new(mock_state_manager);
-        let sre = StateReaderExecutor::new(state_manager.clone());
+        let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
+        metadata.batch_time = mock_time();
+        let state = ReplicatedState::new_from_checkpoint(
+            BTreeMap::new(),
+            metadata,
+            CanisterQueues::default(),
+        );
         assert_eq!(
             verify_paths(
-                &sre,
+                &state,
                 &user_test_id(1),
                 &[Path::from(Label::from("time"))],
                 &CanisterIdSet::all(),
                 canister_test_id(1),
-                &HttpHandlerMetrics::new(&MetricsRegistry::default())
-            )
-            .await,
+            ),
             Ok(())
         );
         assert_eq!(
             verify_paths(
-                &sre,
+                &state,
                 &user_test_id(1),
                 &[
                     Path::new(vec![
@@ -592,13 +556,11 @@ mod test {
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1),
-                &HttpHandlerMetrics::new(&MetricsRegistry::default())
-            )
-            .await,
+            ),
             Ok(())
         );
         assert!(verify_paths(
-            &sre,
+            &state,
             &user_test_id(1),
             &[
                 Path::new(vec![Label::from("request_status"), [0; 32].into()]),
@@ -606,9 +568,7 @@ mod test {
             ],
             &CanisterIdSet::all(),
             canister_test_id(1),
-            &HttpHandlerMetrics::new(&MetricsRegistry::default())
         )
-        .await
         .is_err());
     }
 }

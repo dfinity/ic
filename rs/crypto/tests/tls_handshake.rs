@@ -732,6 +732,7 @@ mod server {
         );
     }
 
+    // TODO(CRP-2149): remove dependency on system time in the following test
     #[test]
     fn should_return_error_if_client_cert_not_yet_valid() {
         let registry = TlsRegistry::new();
@@ -756,7 +757,7 @@ mod server {
 
         assert_handshake_server_error_containing(
             &server_result,
-            "is later than two minutes from now",
+            "is in the future compared to current time",
         );
     }
 }
@@ -1266,7 +1267,7 @@ mod client {
 
         assert_handshake_client_error_containing(
             &client_result,
-            "is later than two minutes from now",
+            "is in the future compared to current time",
         );
     }
 
@@ -1391,12 +1392,11 @@ fn assert_handshake_server_error_containing(
     server_result: &Result<AuthenticatedPeer, TlsServerHandshakeError>,
     error_substring: &str,
 ) {
-    let error = server_result.clone().unwrap_err();
-    if let TlsServerHandshakeError::HandshakeError { internal_error } = error {
-        assert_string_contains(internal_error, error_substring);
-    } else {
-        panic!("expected HandshakeError error, got {}", error)
-    }
+    assert_matches!(
+        server_result,
+        Err(TlsServerHandshakeError::HandshakeError { internal_error })
+            if internal_error.contains(error_substring)
+    );
 }
 
 fn assert_malformed_self_cert_client_error_containing(

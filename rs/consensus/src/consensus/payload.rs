@@ -41,6 +41,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     XNet(Arc<dyn XNetPayloadBuilder>),
     SelfValidating(Arc<dyn SelfValidatingPayloadBuilder>),
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
+    QueryStats(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -131,8 +132,16 @@ impl BatchPayloadSectionBuilder {
                     max_size,
                 );
 
-                // NOTE: At the moment, the payload builder is calling it's own validator,
-                // so we don't have to do that here
+                // As a safety measure, the payload is validated, before submitting it.
+                if let Err(e) = builder.validate_self_validating_payload(
+                    &self_validating,
+                    validation_context,
+                    &past_payloads,
+                ) {
+                    error!(logger, "Created an invalid SelfValidatingPayload: {:?}", e);
+                    payload.self_validating = SelfValidatingPayload::default();
+                    return NumBytes::new(0);
+                }
 
                 // Check that the size limit is respected
                 if size > max_size {
@@ -185,6 +194,45 @@ impl BatchPayloadSectionBuilder {
 
                         metrics.critical_error_validation_not_passed.inc();
                         payload.canister_http = vec![];
+                        NumBytes::new(0)
+                    }
+                }
+            }
+            Self::QueryStats(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.query_stats)
+                        }
+                    });
+
+                let query_stats =
+                    builder.build_payload(height, max_size, &past_payloads, validation_context);
+                let size = NumBytes::new(query_stats.len() as u64);
+
+                // Check validation as safety measure
+                match builder.validate_payload(
+                    height,
+                    &query_stats,
+                    &past_payloads,
+                    validation_context,
+                ) {
+                    Ok(()) => {
+                        payload.query_stats = query_stats;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "QueryStats payload did not pass validation, this is a bug, {:?} @{}",
+                            err,
+                            CRITICAL_ERROR_VALIDATION_NOT_PASSED
+                        );
+
+                        metrics.critical_error_validation_not_passed.inc();
+                        payload.query_stats = vec![];
                         NumBytes::new(0)
                     }
                 }
@@ -253,6 +301,25 @@ impl BatchPayloadSectionBuilder {
                 )?;
 
                 Ok(NumBytes::new(payload.canister_http.len() as u64))
+            }
+            Self::QueryStats(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.query_stats)
+                        }
+                    });
+
+                builder.validate_payload(
+                    height,
+                    &payload.query_stats,
+                    &past_payloads,
+                    validation_context,
+                )?;
+
+                Ok(NumBytes::new(payload.query_stats.len() as u64))
             }
         }
     }

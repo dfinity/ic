@@ -27,7 +27,6 @@ ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-pprof = { path = "../../monitoring/pprof" }
-ic-backtrace = { path = "../../monitoring/backtrace" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
@@ -51,6 +50,10 @@ tokio = { version = "1.15.0", features = ["full"] }
 tokio-io-timeout = "1.2.0"
 tower = { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
 url = "2.1.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# this library uses libunwind, which is only applicable to Linux
+ic-backtrace = { path = "../../monitoring/backtrace" }
 
 [dev-dependencies]
 bytes = "1.0.1"

@@ -58,7 +58,6 @@ impl CanisterId {
     }
 
     pub const fn new(principal_id: PrincipalId) -> Result<Self, CanisterIdError> {
-        // TODO(EXC-241)
         Ok(Self(principal_id))
     }
 

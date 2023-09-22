@@ -1,7 +1,7 @@
 use crate::pb::v1::{
     create_service_nervous_system,
-    create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters, proposal,
-    CreateServiceNervousSystem, Proposal,
+    create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters,
+    CreateServiceNervousSystem,
 };
 use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
@@ -18,14 +18,16 @@ pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
 }
 #[cfg(not(feature = "test"))]
 pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
-    false
+    true
 }
 
+#[derive(Clone, Debug)]
 pub struct ExecutedCreateServiceNervousSystemProposal {
     pub current_timestamp_seconds: u64,
     pub create_service_nervous_system: CreateServiceNervousSystem,
     pub proposal_id: u64,
     pub neurons_fund_participants: Vec<CfParticipant>,
+    pub random_swap_start_time: GlobalTimeOfDay,
 }
 
 impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
@@ -52,7 +54,7 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
 
         let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
             match CreateServiceNervousSystem::swap_start_and_due_timestamps(
-                start_time,
+                start_time.unwrap_or(src.random_swap_start_time),
                 duration.unwrap_or_default(),
                 current_timestamp_seconds,
             ) {
@@ -73,65 +75,13 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
         result.swap_start_timestamp_seconds = swap_start_timestamp_seconds;
         result.swap_due_timestamp_seconds = swap_due_timestamp_seconds;
 
-        result
-            .validate_post_execution()
-            .map_err(|err| err.to_string())?;
+        result.validate_post_execution()?;
 
         Ok(result)
     }
 }
 
 impl CreateServiceNervousSystem {
-    pub fn upgrade_to_proposal(self) -> Proposal {
-        let Self {
-            name,
-            url,
-            description,
-            ..
-        } = &self;
-
-        let name = name.clone().unwrap_or_else(|| "A Profound".to_string());
-        let title = Some(format!("Create {} Service Nervous System", name));
-
-        let description = description.clone().unwrap_or_else(|| {
-            "Ladies and gentlemen,
-             it is with great pleasure that present to you, \
-             a fabulous new SNS for the good of all humankind. \
-             You will surely be in awe of its grandeur, \
-             once your eyes have beheld is glorious majesty."
-                .to_string()
-        });
-
-        let url = url.clone().unwrap_or_default();
-
-        let summary = {
-            let url_line = if url.is_empty() {
-                "".to_string()
-            } else {
-                format!("URL: {}\n", url)
-            };
-
-            format!(
-                "Name: {}\n\
-                 {}\
-                 \n\
-                 ## Description\n\
-                 \n\
-                 {}",
-                name, url_line, description,
-            )
-        };
-
-        let action = Some(proposal::Action::CreateServiceNervousSystem(self));
-
-        Proposal {
-            title,
-            summary,
-            url,
-            action,
-        }
-    }
-
     pub fn sns_token_e8s(&self) -> Option<u64> {
         self.initial_token_distribution
             .as_ref()?
@@ -169,12 +119,11 @@ impl CreateServiceNervousSystem {
     /// if start_time_of_day is None, then randomly_pick_swap_start is used to
     /// pick a start time.
     pub fn swap_start_and_due_timestamps(
-        start_time_of_day: Option<GlobalTimeOfDay>,
+        start_time_of_day: GlobalTimeOfDay,
         duration: Duration,
         swap_approved_timestamp_seconds: u64,
     ) -> Result<(u64, u64), String> {
         let start_time_of_day = start_time_of_day
-            .unwrap_or_else(Self::randomly_pick_swap_start)
             .seconds_after_utc_midnight
             .ok_or("`seconds_after_utc_midnight` should not be None")?;
         let duration = duration.seconds.ok_or("`seconds` should not be None")?;
@@ -213,31 +162,6 @@ impl CreateServiceNervousSystem {
             .ok_or("`duration` should not be None")?;
 
         Ok((swap_start_timestamp_seconds, swap_due_timestamp_seconds))
-    }
-
-    /// Picks a value uniformly at random in [00:00, 23:45] that is a multiple of 15
-    /// minutes past midnight.
-    pub(crate) fn randomly_pick_swap_start() -> GlobalTimeOfDay {
-        // TODO(NNS1-2296) - Re-enable random swap start time selection using env trait of gov
-        let time_of_day_seconds = 0; // Midnight UTC
-
-        // Round down to nearest multiple of 15 min.
-        let remainder_seconds = time_of_day_seconds % (15 * 60);
-        let seconds_after_utc_midnight = Some(time_of_day_seconds - remainder_seconds);
-
-        GlobalTimeOfDay {
-            seconds_after_utc_midnight,
-        }
-    }
-
-    pub fn to_legacy_sns_init_payload(self) -> Result<SnsInitPayload, String> {
-        let preliminary_result = SnsInitPayload::try_from(self);
-        if let Ok(mut sns_init_payload) = preliminary_result {
-            sns_init_payload.neuron_basket_construction_parameters = None;
-            Ok(sns_init_payload)
-        } else {
-            preliminary_result
-        }
     }
 }
 
@@ -291,10 +215,12 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             transaction_fee,
             token_name,
             token_symbol,
-            token_logo: _, // Not used.
+            token_logo,
         } = ledger_parameters;
 
         let transaction_fee_e8s = transaction_fee.and_then(|tokens| tokens.e8s);
+
+        let token_logo = token_logo.and_then(|image| image.base64_encoding);
 
         let proposal_reject_cost_e8s = governance_parameters
             .proposal_rejection_fee
@@ -460,6 +386,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             neuron_basket_construction_parameters,
             confirmation_text,
             restricted_countries,
+            token_logo,
 
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>
@@ -469,9 +396,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             swap_due_timestamp_seconds: None,
         };
 
-        result
-            .validate_pre_execution()
-            .map_err(|err| err.to_string())?;
+        result.validate_pre_execution()?;
 
         Ok(result)
     }

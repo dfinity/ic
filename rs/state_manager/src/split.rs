@@ -18,7 +18,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout};
-use ic_types::{malicious_flags::MaliciousFlags, PrincipalId, SubnetId};
+use ic_types::{malicious_flags::MaliciousFlags, PrincipalId, SubnetId, Time};
 use scoped_threadpool::Pool;
 use std::{iter::once, path::PathBuf, sync::Arc};
 
@@ -34,12 +34,20 @@ pub fn resolve_ranges_and_split(
     subnet_id: PrincipalId,
     retain: Vec<CanisterIdRange>,
     drop: Vec<CanisterIdRange>,
+    new_subnet_batch_time: Option<Time>,
     metrics_registry: &MetricsRegistry,
     log: ReplicaLogger,
 ) -> Result<(), String> {
     let canister_id_ranges = resolve(retain, drop).map_err(|e| format!("{:?}", e))?;
 
-    split(root, subnet_id, canister_id_ranges, metrics_registry, log)
+    split(
+        root,
+        subnet_id,
+        canister_id_ranges,
+        new_subnet_batch_time,
+        metrics_registry,
+        log,
+    )
 }
 
 /// Loads the latest checkpoint under the given root; splits off the state of
@@ -49,6 +57,7 @@ pub fn split(
     root: PathBuf,
     subnet_id: PrincipalId,
     canister_id_ranges: CanisterIdRanges,
+    new_subnet_batch_time: Option<Time>,
     metrics_registry: &MetricsRegistry,
     log: ReplicaLogger,
 ) -> Result<(), String> {
@@ -80,7 +89,7 @@ pub fn split(
         .map_err(|e| format!("{:?}", e))?;
 
     // Split the state.
-    let split_state = state.split(subnet_id, &routing_table);
+    let split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
 
     // Write the split state as a new checkpoint.
     write_checkpoint(

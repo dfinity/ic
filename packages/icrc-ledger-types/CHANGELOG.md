@@ -9,6 +9,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `icrc1` and `icrc2` types.
 - The `Value` type and the algorithm to compute its hash.
-- The blocks and transactions types for an icrc ledger.
-- The types needed for interacting with the icrc ledgers via an egent (e.g. TransferArg, TransferError)

@@ -76,7 +76,7 @@ pub(crate) async fn fetch_update_file_sha256(
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("SHA256.txt");
 
-    let file_downloader = FileDownloader::new(None);
+    let file_downloader = FileDownloader::new(None).follow_redirects();
     file_downloader
         .download_file(&sha_url, &tmp_file, None)
         .await

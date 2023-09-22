@@ -1,15 +1,23 @@
 //! Utilities to help with testing interleavings of calls to the governance
 //! canister
 use async_trait::async_trait;
-use futures::channel::{
-    mpsc::UnboundedSender as USender,
-    oneshot::{self, Sender as OSender},
+use futures::{
+    channel::{
+        mpsc::{UnboundedReceiver as UReceiver, UnboundedSender as USender},
+        oneshot::{self, Sender as OSender},
+    },
+    StreamExt,
 };
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use ic_nns_governance::{
+    governance::{Environment, HeapGrowthPotential},
+    pb::v1::{ExecuteNnsFunction, GovernanceError},
+};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use std::sync::{atomic, atomic::Ordering as AOrdering};
 
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+pub mod test_data;
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
 /// channel
@@ -51,8 +59,8 @@ impl InterleavingTestLedger {
         }
     }
 
-    // Notifies the observer that a ledger method has been called, and blocks until
-    // it receives a message to continue.
+    /// Notifies the observer that a ledger method has been called, and blocks until
+    /// it receives a message to continue.
     async fn notify(&self, msg: LedgerMessage) -> Result<(), NervousSystemError> {
         let (tx, rx) = oneshot::channel::<Result<(), NervousSystemError>>();
         self.observer.unbounded_send((msg, tx)).unwrap();
@@ -102,5 +110,132 @@ impl IcpLedger for InterleavingTestLedger {
 
     fn canister_id(&self) -> CanisterId {
         self.underlying.canister_id()
+    }
+}
+
+/// Reifies the methods of the Environment trait, such that they can be sent over a
+/// channel
+#[derive(Debug)]
+pub enum EnvironmentMessage {
+    CallCanisterMethod {
+        target: CanisterId,
+        method_name: String,
+        request: Vec<u8>,
+    },
+}
+
+pub type EnvironmentControlMessage = (
+    EnvironmentMessage,
+    OSender<Result<(), (Option<i32>, String)>>,
+);
+
+pub type EnvironmentObserver = USender<EnvironmentControlMessage>;
+
+/// Drains an UnboundedReceiver channel by sending `Ok()` signals for all incoming
+/// EnvironmentControlMessage messages, ignoring the response.
+pub async fn drain_receiver_channel(receiver_channel: &mut UReceiver<EnvironmentControlMessage>) {
+    // Drain the channel to finish the test.
+    while let Some((_msg, environment_control_message)) = receiver_channel.next().await {
+        environment_control_message
+            .send(Ok(()))
+            .expect("Error draining the receiver_channel");
+    }
+}
+
+/// A mock environment to test interleavings of governance method calls.
+pub struct InterleavingTestEnvironment {
+    underlying: Box<dyn Environment>,
+    observer: EnvironmentObserver,
+}
+impl InterleavingTestEnvironment {
+    /// This environment intercepts calls to an underlying environment implementation,
+    /// sends the reified calls over the provided observer channel, and
+    /// blocks. The receiver side of the channel can then inspect the
+    /// results, and decide at what point to go ahead with the call to the
+    /// underlying environment, or, alternatively, return an error. This is done
+    /// through a one-shot channel, the sender side of which is sent to the
+    /// observer.
+    pub fn new(underlying: Box<dyn Environment>, observer: EnvironmentObserver) -> Self {
+        Self {
+            underlying,
+            observer,
+        }
+    }
+
+    /// Notifies the observer that an environment method has been called, and blocks until
+    /// it receives a message to continue.
+    async fn notify(&self, msg: EnvironmentMessage) -> Result<(), (Option<i32>, String)> {
+        let (tx, rx) = oneshot::channel::<Result<(), (Option<i32>, String)>>();
+        self.observer.unbounded_send((msg, tx)).unwrap();
+        rx.await
+            .map_err(|_e| (None, "Operation unavailable".to_string()))?
+    }
+
+    /// Closes the observer channel so the UnboundedReceiver can terminate. This
+    /// should be called after the InterleavingTestEnvironment is no longer being used
+    /// in the test, and no other calls to the underlying Ledger will be issued.
+    pub fn close_channel(&self) {
+        self.observer.close_channel()
+    }
+}
+
+#[async_trait]
+impl Environment for InterleavingTestEnvironment {
+    /// Since this is not asynchronous we cannot interleave calls. Just forward
+    /// the call to the underlying trait
+    fn now(&self) -> u64 {
+        atomic::fence(AOrdering::SeqCst);
+        self.underlying.now()
+    }
+
+    fn random_u64(&mut self) -> u64 {
+        atomic::fence(AOrdering::SeqCst);
+        self.underlying.random_u64()
+    }
+
+    fn random_byte_array(&mut self) -> [u8; 32] {
+        unimplemented!()
+    }
+
+    fn execute_nns_function(
+        &self,
+        _proposal_id: u64,
+        _update: &ExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
+        unimplemented!()
+    }
+
+    /// Since this is not asynchronous we cannot interleave calls. Just forward
+    /// the call to the underlying trait
+    fn heap_growth_potential(&self) -> HeapGrowthPotential {
+        atomic::fence(AOrdering::SeqCst);
+        self.underlying.heap_growth_potential()
+    }
+
+    async fn call_canister_method(
+        &mut self,
+        target: CanisterId,
+        method_name: &str,
+        request: Vec<u8>,
+    ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        let msg = EnvironmentMessage::CallCanisterMethod {
+            target,
+            method_name: method_name.to_string(),
+            request: request.clone(),
+        };
+        atomic::fence(AOrdering::SeqCst);
+        self.notify(msg).await?;
+        self.underlying
+            .call_canister_method(target, method_name, request)
+            .await
+    }
+}
+
+/// Closes the InterleavingTestLedger's observer channel when InterleavingTestLedger
+/// exits its scope. `close_channel` is idempotent so multiple calls will not cause
+/// any unexpected panics.
+impl Drop for InterleavingTestEnvironment {
+    fn drop(&mut self) {
+        self.close_channel()
     }
 }

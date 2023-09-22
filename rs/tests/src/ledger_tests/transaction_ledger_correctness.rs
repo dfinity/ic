@@ -562,6 +562,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
                         to,
                         amount: amnt,
                         fee,
+                        ..
                     } = trans.operation
                     {
                         assert_eq!(from, from_account);

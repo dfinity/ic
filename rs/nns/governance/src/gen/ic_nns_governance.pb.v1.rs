@@ -1704,6 +1704,8 @@ pub struct DerivedProposalInformation {
 /// the swap canister.
 ///
 /// (See Governance::fetch_swap_background_information for how this is compiled.)
+///
+/// Obsolete. Superseded by newer fields.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2256,6 +2258,11 @@ pub mod create_service_nervous_system {
         pub start_time: ::core::option::Option<::ic_nervous_system_proto::pb::v1::GlobalTimeOfDay>,
         #[prost(message, optional, tag = "10")]
         pub duration: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        /// The amount that the Neuron's Fund will collectively spend in maturity on
+        /// the swap.
+        #[prost(message, optional, tag = "11")]
+        pub neurons_fund_investment_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
     }
     /// Nested message and enum types in `SwapParameters`.
     pub mod swap_parameters {
@@ -2374,8 +2381,8 @@ pub mod create_service_nervous_system {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
     /// Current set of neurons.
-    #[prost(map = "fixed64, message", tag = "1")]
-    pub neurons: ::std::collections::HashMap<u64, Neuron>,
+    #[prost(btree_map = "fixed64, message", tag = "1")]
+    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
     /// Proposals.
     #[prost(btree_map = "uint64, message", tag = "2")]
     pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
@@ -2460,6 +2467,8 @@ pub struct Governance {
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "19")]
     pub spawning_neurons: ::core::option::Option<bool>,
+    #[prost(message, optional, tag = "20")]
+    pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2534,7 +2543,8 @@ pub mod governance {
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
-    /// requested
+    /// requested. For bucketed metrics, keys are bucket IDs, i.e., number of full
+    /// half-year dissolve delay intervals of neurons counted towards this bucket.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[compare_default]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2573,8 +2583,49 @@ pub mod governance {
         pub community_fund_total_staked_e8s: u64,
         #[prost(uint64, tag = "17")]
         pub community_fund_total_maturity_e8s_equivalent: u64,
+        #[prost(uint64, tag = "25")]
+        pub neurons_fund_total_active_neurons: u64,
         #[prost(uint64, tag = "18")]
         pub total_locked_e8s: u64,
+        #[prost(uint64, tag = "19")]
+        pub total_maturity_e8s_equivalent: u64,
+        #[prost(uint64, tag = "20")]
+        pub total_staked_maturity_e8s_equivalent: u64,
+        #[prost(map = "uint64, double", tag = "21")]
+        pub dissolving_neurons_staked_maturity_e8s_equivalent_buckets:
+            ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "22")]
+        pub dissolving_neurons_staked_maturity_e8s_equivalent_sum: u64,
+        #[prost(map = "uint64, double", tag = "23")]
+        pub not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets:
+            ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "24")]
+        pub not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: u64,
+    }
+    /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
+    /// proposal is in progress. We only want one of these to be happening at the same time,
+    /// because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
+    /// unique. In particular, the result of checking that the proposal currently being made
+    /// would be unique is liable to becoming invalid during an .await.
+    ///
+    /// This is a temporary measure, because OSTS is part of the SNS flow that will
+    /// be replaced by 1-proposal very soon.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct MakingSnsProposal {
+        #[prost(message, optional, tag = "1")]
+        pub proposer_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
+        #[prost(message, optional, tag = "2")]
+        pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        #[prost(message, optional, tag = "3")]
+        pub proposal: ::core::option::Option<super::Proposal>,
     }
 }
 /// Proposals with restricted voting are not included unless the caller

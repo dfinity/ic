@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde::{Deserialize, Serialize};
 
 /// Payload to upgrade the root canister.

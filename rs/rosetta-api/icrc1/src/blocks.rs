@@ -1,18 +1,21 @@
+use crate::known_tags::{BIGNUM, SELF_DESCRIBED};
 use crate::{Block, Transaction};
 use ciborium::into_writer;
 use ciborium::value::{Integer, Value as CiboriumValue};
 use ic_ledger_core::block::{BlockType, EncodedBlock};
+use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc3::transactions::GenericTransaction;
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
+use thiserror::Error;
 
 const CBOR_TRANSACTION_KEY: &str = "tx";
 
-// Tag for Self-described CBOR; see Section 3.4.6 https://www.rfc-editor.org/rfc/rfc8949.html
-const SELF_DESCRIBED_CBOR_TAG: u64 = 55799;
+/// The maximum allowed value nesting within a CBOR value.
+const VALUE_DEPTH_LIMIT: usize = 64;
 
 fn generic_block_to_ciborium_value(generic_block: GenericBlock) -> Result<ciborium::Value, String> {
     fn extract_value(value: GenericBlock) -> Result<ciborium::Value, String> {
@@ -47,7 +50,7 @@ fn generic_block_to_ciborium_value(generic_block: GenericBlock) -> Result<cibori
         }
     }
     Ok(ciborium::Value::Tag(
-        SELF_DESCRIBED_CBOR_TAG,
+        SELF_DESCRIBED,
         Box::new(extract_value(generic_block)?),
     ))
 }
@@ -64,44 +67,74 @@ pub fn generic_block_to_encoded_block(generic_block: GenericBlock) -> Result<Enc
 pub fn encoded_block_to_generic_block(encoded_block: &EncodedBlock) -> GenericBlock {
     let value: CiboriumValue =
         ciborium::de::from_reader(encoded_block.as_slice()).expect("failed to decode block");
-    icrc1_block_from_value(&value)
+    icrc1_block_from_value(value, 0).expect("failed to decode encoded block")
 }
 
-fn icrc1_block_from_value(value: &CiboriumValue) -> GenericBlock {
+#[derive(Debug, Error)]
+enum ValueDecodingError {
+    #[error("CBOR value depth must not exceed {max_depth}")]
+    DepthLimitExceeded { max_depth: usize },
+    #[error("unsupported CBOR map key value {0:?} (only text keys are allowed)")]
+    UnsupportedKeyType(String),
+    #[error("unsupported CBOR tag {0} (value = {1:?})")]
+    UnsupportedTag(u64, CiboriumValue),
+    #[error("unsupported CBOR value value {0}")]
+    UnsupportedValueType(&'static str),
+    #[error("cannot decode CBOR value {0:?}")]
+    UnsupportedValue(CiboriumValue),
+}
+
+fn icrc1_block_from_value(
+    value: CiboriumValue,
+    depth: usize,
+) -> Result<GenericBlock, ValueDecodingError> {
+    if depth == VALUE_DEPTH_LIMIT {
+        return Err(ValueDecodingError::DepthLimitExceeded {
+            max_depth: VALUE_DEPTH_LIMIT,
+        });
+    }
+
     match value {
         CiboriumValue::Integer(int) => {
-            let v: i128 = (*int).into();
+            let v: i128 = int.into();
             let uv: u128 = v
                 .try_into()
-                .expect("blocks should not contain negative integers");
-            GenericValue::Int(uv.into())
+                .map_err(|_| ValueDecodingError::UnsupportedValueType("negative integers"))?;
+            Ok(GenericValue::Int(uv.into()))
         }
-        CiboriumValue::Bytes(bytes) => GenericValue::Blob(ByteBuf::from(bytes.to_vec())),
-        CiboriumValue::Text(text) => GenericValue::Text(text.to_string()),
-        CiboriumValue::Array(values) => {
-            let mut vec = Vec::new();
-            for v in values.iter() {
-                vec.push(icrc1_block_from_value(v));
-            }
-            GenericValue::Array(vec)
+        CiboriumValue::Bytes(bytes) => Ok(GenericValue::Blob(ByteBuf::from(bytes))),
+        CiboriumValue::Text(text) => Ok(GenericValue::Text(text)),
+        CiboriumValue::Array(values) => Ok(GenericValue::Array(
+            values
+                .into_iter()
+                .map(|v| icrc1_block_from_value(v, depth + 1))
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        CiboriumValue::Map(map) => Ok(GenericValue::Map(
+            map.into_iter()
+                .map(|(k, v)| {
+                    let key = k
+                        .into_text()
+                        .map_err(|k| ValueDecodingError::UnsupportedKeyType(format!("{:?}", k)))?;
+                    Ok((key, icrc1_block_from_value(v, depth + 1)?))
+                })
+                .collect::<Result<BTreeMap<_, _>, _>>()?,
+        )),
+        CiboriumValue::Bool(_) => Err(ValueDecodingError::UnsupportedValueType("bool")),
+        CiboriumValue::Null => Err(ValueDecodingError::UnsupportedValueType("null")),
+        CiboriumValue::Float(_) => Err(ValueDecodingError::UnsupportedValueType("float")),
+        CiboriumValue::Tag(SELF_DESCRIBED, value) => icrc1_block_from_value(*value, depth + 1),
+        CiboriumValue::Tag(BIGNUM, value) => {
+            let value_bytes = value
+                .into_bytes()
+                .map_err(|_| ValueDecodingError::UnsupportedValueType("non-bytes bignums"))?;
+            Ok(GenericValue::Nat(candid::Nat(
+                num_bigint::BigUint::from_bytes_be(&value_bytes),
+            )))
         }
-        CiboriumValue::Map(map) => {
-            let mut result = BTreeMap::new();
-            for (k, v) in map.iter() {
-                let key_id = match k {
-                    CiboriumValue::Text(text) => text.to_string(),
-                    _ => panic!("icrc1 block value key should be a string, not: {:?}", k),
-                };
-                result.insert(key_id, icrc1_block_from_value(v));
-            }
-
-            GenericValue::Map(result)
-        }
-        CiboriumValue::Bool(_) => panic!("boolean values not supported in icrc1 blocks"),
-        CiboriumValue::Null => panic!("Null values not supported in icrc1 blocks"),
-        CiboriumValue::Float(_) => panic!("float values not supported in icrc1 blocks"),
-        CiboriumValue::Tag(_tag, value) => icrc1_block_from_value(value),
-        _ => panic!("unsupported value type: {:?}", value),
+        CiboriumValue::Tag(tag, value) => Err(ValueDecodingError::UnsupportedTag(tag, *value)),
+        // NB. ciborium::value::Value is marked as #[non_exhaustive]
+        other => Err(ValueDecodingError::UnsupportedValue(other)),
     }
 }
 
@@ -119,14 +152,14 @@ pub fn generic_transaction_from_generic_block(
     }
 }
 
-impl TryFrom<GenericBlock> for Block {
+impl<Tokens: TokensType> TryFrom<GenericBlock> for Block<Tokens> {
     type Error = String;
     fn try_from(value: GenericBlock) -> Result<Self, Self::Error> {
-        Block::decode(generic_block_to_encoded_block(value)?)
+        Self::decode(generic_block_to_encoded_block(value)?)
     }
 }
 
-impl TryFrom<GenericBlock> for Transaction {
+impl<Tokens: TokensType> TryFrom<GenericBlock> for Transaction<Tokens> {
     type Error = String;
     fn try_from(value: GenericBlock) -> Result<Self, Self::Error> {
         Ok(Block::try_from(value)?.transaction)

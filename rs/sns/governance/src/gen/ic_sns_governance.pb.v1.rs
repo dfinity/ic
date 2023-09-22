@@ -908,7 +908,7 @@ pub struct ProposalData {
     /// which normally only happens after rewards are distributed.
     #[prost(bool, tag = "16")]
     pub is_eligible_for_rewards: bool,
-    /// The initial voting period of the proposal, identical in meaning to the one in  
+    /// The initial voting period of the proposal, identical in meaning to the one in
     /// NervousSystemParameters, and duplicated here so the parameters can be changed
     /// without affecting existing proposals.
     #[prost(uint64, tag = "17")]
@@ -2812,6 +2812,36 @@ pub struct GetMaturityModulationRequest {}
 pub struct GetMaturityModulationResponse {
     #[prost(message, optional, tag = "1")]
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
+}
+/// A request to add maturity to a neuron. The associated endpoint is only
+/// available when governance is compiled with the `test` feature enabled.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AddMaturityRequest {
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<NeuronId>,
+    #[prost(uint64, optional, tag = "2")]
+    pub amount_e8s: ::core::option::Option<u64>,
+}
+/// The response to a request to add maturity to a neuron. The associated endpoint is only
+/// available when governance is compiled with the `test` feature enabled.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AddMaturityResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub new_maturity_e8s: ::core::option::Option<u64>,
 }
 /// A Ledger subaccount.
 #[derive(

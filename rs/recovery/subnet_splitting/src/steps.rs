@@ -3,23 +3,26 @@ use crate::{
     layout::Layout,
     state_tool_helper::StateToolHelper,
     target_subnet::TargetSubnet,
-    utils::{find_expected_state_hash_for_subnet_id, get_state_hash},
+    utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
+    validation::validate_artifacts,
 };
 
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
+    cli::consent_given,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::rsync,
-    replay_helper,
+    registry_helper::VersionedRecoveryResult,
     steps::Step,
-    util::{block_on, parse_hex_str},
+    util::parse_hex_str,
     Recovery, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::split::resolve_ranges_and_split;
 use ic_types::Height;
-use slog::{info, Logger};
+use slog::{error, info, Logger};
 use url::Url;
 
 use std::net::IpAddr;
@@ -83,7 +86,6 @@ impl StateSplitStrategy {
 pub(crate) struct SplitStateStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) state_split_strategy: StateSplitStrategy,
-    pub(crate) state_tool_helper: StateToolHelper,
     pub(crate) layout: Layout,
     pub(crate) target_subnet: TargetSubnet,
     pub(crate) logger: Logger,
@@ -117,6 +119,12 @@ impl Step for SplitStateStep {
             self.subnet_id.get(),
             self.state_split_strategy.retained_canister_id_ranges(),
             self.state_split_strategy.dropped_canister_id_ranges(),
+            match self.target_subnet {
+                TargetSubnet::Source => None,
+                TargetSubnet::Destination => Some(get_batch_time_from_cup(
+                    &self.layout.pre_split_source_cup_file(),
+                )?),
+            },
             &MetricsRegistry::new(),
             self.logger.clone().into(),
         )
@@ -127,13 +135,11 @@ impl Step for SplitStateStep {
         let latest_checkpoint_dir = self.layout.latest_checkpoint_dir(self.target_subnet)?;
         let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
 
-        self.state_tool_helper
-            .compute_manifest(&latest_checkpoint_dir, &manifest_path)?;
+        StateToolHelper::compute_manifest(&latest_checkpoint_dir, &manifest_path)?;
 
         // 3. Validate the manifest
         info!(self.logger, "Validating the manifest");
-        self.state_tool_helper
-            .verify_manifest(&manifest_path)
+        StateToolHelper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
 
         let expected_state_hash = find_expected_state_hash_for_subnet_id(
@@ -142,6 +148,12 @@ impl Step for SplitStateStep {
         )?;
         let actual_state_hash = get_state_hash(&latest_checkpoint_dir)?;
 
+        info!(
+            self.logger,
+            "Checking if the state hash after split {} matches the expected state hash {}",
+            actual_state_hash,
+            expected_state_hash
+        );
         if actual_state_hash != expected_state_hash {
             return Err(RecoveryError::ValidationFailed(format!(
                 "State hash after split {} doesn't match the expected state hash {}",
@@ -167,6 +179,7 @@ pub(crate) struct ComputeExpectedManifestsStep {
     pub(crate) destination_subnet_id: SubnetId,
     pub(crate) canister_id_ranges_to_move: Vec<CanisterIdRange>,
     pub(crate) layout: Layout,
+    pub(crate) subnet_type: SubnetType,
 }
 
 impl Step for ComputeExpectedManifestsStep {
@@ -182,16 +195,13 @@ impl Step for ComputeExpectedManifestsStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        self.state_tool_helper.compute_manifest(
-            &self.layout.latest_checkpoint_dir(TargetSubnet::Source)?,
-            self.layout.original_state_manifest_file(),
-        )?;
-
         self.state_tool_helper.split_manifest(
             self.layout.original_state_manifest_file(),
             self.source_subnet_id,
             self.destination_subnet_id,
+            get_batch_time_from_cup(&self.layout.pre_split_source_cup_file())?,
             &self.canister_id_ranges_to_move,
+            self.subnet_type,
             self.layout.expected_manifests_file(),
         )
     }
@@ -215,42 +225,37 @@ impl Step for ValidateCUPStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let work_dir = self.layout.work_dir(TargetSubnet::Source);
-
         // 1. Get the subnet's public key using `ic-agent` and persist it at the disk
+        info!(self.logger, "Getting the NNS signed State Tree");
         let agent_helper = AgentHelper::new(
             &self.nns_url,
-            self.layout.nns_public_key_file(),
+            Some(self.layout.nns_public_key_file()),
             self.logger.clone(),
         )?;
 
         let pruned_state_tree = agent_helper.read_subnet_data(self.subnet_id)?;
-        agent_helper
-            .validate_state_tree(&pruned_state_tree)
-            .map_err(|err| {
-                RecoveryError::validation_failed("Failed to validate the state tree", err)
-            })?;
-
         pruned_state_tree.save_to_file(self.layout.pruned_state_tree_file())?;
         pruned_state_tree
             .save_public_key_to_file(&self.layout.subnet_public_key_file(self.subnet_id))?;
 
-        // 2. Run ic-replay to verify the CUP
-        block_on(replay_helper::replay(
+        // 2. Compute the state manifest
+        info!(self.logger, "Computing the state manifest");
+        let latest_checkpoint_dir = self.layout.latest_checkpoint_dir(TargetSubnet::Source)?;
+
+        StateToolHelper::compute_manifest(
+            &latest_checkpoint_dir,
+            self.layout.original_state_manifest_file(),
+        )?;
+
+        // 3. Validate all the artifacts (state tree, CUP, state manifest)
+        validate_artifacts(
+            self.layout.pruned_state_tree_file(),
+            Some(self.layout.nns_public_key_file()),
+            self.layout.pre_split_source_cup_file(),
+            self.layout.original_state_manifest_file(),
             self.subnet_id,
-            work_dir.join("ic.json5"),
-            /*canister_caller_id=*/ None,
-            self.layout.data_dir(TargetSubnet::Source),
-            Some(ic_replay::cmd::SubCommand::VerifySubnetCUP(
-                ic_replay::cmd::VerifySubnetCUPCmd {
-                    cup_file: self.layout.cup_file(TargetSubnet::Source),
-                    public_key_file: self.layout.subnet_public_key_file(self.subnet_id),
-                },
-            )),
-            work_dir.join("cup_validation_result.txt"),
-        ))
-        .map(|_| ())
-        .map_err(|err| RecoveryError::validation_failed("Failed to validate CUP", err))
+            &self.logger,
+        )
     }
 }
 
@@ -276,5 +281,36 @@ impl Step for WaitForCUPStep {
         let new_cup_height = Recovery::get_recovery_height(Height::from(state_height));
 
         Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, new_cup_height, state_hash)
+    }
+}
+
+pub(crate) struct ReadRegistryStep<T: std::fmt::Debug, F: Fn() -> VersionedRecoveryResult<T>> {
+    pub(crate) logger: Logger,
+    pub(crate) label: String,
+    pub(crate) interactive: bool,
+    pub(crate) querier: F,
+}
+
+impl<T: std::fmt::Debug, F: Fn() -> VersionedRecoveryResult<T>> Step for ReadRegistryStep<T, F> {
+    fn descr(&self) -> String {
+        format!("Read Registry to get the most recent {}", self.label)
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        loop {
+            match (self.querier)() {
+                Ok((registry_version, value)) => info!(
+                    self.logger,
+                    "{} at registry version {}: {:#?}", self.label, registry_version, value,
+                ),
+                Err(err) => error!(self.logger, "Failed getting {}, error: {}", self.label, err),
+            }
+
+            if !self.interactive || !consent_given(&self.logger, "Read registry again?") {
+                break;
+            }
+        }
+
+        Ok(())
     }
 }

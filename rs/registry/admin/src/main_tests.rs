@@ -56,13 +56,13 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "--swap-minimum-participants",
             "42",
             "--swap-minimum-icp",
-            "250_tokens",
+            "123_tokens",
             "--swap-maximum-icp",
-            "1000_tokens",
+            "65000_tokens",
             "--swap-minimum-participant-icp",
-            "2_tokens",
+            "650_tokens",
             "--swap-maximum-participant-icp",
-            "100_tokens",
+            "6500_tokens",
             "--confirmation-text",
             "I confirm that I am a human",
             "--restrict-swap-in-country",
@@ -77,6 +77,8 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "10:01 UTC",
             "--swap-duration",
             "7 days",
+            "--neurons-fund-investment-icp",
+            "2_tokens",
             "--transaction-fee",
             "10_000_e8s",
             "--token-name",
@@ -100,7 +102,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "--neuron-maximum-dissolve-delay-bonus",
             "50%",
             "--neuron-maximum-age-for-age-bonus",
-            "2922d", // 8 years (including lear days)
+            "2922d", // 8 years (including leap days)
             "--neuron-maximum-age-bonus",
             "10%",
             "--initial-voting-reward-rate",
@@ -142,16 +144,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
             ],
             swap_parameters: Some(SwapParameters {
                 minimum_participants: Some(42),
-                minimum_icp: Some(nervous_system_pb::Tokens {
-                    e8s: Some(250 * E8),
-                }),
-                maximum_icp: Some(nervous_system_pb::Tokens {
-                    e8s: Some(1_000 * E8),
-                }),
-                minimum_participant_icp: Some(nervous_system_pb::Tokens { e8s: Some(2 * E8) }),
-                maximum_participant_icp: Some(nervous_system_pb::Tokens {
-                    e8s: Some(100 * E8),
-                }),
+                minimum_icp: Some(nervous_system_pb::Tokens::from_tokens(123)),
+                maximum_icp: Some(nervous_system_pb::Tokens::from_tokens(65000)),
+                minimum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(650)),
+                maximum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(6500)),
                 neuron_basket_construction_parameters: Some(
                     swap_parameters::NeuronBasketConstructionParameters {
                         count: Some(3),
@@ -168,6 +164,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 duration: Some(nervous_system_pb::Duration {
                     seconds: Some(7 * SECONDS_PER_DAY),
                 }),
+                neurons_fund_investment_icp: Some(nervous_system_pb::Tokens::from_tokens(2))
             }),
             ledger_parameters: Some(LedgerParameters {
                 transaction_fee: Some(nervous_system_pb::Tokens { e8s: Some(10_000) }),
@@ -265,4 +262,120 @@ fn convert_from_flags_to_create_service_nervous_system() {
             }),
         }
     );
+}
+
+#[test]
+fn convert_from_flags_to_create_service_nervous_system_without_start_time() {
+    let logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
+    let token_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAAAAAAEAAEvUrSNAAAAAElFTkSuQmCC";
+    assert_ne!(logo, token_logo);
+
+    let flags = ProposeToCreateServiceNervousSystemCmd::parse_from(
+        [
+            "propose-to-create-service-nervous-system",
+            "--name",
+            "Daniel Wong",
+            "--description",
+            "The best software engineer at DFINITY.",
+            "--url",
+            "https://www.example.com",
+            "--logo",
+            logo,
+            "--fallback-controller-principal-id",
+            &PrincipalId::new_user_test_id(354_886).to_string(),
+            "--fallback-controller-principal-id",
+            &PrincipalId::new_user_test_id(354_887).to_string(),
+            "--dapp-canister",
+            &CanisterId::from_u64(800_219).to_string(),
+            "--dapp-canister",
+            &CanisterId::from_u64(800_220).to_string(),
+            // Developer 1
+            "--developer-neuron-controller",
+            &PrincipalId::new_user_test_id(308_651).to_string(),
+            "--developer-neuron-dissolve-delay",
+            "52w",
+            "--developer-neuron-memo",
+            "0",
+            "--developer-neuron-stake",
+            "100_tokens",
+            "--developer-neuron-vesting-period",
+            "104w",
+            // Developer 2
+            "--developer-neuron-controller",
+            &PrincipalId::new_user_test_id(598_815).to_string(),
+            "--developer-neuron-dissolve-delay",
+            "26w",
+            "--developer-neuron-memo",
+            "1",
+            "--developer-neuron-stake",
+            "101_tokens",
+            "--developer-neuron-vesting-period",
+            "52w",
+            "--treasury-amount",
+            "1_000_tokens",
+            "--swap-amount",
+            "1_234_tokens",
+            "--swap-minimum-participants",
+            "42",
+            "--swap-minimum-icp",
+            "123_tokens",
+            "--swap-maximum-icp",
+            "65000_tokens",
+            "--swap-minimum-participant-icp",
+            "650_tokens",
+            "--swap-maximum-participant-icp",
+            "6500_tokens",
+            "--confirmation-text",
+            "I confirm that I am a human",
+            "--restrict-swap-in-country",
+            "CH",
+            "--restrict-swap-in-country",
+            "US",
+            "--swap-neuron-count",
+            "3",
+            "--swap-neuron-dissolve-delay",
+            "6w",
+            "--swap-duration",
+            "7 days",
+            "--neurons-fund-investment-icp",
+            "2_tokens",
+            "--transaction-fee",
+            "10_000_e8s",
+            "--token-name",
+            "Legitimate Integration Techniques",
+            "--token-symbol",
+            "LIT",
+            "--token-logo-url",
+            token_logo,
+            "--proposal-rejection-fee",
+            "0.1_tokens",
+            "--proposal-initial-voting-period",
+            "1d",
+            "--proposal-wait-for-quiet-deadline-increase",
+            "1h",
+            "--neuron-minimum-stake",
+            "1_tokens",
+            "--neuron-minimum-dissolve-delay-to-vote",
+            "4w",
+            "--neuron-maximum-dissolve-delay",
+            "1461d", // 4 year (including leap day)
+            "--neuron-maximum-dissolve-delay-bonus",
+            "50%",
+            "--neuron-maximum-age-for-age-bonus",
+            "2922d", // 8 years (including leap days)
+            "--neuron-maximum-age-bonus",
+            "10%",
+            "--initial-voting-reward-rate",
+            "10.5%",
+            "--final-voting-reward-rate",
+            "5.25%",
+            "--voting-reward-rate-transition-duration",
+            "4383d", // 12 years (including leap days).
+        ]
+        .into_iter(),
+    );
+
+    let result = CreateServiceNervousSystem::try_from(flags).unwrap();
+
+    assert_eq!(result.swap_parameters.unwrap().start_time, None);
 }

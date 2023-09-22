@@ -7,6 +7,7 @@
 1. `bazel run //:python-requirements.update`
 1. commit `requirements.in` and `requirements.txt`
 
+
 # How to install python dependencies from `requirements.txt`
 - `pip-sync` (will also uninstall unneeded dependencies)
 - If you get permission errors, run: `pip-sync --user`

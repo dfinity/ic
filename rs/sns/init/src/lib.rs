@@ -1,13 +1,15 @@
 use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
-    FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload,
+    FractionalDeveloperVotingPower as FractionalDVP, NeuronsFundParticipants, SnsInitPayload,
+    SwapDistribution,
 };
-use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index::InitArgs as IndexInitArgs;
-use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_common::E8;
+use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
@@ -22,15 +24,17 @@ use ic_sns_governance::{
     types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
-use ic_sns_swap::pb::v1::Init as SwapInit;
-use icrc_ledger_types::icrc1::account::Account;
+use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
+use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
 use isocountry::CountryCode;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+use pb::v1::DappCanisters;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     str::FromStr,
+    string::ToString,
 };
 
 pub mod distributions;
@@ -63,10 +67,16 @@ pub const MIN_CONFIRMATION_TEXT_LENGTH: usize = 1;
 /// The maximum number of fallback controllers can be included in the SnsInitPayload.
 pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 
+/// The maximum amount of ICP that can be contributed to a decentralization swap.
+/// Aka, the ceiling for the value `max_icp`.
+pub const MAX_TOTAL_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
+
+pub const ICRC1_TOKEN_LOGO_KEY: &str = "icrc1:logo";
+
 pub enum RestrictedCountriesValidationError {
     EmptyList,
     TooManyItems(usize),
-    NotIsoComplient(String),
+    NotIsoCompliant(String),
     ContainsDuplicates(String),
 }
 
@@ -89,7 +99,7 @@ impl ToString for RestrictedCountriesValidationError {
                     num_items,
                 )
             }
-            Self::NotIsoComplient(item) => {
+            Self::NotIsoCompliant(item) => {
                 format!("must include only ISO 3166-1 alpha-2 country codes, found '{item}'",)
             }
             Self::ContainsDuplicates(item) => {
@@ -155,6 +165,20 @@ impl From<NeuronBasketConstructionParametersValidationError> for Result<(), Stri
     }
 }
 
+impl From<NeuronsFundParticipants> for ic_sns_swap::pb::v1::NeuronsFundParticipants {
+    fn from(value: NeuronsFundParticipants) -> Self {
+        Self {
+            cf_participants: value
+                .participants
+                .iter()
+                .map(|cf_participant| ic_sns_swap::pb::v1::CfParticipant {
+                    hotkey_principal: cf_participant.hotkey_principal.clone(),
+                    cf_neurons: cf_participant.cf_neurons.clone(),
+                })
+                .collect(),
+        }
+    }
+}
 // Token Symbols that can not be used.
 lazy_static! {
     static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
@@ -209,6 +233,7 @@ impl SnsInitPayload {
                 .final_reward_rate_basis_points,
             token_name: None,
             token_symbol: None,
+            token_logo: None,
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
             neuron_minimum_dissolve_delay_to_vote_seconds: nervous_system_parameters_default
@@ -247,11 +272,20 @@ impl SnsInitPayload {
     }
 
     /// This gives us some values that work for testing but would not be useful
-    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    /// in a real world scenario. They are only meant to validate, not be sensible.
+    pub fn with_valid_legacy_values_for_testing() -> Self {
+        Self::with_valid_values_for_testing().strip_non_legacy_parameters()
+    }
+
+    /// This gives us some values that work for testing but would not be useful
+    /// in a real world scenario. They are only meant to validate, not be sensible.
+    /// These values are "post-execution", meaning they can be used to
+    /// immediately create an SNS.  
     pub fn with_valid_values_for_testing() -> Self {
         Self {
             token_symbol: Some("TEST".to_string()),
             token_name: Some("PlaceHolder".to_string()),
+            token_logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             initial_token_distribution: Some(FractionalDeveloperVotingPower(
                 FractionalDVP::with_valid_values_for_testing(),
             )),
@@ -260,6 +294,33 @@ impl SnsInitPayload {
             name: Some("ServiceNervousSystemTest".to_string()),
             url: Some("https://internetcomputer.org/".to_string()),
             description: Some("Description of an SNS Project".to_string()),
+
+            // TODO(NNS1-2436): Set `confirmation_text` to a non-None value and
+            // fix the tests that assume it will be None.
+            confirmation_text: None,
+            restricted_countries: Some(Countries {
+                iso_codes: vec!["CH".to_string()],
+            }),
+            dapp_canisters: Some(DappCanisters {
+                canisters: vec![Canister {
+                    id: Some(CanisterId::from_u64(1000).get()),
+                }],
+            }),
+            min_participants: Some(5),
+            min_icp_e8s: Some(12_300_000_000),
+            max_icp_e8s: Some(65_000_000_000),
+            min_participant_icp_e8s: Some(6_500_000_000),
+            max_participant_icp_e8s: Some(65_000_000_000),
+            swap_start_timestamp_seconds: Some(10_000_000),
+            swap_due_timestamp_seconds: Some(10_086_400),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 5,
+                dissolve_delay_interval_seconds: 10_001,
+            }),
+            nns_proposal_id: Some(10),
+            neurons_fund_participants: Some(NeuronsFundParticipants {
+                participants: vec![],
+            }),
             ..SnsInitPayload::with_default_values()
         }
     }
@@ -271,17 +332,17 @@ impl SnsInitPayload {
         sns_canister_ids: &SnsCanisterIds,
         deployed_version: Option<Version>,
         testflight: bool,
-    ) -> anyhow::Result<SnsCanisterInitPayloads> {
-        if self.is_legacy_flow() {
+    ) -> Result<SnsCanisterInitPayloads, String> {
+        if self.is_legacy_flow()? {
             self.validate_legacy_init()?;
         } else {
-            self.validate_pre_execution()?;
+            self.validate_post_execution()?;
         }
         Ok(SnsCanisterInitPayloads {
             governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids, testflight),
-            swap: self.swap_init_args(sns_canister_ids),
+            swap: self.swap_init_args(sns_canister_ids)?,
             index: self.index_init_args(sns_canister_ids),
         })
     }
@@ -291,7 +352,7 @@ impl SnsInitPayload {
         &self,
         sns_canister_ids: &SnsCanisterIds,
         deployed_version: Option<Version>,
-    ) -> anyhow::Result<Governance> {
+    ) -> Result<Governance, String> {
         let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
@@ -306,7 +367,7 @@ impl SnsInitPayload {
         governance.neurons = self.get_initial_neurons(&parameters)?;
 
         governance.sns_initialization_parameters = serde_yaml::to_string(self)
-            .map_err(|e| anyhow!(format!("Could not create initialization parameters {}", e)))?;
+            .map_err(|e| format!("Could not create initialization parameters {}", e))?;
 
         Ok(governance)
     }
@@ -334,7 +395,7 @@ impl SnsInitPayload {
     fn ledger_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<LedgerArgument> {
+    ) -> Result<LedgerArgument, String> {
         let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
         let token_symbol = self
             .token_symbol
@@ -347,47 +408,41 @@ impl SnsInitPayload {
             .expect("Expected token_name to be set")
             .clone();
 
-        let minting_account = Account {
-            owner: sns_canister_ids.governance.0,
-            subaccount: None,
-        };
+        let mut payload_builder =
+            LedgerInitArgsBuilder::with_symbol_and_name(token_symbol, token_name)
+                .with_minting_account(sns_canister_ids.governance.0)
+                .with_transfer_fee(
+                    self.transaction_fee_e8s
+                        .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s()),
+                )
+                .with_archive_options(ArchiveOptions {
+                    trigger_threshold: 2000,
+                    num_blocks_to_archive: 1000,
+                    // 1 GB, which gives us 3 GB space when upgrading
+                    node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+                    // 128kb
+                    max_message_size_bytes: Some(128 * 1024),
+                    controller_id: root_canister_id.get(),
+                    // TODO: allow users to set this value
+                    // 10 Trillion cycles
+                    cycles_for_archive_creation: Some(10_000_000_000_000),
+                    max_transactions_per_response: None,
+                });
 
-        let initial_balances = self
-            .get_all_ledger_accounts(sns_canister_ids)?
-            .into_iter()
-            .map(|(a, t)| (a, t.get_e8s()))
-            .chain(self.maybe_test_balances())
-            .collect();
-        let transfer_fee = self
-            .transaction_fee_e8s
-            .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
+        if let Some(token_logo) = &self.token_logo {
+            payload_builder = payload_builder.with_metadata_entry(
+                ICRC1_TOKEN_LOGO_KEY.to_string(),
+                MetadataValue::Text(token_logo.clone()),
+            );
+        }
 
-        let payload = LedgerInitArgs {
-            minting_account,
-            initial_balances,
-            transfer_fee,
-            token_name,
-            token_symbol,
-            metadata: vec![],
-            archive_options: ArchiveOptions {
-                trigger_threshold: 2000,
-                num_blocks_to_archive: 1000,
-                // 1 GB, which gives us 3 GB space when upgrading
-                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                // 128kb
-                max_message_size_bytes: Some(128 * 1024),
-                controller_id: root_canister_id.get(),
-                // TODO: allow users to set this value
-                // 10 Trillion cycles
-                cycles_for_archive_creation: Some(10_000_000_000_000),
-                max_transactions_per_response: None,
-            },
-            fee_collector_account: None,
-            max_memo_length: None,
-            feature_flags: None,
-        };
-
-        Ok(LedgerArgument::Init(payload))
+        for (account, amount) in self.get_all_ledger_accounts(sns_canister_ids)? {
+            payload_builder = payload_builder.with_initial_balance(account, amount);
+        }
+        for (account, amount) in self.maybe_test_balances() {
+            payload_builder = payload_builder.with_initial_balance(account, amount);
+        }
+        Ok(LedgerArgument::Init(payload_builder.build()))
     }
 
     /// Construct the params used to initialize a SNS Index canister.
@@ -426,9 +481,30 @@ impl SnsInitPayload {
 
     /// Construct the parameters used to initialize a SNS Swap canister.
     ///
-    /// Precondition: self must be valid (see fn validate).
-    fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> SwapInit {
-        SwapInit {
+    /// Precondition: At least one of [`Self::validate_legacy_init`],
+    /// [`Self::validate_pre_execution`], or [`Self::validate_post_execution`] must
+    /// be `Ok(())`.
+    fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Result<SwapInit, String> {
+        let neurons_fund_participants = self
+            .neurons_fund_participants
+            .clone()
+            .map(ic_sns_swap::pb::v1::NeuronsFundParticipants::from);
+
+        // Safe to cast due to validation
+        let min_participants = self
+            .min_participants
+            .map(|min_participants| min_participants as u32);
+
+        // sns_tokens_e8s should only be set if we are not in the legacy flow.
+        // In the near future (when we deprecate the legacy init path)
+        // sns_tokens_e8s will always be set to Some.
+        let sns_tokens_e8s = if self.is_legacy_flow()? {
+            None
+        } else {
+            Some(self.get_swap_distribution()?.initial_swap_amount_e8s)
+        };
+
+        Ok(SwapInit {
             sns_root_canister_id: sns_canister_ids.root.to_string(),
             sns_governance_canister_id: sns_canister_ids.governance.to_string(),
             sns_ledger_canister_id: sns_canister_ids.ledger.to_string(),
@@ -442,18 +518,27 @@ impl SnsInitPayload {
             neuron_minimum_stake_e8s: self.neuron_minimum_stake_e8s,
             confirmation_text: self.confirmation_text.clone(),
             restricted_countries: self.restricted_countries.clone(),
-            min_participants: None,                      // TODO[NNS1-2339]
-            min_icp_e8s: None,                           // TODO[NNS1-2339]
-            max_icp_e8s: None,                           // TODO[NNS1-2339]
-            min_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            max_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
-            swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
-            sns_token_e8s: None,                         // TODO[NNS1-2339]
-            neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-            nns_proposal_id: None,                       // TODO[NNS1-2339]
-            neurons_fund_participants: None,             // TODO[NNS1-2339]
+            min_participants,
+            min_icp_e8s: self.min_icp_e8s,
+            max_icp_e8s: self.max_icp_e8s,
+            min_participant_icp_e8s: self.min_participant_icp_e8s,
+            max_participant_icp_e8s: self.max_participant_icp_e8s,
+            swap_start_timestamp_seconds: self.swap_start_timestamp_seconds,
+            swap_due_timestamp_seconds: self.swap_due_timestamp_seconds,
+            sns_token_e8s: sns_tokens_e8s,
+            neuron_basket_construction_parameters: self
+                .neuron_basket_construction_parameters
+                .clone(),
+            nns_proposal_id: self.nns_proposal_id,
+            neurons_fund_participants,
             should_auto_finalize: Some(true),
+        })
+    }
+
+    fn get_swap_distribution(&self) -> Result<&SwapDistribution, String> {
+        match &self.initial_token_distribution {
+            None => Err("Error: initial-token-distribution must be specified".to_string()),
+            Some(FractionalDeveloperVotingPower(f)) => f.swap_distribution(),
         }
     }
 
@@ -462,7 +547,7 @@ impl SnsInitPayload {
     fn get_all_ledger_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<BTreeMap<Account, Tokens>> {
+    ) -> Result<BTreeMap<Account, Tokens>, String> {
         match &self.initial_token_distribution {
             None => Ok(btreemap! {}),
             Some(FractionalDeveloperVotingPower(f)) => {
@@ -477,7 +562,7 @@ impl SnsInitPayload {
     fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,
-    ) -> anyhow::Result<BTreeMap<String, Neuron>> {
+    ) -> Result<BTreeMap<String, Neuron>, String> {
         match &self.initial_token_distribution {
             None => Ok(btreemap! {}),
             Some(FractionalDeveloperVotingPower(f)) => f.get_initial_neurons(parameters),
@@ -527,6 +612,7 @@ impl SnsInitPayload {
             neuron_basket_construction_parameters: _,
             nns_proposal_id: _,
             neurons_fund_participants: _,
+            token_logo: _,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -566,7 +652,7 @@ impl SnsInitPayload {
 
     /// Validates the SnsInitPayload. This is called before building each SNS canister's
     /// payload and must pass.
-    pub fn validate_legacy_init(&self) -> anyhow::Result<Self> {
+    pub fn validate_legacy_init(&self) -> Result<Self, String> {
         let validation_fns = [
             self.validate_token_symbol(),
             self.validate_token_name(),
@@ -589,20 +675,22 @@ impl SnsInitPayload {
             self.validate_max_age_bonus_percentage(),
             self.validate_initial_voting_period_seconds(),
             self.validate_wait_for_quiet_deadline_increase_seconds(),
-            self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_neuron_basket_construction_params(true),
+            self.validate_parameters_are_legacy(),
         ];
 
         self.join_validation_results(&validation_fns)
     }
 
-    pub fn validate_pre_execution(&self) -> anyhow::Result<Self> {
-        // TODO NNS1-2296: validate new fields in SnsInitPayload when generated from a CreateServiceNervousSystemProposal
+    /// Validates all the fields that are shared with CreateServiceNervousSystem.
+    /// For use in e.g. the SNS CLI or in NNS Governance before the proposal has
+    /// been executed.
+    pub fn validate_pre_execution(&self) -> Result<Self, String> {
         let validation_fns = [
             self.validate_token_symbol(),
             self.validate_token_name(),
+            self.validate_token_logo(),
             self.validate_token_distribution(),
             self.validate_neuron_minimum_stake_e8s(),
             self.validate_neuron_minimum_dissolve_delay_to_vote_seconds(),
@@ -625,17 +713,29 @@ impl SnsInitPayload {
             self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_neuron_basket_construction_params(false),
+            self.validate_all_non_legacy_pre_execution_swap_parameters_are_set(),
+            self.validate_neuron_basket_construction_params(),
+            self.validate_min_participants(),
+            self.validate_min_icp_e8s(),
+            self.validate_max_icp_e8s(),
+            self.validate_min_participant_icp_e8s(),
+            self.validate_max_participant_icp_e8s(),
+            // Ensure that the values that can only be known after the execution
+            // of the CreateServiceNervousSystem proposal are not set.
+            self.validate_nns_proposal_id_pre_execution(),
+            self.validate_neurons_fund_participants_pre_execution(),
+            self.validate_swap_start_timestamp_seconds_pre_execution(),
+            self.validate_swap_due_timestamp_seconds_pre_execution(),
         ];
 
         self.join_validation_results(&validation_fns)
     }
 
-    pub fn validate_post_execution(&self) -> anyhow::Result<Self> {
-        // TODO NNS1-2296: validate new fields in SnsInitPayload when generated from a CreateServiceNervousSystemProposal
+    pub fn validate_post_execution(&self) -> Result<Self, String> {
         let validation_fns = [
             self.validate_token_symbol(),
             self.validate_token_name(),
+            self.validate_token_logo(),
             self.validate_token_distribution(),
             self.validate_neuron_minimum_stake_e8s(),
             self.validate_neuron_minimum_dissolve_delay_to_vote_seconds(),
@@ -658,20 +758,44 @@ impl SnsInitPayload {
             self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_neuron_basket_construction_params(false),
+            self.validate_all_non_legacy_pre_execution_swap_parameters_are_set(),
+            self.validate_all_post_execution_swap_parameters_are_set(),
+            self.validate_neuron_basket_construction_params(),
+            self.validate_min_participants(),
+            self.validate_min_icp_e8s(),
+            self.validate_max_icp_e8s(),
+            self.validate_min_participant_icp_e8s(),
+            self.validate_max_participant_icp_e8s(),
+            self.validate_nns_proposal_id(),
+            self.validate_neurons_fund_participants(),
+            self.validate_swap_start_timestamp_seconds(),
+            self.validate_swap_due_timestamp_seconds(),
         ];
 
         self.join_validation_results(&validation_fns)
     }
 
-    pub fn is_legacy_flow(&self) -> bool {
-        self.neuron_basket_construction_parameters.is_none()
+    /// Returns Ok(false) if the one-proposal parameters are all present,
+    /// Ok(true) if they are all absent, and Err(_) if some but not all are
+    /// present (as in this case it cannot be determined whether we are in the legacy flow).
+    pub fn is_legacy_flow(&self) -> Result<bool, String> {
+        if self
+            .validate_all_non_legacy_pre_execution_swap_parameters_are_set()
+            .is_ok()
+        {
+            Ok(false)
+        } else if self.validate_parameters_are_legacy().is_ok() {
+            Ok(true)
+        } else {
+            Err(
+            "Could not determine whether the SNS init payload is using the one-proposal flow or the legacy because it contains a mix of set and unset one proposal parameters".to_string())
+        }
     }
 
     fn join_validation_results(
         &self,
         validation_fns: &[Result<(), String>],
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, String> {
         let defect_msg = validation_fns
             .iter()
             .filter_map(|validation_fn| match validation_fn {
@@ -685,7 +809,7 @@ impl SnsInitPayload {
         if defect_msg.is_empty() {
             Ok(self.clone())
         } else {
-            Err(anyhow!(defect_msg))
+            Err(defect_msg)
         }
     }
 
@@ -761,6 +885,35 @@ impl SnsInitPayload {
         Ok(())
     }
 
+    fn validate_token_logo(&self) -> Result<(), String> {
+        let token_logo = self
+            .token_logo
+            .as_ref()
+            .ok_or_else(|| "Error: token_logo must be specified".to_string())?;
+
+        const PREFIX: &str = "data:image/png;base64,";
+
+        if token_logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
+            return Err(format!(
+                "Error: token_logo must be less than {} characters, roughly 256 Kb",
+                SnsMetadata::MAX_LOGO_LENGTH
+            ));
+        }
+
+        if !token_logo.starts_with(PREFIX) {
+            return Err(format!(
+                "Error: token_logo must be a base64 encoded PNG, but the provided \
+                string doesn't begin with `{PREFIX}`."
+            ));
+        }
+
+        if base64::decode(&token_logo[PREFIX.len()..]).is_err() {
+            return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
+        }
+
+        Ok(())
+    }
+
     fn validate_token_distribution(&self) -> Result<(), String> {
         let initial_token_distribution = self
             .initial_token_distribution
@@ -770,9 +923,7 @@ impl SnsInitPayload {
         let nervous_system_parameters = self.get_nervous_system_parameters();
 
         match initial_token_distribution {
-            FractionalDeveloperVotingPower(f) => f
-                .validate(&nervous_system_parameters)
-                .map_err(|err| err.to_string())?,
+            FractionalDeveloperVotingPower(f) => f.validate(&nervous_system_parameters)?,
         }
 
         Ok(())
@@ -914,7 +1065,7 @@ impl SnsInitPayload {
             ));
         }
 
-        let invalid_principals: Vec<_> = self
+        let (valid_principals, invalid_principals): (Vec<_>, Vec<_>) = self
             .fallback_controller_principal_ids
             .iter()
             .map(|principal_id_string| {
@@ -923,25 +1074,42 @@ impl SnsInitPayload {
                     PrincipalId::from_str(principal_id_string),
                 )
             })
-            .filter(|pair| pair.1.is_err())
-            .map(|pair| pair.0)
-            .collect();
+            .partition(|item| item.1.is_ok());
 
         if !invalid_principals.is_empty() {
             return Err(format!(
                 "Error: One or more fallback_controller_principal_ids is not a valid principal id. \
-                The follow principals are invalid: {:?}", invalid_principals
+                The follow principals are invalid: {:?}", 
+                invalid_principals
+                    .into_iter()
+                    .map(|pair| pair.0)
+                    .collect::<Vec<_>>()
             ));
+        }
+
+        // At this point, all principals are valid. Dedupe the values
+        let unique_principals: BTreeSet<_> = valid_principals
+            .iter()
+            .filter_map(|pair| pair.1.clone().ok())
+            .collect();
+
+        if unique_principals.len() != valid_principals.len() {
+            return Err(
+                "Error: Duplicate PrincipalIds found in fallback_controller_principal_ids"
+                    .to_string(),
+            );
         }
 
         Ok(())
     }
 
     fn validate_logo(&self) -> Result<(), String> {
-        if let Some(logo) = &self.logo {
-            SnsMetadata::validate_logo(logo)?;
-        }
-        Ok(())
+        let logo = self
+            .logo
+            .as_ref()
+            .ok_or_else(|| "Error: logo must be specified".to_string())?;
+
+        SnsMetadata::validate_logo(logo)
     }
 
     fn validate_url(&self) -> Result<(), String> {
@@ -1195,7 +1363,7 @@ impl SnsInitPayload {
             let mut unique_iso_codes = BTreeSet::<String>::new();
             for item in &restricted_countries.iso_codes {
                 if CountryCode::for_alpha2(item).is_err() {
-                    return RestrictedCountriesValidationError::NotIsoComplient(item.clone())
+                    return RestrictedCountriesValidationError::NotIsoCompliant(item.clone())
                         .into();
                 }
                 if !unique_iso_codes.insert(item.clone()) {
@@ -1207,25 +1375,20 @@ impl SnsInitPayload {
         Ok(())
     }
 
-    fn validate_neuron_basket_construction_params(&self, is_legacy: bool) -> Result<(), String> {
-        if self.neuron_basket_construction_parameters.is_none() {
-            return Ok(()); // Nothing to validate.
-        }
-        // Check that the filed is not set if we are in the legacy flow.
-        if is_legacy && self.neuron_basket_construction_parameters.is_some() {
-            return NeuronBasketConstructionParametersValidationError::UnexpectedInLegacyFlow
-                .into();
-        }
+    fn validate_neuron_basket_construction_params(&self) -> Result<(), String> {
+        let neuron_basket_construction_parameters = self
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .ok_or("Error: neuron_basket_construction_parameters must be specified")?;
+
         // Check that `NeuronBasket` dissolve delay does not exceed
         // the maximum dissolve delay.
-        let max_dissolve_delay_seconds = self.max_dissolve_delay_seconds.unwrap_or_default();
+        let max_dissolve_delay_seconds = self
+            .max_dissolve_delay_seconds
+            .ok_or("Error: max_dissolve_delay_seconds must be specified")?;
         // The maximal dissolve delay of a neuron from a basket created by
         // `NeuronBasketConstructionParameters::generate_vesting_schedule`
         // will equal `(count - 1) * dissolve_delay_interval_seconds`.
-        let neuron_basket_construction_parameters = self
-            .neuron_basket_construction_parameters
-            .clone()
-            .unwrap_or_default();
         let max_neuron_basket_dissolve_delay = neuron_basket_construction_parameters
             .count
             .saturating_sub(1_u64)
@@ -1247,6 +1410,355 @@ impl SnsInitPayload {
         }
         Ok(())
     }
+
+    fn validate_min_participants(&self) -> Result<(), String> {
+        let min_participants = self
+            .min_participants
+            .ok_or("Error: min_participants must be specified")?;
+
+        if min_participants == 0 {
+            return Err("Error: min_participants must be > 0".to_string());
+        }
+
+        // Needed as the SwapInit min_participants field is a u32
+        if min_participants > (u32::MAX as u64) {
+            return Err(format!(
+                "Error: min_participants cannot be greater than {}",
+                u32::MAX
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_min_icp_e8s(&self) -> Result<(), String> {
+        let min_icp_e8s = self
+            .min_icp_e8s
+            .ok_or("Error: min_icp_e8s must be specified")?;
+
+        if min_icp_e8s == 0 {
+            return Err("Error: min_icp_e8s must be > 0".to_string());
+        }
+
+        Ok(())
+    }
+
+    fn validate_max_icp_e8s(&self) -> Result<(), String> {
+        let max_icp_e8s = self
+            .max_icp_e8s
+            .ok_or("Error: max_icp_e8s must be specified")?;
+
+        let min_icp_e8s = self
+            .min_icp_e8s
+            .ok_or("Error: min_icp_e8s must be specified")?;
+
+        if max_icp_e8s < min_icp_e8s {
+            return Err(format!(
+                "max_icp_e8s ({}) must be >= min_icp_e8s ({})",
+                max_icp_e8s, min_icp_e8s
+            ));
+        }
+
+        if max_icp_e8s > MAX_TOTAL_ICP_CONTRIBUTION_TO_SWAP {
+            return Err(format!(
+                "Error: max_icp_e8s ({}) can be at most {} ICP E8s",
+                max_icp_e8s, MAX_TOTAL_ICP_CONTRIBUTION_TO_SWAP
+            ));
+        }
+
+        let min_participants = self
+            .min_participants
+            .ok_or("Error: min_participants must be specified")?;
+
+        let min_participant_icp_e8s = self
+            .min_participant_icp_e8s
+            .ok_or("Error: min_participant_icp_e8s must be specified")?;
+
+        if max_icp_e8s < (min_participants).saturating_mul(min_participant_icp_e8s) {
+            return Err(format!(
+                "Error: max_icp_e8s ({}) must be >= min_participants ({}) * min_participant_icp_e8s ({})",
+                max_icp_e8s, min_participants, min_participant_icp_e8s
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_min_participant_icp_e8s(&self) -> Result<(), String> {
+        let min_participant_icp_e8s = self
+            .min_participant_icp_e8s
+            .ok_or("Error: min_participant_icp_e8s must be specified")?;
+
+        let max_icp_e8s = self
+            .max_icp_e8s
+            .ok_or("Error: max_icp_e8s must be specified")?;
+
+        let sns_transaction_fee_e8s = self
+            .transaction_fee_e8s
+            .ok_or("Error: transaction_fee_e8s must be specified")?;
+
+        let neuron_minimum_stake_e8s = self
+            .neuron_minimum_stake_e8s
+            .ok_or("Error: neuron_minimum_stake_e8s must be specified")?;
+
+        let neuron_basket_construction_parameters_count = self
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .ok_or("Error: neuron_basket_construction_parameters must be specified")?
+            .count;
+
+        let sns_tokens_e8s = self
+            .get_swap_distribution()
+            .map_err(|_| "Error: the SwapDistribution must be specified")?
+            .initial_swap_amount_e8s;
+
+        let min_participant_sns_e8s =
+            min_participant_icp_e8s as u128 * sns_tokens_e8s as u128 / max_icp_e8s as u128;
+
+        let min_participant_icp_e8s_big_enough = min_participant_sns_e8s
+            >= neuron_basket_construction_parameters_count as u128
+                * (neuron_minimum_stake_e8s + sns_transaction_fee_e8s) as u128;
+
+        if !min_participant_icp_e8s_big_enough {
+            return Err(format!(
+                "Error: min_participant_icp_e8s={} is too small. It needs to be \
+                 large enough to ensure that participants will end up with \
+                 enough SNS tokens to form {} SNS neurons, each of which \
+                 require at least {} SNS e8s, plus {} e8s in transaction \
+                 fees. More precisely, the following inequality must hold: \
+                 min_participant_icp_e8s >= neuron_basket_count * \
+                 (neuron_minimum_stake_e8s + transaction_fee_e8s) * max_icp_e8s / sns_tokens_e8s",
+                min_participant_icp_e8s,
+                neuron_basket_construction_parameters_count,
+                neuron_minimum_stake_e8s,
+                sns_transaction_fee_e8s,
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_max_participant_icp_e8s(&self) -> Result<(), String> {
+        let max_participant_icp_e8s = self
+            .max_participant_icp_e8s
+            .ok_or("Error: max_participant_icp_e8s must be specified")?;
+
+        let min_participant_icp_e8s = self
+            .min_participant_icp_e8s
+            .ok_or("Error: min_participant_icp_e8s must be specified")?;
+
+        if max_participant_icp_e8s < min_participant_icp_e8s {
+            return Err(format!(
+                "Error: max_participant_icp_e8s ({}) must be >= min_participant_icp_e8s ({})",
+                max_participant_icp_e8s, min_participant_icp_e8s
+            ));
+        }
+
+        let max_icp_e8s = self
+            .max_icp_e8s
+            .ok_or("Error: max_icp_e8s must be specified")?;
+
+        if max_participant_icp_e8s > max_icp_e8s {
+            return Err(format!(
+                "max_participant_icp_e8s ({}) must be <= max_icp_e8s ({})",
+                max_participant_icp_e8s, max_icp_e8s
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_nns_proposal_id_pre_execution(&self) -> Result<(), String> {
+        if self.nns_proposal_id.is_none() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Error: nns_proposal_id cannot be specified pre_execution, but was {:?}",
+                self.nns_proposal_id
+            ))
+        }
+    }
+
+    fn validate_nns_proposal_id(&self) -> Result<(), String> {
+        match self.nns_proposal_id {
+            None => Err("Error: nns_proposal_id must be specified".to_string()),
+            Some(_) => Ok(()),
+        }
+    }
+
+    fn validate_neurons_fund_participants_pre_execution(&self) -> Result<(), String> {
+        if self.neurons_fund_participants.is_none() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Error: neurons_fund_participants cannot be specified pre_execution, but was {:?}",
+                self.neurons_fund_participants
+            ))
+        }
+    }
+
+    fn validate_neurons_fund_participants(&self) -> Result<(), String> {
+        let neurons_fund_participants = self
+            .neurons_fund_participants
+            .as_ref()
+            .ok_or("Error: neurons_fund_participants must be specified")?;
+
+        let errors = neurons_fund_participants
+            .participants
+            .iter()
+            .map(|cf_participant| cf_participant.validate())
+            .filter_map(|result| result.err())
+            .collect::<Vec<String>>();
+
+        if !errors.is_empty() {
+            let msg = format!(
+                "Error: one or more participants from the Neuron's Fund is invalid: {}",
+                errors.join("\n")
+            );
+            return Err(msg);
+        }
+
+        Ok(())
+    }
+
+    fn validate_swap_start_timestamp_seconds_pre_execution(&self) -> Result<(), String> {
+        if self.swap_start_timestamp_seconds.is_none() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Error: swap_start_timestamp_seconds cannot be specified pre_execution, but was {:?}",
+                self.swap_start_timestamp_seconds
+            ))
+        }
+    }
+
+    fn validate_swap_start_timestamp_seconds(&self) -> Result<(), String> {
+        match self.swap_start_timestamp_seconds {
+            Some(_) => Ok(()),
+            None => Err("Error: swap_start_timestamp_seconds must be specified".to_string()),
+        }
+    }
+
+    fn validate_swap_due_timestamp_seconds_pre_execution(&self) -> Result<(), String> {
+        if self.swap_due_timestamp_seconds.is_none() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Error: swap_due_timestamp_seconds cannot be specified pre_execution, but was {:?}",
+                self.swap_due_timestamp_seconds
+            ))
+        }
+    }
+
+    fn validate_swap_due_timestamp_seconds(&self) -> Result<(), String> {
+        let swap_start_timestamp_seconds = self
+            .swap_start_timestamp_seconds
+            .ok_or("Error: swap_start_timestamp_seconds must be specified")?;
+
+        let swap_due_timestamp_seconds = self
+            .swap_due_timestamp_seconds
+            .ok_or("Error: swap_due_timestamp_seconds must be specified")?;
+
+        if swap_due_timestamp_seconds < swap_start_timestamp_seconds {
+            return Err(format!(
+                "Error: swap_due_timestamp_seconds({}) must be after swap_start_timestamp_seconds({})",
+                swap_due_timestamp_seconds, swap_start_timestamp_seconds,
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Checks that no parameters not used by the legacy flow are present.
+    pub fn validate_parameters_are_legacy(&self) -> Result<(), String> {
+        let stripped = self.clone().strip_non_legacy_parameters();
+        if self == &stripped {
+            Ok(())
+        } else {
+            Err(format!(
+                    "Error: The legacy SNS initialization requires some SnsInitPayload parameters to not be None. Received {self:#?}, but expected {stripped:#?}.", 
+                ))
+        }
+    }
+
+    /// Checks that all parameters whose values can only be known after the CreateServiceNervousSystem proposal is executed are present.
+    pub fn validate_all_post_execution_swap_parameters_are_set(&self) -> Result<(), String> {
+        let mut missing_one_proposal_fields = vec![];
+        if self.nns_proposal_id.is_none() {
+            missing_one_proposal_fields.push("nns_proposal_id")
+        }
+        if self.neurons_fund_participants.is_none() {
+            missing_one_proposal_fields.push("neurons_fund_participants")
+        }
+        if self.swap_start_timestamp_seconds.is_none() {
+            missing_one_proposal_fields.push("swap_start_timestamp_seconds")
+        }
+        if self.swap_due_timestamp_seconds.is_none() {
+            missing_one_proposal_fields.push("swap_due_timestamp_seconds")
+        }
+
+        if missing_one_proposal_fields.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("Error: The one-proposal SNS initialization requires some SnsInitPayload parameters to be Some. But the following fields were set to None: {}", missing_one_proposal_fields.join(", ")))
+        }
+    }
+
+    /// Checks that all parameters used by the one-proposal flow are present, except for those whose values can't be known before the CreateServiceNervousSystem proposal is executed.
+    pub fn validate_all_non_legacy_pre_execution_swap_parameters_are_set(
+        &self,
+    ) -> Result<(), String> {
+        let mut missing_one_proposal_fields = vec![];
+        if self.min_participants.is_none() {
+            missing_one_proposal_fields.push("min_participants")
+        }
+        if self.min_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("min_icp_e8s")
+        }
+        if self.max_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("max_icp_e8s")
+        }
+        if self.min_participant_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("min_participant_icp_e8s")
+        }
+        if self.max_participant_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("max_participant_icp_e8s")
+        }
+        if self.neuron_basket_construction_parameters.is_none() {
+            missing_one_proposal_fields.push("neuron_basket_construction_parameters")
+        }
+        if self.dapp_canisters.is_none() {
+            missing_one_proposal_fields.push("dapp_canisters")
+        }
+        if self.token_logo.is_none() {
+            missing_one_proposal_fields.push("token_logo")
+        }
+
+        if missing_one_proposal_fields.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("Error: The one-proposal SNS initialization requires some SnsInitPayload parameters to be Some. But the following fields were set to None: {}", missing_one_proposal_fields.join(", ")))
+        }
+    }
+
+    /// Removes everything that is not used in the legacy flow
+    pub fn strip_non_legacy_parameters(self) -> Self {
+        Self {
+            min_participants: None,
+            min_icp_e8s: None,
+            max_icp_e8s: None,
+            min_participant_icp_e8s: None,
+            max_participant_icp_e8s: None,
+            neuron_basket_construction_parameters: None,
+            nns_proposal_id: None,
+            neurons_fund_participants: None,
+            swap_start_timestamp_seconds: None,
+            swap_due_timestamp_seconds: None,
+            dapp_canisters: None,
+            token_logo: None,
+            ..self
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1257,7 +1769,7 @@ mod test {
             FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
         },
         FractionalDeveloperVotingPower, NeuronBasketConstructionParametersValidationError,
-        RestrictedCountriesValidationError, SnsCanisterIds, SnsInitPayload,
+        RestrictedCountriesValidationError, SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY,
         MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
         MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MAX_TOKEN_NAME_LENGTH,
         MAX_TOKEN_SYMBOL_LENGTH,
@@ -1269,32 +1781,21 @@ mod test {
         governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
     };
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
-    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
     use std::{collections::BTreeMap, convert::TryInto};
 
-    #[inline]
-    fn assert_ok<T>(result: anyhow::Result<T>)
+    #[track_caller]
+    fn assert_error<T, E1, E2>(result: Result<T, E1>, expected_error: E2)
     where
         T: std::fmt::Debug,
+        E1: ToString,
+        E2: ToString,
     {
-        assert!(
-            result.is_ok(),
-            "assertion failed: expected Ok got {result:?}"
-        );
-    }
-
-    #[inline]
-    fn assert_error<T, E>(result: anyhow::Result<T>, expected_error: E)
-    where
-        T: std::fmt::Debug,
-        E: ToString,
-    {
-        assert!(
-            result.is_err(),
-            "assertion failed: expected Err got {result:?}"
-        );
-        assert_eq!(result.unwrap_err().to_string(), expected_error.to_string());
+        match result {
+            Ok(result) => panic!("assertion failed: expected Err, got Ok({result:?})"),
+            Err(err) => assert_eq!(err.to_string(), expected_error.to_string()),
+        }
     }
 
     fn create_canister_ids() -> SnsCanisterIds {
@@ -1309,7 +1810,6 @@ mod test {
 
     fn generate_unique_dapp_canisters(count: usize) -> DappCanisters {
         let canisters = (0..count)
-            .into_iter()
             .map(|i| Canister {
                 id: Some(CanisterId::from_u64(i as u64).get()),
             })
@@ -1322,78 +1822,130 @@ mod test {
     fn test_sns_init_payload_validate() {
         // Build a payload that passes validation, then test the parts that wouldn't
         let get_sns_init_payload = || {
-            SnsInitPayload::with_valid_values_for_testing()
+            SnsInitPayload::with_valid_legacy_values_for_testing()
                 .validate_legacy_init()
                 .expect("Payload did not pass validation.")
         };
 
-        let mut sns_init_payload = get_sns_init_payload();
+        let sns_init_payload = get_sns_init_payload();
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.token_symbol = Some("S".repeat(MAX_TOKEN_SYMBOL_LENGTH + 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.token_symbol = Some(" ICP".to_string());
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.token_name = Some("S".repeat(MAX_TOKEN_NAME_LENGTH + 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.token_name = Some("Internet Computer".to_string());
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.token_name = Some("InternetComputerProtocol".to_string());
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.transaction_fee_e8s = None;
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.description = None;
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.description =
+                Some("S".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.description =
+                Some("S".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH - 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.name = None;
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.name = Some("S".repeat(SnsMetadata::MAX_NAME_LENGTH + 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.name = Some("S".repeat(SnsMetadata::MIN_NAME_LENGTH - 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.url = None;
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.url = Some("S".repeat(SnsMetadata::MAX_URL_LENGTH + 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.url = Some("S".repeat(SnsMetadata::MIN_URL_LENGTH - 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        {
+            let mut sns_init_payload = sns_init_payload.clone();
+            sns_init_payload.logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
+            sns_init_payload.validate_legacy_init().unwrap_err();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
 
-        sns_init_payload.token_symbol = Some("S".repeat(MAX_TOKEN_SYMBOL_LENGTH + 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.token_symbol = Some(" ICP".to_string());
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.token_name = Some("S".repeat(MAX_TOKEN_NAME_LENGTH + 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.token_name = Some("Internet Computer".to_string());
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.token_name = Some("InternetComputerProtocol".to_string());
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.transaction_fee_e8s = None;
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.description = None;
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.description = Some("S".repeat(SnsMetadata::MAX_DESCRIPTION_LENGTH + 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.description = Some("S".repeat(SnsMetadata::MIN_DESCRIPTION_LENGTH - 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.name = None;
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.name = Some("S".repeat(SnsMetadata::MAX_NAME_LENGTH + 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.name = Some("S".repeat(SnsMetadata::MIN_NAME_LENGTH - 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.url = None;
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.url = Some("S".repeat(SnsMetadata::MAX_URL_LENGTH + 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.url = Some("S".repeat(SnsMetadata::MIN_URL_LENGTH - 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        sns_init_payload.logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
-        sns_init_payload = get_sns_init_payload();
-
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
     }
 
     #[test]
@@ -1449,6 +2001,39 @@ mod test {
     }
 
     #[test]
+    fn test_legacy_governance_init_args_is_valid() {
+        // Build an sns_init_payload with defaults for non-governance related configuration.
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some("ServiceNervousSystem Coin".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(
+                FractionalDVP::with_valid_values_for_testing(),
+            )),
+            proposal_reject_cost_e8s: Some(10_000),
+            neuron_minimum_stake_e8s: Some(100_000_000),
+            ..SnsInitPayload::with_valid_legacy_values_for_testing()
+        };
+
+        // Assert that this payload is valid in the view of the library
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+
+        // Build the SnsCanisterInitPayloads including SNS Governance
+        let canister_payloads = sns_init_payload
+            .build_canister_payloads(&sns_canister_ids, None, false)
+            .expect("Expected SnsInitPayload to be a valid payload");
+
+        let governance = canister_payloads.governance;
+
+        // Assert that the Governance canister would accept this init payload
+        assert!(ValidGovernanceProto::try_from(governance).is_ok());
+    }
+
+    #[test]
     fn test_governance_init_args_is_valid() {
         // Build an sns_init_payload with defaults for non-governance related configuration.
         let sns_init_payload = SnsInitPayload {
@@ -1463,7 +2048,9 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1477,6 +2064,43 @@ mod test {
 
         // Assert that the Governance canister would accept this init payload
         assert!(ValidGovernanceProto::try_from(governance).is_ok());
+    }
+
+    #[test]
+    fn test_legacy_governance_init_args_has_generated_config() {
+        // Build an sns_init_payload with defaults for non-governance related configuration.
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some("ServiceNervousSystem Coin".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(
+                FractionalDVP::with_valid_values_for_testing(),
+            )),
+            proposal_reject_cost_e8s: Some(10_000),
+            neuron_minimum_stake_e8s: Some(100_000_000),
+            ..SnsInitPayload::with_valid_legacy_values_for_testing()
+        };
+
+        // Assert that this payload is valid in the view of the library
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+
+        // Build the SnsCanisterInitPayloads including SNS Governance
+        let canister_payloads = sns_init_payload
+            .build_canister_payloads(&sns_canister_ids, None, false)
+            .expect("Expected SnsInitPayload to be a valid payload");
+
+        let governance = canister_payloads.governance;
+
+        // Assert that the Governance canister's params match the SnsInitPayload
+        assert_eq!(
+            serde_yaml::from_str::<SnsInitPayload>(&governance.sns_initialization_parameters)
+                .unwrap(),
+            sns_init_payload
+        );
     }
 
     #[test]
@@ -1494,7 +2118,9 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1520,11 +2146,13 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem".to_string()),
             token_symbol: Some("SNS".to_string()),
-            ..SnsInitPayload::with_valid_values_for_testing()
+            ..SnsInitPayload::with_valid_legacy_values_for_testing()
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1542,8 +2170,8 @@ mod test {
     }
 
     #[test]
-    fn test_swap_init_args_is_valid() {
-        // Build an sns_init_payload with defaults for non-swap related configuration.
+    fn test_legacy_root_init_args_is_valid() {
+        // Build an sns_init_payload with defaults for non-root related configuration.
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem".to_string()),
             token_symbol: Some("SNS".to_string()),
@@ -1551,7 +2179,38 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+
+        // Build the SnsCanisterInitPayloads including SNS Root
+        let canister_payloads = sns_init_payload
+            .build_canister_payloads(&sns_canister_ids, None, false)
+            .expect("Expected SnsInitPayload to be a valid payload");
+
+        let root = canister_payloads.root;
+
+        // Assert that the Root canister would accept this init payload
+        assert!(root.ledger_canister_id.is_some());
+        assert!(root.governance_canister_id.is_some());
+    }
+
+    #[test]
+    fn test_swap_init_args_is_valid_legacy() {
+        // Build an sns_init_payload with defaults for non-swap related configuration.
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some("ServiceNervousSystem".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            ..SnsInitPayload::with_valid_legacy_values_for_testing()
+        };
+
+        // Assert that this payload is valid in the view of the library
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1563,8 +2222,42 @@ mod test {
 
         let swap = canister_payloads.swap;
 
+        // Assert that sns_tokens_e8s wasn't set (as we are in the legacy flow)
+        assert_eq!(swap.sns_token_e8s, None);
+
         // Assert that the swap canister would accept this payload.
-        assert!(swap.validate().is_ok());
+        swap.validate().unwrap();
+    }
+
+    #[test]
+    fn test_swap_init_args_is_valid() {
+        // Build an sns_init_payload with defaults for non-swap related configuration.
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some("ServiceNervousSystem".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+
+        // Assert that this payload is valid in the view of the library
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+
+        // Build the SnsCanisterInitPayloads including SNS Swap
+        let canister_payloads = sns_init_payload
+            .build_canister_payloads(&sns_canister_ids, None, false)
+            .expect("Expected SnsInitPayload to be a valid payload");
+
+        let swap = canister_payloads.swap;
+
+        // Assert that sns_tokens_e8s was set (as we are in the one-proposal flow)
+        swap.sns_token_e8s.unwrap();
+
+        // Assert that the swap canister would accept this payload.
+        swap.validate().unwrap();
     }
 
     #[test]
@@ -1577,7 +2270,9 @@ mod test {
                 confirmation_text: None,
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that some non-trivial value of `confirmation_text` validates.
         {
@@ -1585,7 +2280,9 @@ mod test {
                 confirmation_text: Some("Please confirm that 2+2=4".to_string()),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that `confirmation_text` set to an empty string is rejected.
         {
@@ -1623,7 +2320,9 @@ mod test {
                 restricted_countries: None,
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that some non-trivial value of `restricted_countries` validates.
         {
@@ -1633,7 +2332,9 @@ mod test {
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that multiple countries can be validated.
         {
@@ -1645,7 +2346,9 @@ mod test {
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Check that item count is checked before duplicate analysis.
         {
@@ -1683,7 +2386,7 @@ mod test {
             };
             assert_error(
                 sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
-                RestrictedCountriesValidationError::NotIsoComplient(item),
+                RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
         // Test that alpha3 is rejected.
@@ -1697,7 +2400,7 @@ mod test {
             };
             assert_error(
                 sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
-                RestrictedCountriesValidationError::NotIsoComplient(item),
+                RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
         // Test that a non-existing country code is rejected.
@@ -1711,7 +2414,7 @@ mod test {
             };
             assert_error(
                 sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
-                RestrictedCountriesValidationError::NotIsoComplient(item),
+                RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
         // Test that duplicate country codes are rejected.
@@ -1733,17 +2436,27 @@ mod test {
     #[test]
     fn test_neuron_basket_construction_parameters() {
         let default_dd_limit: u64 = 252_460_800;
-        // Test that `neuron_basket_construction_parameters` is indeed optional.
+        // Test that `neuron_basket_construction_parameters` is indeed optional in the legacy flow.
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_basket_construction_parameters: None,
+                ..SnsInitPayload::with_valid_legacy_values_for_testing()
+            };
+            // Legacy flow
+            sns_init_payload.validate_legacy_init().unwrap();
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        // Test that `neuron_basket_construction_parameters` is not optional in the one-proposal flow.
         {
             let sns_init_payload = SnsInitPayload {
                 neuron_basket_construction_parameters: None,
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            // Legacy flow
-            assert_ok(sns_init_payload.validate_legacy_init());
             // Single proposal
-            assert_ok(sns_init_payload.validate_pre_execution());
-            assert_ok(sns_init_payload.validate_post_execution());
+            sns_init_payload.validate_post_execution().unwrap_err();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+            sns_init_payload.validate_legacy_init().unwrap_err();
         }
         // Test that `neuron_basket_construction_parameters` is forbidden in
         // the legacy flow and allowed in the single-proposal flow.
@@ -1756,14 +2469,9 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
 
-            // Legacy flow
-            assert_error(
-                sns_init_payload.validate_legacy_init(),
-                NeuronBasketConstructionParametersValidationError::UnexpectedInLegacyFlow,
-            );
-            // Single proposal
-            assert_ok(sns_init_payload.validate_pre_execution());
-            assert_ok(sns_init_payload.validate_post_execution());
+            sns_init_payload.validate_post_execution().unwrap();
+            sns_init_payload.validate_pre_execution().unwrap_err();
+            sns_init_payload.validate_legacy_init().unwrap_err();
         }
         // Test that validation fails when
         // (count - 1) * dissolve_delay_interval == 1 + max_dissolve_delay_seconds
@@ -1785,8 +2493,9 @@ mod test {
                 "dissolve_delay_interval_seconds = {}",
                 default_dd_limit.saturating_div(3)
             );
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
             assert_error(sns_init_payload.validate_post_execution(), expected);
+            sns_init_payload.validate_pre_execution().unwrap_err();
+            sns_init_payload.validate_legacy_init().unwrap_err();
         }
         // Test that validation fails when (count - 1) * dissolve_delay_interval
         // does not fit u64.
@@ -1795,13 +2504,14 @@ mod test {
                 max_dissolve_delay_seconds: Some(default_dd_limit),
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
                     count: 3_u64,
-                    dissolve_delay_interval_seconds: u64::MAX,
+                    dissolve_delay_interval_seconds: u64::MAX - 1,
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             let expected = NeuronBasketConstructionParametersValidationError::ExceedsU64;
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
             assert_error(sns_init_payload.validate_post_execution(), expected);
+            sns_init_payload.validate_pre_execution().unwrap_err();
+            sns_init_payload.validate_legacy_init().unwrap_err();
         }
         // Test that validation fails when basket count is too low
         {
@@ -1813,8 +2523,9 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             let expected = NeuronBasketConstructionParametersValidationError::InadequateBasketSize;
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
             assert_error(sns_init_payload.validate_post_execution(), expected);
+            sns_init_payload.validate_pre_execution().unwrap_err();
+            sns_init_payload.validate_legacy_init().unwrap_err();
         }
         // Test that validation fails when dissolve_delay_interval_seconds is too low
         {
@@ -1827,13 +2538,14 @@ mod test {
             };
             let expected =
                 NeuronBasketConstructionParametersValidationError::InadequateDissolveDelay;
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
             assert_error(sns_init_payload.validate_post_execution(), expected);
+            sns_init_payload.validate_pre_execution().unwrap_err();
+            sns_init_payload.validate_legacy_init().unwrap_err();
         }
     }
 
     #[test]
-    fn test_ledger_init_args_is_valid() {
+    fn test_legacy_ledger_init_args_is_valid() {
         // Build an sns_init_payload with defaults for non-ledger related configuration.
         let transaction_fee = 10_000;
         let token_symbol = "SNS".to_string();
@@ -1843,11 +2555,13 @@ mod test {
             token_name: Some(token_name.clone()),
             token_symbol: Some(token_symbol.clone()),
             transaction_fee_e8s: Some(transaction_fee),
-            ..SnsInitPayload::with_valid_values_for_testing()
+            ..SnsInitPayload::with_valid_legacy_values_for_testing()
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1869,6 +2583,59 @@ mod test {
                 }
             );
             assert_eq!(ledger.transfer_fee, transaction_fee);
+        } else {
+            panic!("bug: expected Init got Upgrade.");
+        }
+    }
+
+    #[test]
+    fn test_ledger_init_args_is_valid() {
+        // Build an sns_init_payload with defaults for non-ledger related configuration.
+        let transaction_fee = 10_000;
+        let token_symbol = "SNS".to_string();
+        let token_name = "ServiceNervousSystem Coin".to_string();
+        let token_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some(token_name.clone()),
+            token_symbol: Some(token_symbol.clone()),
+            transaction_fee_e8s: Some(transaction_fee),
+            token_logo: Some(token_logo.clone()),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+
+        // Assert that this payload is valid in the view of the library
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+
+        // Build the SnsCanisterInitPayloads including SNS Ledger
+        let canister_payloads = sns_init_payload
+            .build_canister_payloads(&sns_canister_ids, None, false)
+            .expect("Expected SnsInitPayload to be a valid payload");
+
+        // Assert that the Ledger canister would accept this init payload
+        if let LedgerArgument::Init(ledger) = canister_payloads.ledger {
+            assert_eq!(ledger.token_symbol, token_symbol);
+            assert_eq!(ledger.token_name, token_name);
+            assert_eq!(
+                ledger.minting_account,
+                Account {
+                    owner: sns_canister_ids.governance.0,
+                    subaccount: None
+                }
+            );
+            assert_eq!(ledger.transfer_fee, transaction_fee);
+            assert_eq!(
+                ledger.metadata,
+                vec![(
+                    ICRC1_TOKEN_LOGO_KEY.to_string(),
+                    MetadataValue::Text(token_logo.clone())
+                )]
+            )
         } else {
             panic!("bug: expected Init got Upgrade.");
         }
@@ -1924,29 +2691,37 @@ mod test {
 
     #[test]
     fn test_dapp_canisters_validation() {
-        // Build a payload that passes validation, then test the parts that wouldn't
+        // Build a payload that passes legacy validation, then test the parts that wouldn't
         let get_sns_init_payload = || {
             SnsInitPayload::with_valid_values_for_testing()
-                .validate_legacy_init()
-                .expect("Payload did not pass validation.")
+                .validate_post_execution()
+                .unwrap()
         };
 
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.dapp_canisters =
             Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT + 1));
-        assert!(sns_init_payload.validate_legacy_init().is_err());
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         sns_init_payload.dapp_canisters =
             Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT));
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         sns_init_payload.dapp_canisters = None;
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         sns_init_payload.dapp_canisters = Some(DappCanisters {
             canisters: vec![Canister { id: None }],
         });
-        assert!(sns_init_payload.validate_legacy_init().is_err());
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         let duplicate_dapp_canister = Canister {
             id: Some(CanisterId::from_u64(1).get()),
@@ -1954,7 +2729,9 @@ mod test {
         sns_init_payload.dapp_canisters = Some(DappCanisters {
             canisters: vec![duplicate_dapp_canister, duplicate_dapp_canister],
         });
-        assert!(sns_init_payload.validate_legacy_init().is_err());
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
     }
 
     // Create an initial SNS payload that includes Governance and Ledger init payloads. Then
@@ -1962,6 +2739,8 @@ mod test {
     // account is present in the Ledger init payload's `initial_balances`.
     #[test]
     fn test_build_canister_payloads_creates_neurons_with_correct_ledger_accounts() {
+        use num_traits::ToPrimitive;
+
         let controller1 = PrincipalId::new_user_test_id(2209);
         let airdrop_neuron1 = NeuronDistribution {
             controller: Some(controller1),
@@ -2009,7 +2788,7 @@ mod test {
 
         // Assert that this payload is valid in the view of the library
         sns_init_payload
-            .validate_legacy_init()
+            .validate_post_execution()
             .expect("Init payload must be valid");
 
         // Create valid CanisterIds
@@ -2023,7 +2802,19 @@ mod test {
         let governance = canister_payloads.governance;
         let init_accounts: BTreeMap<Account, u64> =
             if let LedgerArgument::Init(ledger) = canister_payloads.ledger {
-                ledger.initial_balances.into_iter().collect()
+                ledger
+                    .initial_balances
+                    .into_iter()
+                    .map(|(account, amount)| {
+                        (
+                            account,
+                            amount
+                                .0
+                                .to_u64()
+                                .expect("bug: balance does not fit into u64"),
+                        )
+                    })
+                    .collect()
             } else {
                 panic!("bug: expected Init got Upgrade");
             };
@@ -2046,6 +2837,60 @@ mod test {
     }
 
     #[test]
+    fn test_legacy_fallback_controller_principal_ids_validation() {
+        let generate_pids = |count| -> Vec<String> {
+            (0..count)
+                .map(|i| PrincipalId::new_user_test_id(i as u64).to_string())
+                .collect()
+        };
+
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let get_sns_init_payload = || {
+            SnsInitPayload::with_valid_legacy_values_for_testing()
+                .validate_legacy_init()
+                .expect("Payload did not pass validation.")
+        };
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = generate_pids(0);
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids =
+            generate_pids(MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT + 1);
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = vec![
+            "not a valid pid".to_string(),
+            "definitely not a valid pid".to_string(),
+        ];
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = vec![
+            PrincipalId::new_user_test_id(1).to_string(),
+            PrincipalId::new_user_test_id(1).to_string(),
+        ];
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids =
+            vec![PrincipalId::new_user_test_id(1).to_string()];
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+    }
+
+    #[test]
     fn test_fallback_controller_principal_ids_validation() {
         let generate_pids = |count| -> Vec<String> {
             (0..count)
@@ -2056,29 +2901,161 @@ mod test {
         // Build a payload that passes validation, then test the parts that wouldn't
         let get_sns_init_payload = || {
             SnsInitPayload::with_valid_values_for_testing()
-                .validate_legacy_init()
+                .validate_post_execution()
                 .expect("Payload did not pass validation.")
         };
 
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids = generate_pids(0);
-        assert!(sns_init_payload.validate_legacy_init().is_err());
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids =
             generate_pids(MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT + 1);
-        assert!(sns_init_payload.validate_legacy_init().is_err());
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
 
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids = vec![
             "not a valid pid".to_string(),
             "definitely not a valid pid".to_string(),
         ];
-        assert!(sns_init_payload.validate_legacy_init().is_err());
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = vec![
+            PrincipalId::new_user_test_id(1).to_string(),
+            PrincipalId::new_user_test_id(1).to_string(),
+        ];
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
 
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids =
             vec![PrincipalId::new_user_test_id(1).to_string()];
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+    }
+
+    #[test]
+    fn test_token_logo_validation() {
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let get_sns_init_payload = || {
+            SnsInitPayload::with_valid_values_for_testing()
+                .validate_post_execution()
+                .expect("Payload did not pass validation.")
+        };
+
+        let token_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+
+        // The legacy SnsInitPayload should not support the token-logo configuration
+        let mut sns_init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
+        sns_init_payload.token_logo = Some(token_logo.clone());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // Not-specified
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = None;
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        // Exceeds max length
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        // Illegal image prefix
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some("NOT A DATA URL WITH BASE64".to_string());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some("data:image/png;".to_string());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some(token_logo.clone());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+    }
+
+    #[test]
+    fn pre_and_post_execution_mutually_exclusive() {
+        // The result of SnsInitPayload::with_valid_values_for_testing() is
+        // valid "post-execution"
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload
+            .validate_all_non_legacy_pre_execution_swap_parameters_are_set()
+            .unwrap();
+        sns_init_payload
+            .validate_all_post_execution_swap_parameters_are_set()
+            .unwrap();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // If we remove the pre-execution values, the payload is valid "pre-execution"
+        let sns_init_payload = SnsInitPayload {
+            nns_proposal_id: None,
+            neurons_fund_participants: None,
+            swap_start_timestamp_seconds: None,
+            swap_due_timestamp_seconds: None,
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+        sns_init_payload.validate_pre_execution().unwrap();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload
+            .validate_all_non_legacy_pre_execution_swap_parameters_are_set()
+            .unwrap();
+        sns_init_payload
+            .validate_all_post_execution_swap_parameters_are_set()
+            .unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // If we remove only some of the pre-execution values, the payload is
+        // not valid "pre-execution" or "post-execution"
+        let sns_init_payload = SnsInitPayload {
+            nns_proposal_id: None,
+            swap_start_timestamp_seconds: None,
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload
+            .validate_all_non_legacy_pre_execution_swap_parameters_are_set()
+            .unwrap();
+        sns_init_payload
+            .validate_all_post_execution_swap_parameters_are_set()
+            .unwrap_err();
+        sns_init_payload.validate_legacy_init().unwrap_err();
+    }
+
+    #[test]
+    fn legacy_payload_invalid_pre_and_post_execution() {
+        let sns_init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
+        sns_init_payload.validate_legacy_init().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload
+            .validate_all_non_legacy_pre_execution_swap_parameters_are_set()
+            .unwrap_err();
+        sns_init_payload
+            .validate_all_post_execution_swap_parameters_are_set()
+            .unwrap_err();
     }
 }

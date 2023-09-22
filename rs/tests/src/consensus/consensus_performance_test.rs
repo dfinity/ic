@@ -15,7 +15,6 @@ use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOu
 use crate::nns_dapp::set_authorized_subnets;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::util::assert_canister_counter_with_retries;
-use crate::workload_counter_canister_test::install_counter_canister;
 
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
@@ -27,7 +26,7 @@ use tokio::runtime::{Builder, Runtime};
 const NODES_COUNT: usize = 13;
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
-const SUCCESS_THRESHOLD: f32 = 0.33; // If more than 33% of the expected calls are successful the test passes
+const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900);
 const DKG_INTERVAL: u64 = 999;
@@ -73,18 +72,18 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test_small_messages(env: TestEnv) {
-    test(env, 640, 8500)
+    test(env, 640, 8500.0)
 }
 
 pub fn test_large_messages(env: TestEnv) {
-    test(env, 300000, 20)
+    test(env, 300000, 20.0)
 }
 
 pub fn custom_message_test(env: TestEnv) {
-    test(env, 6000, 1000)
+    test(env, 6000, 1000.0)
 }
 
-fn test(env: TestEnv, message_size: usize, rps: usize) {
+fn test(env: TestEnv, message_size: usize, rps: f64) {
     let log = env.logger();
 
     let canister_count: usize = 4;
@@ -132,9 +131,8 @@ fn test(env: TestEnv, message_size: usize, rps: usize) {
         .await;
 
         for _ in 0..canister_count {
-            canisters.push(
-                install_counter_canister(&agent.get(), app_node.effective_canister_id()).await,
-            );
+            const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+            canisters.push(app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None));
         }
         info!(log, "{} canisters installed successfully.", canisters.len());
         assert_eq!(
@@ -175,8 +173,8 @@ fn test(env: TestEnv, message_size: usize, rps: usize) {
             log,
             "Step 3: Assert expected number of success update calls on each canister.."
         );
-        let requests_count = rps * duration.as_secs() as usize;
-        let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count as f32) as usize;
+        let requests_count = rps * duration.as_secs_f64();
+        let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
         info!(
             log,
             "Minimal expected number of success calls {}", min_expected_success_calls,

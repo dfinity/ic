@@ -281,7 +281,7 @@ impl Polynomial {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CommitmentOpening {
     Simple(EccScalar),
     Pedersen(EccScalar, EccScalar),
@@ -428,7 +428,7 @@ impl SimpleCommitment {
         let mut points = Vec::with_capacity(num_coefficients);
 
         for i in 0..num_coefficients {
-            points.push(EccPoint::mul_by_g(&poly.coeff(i))?);
+            points.push(EccPoint::mul_by_g(&poly.coeff(i)));
         }
 
         Ok(Self::new(points))
@@ -444,7 +444,7 @@ impl SimpleCommitment {
         value: &EccScalar,
     ) -> ThresholdEcdsaResult<bool> {
         let eval = self.evaluate_at(eval_point)?;
-        Ok(eval == EccPoint::mul_by_g(value)?)
+        Ok(eval == EccPoint::mul_by_g(value))
     }
 }
 

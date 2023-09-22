@@ -43,6 +43,7 @@ impl PayloadBuilderImpl {
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -51,6 +52,7 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
+            BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
         ];
 
         Self {
@@ -196,7 +198,7 @@ pub(crate) mod test {
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
-        consensus::fake::Fake,
+        consensus::{batch::MockBatchPayloadBuilder, fake::Fake},
         ingress_selector::FakeIngressSelector,
         mock_time,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -247,6 +249,7 @@ pub(crate) mod test {
             FakeSelfValidatingPayloadBuilder::new().with_responses(responses_from_adapter);
         let canister_http_payload_builder =
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -255,6 +258,7 @@ pub(crate) mod test {
             Arc::new(xnet_payload_builder),
             Arc::new(self_validating_payload_builder),
             Arc::new(canister_http_payload_builder),
+            Arc::new(query_stats_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )

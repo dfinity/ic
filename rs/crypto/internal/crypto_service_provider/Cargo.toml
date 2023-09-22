@@ -10,13 +10,10 @@ async-trait = "0.1.41"
 base64 = "0.11"
 hex = "0.4.2"
 ic-config = { path = "../../../config" }
-ic-crypto-internal-basic-sig-der-utils = { path = "../crypto_lib/basic_sig/der_utils" }
-ic-crypto-internal-basic-sig-cose = { path = "../crypto_lib/basic_sig/cose" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../crypto_lib/basic_sig/rsa_pkcs1" }
-ic-crypto-internal-basic-sig-iccsa = { path = "../crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-logmon = { path = "../logmon" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-secrets-containers = { path = "../../secrets_containers" }
@@ -27,7 +24,8 @@ ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-tls = { path = "../crypto_lib/tls" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
-ic-crypto-sha = { path = "../../sha" }
+ic-crypto-sha2 = { path = "../../sha2" }
+ic-crypto-standalone-sig-verifier = { path = "../../standalone-sig-verifier" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-crypto-utils-time = { path = "../../utils/time" }
 ic-interfaces = { path = "../../../interfaces" }

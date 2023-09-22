@@ -1,11 +1,9 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{
     BasicSigner, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
@@ -28,20 +26,22 @@ use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 pub mod dummy_values;
 
-pub fn create_params_for_dealers<R: RngCore + CryptoRng>(
+pub fn create_idkg_params<R: RngCore + CryptoRng>(
     dealer_set: &BTreeSet<NodeId>,
+    receiver_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,
     rng: &mut R,
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
         random_transcript_id(rng),
         dealer_set.clone(),
-        dealer_set.clone(),
+        receiver_set.clone(),
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         operation,
@@ -256,9 +256,7 @@ pub fn build_params_from_previous<R: RngCore + CryptoRng>(
 
 pub mod node {
     use crate::{IDkgParticipants, IDkgParticipantsRandom};
-    use ic_crypto_internal_csp::Csp;
     use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
-    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CurrentNodePublicKeysError, IDkgProtocol, KeyManager,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -288,7 +286,8 @@ pub mod node {
     use ic_types::signature::BasicSignatureBatch;
     use ic_types::{NodeId, RegistryVersion};
     use rand::seq::IteratorRandom;
-    use rand::{CryptoRng, Rng, RngCore};
+    use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
     use std::cmp::Ordering;
     use std::collections::btree_set::{IntoIter, Iter};
     use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -299,7 +298,7 @@ pub mod node {
     /// A node is uniquely identified by its `id`.
     pub struct Node {
         id: NodeId,
-        crypto_component: Arc<TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
+        crypto_component: Arc<TempCryptoComponentGeneric<ChaCha20Rng>>,
         logger: InMemoryReplicaLogger,
     }
 
@@ -328,7 +327,7 @@ pub mod node {
             self.id
         }
 
-        pub fn crypto(&self) -> Arc<TempCryptoComponentGeneric<Csp, ReproducibleRng>> {
+        pub fn crypto(&self) -> Arc<TempCryptoComponentGeneric<ChaCha20Rng>> {
             Arc::clone(&self.crypto_component)
         }
 
@@ -569,7 +568,7 @@ pub mod node {
         registry: Arc<FakeRegistryClient>,
         logger: ReplicaLogger,
         rng: &mut R,
-    ) -> TempCryptoComponentGeneric<Csp, ReproducibleRng> {
+    ) -> TempCryptoComponentGeneric<ChaCha20Rng> {
         TempCryptoComponent::builder()
             .with_registry(Arc::clone(&registry) as Arc<_>)
             .with_node_id(node_id)
@@ -581,7 +580,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ReproducibleRng::from_rng(rng))
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
             .build()
     }
 
@@ -657,13 +656,13 @@ pub mod node {
             (nodes_true, nodes_false)
         }
 
-        pub fn into_receivers(
+        pub fn into_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             self,
-            idkg_receivers: &IDkgReceivers,
-        ) -> impl Iterator<Item = Node> + '_ {
+            idkg_receivers: T,
+        ) -> impl Iterator<Item = Node> + 'a {
             self.nodes
                 .into_iter()
-                .filter(|node| idkg_receivers.get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
         }
 
         pub fn receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
@@ -707,9 +706,9 @@ pub mod node {
                 .expect("empty receivers")
         }
 
-        pub fn random_receiver<'a, R: Rng>(
+        pub fn random_receiver<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
-            idkg_receivers: &'a IDkgReceivers,
+            idkg_receivers: T,
             rng: &mut R,
         ) -> &Node {
             self.receivers(idkg_receivers)
@@ -870,7 +869,7 @@ pub mod node {
         ) -> IDkgTranscript {
             let dealings = self.load_previous_transcripts_and_create_signed_dealings(params);
             let multisigned_dealings = self.support_dealings_from_all_receivers(dealings, params);
-            let transcript_creator = self.dealers(params).next().unwrap();
+            let transcript_creator = self.receivers(params).next().unwrap();
             let transcript =
                 transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
             assert!(self
@@ -948,7 +947,6 @@ pub mod node {
 
                     let min_num_receivers = self.len();
                     let min_num_dealers = (1..=min_num_receivers)
-                        .into_iter()
                         .find(|&num_dealers| is_threshold_satisfied(num_dealers, min_num_receivers))
                         .unwrap_or_else(||  panic!("no valid number of dealers found for {min_num_receivers} receivers and given constraint"));
 
@@ -1017,7 +1015,8 @@ pub enum IDkgParticipants {
     /// - Choose a random subset with at least one node to be dealers.
     /// - Choose a random subset with at least one node to be receivers.
     /// Both dealers and receivers are chosen independently of each other and it could be the case
-    /// that some nodes are neither dealers nor receivers.
+    /// that some nodes are neither dealers nor receivers. It could also be the case that some
+    /// nodes are both dealers and receivers.
     /// This is equivalent to `RandomWithAtLeast{min_num_dealers: 1, min_num_receivers: 1}`.
     Random,
 
@@ -1025,7 +1024,8 @@ pub enum IDkgParticipants {
     /// - Choose a random subset with at least `min_num_dealers` nodes to be dealers.
     /// - Choose a random subset with at least `min_num_receivers` nodes to be receivers.
     /// Both dealers and receivers are chosen independently of each other and it could be the case
-    /// that some nodes are neither dealers nor receivers.
+    /// that some nodes are neither dealers nor receivers. It could also be the case that some
+    /// nodes are both dealers and receivers.
     ///
     /// # Panics
     /// - If `min_num_dealers` is zero.
@@ -1083,6 +1083,29 @@ impl CanisterThresholdSigTestEnvironment {
         env
     }
 
+    /// Creates a new test environment with the given number of nodes,
+    /// but the same registry as an existing environment.
+    pub fn new_with_existing_registry<R: RngCore + CryptoRng>(
+        existing: &CanisterThresholdSigTestEnvironment,
+        num_of_nodes: usize,
+        rng: &mut R,
+    ) -> Self {
+        let mut env = Self {
+            nodes: Nodes::new(),
+            registry_data: Arc::clone(&existing.registry_data),
+            registry: Arc::clone(&existing.registry),
+            newest_registry_version: existing.newest_registry_version,
+        };
+
+        for node_id in n_random_node_ids(num_of_nodes, rng) {
+            let node = Node::new(node_id, Arc::clone(&existing.registry), rng);
+            env.add_node(node);
+        }
+        env.registry.update_to_latest_version();
+
+        env
+    }
+
     /// Returns an `IDkgTranscriptParams` appropriate for creating a random
     /// sharing in this environment.
     pub fn params_for_random_sharing<R: RngCore + CryptoRng>(
@@ -1111,7 +1134,7 @@ impl CanisterThresholdSigTestEnvironment {
         self.nodes.choose_dealers_and_receivers(strategy, rng)
     }
 
-    fn add_node(&mut self, node: Node) {
+    pub fn add_node(&mut self, node: Node) {
         let node_id = node.id();
         let node_keys = node
             .crypto()
@@ -1199,7 +1222,7 @@ fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersi
     RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
 }
 
-fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
+pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen::<u64>();
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
     let height = Height::from(rng.gen::<u64>());
@@ -1207,12 +1230,16 @@ fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
+pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
     let mut node_ids = BTreeSet::new();
     while node_ids.len() < n {
-        node_ids.insert(NodeId::from(PrincipalId::new_node_test_id(rng.gen())));
+        node_ids.insert(random_node_id(rng));
     }
     node_ids
+}
+
+fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(rng.gen()))
 }
 
 pub fn random_receiver_id<R: RngCore + CryptoRng>(
@@ -1297,12 +1324,12 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,
     rng: &mut R,
-) -> TempCryptoComponentGeneric<Csp, ReproducibleRng> {
+) -> TempCryptoComponentGeneric<ChaCha20Rng> {
     let node_id = random_node_id_excluding(receivers.get(), rng);
     TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(node_id)
-        .with_rng(ReproducibleRng::from_rng(rng))
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build()
 }
 
@@ -1372,7 +1399,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ReproducibleRng::from_rng(rng))
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         assert!(verifier_crypto_component
@@ -1383,7 +1410,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ReproducibleRng::from_rng(rng))
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
     combiner_crypto_component
         .combine_sig_shares(sig_inputs, &sig_shares)

@@ -5,7 +5,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
     SignedIDkgDealing,
 };
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
+use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
 use ic_base_types::{
@@ -13,7 +13,9 @@ use ic_base_types::{
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
+use ic_protobuf::registry::subnet::v1::IDkgComplaint as IDkgComplaintProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
+use ic_protobuf::registry::subnet::v1::IDkgOpening as IDkgOpeningProto;
 use ic_protobuf::registry::subnet::v1::IDkgSignedDealingTuple as IDkgSignedDealingTupleProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscriptId as IDkgTranscriptIdProto;
@@ -22,11 +24,14 @@ use ic_protobuf::registry::subnet::v1::IDkgTranscriptParams as IDkgTranscriptPar
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::registry::subnet::v1::VerifiedIDkgDealing as VerifiedIDkgDealingProto;
 use ic_protobuf::registry::subnet::v1::{DealerTuple as DealerTupleProto, SignatureTuple};
+use ic_protobuf::types::v1::IDkgDealingSupport as IDkgDealingSupportProto;
 use ic_protobuf::types::v1::NodeId as NodeIdProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::iter::FromIterator;
+
+use super::{IDkgComplaint, IDkgDealingSupport, IDkgOpening};
 
 const CURRENT_INITIAL_IDKG_DEALINGS_VERSION: u32 = 0;
 
@@ -88,6 +93,50 @@ impl TryFrom<&InitialIDkgDealingsProto> for InitialIDkgDealings {
     }
 }
 
+impl From<&IDkgOpening> for IDkgOpeningProto {
+    fn from(value: &IDkgOpening) -> Self {
+        Self {
+            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            dealer: Some(node_id_into_protobuf(value.dealer_id)),
+            raw_opening: value.internal_opening_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&IDkgOpeningProto> for IDkgOpening {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &IDkgOpeningProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
+            dealer_id: node_id_struct(&proto.dealer)?,
+            internal_opening_raw: proto.raw_opening.clone(),
+        })
+    }
+}
+
+impl From<&IDkgComplaint> for IDkgComplaintProto {
+    fn from(value: &IDkgComplaint) -> Self {
+        Self {
+            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            dealer: Some(node_id_into_protobuf(value.dealer_id)),
+            raw_complaint: value.internal_complaint_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&IDkgComplaintProto> for IDkgComplaint {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &IDkgComplaintProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
+            dealer_id: node_id_struct(&proto.dealer)?,
+            internal_complaint_raw: proto.raw_complaint.clone(),
+        })
+    }
+}
+
 impl From<ExtendedDerivationPath> for ExtendedDerivationPathProto {
     fn from(path: ExtendedDerivationPath) -> Self {
         ExtendedDerivationPathProto {
@@ -104,6 +153,47 @@ impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
             caller: try_from_option_field(proto.caller, "ExtendedDerivationPath::caller")?,
             derivation_path: proto.derivation_path,
         })
+    }
+}
+
+impl From<&IDkgDealingSupport> for IDkgDealingSupportProto {
+    fn from(value: &IDkgDealingSupport) -> Self {
+        Self {
+            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            dealer: Some(node_id_into_protobuf(value.dealer_id)),
+            dealing_hash: value.dealing_hash.clone().get().0,
+            sig_share: Some(value.sig_share.clone().into()),
+        }
+    }
+}
+
+impl TryFrom<&IDkgDealingSupportProto> for IDkgDealingSupport {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &IDkgDealingSupportProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
+            dealer_id: node_id_struct(&proto.dealer)?,
+            dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash(proto.dealing_hash.clone())),
+            sig_share: try_from_option_field(
+                proto.sig_share.clone(),
+                "IDkgDealingSupport::sig_share",
+            )?,
+        })
+    }
+}
+
+impl From<&SignedIDkgDealing> for IDkgSignedDealingTupleProto {
+    fn from(value: &SignedIDkgDealing) -> Self {
+        signed_idkg_dealing_tuple_proto(value)
+    }
+}
+
+impl TryFrom<&IDkgSignedDealingTupleProto> for SignedIDkgDealing {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &IDkgSignedDealingTupleProto) -> Result<Self, Self::Error> {
+        signed_idkg_dealing_struct(&Some(proto.clone())).map_err(|e| e.into())
     }
 }
 

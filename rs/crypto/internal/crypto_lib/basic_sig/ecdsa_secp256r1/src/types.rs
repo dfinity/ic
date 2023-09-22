@@ -16,7 +16,7 @@ pub struct SecretKeyBytes(pub SecretVec);
 
 /// ECDSA secp256r1 public key bytes, in uncompressed format
 ///
-/// The public key is a point (x, y) on secp256k1, uncompressed.
+/// The public key is a point (x, y) on secp256r1, uncompressed.
 /// Affine coordinates of the public key.
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone)]
 pub struct PublicKeyBytes(#[serde(with = "serde_bytes")] pub Vec<u8>);

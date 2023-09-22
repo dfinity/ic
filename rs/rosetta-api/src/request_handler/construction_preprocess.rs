@@ -48,7 +48,14 @@ impl RosettaRequestHandler {
 /// Return the public key required to complete a request.
 fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier, ApiError> {
     match request {
-        Request::Transfer(Operation::Transfer { from, .. }) => Ok(from),
+        Request::Transfer(Operation::Transfer { from, spender, .. }) => {
+            if spender.is_some() {
+                return Err(ApiError::invalid_request(
+                    "TransferFrom operations are not supported through Rosetta.",
+                ));
+            }
+            Ok(from)
+        }
         Request::Transfer(Operation::Burn { .. }) => Err(ApiError::invalid_request(
             "Burn operations are not supported through rosetta",
         )),
@@ -57,9 +64,6 @@ fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier
         )),
         Request::Transfer(Operation::Approve { .. }) => Err(ApiError::invalid_request(
             "Approve operations are not supported through rosetta",
-        )),
-        Request::Transfer(Operation::TransferFrom { .. }) => Err(ApiError::invalid_request(
-            "TransferFrom operations are not supported through rosetta",
         )),
         Request::Stake(Stake { account, .. })
         | Request::SetDissolveTimestamp(SetDissolveTimestamp { account, .. })

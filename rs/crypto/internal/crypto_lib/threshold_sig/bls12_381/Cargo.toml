@@ -10,15 +10,15 @@ cached = { version = "0.41", default-features = false }
 parking_lot = "0.12.1"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-seed = { path = "../../seed" }
-ic-crypto-internal-threshold-sig-bls12381-der = { path = "der_utils"}
+ic-crypto-internal-threshold-sig-bls12381-der = { path = "der_utils" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-types = { path = "../../types" }
-ic-crypto-sha = { path = "../../../../sha" }
+ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
 lazy_static = "1.4.0"
 rand = "0.8"
 rand_chacha = "0.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 subtle = "2.4"

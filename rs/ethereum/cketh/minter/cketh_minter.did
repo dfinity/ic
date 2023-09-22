@@ -1,17 +1,60 @@
-type MinterArg = variant {
-    InitArg : record { ecdsa_key_name : text };
-    UpgradeArg;
+type DisplayLogsRequest = record { to : text; from : text; address : text };
+type EthereumNetwork = variant {
+    // The public Ethereum mainnet.
+    Mainnet;
+    // The public Ethereum Sepolia testnet.
+    Sepolia;
 };
-
+type InitArg = record {
+    // The minter will interact with this Ethereum network.
+    eth_network : EthereumNetwork;
+    ecdsa_key_name : text;
+    ledger_id : principal;
+    next_transaction_nonce: nat
+};
+type JsonRpcResult = variant {
+  Error : record { code : int64; message : text };
+   Result : text;
+};
+type MinterArg = variant { UpgradeArg; InitArg : InitArg };
+type RetrieveEthStatus = variant {
+    NotFound;
+    PendingSigning;
+    Found: record {transaction_hash : text};
+};
+type RetrieveEthRequest = record { block_index : nat };
+type WithdrawalError = variant {
+    // The withdrawal amount is too low.
+    // The payload contains the minimal withdrawal amount.
+    AmountTooLow : record { min_withdrawal_amount: nat };
+    // The ckETH balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat };
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat };
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable: text;
+};
 service : (MinterArg) -> {
     minter_address : () -> (text);
-    display_logs: (record {
-      address : text;
-      from : text;
-      to : text;
-    }) -> (vec record {
-      to_address : text;
-      value : nat;
-      "principal" : principal;
+    test_transfer : (nat64, nat64, text) -> (JsonRpcResult);
+    eip_1559_transaction_price: () -> (record {
+        base_fee_from_last_finalized_block : nat;
+        base_fee_of_next_finalized_block : nat;
+        max_priority_fee_per_gas : nat;
+        max_fee_per_gas : nat;
+        gas_limit : nat;
     });
+    withdraw : (nat, text) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
+    retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
+    dump_state_for_debugging: () -> ( record {
+        ecdsa_key_name : text;
+        last_seen_block_number: nat;
+        minted_transactions : vec record {transaction_hash : text};
+        invalid_transactions : vec record {transaction_hash : text};
+        next_transaction_nonce : nat;
+        unapproved_retrieve_eth_requests : vec text;
+        signed_retrieve_eth_requests : vec text;
+        sent_retrieve_eth_requests : vec text;
+    }) query;
 }

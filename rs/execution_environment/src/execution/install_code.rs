@@ -7,20 +7,18 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::CanisterStateChanges;
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode};
-use ic_interfaces::{
-    execution_environment::{
-        HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
-    },
-    messages::CanisterCall,
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
 use ic_types::{
-    funds::Cycles, CanisterTimer, ComputeAllocation, Height, MemoryAllocation, NumInstructions,
-    Time,
+    funds::Cycles, messages::CanisterCall, CanisterTimer, ComputeAllocation, Height,
+    MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmHash;
 
@@ -226,6 +224,7 @@ impl InstallCodeHelper {
                 self.canister.memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
+                self.canister.system_state.reserved_balance(),
             );
             if self.canister.system_state.balance() < threshold {
                 let bytes = self.allocated_bytes - self.deallocated_bytes;
@@ -335,6 +334,7 @@ impl InstallCodeHelper {
         DtsInstallCodeResult::Finished {
             canister: self.canister,
             message: original.message,
+            call_id: original.call_id,
             instructions_used,
             result: Ok(InstallCodeResult {
                 heap_delta: self.total_heap_delta,
@@ -377,6 +377,7 @@ impl InstallCodeHelper {
             self.canister.system_state.balance(),
             round.cycles_account_manager,
             original.subnet_size,
+            self.canister.system_state.reserved_balance(),
         )?;
 
         match original.mode {
@@ -525,17 +526,28 @@ impl InstallCodeHelper {
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
+    ///
+    /// Returns the amount of instructions consumed along with the result of
+    /// applying the state changes.
     pub fn handle_wasm_execution(
         &mut self,
         canister_state_changes: Option<CanisterStateChanges>,
         output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> (NumInstructions, Result<(), CanisterManagerError>) {
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
             output: output.clone(),
         });
+
+        let instructions_consumed = NumInstructions::from(
+            self.execution_parameters
+                .instruction_limits
+                .message()
+                .get()
+                .saturating_sub(output.num_instructions_left.get()),
+        );
 
         self.execution_parameters
             .instruction_limits
@@ -560,7 +572,10 @@ impl InstallCodeHelper {
                         limit
                     );
                 }
-                return Err((self.canister().canister_id(), err).into());
+                return (
+                    instructions_consumed,
+                    Err((self.canister().canister_id(), err).into()),
+                );
             }
         };
 
@@ -600,7 +615,10 @@ impl InstallCodeHelper {
                         )
                     }
                 }
-                return Err((self.canister.canister_id(), err).into());
+                return (
+                    instructions_consumed,
+                    Err((self.canister.canister_id(), err).into()),
+                );
             }
             let execution_state = self.canister.execution_state.as_mut().unwrap();
             execution_state.wasm_memory = wasm_memory;
@@ -616,7 +634,7 @@ impl InstallCodeHelper {
             self.total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
         }
-        Ok(())
+        (instructions_consumed, Ok(()))
     }
 
     // A helper method to replay the given step.
@@ -642,7 +660,11 @@ impl InstallCodeHelper {
             InstallCodeStep::HandleWasmExecution {
                 canister_state_changes,
                 output,
-            } => self.handle_wasm_execution(canister_state_changes, output, original, round),
+            } => {
+                let (_, result) =
+                    self.handle_wasm_execution(canister_state_changes, output, original, round);
+                result
+            }
         }
     }
 }
@@ -656,6 +678,8 @@ pub(crate) struct OriginalContext {
     pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
+    // TODO(EXC-1454): Make call_id non-optional.
+    pub call_id: Option<InstallCodeCallId>,
     pub prepaid_execution_cycles: Cycles,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
@@ -739,6 +763,7 @@ pub(crate) fn finish_err(
     DtsInstallCodeResult::Finished {
         canister: new_canister,
         message: original.message,
+        call_id: original.call_id,
         instructions_used,
         result: Err(err),
     }

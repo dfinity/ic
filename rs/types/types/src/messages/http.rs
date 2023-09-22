@@ -71,7 +71,7 @@ pub(crate) fn representation_independent_hash_read_state(
                 .map(|p| {
                     RawHttpRequestVal::Array(
                         p.iter()
-                            .map(|b| RawHttpRequestVal::Bytes(b.clone().to_vec()))
+                            .map(|b| RawHttpRequestVal::Bytes(b.clone().into_vec()))
                             .collect(),
                     )
                 })
@@ -277,28 +277,6 @@ pub enum Authentication {
     Anonymous,
 }
 
-// TODO(CRP-2004): replace with a private function
-impl<C> TryFrom<&HttpRequestEnvelope<C>> for Authentication {
-    type Error = HttpRequestError;
-
-    fn try_from(env: &HttpRequestEnvelope<C>) -> Result<Self, Self::Error> {
-        match (&env.sender_pubkey, &env.sender_sig, &env.sender_delegation) {
-            (Some(pubkey), Some(signature), delegation) => {
-                Ok(Authentication::Authenticated(UserSignature {
-                    signature: signature.0.clone(),
-                    signer_pubkey: pubkey.0.clone(),
-                    sender_delegation: delegation.clone(),
-                }))
-            }
-            (None, None, None) => Ok(Authentication::Anonymous),
-            rest => Err(Self::Error::MissingPubkeyOrSignature(format!(
-                "Got {:?}",
-                rest
-            ))),
-        }
-    }
-}
-
 /// Common attributes that all HTTP request contents should have.
 pub trait HttpRequestContent {
     fn id(&self) -> MessageId;
@@ -387,7 +365,7 @@ impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<UserQuery> {
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpQueryContent>) -> Result<Self, Self::Error> {
-        let auth = Authentication::try_from(&envelope)?;
+        let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpQueryContent::Query { query } => Ok(HttpRequest {
                 content: UserQuery::try_from(query)?,
@@ -401,7 +379,7 @@ impl TryFrom<HttpRequestEnvelope<HttpReadStateContent>> for HttpRequest<ReadStat
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpReadStateContent>) -> Result<Self, Self::Error> {
-        let auth = Authentication::try_from(&envelope)?;
+        let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpReadStateContent::ReadState { read_state } => Ok(HttpRequest {
                 content: ReadState::try_from(read_state)?,
@@ -415,7 +393,7 @@ impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for HttpRequest<SignedIngress
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpCallContent>) -> Result<Self, Self::Error> {
-        let auth = Authentication::try_from(&envelope)?;
+        let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpCallContent::Call { update } => Ok(HttpRequest {
                 content: SignedIngressContent::try_from(update)?,
@@ -683,4 +661,21 @@ pub struct HttpStatusResponse {
     pub replica_health_status: Option<ReplicaHealthStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub certified_height: Option<Height>,
+}
+
+fn to_authentication<C>(env: &HttpRequestEnvelope<C>) -> Result<Authentication, HttpRequestError> {
+    match (&env.sender_pubkey, &env.sender_sig, &env.sender_delegation) {
+        (Some(pubkey), Some(signature), delegation) => {
+            Ok(Authentication::Authenticated(UserSignature {
+                signature: signature.0.clone(),
+                signer_pubkey: pubkey.0.clone(),
+                sender_delegation: delegation.clone(),
+            }))
+        }
+        (None, None, None) => Ok(Authentication::Anonymous),
+        rest => Err(HttpRequestError::MissingPubkeyOrSignature(format!(
+            "Got {:?}",
+            rest
+        ))),
+    }
 }

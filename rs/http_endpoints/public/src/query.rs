@@ -13,7 +13,7 @@ use futures_util::FutureExt;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
-use ic_interfaces::execution_environment::QueryExecutionService;
+use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionService};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
 use ic_types::messages::{
@@ -181,12 +181,12 @@ impl Service<Request<Vec<u8>>> for QueryService {
             new_query_execution_service,
         );
 
-        let registry_client = self.registry_client.get_latest_version();
+        let registry_version = self.registry_client.get_latest_version();
         let validator_executor = self.validator_executor.clone();
         let response_body_size_bytes_metric = self.metrics.response_body_size_bytes.clone();
         async move {
             let get_authorized_canisters_fut =
-                validator_executor.validate_request(request.clone(), registry_client);
+                validator_executor.validate_request(request.clone(), registry_version);
 
             match get_authorized_canisters_fut.await {
                 Ok(targets) => {
@@ -202,13 +202,27 @@ impl Service<Request<Vec<u8>>> for QueryService {
             };
             old_query_execution_service
                 .call((request.take_content(), delegation_from_nns))
-                .map(|result| {
-                    let v = result?;
-                    let (resp, body_size) = cbor_response(&v);
-                    response_body_size_bytes_metric
-                        .with_label_values(&[ApiReqType::Query.into()])
-                        .observe(body_size as f64);
-                    Ok(resp)
+                .map(|call_result| {
+                    let query_execution_response = call_result?;
+
+                    let response = match query_execution_response {
+                        Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                            make_plaintext_response(
+                                StatusCode::SERVICE_UNAVAILABLE,
+                                "Certified state unavailable. Please try again.".to_string(),
+                            )
+                        }
+                        Ok(v) => {
+                            let (resp, body_size) = cbor_response(&v);
+                            response_body_size_bytes_metric
+                                .with_label_values(&[ApiReqType::Query.into()])
+                                .observe(body_size as f64);
+
+                            resp
+                        }
+                    };
+
+                    Ok(response)
                 })
                 .await
         }

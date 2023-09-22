@@ -5,7 +5,7 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
-use ic_icrc1_ledger::{InitArgs, LedgerArgument};
+use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
     NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
@@ -13,7 +13,6 @@ use ic_icrc1_ledger_sm_tests::{
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_starter_tests::{ReplicaBins, ReplicaContext, ReplicaStarterConfig};
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
 
 use std::sync::Arc;
@@ -49,7 +48,7 @@ pub async fn start_new_local_replica() -> ReplicaContext {
         std::fs::canonicalize(std::env::var_os("STARTER_BIN").expect("missing ic-starter binary"))
             .unwrap();
 
-    let context = ic_starter_tests::start_replica(
+    ic_starter_tests::start_replica(
         &ReplicaBins {
             canister_launcher,
             replica_bin,
@@ -59,9 +58,7 @@ pub async fn start_new_local_replica() -> ReplicaContext {
         &ReplicaStarterConfig::default(),
     )
     .await
-    .expect("Failed to start replica");
-
-    context
+    .expect("Failed to start replica")
 }
 
 pub async fn get_testing_agent(context: &ReplicaContext) -> Agent {
@@ -90,21 +87,11 @@ pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> C
         .get_principal()
         .unwrap()
         .into();
-    let default_init_args = InitArgs {
-        minting_account: testing_account,
-        fee_collector_account: None,
-        // For testing the test identity of the local replica will receive 1 million ICP
-        initial_balances: vec![(testing_account, 1_000_000_000_000)],
-        transfer_fee: FEE,
-        token_name: TOKEN_NAME.to_string(),
-        token_symbol: TOKEN_SYMBOL.to_string(),
-        metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
-        ],
-        archive_options: ArchiveOptions {
+    let default_init_args = InitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+        .with_minting_account(testing_account)
+        .with_initial_balance(testing_account, 1_000_000_000_000u64)
+        .with_transfer_fee(FEE)
+        .with_archive_options(ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
             num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
             node_max_memory_size_bytes: None,
@@ -112,10 +99,12 @@ pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> C
             controller_id: PrincipalId::new_user_test_id(100),
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
-        },
-        max_memo_length: None,
-        feature_flags: None,
-    };
+        })
+        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
+        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
+        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
+        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
+        .build();
     deploy_icrc_ledger_with_custom_args(context, default_init_args).await
 }
 

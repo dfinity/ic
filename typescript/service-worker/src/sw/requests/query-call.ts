@@ -5,7 +5,10 @@ import {
   responseVerification,
   streamBody,
 } from '../response';
-import { VerifiedResponse } from './typings';
+import {
+  VerifiedResponse,
+  responseVerificationFailedResponse,
+} from './typings';
 import {
   HttpRequest,
   HttpResponse,
@@ -37,16 +40,6 @@ export async function queryCallHandler(
       agent.rootKey
     );
 
-    if (!verificationResult.passed || !verificationResult.response) {
-      return {
-        response: new Response('Response verification failed', {
-          status: 500,
-          statusText: 'Response verification failed',
-        }),
-        certifiedHeaders: new Headers(),
-      };
-    }
-
     if (verificationResult.verificationVersion < 2) {
       if (httpResponse.status_code >= 300 && httpResponse.status_code < 400) {
         return {
@@ -70,14 +63,14 @@ export async function queryCallHandler(
         status: httpResponse.status_code,
         headers: responseHeaders,
       }),
-      certifiedHeaders: new Headers(verificationResult.response.headers),
+      certifiedHeaders: new Headers(verificationResult.response?.headers),
     };
   } catch (error) {
     if (error instanceof ResponseVerificationError) {
       return {
         response: new Response('Response verification failed', {
-          status: 500,
-          statusText: 'Response verification failed',
+          status: responseVerificationFailedResponse.status,
+          statusText: responseVerificationFailedResponse.statusText,
         }),
         certifiedHeaders: new Headers(),
       };

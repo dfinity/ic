@@ -2,20 +2,29 @@ use std::time::Duration;
 
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, Rng};
 
-fn random_point(curve_type: EccCurveType) -> EccPoint {
-    let mut rng = rand::thread_rng();
-    EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng)).unwrap()
+fn random_point<R: Rng + CryptoRng>(curve_type: EccCurveType, rng: &mut R) -> EccPoint {
+    EccPoint::mul_by_g(&EccScalar::random(curve_type, rng))
 }
 
-fn random_scalar(curve_type: EccCurveType) -> EccScalar {
-    let mut rng = rand::thread_rng();
-    EccScalar::random(curve_type, &mut rng)
+fn random_scalar<R: Rng + CryptoRng>(curve_type: EccCurveType, rng: &mut R) -> EccScalar {
+    EccScalar::random(curve_type, rng)
 }
 
-fn gen_mul_n_instance(num_terms: usize, curve_type: EccCurveType) -> Vec<(EccPoint, EccScalar)> {
+fn gen_mul_n_instance<R: Rng + CryptoRng>(
+    num_terms: usize,
+    curve_type: EccCurveType,
+    rng: &mut R,
+) -> Vec<(EccPoint, EccScalar)> {
     (0..num_terms)
-        .map(|_| (random_point(curve_type), random_scalar(curve_type)))
+        .map(|_| {
+            (
+                random_point(curve_type, rng),
+                random_scalar(curve_type, rng),
+            )
+        })
         .collect()
 }
 
@@ -28,6 +37,8 @@ fn mul_n_naive(terms: &[(EccPoint, EccScalar)]) -> EccPoint {
 }
 
 fn point_multiexp_vartime_total(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_point_multiexp_total_{}", curve_type));
 
@@ -39,7 +50,7 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
                 &num_args,
                 |b, size| {
                     b.iter_batched_ref(
-                        || gen_mul_n_instance(*size, curve_type),
+                        || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
                             EccPoint::mul_2_points(
                                 &terms[0].0,
@@ -61,7 +72,7 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
                 &num_args,
                 |b, &size| {
                     b.iter_batched_ref(
-                        || gen_mul_n_instance(*size, curve_type),
+                        || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| mul_n_naive(&terms[..]),
                         BatchSize::SmallInput,
                     )
@@ -74,7 +85,7 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
                     &num_args,
                     |b, &size| {
                         b.iter_batched_ref(
-                            || gen_mul_n_instance(*size, curve_type),
+                            || gen_mul_n_instance(*size, curve_type, rng),
                             |terms| {
                                 // create "deep" refs of pairs
                                 for (p, _s) in terms.iter_mut() {
@@ -99,6 +110,8 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
 }
 
 fn point_multiexp_vartime_online(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_point_multiexp_online_{}", curve_type));
 
@@ -110,7 +123,7 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
                 &num_args,
                 |b, size| {
                     b.iter_batched_ref(
-                        || gen_mul_n_instance(*size, curve_type),
+                        || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
                             EccPoint::mul_2_points(
                                 &terms[0].0,
@@ -132,7 +145,7 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
                 &num_args,
                 |b, &size| {
                     b.iter_batched_ref(
-                        || gen_mul_n_instance(*size, curve_type),
+                        || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| mul_n_naive(&terms[..]),
                         BatchSize::SmallInput,
                     )
@@ -146,7 +159,7 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
                     |b, &size| {
                         b.iter_batched_ref(
                             || {
-                                let mut terms = gen_mul_n_instance(*size, curve_type);
+                                let mut terms = gen_mul_n_instance(*size, curve_type, rng);
                                 // create "deep" refs of pairs
                                 for (p, _s) in terms.iter_mut() {
                                     p.precompute(window_size).unwrap();
@@ -172,6 +185,8 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
 }
 
 fn point_multiexp_constant_time(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!(
             "crypto_point_multiexp_constant_time_{}",
@@ -186,7 +201,7 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
                 &num_args,
                 |b, size| {
                     b.iter_batched_ref(
-                        || gen_mul_n_instance(*size, curve_type),
+                        || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
                             EccPoint::mul_2_points(
                                 &terms[0].0,
@@ -208,7 +223,7 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
                 &num_args,
                 |b, &size| {
                     b.iter_batched_ref(
-                        || gen_mul_n_instance(*size, curve_type),
+                        || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| mul_n_naive(&terms[..]),
                         BatchSize::SmallInput,
                     )
@@ -220,7 +235,7 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
                 &num_args,
                 |b, &size| {
                     b.iter_batched_ref(
-                        || gen_mul_n_instance(*size, curve_type),
+                        || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
                             // create refs of pairs
                             let refs_of_pairs: Vec<_> = terms.iter().map(|(p, s)| (p, s)).collect();
@@ -238,17 +253,19 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
 }
 
 fn point_double_vs_addition(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     for curve_type in EccCurveType::all() {
         let mut group =
             c.benchmark_group(format!("crypto_point_double_vs_addition_{}", curve_type));
 
-        group.bench_function(BenchmarkId::new("double", 0), move |b| {
-            b.iter_with_setup(|| random_point(curve_type), |p| p.double())
+        group.bench_function(BenchmarkId::new("double", 0), |b| {
+            b.iter_with_setup(|| random_point(curve_type, rng), |p| p.double())
         });
 
-        group.bench_function(BenchmarkId::new("add_points", 0), move |b| {
+        group.bench_function(BenchmarkId::new("add_points", 0), |b| {
             b.iter_with_setup(
-                || (random_point(curve_type), random_point(curve_type)),
+                || (random_point(curve_type, rng), random_point(curve_type, rng)),
                 |(p_0, p_1)| p_0.add_points(&p_1),
             )
         });
@@ -258,21 +275,31 @@ fn point_double_vs_addition(c: &mut Criterion) {
 }
 
 fn point_mul(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_point_multiplication_{}", curve_type));
 
-        group.bench_function("multiply", move |b| {
+        group.bench_function("multiply", |b| {
             b.iter_batched_ref(
-                || (random_point(curve_type), random_scalar(curve_type)),
+                || {
+                    (
+                        random_point(curve_type, rng),
+                        random_scalar(curve_type, rng),
+                    )
+                },
                 |(p, s)| p.scalar_mul(s),
                 BatchSize::SmallInput,
             )
         });
 
-        group.bench_function("multiply_vartime_online", move |b| {
+        group.bench_function("multiply_vartime_online", |b| {
             b.iter_batched_ref(
                 || {
-                    let (mut p, s) = (random_point(curve_type), random_scalar(curve_type));
+                    let (mut p, s) = (
+                        random_point(curve_type, rng),
+                        random_scalar(curve_type, rng),
+                    );
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
                         .expect("failed to precopmute point");
                     (p, s)
@@ -282,9 +309,14 @@ fn point_mul(c: &mut Criterion) {
             )
         });
 
-        group.bench_function("multiply_vartime_total", move |b| {
+        group.bench_function("multiply_vartime_total", |b| {
             b.iter_batched_ref(
-                || (random_point(curve_type), random_scalar(curve_type)),
+                || {
+                    (
+                        random_point(curve_type, rng),
+                        random_scalar(curve_type, rng),
+                    )
+                },
                 |(p, s)| {
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
                         .expect("failed to precopmute point");
@@ -297,10 +329,13 @@ fn point_mul(c: &mut Criterion) {
         for window_size in NafLut::MIN_WINDOW_SIZE..=NafLut::MAX_WINDOW_SIZE {
             group.bench_function(
                 BenchmarkId::new("multiply_vartime_online", window_size),
-                move |b| {
+                |b| {
                     b.iter_batched_ref(
                         || {
-                            let (mut p, s) = (random_point(curve_type), random_scalar(curve_type));
+                            let (mut p, s) = (
+                                random_point(curve_type, rng),
+                                random_scalar(curve_type, rng),
+                            );
                             p.precompute(window_size)
                                 .expect("failed to precopmute point");
                             (p, s)
@@ -313,9 +348,14 @@ fn point_mul(c: &mut Criterion) {
 
             group.bench_function(
                 BenchmarkId::new("multiply_vartime_total", window_size),
-                move |b| {
+                |b| {
                     b.iter_batched_ref(
-                        || (random_point(curve_type), random_scalar(curve_type)),
+                        || {
+                            (
+                                random_point(curve_type, rng),
+                                random_scalar(curve_type, rng),
+                            )
+                        },
                         |(p, s)| {
                             p.precompute(window_size)
                                 .expect("failed to precopmute point");

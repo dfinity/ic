@@ -8,14 +8,13 @@ use ic_ic00_types::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
-use ic_interfaces::messages::CanisterMessage;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
-    metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
+    metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
     CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
@@ -25,7 +24,9 @@ use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test
 use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
-    messages::{Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    messages::{
+        CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+    },
     CountBytes, Cycles, MemoryAllocation, Time,
 };
 use maplit::btreemap;
@@ -543,10 +544,8 @@ fn insert_bitcoin_response_non_matching() {
 fn insert_bitcoin_response() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-    state
-        .metadata
-        .subnet_call_context_manager
-        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
             payload: GetSuccessorsRequestInitial {
                 network: Network::Regtest,
@@ -554,7 +553,8 @@ fn insert_bitcoin_response() {
                 processed_block_hashes: vec![],
             },
             time: mock_time(),
-        });
+        }),
+    );
 
     let response = GetSuccessorsResponseComplete {
         blocks: vec![],
@@ -589,13 +589,10 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
             .unwrap();
     }
 
-    // Time out everything, then check subnet input schedules are as expected.
-    assert_eq!(
-        3,
-        fixture
-            .state
-            .time_out_requests(Time::from_nanos_since_unix_epoch(u64::MAX)),
-    );
+    // Time out everything, then check that subnet input schedules are as expected.
+    fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
+    assert_eq!(3, fixture.state.time_out_requests());
+
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
         assert!(fixture
@@ -693,7 +690,11 @@ fn split() {
     //
     // Split off subnet A', phase 1.
     //
-    let state_a_phase_1 = fixture.state.clone().split(SUBNET_A, &routing_table);
+    let state_a_phase_1 = fixture
+        .state
+        .clone()
+        .split(SUBNET_A, &routing_table, None)
+        .unwrap();
 
     // Start off with the original state.
     let mut expected = fixture.state.clone();
@@ -725,7 +726,11 @@ fn split() {
     //
     // Split off subnet B, phase 1.
     //
-    let state_b_phase_1 = fixture.state.clone().split(SUBNET_B, &routing_table);
+    let state_b_phase_1 = fixture
+        .state
+        .clone()
+        .split(SUBNET_B, &routing_table, None)
+        .unwrap();
 
     // Subnet B state is based off of an empty state.
     let mut expected = ReplicatedState::new(SUBNET_B, fixture.state.metadata.own_subnet_type);

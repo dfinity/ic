@@ -119,7 +119,7 @@ impl AdvertViewSend {
             self.free.push(new_idx);
         }
         let idx = self.free.pop().unwrap(); // unwrap should be safe due to the check above
-        let mut entry = self
+        let entry = self
             .adverts
             .get_mut(idx)
             .ok_or(AdvertViewError::InternalError)?;
@@ -142,7 +142,7 @@ impl AdvertViewSend {
             .index
             .remove(integrity_hash)
             .ok_or(AdvertViewError::NotFound)?;
-        let mut entry = self
+        let entry = self
             .adverts
             .get_mut(idx)
             .ok_or(AdvertViewError::InternalError)?;

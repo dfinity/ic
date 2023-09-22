@@ -1,9 +1,11 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
+use crate::memo::Status;
 use crate::queries::WithdrawalFee;
+use crate::state::ReimbursementReason;
 use crate::tasks::schedule_after;
 use candid::{CandidType, Deserialize};
-use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
+use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
 use ic_ic00_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
@@ -360,7 +362,7 @@ async fn submit_pending_requests() {
                         log!(
                             P1,
                             "[submit_pending_requests]: successfully sent transaction {}",
-                            &txid,
+                            tx::DisplayTxid(&txid),
                         );
 
                         // Defuse the guard because we sent the transaction
@@ -414,7 +416,10 @@ fn finalization_time_estimate(min_confirmations: u32, network: Network) -> Durat
 
 /// Returns identifiers of finalized transactions from the list of `candidates` according to the
 /// list of newly received UTXOs for the main minter account.
-fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[Utxo]) -> Vec<Txid> {
+fn finalized_txids(
+    candidates: &[state::SubmittedBtcTransaction],
+    new_utxos: &[Utxo],
+) -> Vec<[u8; 32]> {
     candidates
         .iter()
         .filter_map(|tx| {
@@ -428,6 +433,32 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
         .collect()
 }
 
+async fn reimburse_failed_kyt() {
+    let try_to_reimburse = state::read_state(|s| s.reimbursement_map.clone());
+    for (burn_block_index, entry) in try_to_reimburse {
+        let memo_status = match entry.reason {
+            ReimbursementReason::TaintedDestination => Status::Rejected,
+            ReimbursementReason::CallFailed => Status::CallFailed,
+        };
+        let reimburse_memo = crate::memo::MintMemo::KytFail {
+            kyt_fee: Some(entry.kyt_fee),
+            status: Some(memo_status),
+            associated_burn_index: Some(burn_block_index),
+        };
+        if let Ok(block_index) = crate::updates::update_balance::mint(
+            entry.amount - entry.kyt_fee,
+            entry.account,
+            crate::memo::encode(&reimburse_memo).into(),
+        )
+        .await
+        {
+            state::mutate_state(|s| {
+                state::audit::reimbursed_failed_deposit(s, burn_block_index, block_index)
+            });
+        }
+    }
+}
+
 async fn finalize_requests() {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
@@ -437,7 +468,7 @@ async fn finalize_requests() {
     let now = ic_cdk::api::time();
 
     // The list of transactions that are likely to be finalized, indexed by the transaction id.
-    let mut maybe_finalized_transactions: BTreeMap<Txid, state::SubmittedBtcTransaction> =
+    let mut maybe_finalized_transactions: BTreeMap<[u8; 32], state::SubmittedBtcTransaction> =
         state::read_state(|s| {
             let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
             s.submitted_transactions
@@ -495,7 +526,7 @@ async fn finalize_requests() {
             log!(
                 P0,
                 "[finalize_requests]: finalized transaction {} assumed to be stuck",
-                &txid
+                tx::DisplayTxid(&txid)
             );
             state::audit::confirm_transaction(s, &txid);
         }
@@ -538,8 +569,13 @@ async fn finalize_requests() {
     };
 
     for utxo in main_utxos_zero_confirmations {
+        let txid: [u8; 32] = utxo
+            .outpoint
+            .txid
+            .try_into()
+            .expect("BUG: invalid UTXO TXID");
         // This transaction got at least one confirmation, we don't need to replace it.
-        maybe_finalized_transactions.remove(&utxo.outpoint.txid);
+        maybe_finalized_transactions.remove(&txid);
     }
 
     if maybe_finalized_transactions.is_empty() {
@@ -559,7 +595,7 @@ async fn finalize_requests() {
         maybe_finalized_transactions.len(),
         maybe_finalized_transactions
             .keys()
-            .map(|txid| txid.to_string())
+            .map(|txid| tx::DisplayTxid(txid).to_string())
             .collect::<Vec<_>>()
             .join(","),
     );
@@ -603,7 +639,7 @@ async fn finalize_requests() {
                 log!(
                     P1,
                     "[finalize_requests]: failed to rebuild stuck transaction {}: {:?}",
-                    &submitted_tx.txid,
+                    tx::DisplayTxid(&submitted_tx.txid),
                     err
                 );
                 continue;
@@ -649,15 +685,15 @@ async fn finalize_requests() {
                     // equality in case the fee computation rules change in the future.
                     log!(P0,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
-                        new_txid,
+                        tx::DisplayTxid(&new_txid),
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
                 log!(P0,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
-                    new_txid,
-                    old_txid,
+                    tx::DisplayTxid(&new_txid),
+                    tx::DisplayTxid(&old_txid),
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 let new_tx = state::SubmittedBtcTransaction {
@@ -676,7 +712,7 @@ async fn finalize_requests() {
             Err(err) => {
                 log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new())),
-                    &old_txid,
+                    tx::DisplayTxid(&old_txid),
                     err,
                 );
                 continue;
@@ -1108,6 +1144,7 @@ pub fn timer() {
 
                 submit_pending_requests().await;
                 finalize_requests().await;
+                reimburse_failed_kyt().await;
             });
         }
         TaskType::RefreshFeePercentiles => {

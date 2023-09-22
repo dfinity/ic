@@ -118,25 +118,3 @@ impl BasicSignerInternal {
         Ok(BasicSigOf::new(BasicSig(csp_sig.as_ref().to_vec())))
     }
 }
-
-pub struct BasicSignVerifierByPublicKeyInternal {}
-
-impl BasicSignVerifierByPublicKeyInternal {
-    pub fn verify_basic_sig_by_public_key<C: CspSigner, S: Signable>(
-        csp_signer: &C,
-        signature: &BasicSigOf<S>,
-        signed_bytes: &S,
-        public_key: &UserPublicKey,
-    ) -> CryptoResult<()> {
-        let pubkey_algorithm = public_key.algorithm_id;
-        let csp_pk = CspPublicKey::try_from(public_key)?;
-        let csp_sig = SigConverter::for_target(pubkey_algorithm).try_from_basic(signature)?;
-
-        csp_signer.verify(
-            &csp_sig,
-            &signed_bytes.as_signed_bytes(),
-            pubkey_algorithm,
-            csp_pk,
-        )
-    }
-}

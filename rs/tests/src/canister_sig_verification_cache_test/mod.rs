@@ -79,7 +79,7 @@ pub fn test(env: TestEnv) {
     let ii_canister_id = install_ii_canister(&env, &ii_node);
     let ctr_canister_id = install_counter_canister(&env, &app_node);
 
-    let mut rng = ReproducibleRng::silent_new();
+    let mut rng = ReproducibleRng::new();
     info!(env.logger(), "Generated a ReproducibleRng\n{rng:?}");
 
     let num_users = rng.gen_range(NUM_USERS_RANGE);
@@ -284,7 +284,7 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
     let mut count_fetching_metrics: usize = 0;
     let mut count_waiting_for_expected_values: usize = 0;
     loop {
-        match metrics.fetch().await {
+        match metrics.fetch::<u64>().await {
             Ok(val) => {
                 let num_cache_hits = val[HITS_STR][0];
                 let num_cache_misses = val[MISSES_STR][0];

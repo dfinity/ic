@@ -21,7 +21,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};
-use ic_prep_lib::subnet_configuration::SubnetConfig;
+use ic_prep_lib::subnet_configuration::{SubnetConfig, SubnetRunningState};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -45,6 +45,8 @@ use ic_types::{
 use prost::Message;
 use slog_scope::info;
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::sleep;
@@ -215,11 +217,9 @@ pub fn get_ic_config() -> IcConfig {
     subnet_nodes.insert(
         NODE_INDEX_DEFAULT,
         NodeConfiguration {
-            xnet_api: "http://0.0.0.1:0".parse().expect("can't fail"),
-            public_api: "http://128.0.0.1:10000".parse().expect("can't fail"),
-            p2p_addr: "org.internetcomputer.p2p1://128.0.0.1:10000"
-                .parse()
-                .expect("can't fail"),
+            xnet_api: SocketAddr::from_str("0.0.0.1:0").expect("can't fail"),
+            public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
+            p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
             chip_id: vec![],
@@ -250,6 +250,7 @@ pub fn get_ic_config() -> IcConfig {
             None,
             vec![],
             vec![],
+            SubnetRunningState::Active,
         ),
     );
 
@@ -331,7 +332,7 @@ where
         let subnet_id = subnet_ids[0];
         config.transport = TransportConfig {
             node_ip: "0.0.0.0".to_string(),
-            listening_port: 1234,
+            listening_port: 0,
             send_queue_size: 0,
             ..Default::default()
         };

@@ -176,16 +176,8 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            p2p_flow_endpoints: transport_config_to_endpoints(
-                &self.log,
-                &self.node_config.transport,
-            )
-            .expect("Invalid endpoints in transport config."),
-            prometheus_metrics_endpoint: metrics_config_to_endpoint(
-                &self.log,
-                &self.node_config.metrics,
-            )
-            .expect("Invalid endpoints in metrics config."),
+            p2p_flow_endpoints: vec![],
+            prometheus_metrics_endpoint: "".to_string(),
         }
     }
 

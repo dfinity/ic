@@ -2,17 +2,29 @@ use candid::CandidType;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use strum_macros::{EnumIter, EnumString};
+use strum_macros::{AsRefStr, EnumIter, EnumString};
 
 /// Defines the different types of subnets that can exist on the IC.
 #[derive(
-    CandidType, Clone, Copy, Deserialize, Debug, Eq, EnumIter, EnumString, PartialEq, Serialize,
+    CandidType,
+    Clone,
+    Copy,
+    Deserialize,
+    Debug,
+    Eq,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    PartialEq,
+    Serialize,
+    Default,
 )]
 pub enum SubnetType {
     /// The application subnet type where most of the normal applications will
     /// be hosted.
     #[strum(serialize = "application")]
     #[serde(rename = "application")]
+    #[default]
     Application,
     /// System subnet type is allowed special privileges. The NNS subnet is of
     /// this type.
@@ -24,12 +36,6 @@ pub enum SubnetType {
     #[strum(serialize = "verified_application")]
     #[serde(rename = "verified_application")]
     VerifiedApplication,
-}
-
-impl Default for SubnetType {
-    fn default() -> Self {
-        SubnetType::Application
-    }
 }
 
 impl From<SubnetType> for i32 {

@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 from model.dependency import Dependency
 from model.finding import Finding
+from model.security_risk import SecurityRisk
 from model.vulnerability import Vulnerability
 
 
@@ -182,3 +183,187 @@ def test_has_patch_version_raise_error_if_findings_have_different_ids(change_fie
 
     with pytest.raises(RuntimeError, match=r"ids"):
         finding1.has_patch_version(finding2)
+
+
+def test_update_risk_and_vulnerabilities_for_same_finding_keep_risk_if_no_new_vul():
+    finding1 = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version"),
+        [Vulnerability("v1", "vn1", "vd1"), Vulnerability("v2", "vn2", "vd2")],
+        [],
+        [],
+        [],
+        SecurityRisk.MEDIUM,
+        [],
+        [],
+        None,
+    )
+    finding2 = deepcopy(finding1)
+    finding1.vulnerabilities[1].risk_note = "this risk note should be copied"
+    # first vul has disappeared
+    finding2.vulnerabilities = finding2.vulnerabilities[1:]
+
+    finding1.update_risk_and_vulnerabilities_for_same_finding(finding2)
+
+    assert finding1.risk == SecurityRisk.MEDIUM
+    assert len(finding1.vulnerabilities) == 1
+    assert finding1.vulnerabilities[0].id == "v2"
+    assert finding1.vulnerabilities[0].name == "vn2"
+    assert finding1.vulnerabilities[0].description == "vd2"
+    assert finding1.vulnerabilities[0].risk_note == "this risk note should be copied"
+
+
+def test_update_risk_and_vulnerabilities_for_same_finding_reset_risk_if_new_vul_appears():
+    finding1 = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version"),
+        [Vulnerability("v1", "vn1", "vd1")],
+        [],
+        [],
+        [],
+        SecurityRisk.MEDIUM,
+        [],
+        [],
+        None,
+    )
+    finding2 = deepcopy(finding1)
+    finding1.vulnerabilities[0].risk_note = "this risk note should be copied"
+    # new vul is found during scan
+    finding2.vulnerabilities.append(Vulnerability("v2", "vn2", "vd2"))
+
+    finding1.update_risk_and_vulnerabilities_for_same_finding(finding2)
+
+    assert finding1.risk is None
+    assert len(finding1.vulnerabilities) == 2
+    assert finding1.vulnerabilities[0].id == "v1"
+    assert finding1.vulnerabilities[0].name == "vn1"
+    assert finding1.vulnerabilities[0].description == "vd1"
+    assert finding1.vulnerabilities[0].risk_note == "this risk note should be copied"
+    assert finding1.vulnerabilities[1].id == "v2"
+    assert finding1.vulnerabilities[1].name == "vn2"
+    assert finding1.vulnerabilities[1].description == "vd2"
+    assert finding1.vulnerabilities[1].risk_note == " "
+
+
+def test_update_risk_and_vulnerabilities_for_related_findings_set_risk_from_vul():
+    related_finding1 = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version1"),
+        [Vulnerability("v1", "vn1", "vd1", -1, "low"), Vulnerability("v2", "vn2", "vd2", -1, "medium"),
+         Vulnerability("v3", "vn3", "vd3", -1, "critical")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    related_finding2 = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version2"),
+        [Vulnerability("v4", "vn4", "vd4", -1, "high")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    finding = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version3"),
+        [Vulnerability("v1", "vn1", "vd1"), Vulnerability("v2", "vn2", "vd2"), Vulnerability("v4", "vn4", "vd4")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+
+    finding.update_risk_and_vulnerabilities_for_related_findings([related_finding1, related_finding2])
+
+    assert finding.risk == SecurityRisk.HIGH
+    assert len(finding.vulnerabilities) == 3
+    assert finding.vulnerabilities[0].risk_note == "low"
+    assert finding.vulnerabilities[1].risk_note == "medium"
+    assert finding.vulnerabilities[2].risk_note == "high"
+
+
+def test_update_risk_and_vulnerabilities_for_related_findings_set_risk_from_finding():
+    related_finding1 = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version1"),
+        [Vulnerability("v1", "vn1", "vd1"), Vulnerability("v2", "vn2", "vd2")],
+        [],
+        [],
+        [],
+        SecurityRisk.LOW,
+        [],
+        [],
+        None,
+    )
+    finding = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version2"),
+        [Vulnerability("v1", "vn1", "vd1")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+
+    finding.update_risk_and_vulnerabilities_for_related_findings([related_finding1])
+
+    assert finding.risk == SecurityRisk.LOW
+    assert len(finding.vulnerabilities) == 1
+    assert finding.vulnerabilities[0].risk_note == " "
+
+
+
+def test_update_risk_and_vulnerabilities_for_related_findings_reset_risk_if_new_vul_appears():
+    related_finding1 = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version1"),
+        [Vulnerability("v1", "vn1", "vd1", -1, "might be a lowball")],
+        [],
+        [],
+        [],
+        SecurityRisk.LOW,
+        [],
+        [],
+        None,
+    )
+    finding = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_version2"),
+        [Vulnerability("v1", "vn1", "vd1"), Vulnerability("v2", "vn2", "vd2")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+
+    finding.update_risk_and_vulnerabilities_for_related_findings([related_finding1])
+
+    assert finding.risk is None
+    assert len(finding.vulnerabilities) == 2
+    assert finding.vulnerabilities[0].risk_note == "might be a lowball"

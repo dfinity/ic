@@ -1,27 +1,25 @@
-# DO NOT put any configurations in this file! Common configurations must go in 00--common.yml
-# or 00--common-rules.yml. The child pipeline [e.g. cargo pipeline] will not inherit any
-# configurations from this file.
+# DO NOT put any configurations in this file! Common configurations must go in
+# common.yml.  Otherwise child pipelines will not inherit any configurations
+# from this file.
 #
-# This file should only include other YAML files used to create the root parent pipeline.
+# This file should only include other YAML files used to create the root parent
+# pipeline.
+#
+# If you want to remove or rename a file mentioned in this file please do so in
+# two seperate MRs.
+# 1.  Rename/remove the reference to the file from this file
+# 2.  Rename/remove the file from the repository
+# Failure to do so will cause the `gitlab-ci/config/zz-generated-gitlab-ci.yaml`
+# file not to get generated.
+
 
 include:
   - local: /gitlab-ci/config/rosetta.yml
   - local: /gitlab-ci/config/main.yml
-  - local: /gitlab-ci/config/00--common.yml
-  - local: /gitlab-ci/config/20--test--python.yml
-  - local: /gitlab-ci/config/20--test--container-image-autobuild.yml
-  - local: /gitlab-ci/config/20--test--dependencies.yml
-  - local: /gitlab-ci/config/20--test--testnet-deployment.yml
-  - local: /gitlab-ci/config/21--test--bins.yml
-  - local: /gitlab-ci/config/30--cargo-build.yml
-  - local: /gitlab-ci/config/40--rust-test--benchmarks.yml
-  - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
-  - local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
-  - local: /gitlab-ci/config/55--determinism-test.yml
-  - local: /gitlab-ci/config/55--determinism-test-release.yml
-  - local: /gitlab-ci/config/60--prod-test--spawn-test-pipeline.yml
-  - local: /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml
-  - local: /gitlab-ci/config/75--push-branches--push.yml
-  - local: /gitlab-ci/config/80--npm-release-boundary-node-service-worker.yml
-  - local: /gitlab-ci/config/100--finalize--notify.yml
+  - local: /gitlab-ci/config/common.yml
+  - local: /gitlab-ci/config/container-image-autobuild.yml
+  - local: /gitlab-ci/config/dependencies.yml
+  - local: /gitlab-ci/config/base-images-build.yml
+  - local: /gitlab-ci/config/spawn-pipeline--prod.yml
+  - local: /gitlab-ci/config/spawn-pipeline--benchmark.yml
   - local: /testnet/tests/pipeline/pipeline.yml

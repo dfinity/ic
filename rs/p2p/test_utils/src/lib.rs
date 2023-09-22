@@ -1,23 +1,33 @@
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::{start_peer_manager, SubnetTopology};
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
+use ic_registry_local_registry::LocalRegistry;
+use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{consensus::MockConsensusCache, types::ids::subnet_test_id};
 use ic_test_utilities_registry::add_subnet_record;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc, Mutex,
+use std::{
+    str::FromStr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
 };
+use tempfile::TempDir;
 use tokio::{runtime::Handle, sync::watch::Receiver, task::JoinHandle};
+
+pub mod mocks;
+pub mod turmoil;
 
 /// Creates a temp crypto component with TLS key and specified node id.
 /// It also adds the tls keys to the registry data provider.
@@ -46,7 +56,12 @@ pub struct RegistryConsensusHandle {
 }
 
 impl RegistryConsensusHandle {
-    pub fn add_node(&mut self, version: RegistryVersion, node_id: NodeId, ip: &str, port: u16) {
+    pub fn add_node(
+        &mut self,
+        version: RegistryVersion,
+        node_id: NodeId,
+        endpoints: Vec<Option<(&str, u16)>>,
+    ) {
         let mut subnet_record = SubnetRecord::default();
 
         let mut membership = self.membership.lock().unwrap();
@@ -58,15 +73,16 @@ impl RegistryConsensusHandle {
             subnet_test_id(0),
             subnet_record,
         );
-        let connection_endpoint = Some(ConnectionEndpoint {
-            ip_addr: ip.to_string(),
-            port: port as u32,
-            protocol: Protocol::P2p1Tls13 as i32,
-        });
-        let flow_end_point = FlowEndpoint {
-            endpoint: connection_endpoint,
-        };
-        let flow_end_points = vec![flow_end_point];
+
+        let flow_end_points = endpoints
+            .into_iter()
+            .map(|endpoint| FlowEndpoint {
+                endpoint: endpoint.map(|(ip, port)| ConnectionEndpoint {
+                    ip_addr: ip.to_string(),
+                    port: port as u32,
+                }),
+            })
+            .collect();
 
         let node_record = NodeRecord {
             p2p_flow_endpoints: flow_end_points,
@@ -113,14 +129,7 @@ impl RegistryConsensusHandle {
     }
 }
 
-pub fn create_peer_manager_and_registry_handle(
-    rt: &Handle,
-    log: ReplicaLogger,
-) -> (
-    JoinHandle<()>,
-    Receiver<SubnetTopology>,
-    RegistryConsensusHandle,
-) {
+pub fn create_registry_handle() -> (MockConsensusCache, RegistryConsensusHandle) {
     let oldest_registry_version = Arc::new(AtomicU64::new(0));
     let oldest_registry_version_c = oldest_registry_version.clone();
     let mut mock_cache = MockConsensusCache::new();
@@ -130,23 +139,97 @@ pub fn create_peer_manager_and_registry_handle(
 
     let data_provider_proto = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(data_provider_proto.clone()));
-
-    let (jh, rcv) = start_peer_manager(
-        log,
-        &MetricsRegistry::default(),
-        rt,
-        subnet_test_id(0),
-        Arc::new(mock_cache) as Arc<_>,
-        registry_client.clone() as Arc<_>,
-    );
     (
-        jh,
-        rcv,
+        mock_cache,
         RegistryConsensusHandle {
             membership: Arc::new(Mutex::new(Vec::new())),
             oldest_registry_version: oldest_registry_version_c,
             registry_client,
             data_provider: data_provider_proto,
         },
+    )
+}
+
+pub fn create_peer_manager_and_registry_handle(
+    rt: &Handle,
+    log: ReplicaLogger,
+) -> (
+    JoinHandle<()>,
+    Receiver<SubnetTopology>,
+    RegistryConsensusHandle,
+) {
+    let (mock_cache, registry_handle) = create_registry_handle();
+    let (jh, rcv) = start_peer_manager(
+        log,
+        &MetricsRegistry::default(),
+        rt,
+        subnet_test_id(0),
+        Arc::new(mock_cache) as Arc<_>,
+        registry_handle.registry_client.clone() as Arc<_>,
+    );
+    (jh, rcv, registry_handle)
+}
+
+/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
+fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
+    let tempdir = TempDir::new().unwrap();
+    let store = LocalStoreImpl::new(tempdir.path());
+    let changelog =
+        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
+            .expect("")
+            .1;
+
+    for (v, changelog_entry) in changelog.into_iter().enumerate() {
+        let v = RegistryVersion::from((v + 1) as u64);
+        store.store(v, changelog_entry).unwrap();
+    }
+    (tempdir, store)
+}
+
+pub fn create_peer_manager_with_local_store(
+    rt: &Handle,
+    log: ReplicaLogger,
+    subnet_id: SubnetId,
+) -> (
+    JoinHandle<()>,
+    Receiver<SubnetTopology>,
+    Arc<LocalRegistry>,
+    Arc<AtomicU64>,
+    TempDir,
+) {
+    let oldest_registry_version = Arc::new(AtomicU64::new(0));
+    let oldest_registry_version_c = oldest_registry_version.clone();
+    let mut mock_cache = MockConsensusCache::new();
+    mock_cache
+        .expect_get_oldest_registry_version_in_use()
+        .returning(move || RegistryVersion::from(oldest_registry_version.load(Ordering::SeqCst)));
+
+    let (tmp, _local_store) = get_mainnet_delta_00_6d_c1();
+    let local_registry = LocalRegistry::new(tmp.path(), Duration::from_millis(500)).unwrap();
+
+    let registry_client = Arc::new(local_registry);
+
+    let (jh, rcv) = start_peer_manager(
+        log,
+        &MetricsRegistry::default(),
+        rt,
+        subnet_id,
+        Arc::new(mock_cache) as Arc<_>,
+        registry_client.clone() as Arc<_>,
+    );
+    (jh, rcv, registry_client, oldest_registry_version_c, tmp)
+}
+
+pub fn mainnet_nns_subnet() -> SubnetId {
+    SubnetId::new(
+        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap(),
+    )
+}
+
+pub fn mainnet_app_subnet() -> SubnetId {
+    SubnetId::new(
+        PrincipalId::from_str("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae")
+            .unwrap(),
     )
 }

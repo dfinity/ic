@@ -20,10 +20,8 @@ fn bench_allocator(c: &mut Criterion<ProcessTime>) {
     let page = &[1u8; PAGE_SIZE];
     let mut group = c.benchmark_group("Allocate");
     for n in [1usize, 10, 100, 1_000].iter().cloned() {
-        let pages: Vec<(PageIndex, &PageBytes)> = (0..n)
-            .into_iter()
-            .map(|i| (PageIndex::new(i as u64), page))
-            .collect();
+        let pages: Vec<(PageIndex, &PageBytes)> =
+            (0..n).map(|i| (PageIndex::new(i as u64), page)).collect();
         let mut thread_pool = Cell::new(scoped_threadpool::Pool::new(NUM_THREADS));
         group.bench_function(BenchmarkId::new("MmapBasedPageAllocator", n), |b| {
             b.iter(|| {

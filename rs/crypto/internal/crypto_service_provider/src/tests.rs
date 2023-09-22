@@ -3,7 +3,7 @@ mod csp_tests {
     use crate::api::CspKeyGenerator;
     use crate::api::CspSigner;
     use crate::api::CspTlsHandshakeSignerProvider;
-    use crate::vault::test_utils::tls::ed25519_csp_pubkey_from_tls_pubkey_cert;
+    use crate::vault::test_utils::ed25519_csp_pubkey_from_tls_pubkey_cert;
     use crate::Csp;
     use crate::CspPublicKey;
     use crate::KeyId;

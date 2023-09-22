@@ -1,10 +1,12 @@
+use std::borrow::Cow;
+
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
         validate_and_instrument_for_testing,
         validation::{extract_custom_section_name, RESERVED_SYMBOLS},
-        WasmImportsDetails, WasmValidationDetails,
+        Complexity, WasmImportsDetails, WasmValidationDetails,
     },
     WasmtimeEmbedder,
 };
@@ -85,6 +87,7 @@ fn can_validate_valid_export_section() {
     let wasm = wat2wasm(
         r#"(module
                   (func $x)
+                  (export "some_function_is_ok" (func $x))
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
                   (export "canister_global_timer" (func $x))
@@ -99,8 +102,32 @@ fn can_validate_valid_export_section() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
+    );
+}
+
+#[test]
+fn can_validate_valid_export_section_with_no_space_after_canister_query() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x)
+                  (export "canister_init" (func $x))
+                  (export "canister_heartbeat" (func $x))
+                  (export "canister_global_timer" (func $x))
+                  (export "canister_pre_upgrade" (func $x))
+                  (export "canister_post_upgrade" (func $x))
+                  (export "canister_query read" (func $x))
+                  (export "some_function_is_ok" (func $x))
+                  (export "canister_query" (func $x)))"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "Exporting reserved function 'canister_query' with \"canister_\" prefix".to_string()
+        ))
     );
 }
 
@@ -116,18 +143,15 @@ fn can_validate_valid_export_section_with_reserved_functions() {
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
                   (export "some_function_is_ok" (func $x))
-                  (export "canister_query" (func $x))
-                  (export "canister_bar_is_reserved" (func $x))
-                  (export "canister_foo_is_reserved" (func $x)))"#,
+                  (export "canister_bar_is_reserved" (func $x)))"#,
     )
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 3,
-            largest_function_instruction_count: NumInstructions::new(1),
-            ..Default::default()
-        })
+        Err(WasmValidationError::InvalidExportSection(
+            "Exporting reserved function 'canister_bar_is_reserved' with \"canister_\" prefix"
+                .to_string()
+        ))
     );
 }
 
@@ -381,6 +405,7 @@ fn can_validate_many_exported_functions() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -415,6 +440,7 @@ fn can_validate_large_sum_exported_function_name_lengths() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -456,6 +482,7 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -610,16 +637,16 @@ fn can_reject_module_with_too_many_functions() {
 fn can_validate_module_with_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private name1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private name1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public name2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "name3",
-        data: &[0, 2],
+        name: Cow::Borrowed("name3"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -645,16 +672,16 @@ fn can_validate_module_with_custom_sections() {
 fn can_reject_module_with_too_many_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private name1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private name1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public name2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "name3",
-        data: &[0, 2],
+        name: Cow::Borrowed("name3"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -680,13 +707,13 @@ fn can_reject_module_with_custom_sections_too_big() {
     let mut module = wasm_encoder::Module::new();
     // Size of this custom section is 12 bytes.
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name",
-        data: &content,
+        name: Cow::Borrowed("icp:public name"),
+        data: Cow::Borrowed(&content),
     });
     // Adding the size of this custom section will exceed the `max_custom_sections_size`.
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom_section",
-        data: &content,
+        name: Cow::Borrowed("icp:private custom_section"),
+        data: Cow::Borrowed(&content),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -711,16 +738,16 @@ fn can_reject_module_with_custom_sections_too_big() {
 fn can_reject_module_with_duplicate_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private custom1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public custom2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom1",
-        data: &[0, 3],
+        name: Cow::Borrowed("icp:public custom1"),
+        data: Cow::Borrowed(&[0, 3]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -743,16 +770,16 @@ fn can_reject_module_with_duplicate_custom_sections() {
 fn can_reject_module_with_invalid_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private custom1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public custom2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:dummy custom3",
-        data: &[0, 3],
+        name: Cow::Borrowed("icp:dummy custom3"),
+        data: Cow::Borrowed(&[0, 3]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 

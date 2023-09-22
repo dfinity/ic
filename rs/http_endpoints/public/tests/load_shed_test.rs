@@ -2,8 +2,9 @@ pub mod common;
 
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
-    default_get_latest_state, default_latest_certified_height, default_read_certified_state,
-    get_free_localhost_socket_addr, start_http_endpoint, wait_for_status_healthy,
+    default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
+    default_read_certified_state, get_free_localhost_socket_addr, start_http_endpoint,
+    wait_for_status_healthy,
 };
 use async_trait::async_trait;
 use hyper::{Body, Client, Method, Request, StatusCode};
@@ -52,7 +53,7 @@ fn test_load_shedding_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let query_exec_running = Arc::new(Notify::new());
@@ -95,11 +96,11 @@ fn test_load_shedding_query() {
         query_exec_running.notify_one();
         load_shedder_returned.notified().await;
 
-        resp.send_response(HttpQueryResponse::Replied {
+        resp.send_response(Ok(HttpQueryResponse::Replied {
             reply: HttpQueryResponseReply {
                 arg: Blob("success".into()),
             },
-        })
+        }))
     });
 
     rt.block_on(async {
@@ -109,7 +110,7 @@ fn test_load_shedding_query() {
             .query_signed(query.effective_canister_id, query.signed_query.clone())
             .await;
 
-        assert!(resp.is_ok(), "Received unexpeceted response: {:?}", resp);
+        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
 
         let resp = load_shedded_agent.await.unwrap();
         let expected_resp = StatusCode::TOO_MANY_REQUESTS;
@@ -119,7 +120,7 @@ fn test_load_shedding_query() {
                 assert_eq!(expected_resp, status)
             }
             _ => panic!(
-                "Load shedder did not kick in. Received unexpeceted response: {:?}",
+                "Load shedder did not kick in. Received unexpected response: {:?}",
                 resp
             ),
         }
@@ -169,11 +170,29 @@ fn test_load_shedding_read_state() {
             // This is due to status endpoint also relying on state_reader_executor.
             if service_is_healthy_clone.load(Ordering::Relaxed) {
                 rt_clone.block_on(async {
-                    read_state_running.notify_one();
-                    load_shedder_returned.notified().await;
+                    read_state_running_clone.notify_one();
+                    load_shedder_returned_clone.notified().await;
                 })
             }
             default_read_certified_state(labeled_tree)
+        });
+
+    let service_is_healthy_clone = service_is_healthy.clone();
+    let read_state_running_clone = read_state_running.clone();
+    let load_shedder_returned_clone = load_shedder_returned.clone();
+    let rt_clone: tokio::runtime::Handle = rt.handle().clone();
+    mock_state_manager
+        .expect_get_certified_state_reader()
+        .returning(move || {
+            // Need this check, otherwise wait_for_status_healthy() will be stuck.
+            // This is due to status endpoint also relying on state_reader_executor.
+            if service_is_healthy_clone.load(Ordering::Relaxed) {
+                rt_clone.block_on(async {
+                    read_state_running_clone.notify_one();
+                    load_shedder_returned_clone.notified().await;
+                })
+            }
+            default_certified_state_reader()
         });
 
     let mock_consensus_cache = basic_consensus_pool_cache();
@@ -187,7 +206,7 @@ fn test_load_shedding_read_state() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let ok_agent = Agent::builder()
@@ -201,13 +220,13 @@ fn test_load_shedding_read_state() {
 
     // This agent's request wil be load shedded
     let load_shedded_agent_resp = rt.spawn(async move {
-        read_state_running_clone.notified().await;
+        read_state_running.notified().await;
 
         let response = load_shedded_agent
             .read_state_raw(paths_clone, canister)
             .await;
 
-        load_shedder_returned_clone.notify_one();
+        load_shedder_returned.notify_one();
 
         response.map(|_| ())
     });
@@ -222,7 +241,7 @@ fn test_load_shedding_read_state() {
         assert!(
             !(matches!(response, Err(AgentError::HttpError(HttpErrorPayload { status, .. })) if StatusCode::TOO_MANY_REQUESTS == status
             )),
-            "Load shedder kicked in. Received unexpeceted response: {:?}", response
+            "Load shedder kicked in. Received unexpected response: {:?}", response
         );
 
         let response = load_shedded_agent_resp.await.unwrap();
@@ -231,7 +250,7 @@ fn test_load_shedding_read_state() {
         assert!(
             matches!(response, Err(AgentError::HttpError(HttpErrorPayload { status, .. })) if StatusCode::TOO_MANY_REQUESTS == status
             ),
-            "Load shedder did not kick in. Received unexpeceted response: {:?}", response
+            "Load shedder did not kick in. Received unexpected response: {:?}", response
         );
     });
 }
@@ -390,7 +409,7 @@ fn test_load_shedding_update_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let ingress_filter_running = Arc::new(Notify::new());
@@ -428,7 +447,7 @@ fn test_load_shedding_update_call() {
         wait_for_status_healthy(&ok_agent).await.unwrap();
         let resp = ok_agent.update(&canister, "some method").call().await;
 
-        assert!(resp.is_ok(), "Received unexpeceted response: {:?}", resp);
+        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
 
         let resp = load_shedded_agent_handle.await.unwrap();
         let expected_resp = StatusCode::TOO_MANY_REQUESTS;
@@ -438,7 +457,7 @@ fn test_load_shedding_update_call() {
                 assert_eq!(expected_resp, status)
             }
             _ => panic!(
-                "Load shedder did not kick in. Received unexpeceted response: {:?}",
+                "Load shedder did not kick in. Received unexpected response: {:?}",
                 resp
             ),
         }

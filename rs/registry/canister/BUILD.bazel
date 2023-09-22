@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:canisters.bzl", "rust_canister")
@@ -13,7 +13,7 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/node_key_validation",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/nervous_system/common",
     "//rs/nns/cmc",
@@ -185,5 +185,16 @@ generated_files_check(
         "//rs/registry/canister/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
+    ],
+)
+
+rust_binary(
+    name = "generate_did",
+    srcs = ["canister/canister.rs"],
+    compile_data = ["canister/registry.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":canister",
     ],
 )

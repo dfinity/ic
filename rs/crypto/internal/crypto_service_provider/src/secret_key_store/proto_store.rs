@@ -13,7 +13,7 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKey
 use ic_logger::{debug, info, replica_logger::no_op_logger, warn, ReplicaLogger};
 use parking_lot::RwLock;
 use prost::Message;
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{ErrorKind, Write};
@@ -513,5 +513,5 @@ where
     F: FnOnce(&I) -> Option<R>,
 {
     let lock_result = v.as_ref().read();
-    f(lock_result.borrow())
+    f(&lock_result)
 }

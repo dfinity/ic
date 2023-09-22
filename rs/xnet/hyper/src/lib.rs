@@ -288,10 +288,10 @@ fn tls_bind_with_connection_type(
 fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxError> {
     use socket2::{Domain, Protocol, SockAddr, Socket, Type};
     let domain = match addr {
-        SocketAddr::V4(_) => Domain::ipv4(),
-        SocketAddr::V6(_) => Domain::ipv6(),
+        SocketAddr::V4(_) => Domain::IPV4,
+        SocketAddr::V6(_) => Domain::IPV6,
     };
-    let socket = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
+    let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
 
     #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
     {
@@ -306,21 +306,16 @@ fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxE
 
 /// The type of the connection that should be used. This enum is mostly useful
 /// for testing to avoid setting up the registry and keystore for TLS.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 enum ConnectionType {
     /// Only accept TLS connections.
     #[allow(dead_code)]
+    #[default]
     Tls,
     /// Only accept raw unencrypted connections. Should only be used for
     /// testing.
     #[allow(dead_code)]
     Raw,
-}
-
-impl Default for ConnectionType {
-    fn default() -> Self {
-        ConnectionType::Tls
-    }
 }
 
 // TLS connector for the client side.

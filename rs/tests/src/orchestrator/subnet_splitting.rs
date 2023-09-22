@@ -81,6 +81,7 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .halted()
                 .add_nodes(APP_NODES.try_into().unwrap()),
         )
         .setup_and_start(&env)
@@ -100,6 +101,11 @@ pub fn subnet_splitting_test(env: TestEnv) {
         .expect("Failed to get master version");
 
     let (source_subnet, destination_subnet) = get_subnets(&env);
+
+    assert!(
+        destination_subnet.raw_subnet_record().is_halted,
+        "The destination subnet should be halted from the beginning!"
+    );
 
     let (
         download_node_source,
@@ -161,14 +167,6 @@ pub fn subnet_splitting_test(env: TestEnv) {
         /*interactive=*/ false,
     );
 
-    // TODO(kpop): figure out how to create a halted subnet in a system test.
-    halt_subnet(
-        &upload_node_destination,
-        destination_subnet.subnet_id,
-        subnet_splitting.get_recovery_api(),
-        &env.logger(),
-    );
-
     for (step_type, step) in subnet_splitting {
         info!(logger, "Next step: {:?}", step_type);
 
@@ -178,6 +176,12 @@ pub fn subnet_splitting_test(env: TestEnv) {
 
         if step_type == StepType::HaltSourceSubnetAtCupHeight {
             wait_until_halted_at_cup_height(&source_subnet, &logger);
+            info!(
+                logger,
+                "Wait 15 seconds to make sure that \
+                the Orchestrator on the `download_node_source` creates a new CUP"
+            );
+            std::thread::sleep(Duration::from_secs(15));
         }
     }
 

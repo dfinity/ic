@@ -7,10 +7,11 @@
 //! See RFC 8017 (https://www.rfc-editor.org/rfc/rfc8017.txt)
 //! for information about the signature format
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use num_traits::{FromPrimitive, Zero};
-use rsa::{PublicKey, PublicKeyParts};
+use rsa::traits::PublicKeyParts;
+use rsa::{pkcs8, Pkcs1v15Sign};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// The object identifier for RSA public keys
@@ -27,7 +28,7 @@ pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
 pub struct RsaPublicKey {
     der: Vec<u8>,
     #[serde(skip_serializing)]
-    key: rsa::RSAPublicKey,
+    key: rsa::RsaPublicKey,
 }
 
 impl<'de> Deserialize<'de> for RsaPublicKey {
@@ -96,8 +97,8 @@ impl RsaPublicKey {
     pub fn from_der_spki(bytes: &[u8]) -> CryptoResult<Self> {
         use rsa::BigUint;
 
-        let parsed =
-            rsa::RSAPublicKey::from_pkcs8(bytes).map_err(|e| CryptoError::MalformedPublicKey {
+        let parsed: rsa::RsaPublicKey = pkcs8::DecodePublicKey::from_public_key_der(bytes)
+            .map_err(|e| CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 key_bytes: Some(bytes.to_vec()),
                 internal_error: format!("Parsing RSA key failed {:?}", e),
@@ -191,11 +192,11 @@ impl RsaPublicKey {
         }
 
         let digest = Sha256::hash(message);
-        let padding = rsa::PaddingScheme::PKCS1v15Sign {
-            hash: Some(rsa::Hash::SHA2_256),
-        };
 
-        match self.key.verify(padding, &digest, signature) {
+        match &self
+            .key
+            .verify(Pkcs1v15Sign::new::<sha2::Sha256>(), &digest, signature)
+        {
             Ok(_) => Ok(()),
             Err(e) => Err(CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::RsaSha256,

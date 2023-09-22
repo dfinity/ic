@@ -11,14 +11,16 @@ use crate::execution_environment::{
 use ic_base_types::CanisterId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
+use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterMessageOrTask, CanisterTask};
-use ic_interfaces::messages::{CanisterCallOrTask, CanisterMessage};
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_types::messages::CallContextId;
+use ic_types::messages::{
+    CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
+    CanisterTask,
+};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -78,6 +80,7 @@ pub fn execute_update(
         clean_canister.memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
+        clean_canister.system_state.reserved_balance(),
     );
 
     let original = OriginalContext {
@@ -114,11 +117,13 @@ pub fn execute_update(
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
+            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             time,
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
+            IC_00.get(),
             SystemMethod::CanisterGlobalTimer,
             time,
             helper.call_context_id(),

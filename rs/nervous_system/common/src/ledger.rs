@@ -2,7 +2,7 @@ use crate::NervousSystemError;
 use async_trait::async_trait;
 use dfn_core::{api::PrincipalId, call, CanisterId};
 use dfn_protobuf::protobuf;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_ledger_core::block::BlockIndex;
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,

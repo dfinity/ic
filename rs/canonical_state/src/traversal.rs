@@ -1,9 +1,10 @@
-use crate::lazy_tree::LazyTree;
+use crate::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use crate::visitor::{Control, Visitor};
+use ic_canonical_state_tree_hash::lazy_tree::LazyTree;
 use ic_replicated_state::ReplicatedState;
 
 /// Traverses lazy tree using specified visitor.
-fn traverse_lazy_tree<'a, V: Visitor>(t: &LazyTree<'a>, v: &mut V) -> Result<(), V::Output> {
+fn traverse_lazy_tree<V: Visitor>(t: &LazyTree<'_>, v: &mut V) -> Result<(), V::Output> {
     match t {
         LazyTree::Blob(b, _) => v.visit_blob(b),
         LazyTree::LazyBlob(thunk) => {
@@ -31,7 +32,7 @@ fn traverse_lazy_tree<'a, V: Visitor>(t: &LazyTree<'a>, v: &mut V) -> Result<(),
 /// `state` for transmitting it over the network to another replica, compute a
 /// hash tree for certification or extract a specific value.
 pub fn traverse<V: Visitor>(state: &ReplicatedState, mut v: V) -> V::Output {
-    let t = LazyTree::from(state);
+    let t = replicated_state_as_lazy_tree(state);
     match traverse_lazy_tree(&t, &mut v) {
         Err(output) => output,
         _ => v.finish(),
@@ -67,7 +68,7 @@ mod tests {
     use ic_test_utilities::{
         mock_time,
         state::new_canister_state,
-        types::ids::{canister_test_id, subnet_test_id, user_test_id},
+        types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
     };
     use ic_types::{CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::CanisterModule;
@@ -649,6 +650,9 @@ mod tests {
             })
             .unwrap(),
         );
+        state.metadata.node_public_keys = btreemap! {
+            node_test_id(2) => vec![9, 10, 11, 12],
+        };
 
         let visitor = TracingVisitor::new(NoopVisitor);
         state.metadata.certification_version = CertificationVersion::V2;
@@ -691,7 +695,7 @@ mod tests {
 
         let pattern = Pattern::match_only("subnet", Pattern::all());
         let visitor = SubtreeVisitor::new(&pattern, TracingVisitor::new(NoopVisitor));
-        state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
+        state.metadata.certification_version = CertificationVersion::V11;
         assert_eq!(
             vec![
                 E::StartSubtree,
@@ -728,6 +732,62 @@ mod tests {
                 //             00000000000000140101 # "\x00\x00\x00\x00\x00\x00\x00\x14\x01\x01"
                 E::VisitBlob(hex::decode("d9d9f781824a000000000000000b01014a00000000000000140101").unwrap()),
                 edge("public_key"),
+                E::VisitBlob(vec![5, 6, 7, 8]),
+                E::EndSubtree, // subnet
+                E::EndSubtree, // subnets
+                E::EndSubtree, // global
+            ],
+            traverse(&state, visitor).0
+        );
+
+        let pattern = Pattern::match_only("subnet", Pattern::all());
+        let visitor = SubtreeVisitor::new(&pattern, TracingVisitor::new(NoopVisitor));
+        state.metadata.certification_version =
+            std::cmp::max(CertificationVersion::V12, CURRENT_CERTIFICATION_VERSION);
+        assert_eq!(
+            vec![
+                E::StartSubtree,
+                edge("subnet"),
+                E::StartSubtree,
+                E::EnterEdge(subnet_test_id(0).get().into_vec()),
+                E::StartSubtree,
+                edge("canister_ranges"),
+                //D9 D9F7                          # tag(55799)
+                //   82                            # array(2)
+                //      82                         # array(2)
+                //         4A                      # bytes(10)
+                //            00000000000000000101 # "\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01"
+                //         4A                      # bytes(10)
+                //            000000000000000A0101 # "\x00\x00\x00\x00\x00\x00\x00\n\x01\x01"
+                //      82                         # array(2)
+                //         4A                      # bytes(10)
+                //            00000000000000150101 # "\x00\x00\x00\x00\x00\x00\x00\x15\x01\x01"
+                //         4A                      # bytes(10)
+                //            000000000000001E0101 # "\x00\x00\x00\x00\x00\x00\x00\x1E\x01\x01"
+                E::VisitBlob(hex::decode("d9d9f782824a000000000000000001014a000000000000000a0101824a000000000000001501014a000000000000001e0101").unwrap()),
+                edge("public_key"),
+                E::VisitBlob(vec![1, 2, 3, 4]),
+                E::EndSubtree, // subnet
+                E::EnterEdge(subnet_test_id(1).get().into_vec()),
+                E::StartSubtree,
+                edge("canister_ranges"),
+                // D9 D9F7                          # tag(55799)
+                //    81                            # array(1)
+                //       82                         # array(2)
+                //          4A                      # bytes(10)
+                //             000000000000000B0101 # "\x00\x00\x00\x00\x00\x00\x00\v\x01\x01"
+                //          4A                      # bytes(10)
+                //             00000000000000140101 # "\x00\x00\x00\x00\x00\x00\x00\x14\x01\x01"
+                E::VisitBlob(hex::decode("d9d9f781824a000000000000000b01014a00000000000000140101").unwrap()),
+                edge("node"),
+                E::StartSubtree,
+                E::EnterEdge(node_test_id(2).get().into_vec()),
+                E::StartSubtree,
+                edge("public_key"), // node public key
+                E::VisitBlob(vec![9, 10, 11, 12]),
+                E::EndSubtree, // node
+                E::EndSubtree, // nodes
+                edge("public_key"), // subnet public key
                 E::VisitBlob(vec![5, 6, 7, 8]),
                 E::EndSubtree, // subnet
                 E::EndSubtree, // subnets

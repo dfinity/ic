@@ -1,4 +1,4 @@
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 
 use std::fmt;
 use std::net::Ipv6Addr;

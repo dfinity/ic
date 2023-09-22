@@ -158,6 +158,7 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
                 .current_node_public_keys()
                 .expect("Failed to retrieve node public keys"),
             node_id,
+            ic_types::time::current_time(),
         )
         .expect("retrieved keys are not valid");
 

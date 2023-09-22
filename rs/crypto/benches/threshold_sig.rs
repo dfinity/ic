@@ -2,19 +2,21 @@ use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use ic_crypto::THRESHOLD_SIG_DATA_STORE_CAPACITY;
-use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
     load_transcript, run_ni_dkg_and_create_single_transcript, sign_threshold_for_each,
     NiDkgTestEnvironment, RandomNiDkgConfig,
 };
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner};
 use ic_types::consensus::Threshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgId, NiDkgTag, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::SignableMock;
 use ic_types::{Height, NodeId};
 use rand::prelude::*;
 use rand::seq::SliceRandom;
+use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::time::Duration;
@@ -56,12 +58,13 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
     num_of_nodes_in_subnet: usize,
     threshold: Threshold,
 ) {
+    let rng = &mut reproducible_rng();
     let dkg_tag = dkg_tag(num_of_nodes_in_subnet, threshold);
     let config = RandomNiDkgConfig::builder()
         .dkg_tag(dkg_tag)
         .subnet_size(num_of_nodes_in_subnet)
-        .build();
-    let env = NiDkgTestEnvironment::new_for_config(config.get());
+        .build(rng);
+    let env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
 
     let nodes_in_subnet: Vec<_> = config.receiver_ids().iter().copied().collect();
 
@@ -71,12 +74,13 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
     }
     let dkg_id = transcript.dkg_id;
 
-    bench_threshold_sign(group, &nodes_in_subnet, &env.crypto_components, dkg_id);
+    bench_threshold_sign(group, &nodes_in_subnet, &env.crypto_components, dkg_id, rng);
     bench_verify_threshold_sig_share_excl_loading_pubkey(
         group,
         &nodes_in_subnet,
         &env.crypto_components,
         dkg_id,
+        rng,
     );
     bench_verify_threshold_sig_share_incl_loading_pubkey(
         group,
@@ -84,63 +88,66 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
         &env.crypto_components,
         dkg_id,
         &transcript,
+        rng,
     );
-    let threshold_many_random_subnet_nodes = random_nodes(&nodes_in_subnet, threshold);
+    let threshold_many_random_subnet_nodes = random_nodes(&nodes_in_subnet, threshold, rng);
     bench_combine_threshold_sig_shares(
         group,
         &threshold_many_random_subnet_nodes,
         &env.crypto_components,
         dkg_id,
+        rng,
     );
     bench_verify_threshold_sig_combined(
         group,
         &threshold_many_random_subnet_nodes,
         &env.crypto_components,
         dkg_id,
+        rng,
     );
 }
 
-fn bench_threshold_sign<M: Measurement>(
+fn bench_threshold_sign<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     dkg_id: NiDkgId,
+    rng: &mut R,
 ) {
     group.bench_function("threshold_sign", |bench| {
         bench.iter_batched(
             || {
-                let message = signable_with_random_32_bytes();
-                let signer = crypto_for(random_node(nodes_in_subnet), crypto_components);
+                let message = signable_with_random_32_bytes(rng);
+                let signer = crypto_for(random_node(nodes_in_subnet, rng), crypto_components);
                 (message, signer)
             },
             |(message, signer)| {
-                assert!(signer
-                    .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
-                    .is_ok());
+                assert!(signer.sign_threshold(&message, dkg_id).is_ok());
             },
             SmallInput,
         )
     });
 }
 
-fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement>(
+fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     dkg_id: NiDkgId,
     transcript: &NiDkgTranscript,
+    rng: &mut R,
 ) {
     group.bench_function("verify_threshold_sig_share_incl_loading_pubkey", |bench| {
         bench.iter_batched(
             || {
-                let message = signable_with_random_32_bytes();
-                let signer_node_id = random_node(nodes_in_subnet);
+                let message = signable_with_random_32_bytes(rng);
+                let signer_node_id = random_node(nodes_in_subnet, rng);
                 let signer = crypto_for(signer_node_id, crypto_components);
                 let sig_share = signer
-                    .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
+                    .sign_threshold(&message, dkg_id)
                     .expect("failed to threshold sign");
 
-                let verifier_node_id = random_node(nodes_in_subnet);
+                let verifier_node_id = random_node(nodes_in_subnet, rng);
                 let verifier = crypto_for(verifier_node_id, crypto_components);
 
                 // Because the public key used for verifying signature shares is
@@ -156,12 +163,7 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement>(
             },
             |(sig_share, message, verifier, signer_node_id)| {
                 assert!(verifier
-                    .verify_threshold_sig_share(
-                        &sig_share,
-                        &message,
-                        DkgId::NiDkgId(dkg_id),
-                        signer_node_id
-                    )
+                    .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
                     .is_ok());
             },
             SmallInput,
@@ -169,22 +171,23 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement>(
     });
 }
 
-fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement>(
+fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     dkg_id: NiDkgId,
+    rng: &mut R,
 ) {
     group.bench_function("verify_threshold_sig_share_excl_loading_pubkey", |bench| {
         bench.iter_batched(
             || {
-                let message = signable_with_random_32_bytes();
-                let signer_node_id = random_node(nodes_in_subnet);
+                let message = signable_with_random_32_bytes(rng);
+                let signer_node_id = random_node(nodes_in_subnet, rng);
                 let signer = crypto_for(signer_node_id, crypto_components);
                 let sig_share = signer
-                    .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
+                    .sign_threshold(&message, dkg_id)
                     .expect("failed to threshold sign");
-                let verifier = crypto_for(random_node(nodes_in_subnet), crypto_components);
+                let verifier = crypto_for(random_node(nodes_in_subnet, rng), crypto_components);
 
                 // Because the public key used for verifying signature shares is
                 // calculated _lazily_ and then stored in the verifier's threshold
@@ -192,24 +195,14 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement>(
                 // the benchmark is performed to ensure the public key is available
                 // in the data store during the benchmark.
                 assert!(verifier
-                    .verify_threshold_sig_share(
-                        &sig_share,
-                        &message,
-                        DkgId::NiDkgId(dkg_id),
-                        signer_node_id
-                    )
+                    .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
                     .is_ok());
 
                 (sig_share, message, verifier, signer_node_id)
             },
             |(sig_share, message, verifier, signer_node_id)| {
                 assert!(verifier
-                    .verify_threshold_sig_share(
-                        &sig_share,
-                        &message,
-                        DkgId::NiDkgId(dkg_id),
-                        signer_node_id
-                    )
+                    .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
                     .is_ok());
             },
             SmallInput,
@@ -217,24 +210,25 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement>(
     });
 }
 
-fn bench_combine_threshold_sig_shares<M: Measurement>(
+fn bench_combine_threshold_sig_shares<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes: &[NodeId],
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     dkg_id: NiDkgId,
+    rng: &mut R,
 ) {
     group.bench_function("combine_threshold_sig_shares", |bench| {
         bench.iter_batched(
             || {
-                let message = signable_with_random_32_bytes();
+                let message = signable_with_random_32_bytes(rng);
                 let sig_shares =
                     sign_threshold_for_each(nodes, &message, dkg_id, crypto_components);
-                let combiner = crypto_for(random_node(nodes), crypto_components);
+                let combiner = crypto_for(random_node(nodes, rng), crypto_components);
                 (sig_shares, combiner)
             },
             |(sig_shares, combiner)| {
                 assert!(combiner
-                    .combine_threshold_sig_shares(sig_shares, DkgId::NiDkgId(dkg_id))
+                    .combine_threshold_sig_shares(sig_shares, dkg_id)
                     .is_ok());
             },
             SmallInput,
@@ -242,27 +236,28 @@ fn bench_combine_threshold_sig_shares<M: Measurement>(
     });
 }
 
-fn bench_verify_threshold_sig_combined<M: Measurement>(
+fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes: &[NodeId],
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     dkg_id: NiDkgId,
+    rng: &mut R,
 ) {
     group.bench_function("verify_threshold_sig_combined", |bench| {
         bench.iter_batched(
             || {
-                let message = signable_with_random_32_bytes();
+                let message = signable_with_random_32_bytes(rng);
                 let sig_shares =
                     sign_threshold_for_each(nodes, &message, dkg_id, crypto_components);
-                let threshold_sig = crypto_for(random_node(nodes), crypto_components)
-                    .combine_threshold_sig_shares(sig_shares, DkgId::NiDkgId(dkg_id))
+                let threshold_sig = crypto_for(random_node(nodes, rng), crypto_components)
+                    .combine_threshold_sig_shares(sig_shares, dkg_id)
                     .expect("failed to combine threshold signature shares");
-                let verifier = crypto_for(random_node(nodes), crypto_components);
+                let verifier = crypto_for(random_node(nodes, rng), crypto_components);
                 (threshold_sig, message, verifier)
             },
             |(threshold_sig, message, verifier)| {
                 assert!(verifier
-                    .verify_threshold_sig_combined(&threshold_sig, &message, DkgId::NiDkgId(dkg_id))
+                    .verify_threshold_sig_combined(&threshold_sig, &message, dkg_id)
                     .is_ok());
             },
             SmallInput,
@@ -270,18 +265,15 @@ fn bench_verify_threshold_sig_combined<M: Measurement>(
     });
 }
 
-fn random_bytes(n: u128) -> Vec<u8> {
-    let rng = &mut thread_rng();
+fn random_bytes<R: Rng + CryptoRng>(n: u128, rng: &mut R) -> Vec<u8> {
     (0..n).map(|_| rng.gen::<u8>()).collect()
 }
 
-fn random_node(nodes: &[NodeId]) -> NodeId {
-    let rng = &mut thread_rng();
+fn random_node<R: Rng + CryptoRng>(nodes: &[NodeId], rng: &mut R) -> NodeId {
     *nodes.choose(rng).expect("nodes empty")
 }
 
-fn random_nodes(nodes: &[NodeId], n: usize) -> Vec<NodeId> {
-    let rng = &mut thread_rng();
+fn random_nodes<R: Rng + CryptoRng>(nodes: &[NodeId], n: usize, rng: &mut R) -> Vec<NodeId> {
     nodes.choose_multiple(rng, n).cloned().collect()
 }
 
@@ -290,7 +282,7 @@ fn random_nodes(nodes: &[NodeId], n: usize) -> Vec<NodeId> {
 /// capacity is reached.
 fn purge_dkg_id_from_data_store(
     dkg_id: NiDkgId,
-    node: &TempCryptoComponent,
+    node: &TempCryptoComponentGeneric<ChaCha20Rng>,
     transcript: &NiDkgTranscript,
 ) {
     let mut dummy_transcript = transcript.clone();
@@ -306,8 +298,8 @@ fn purge_dkg_id_from_data_store(
     }
 }
 
-fn signable_with_random_32_bytes() -> SignableMock {
-    SignableMock::new(random_bytes(32))
+fn signable_with_random_32_bytes<R: Rng + CryptoRng>(rng: &mut R) -> SignableMock {
+    SignableMock::new(random_bytes(32, rng))
 }
 
 fn dkg_tag(num_of_nodes_in_subnet: usize, threshold: Threshold) -> NiDkgTag {

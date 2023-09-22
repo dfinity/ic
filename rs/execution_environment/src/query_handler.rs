@@ -5,6 +5,7 @@ mod query_cache;
 mod query_call_graph;
 mod query_context;
 mod query_scheduler;
+pub mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -18,7 +19,9 @@ use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{QueryExecutionService, QueryHandler};
+use ic_interfaces::execution_environment::{
+    QueryExecutionError, QueryExecutionResponse, QueryExecutionService, QueryHandler,
+};
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -33,8 +36,8 @@ use ic_types::{
     CanisterId, NumInstructions,
 };
 use serde::Serialize;
+use std::convert::Infallible;
 use std::{
-    convert::Infallible,
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -44,6 +47,7 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
+use self::query_stats::QueryStatsCollector;
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -98,6 +102,7 @@ pub struct InternalHttpQueryHandler {
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    local_query_execution_stats: QueryStatsCollector,
     query_cache: query_cache::QueryCache,
 }
 
@@ -118,6 +123,7 @@ impl InternalHttpQueryHandler {
         metrics_registry: &MetricsRegistry,
         max_instructions_per_query: NumInstructions,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        local_query_execution_stats: QueryStatsCollector,
     ) -> Self {
         let query_cache_capacity = config.query_cache_capacity;
         Self {
@@ -128,6 +134,7 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
+            local_query_execution_stats,
             query_cache: query_cache::QueryCache::new(metrics_registry, query_cache_capacity),
         }
     }
@@ -172,7 +179,6 @@ impl QueryHandler for InternalHttpQueryHandler {
             state,
             data_certificate,
             subnet_available_memory,
-            self.config.subnet_memory_capacity,
             max_canister_memory_size,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
@@ -183,12 +189,32 @@ impl QueryHandler for InternalHttpQueryHandler {
             query.receiver,
             &self.metrics.query_critical_error,
         );
+
+        let canister_id = query.receiver;
+        let ingress_payload_size = query.method_payload.len();
+
         let result = context.run(
             query,
             &self.metrics,
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
         );
+
+        let egress_payload_size = match &result {
+            Ok(WasmResult::Reply(vec)) => vec.len(),
+            Ok(WasmResult::Reject(_)) => 0,
+            Err(_) => 0,
+        };
+
+        // Add query statistics to the query aggregator.
+        if self.config.query_stats_aggregation == FlagStatus::Enabled {
+            self.local_query_execution_stats.register_query_statistics(
+                canister_id,
+                context.total_instructions_used,
+                ingress_payload_size as u64,
+                egress_payload_size as u64,
+            );
+        }
 
         // Add the query execution result to the query cache  (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
@@ -229,7 +255,7 @@ impl QueryHandler for HttpQueryHandler {
 }
 
 impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
-    type Response = HttpQueryResponse;
+    type Response = QueryExecutionResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -252,38 +278,43 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                 // We managed to upgrade the weak pointer, so the query was not cancelled.
                 // Canceling the query after this point will have no effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
+
+                // Retrieving the state must be done here in the query handler, and should be immediately used.
+                // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
+                // with a reference to older states which can cause out-of-memory crashes.
                 let result = match get_latest_certified_state_and_data_certificate(
                     state_reader,
                     certificate_delegation,
                     query.receiver,
                 ) {
-                    Some((state, cert)) => internal.query(query, state, cert),
-                    None => Err(UserError::new(
-                        ErrorCode::CertifiedStateUnavailable,
-                        "Certified state is not available yet. Please try again...",
-                    )),
+                    Some((state, cert)) => {
+                        let result = internal.query(query, state, cert);
+
+                        let http_query_response = match result {
+                            Ok(res) => match res {
+                                WasmResult::Reply(vec) => HttpQueryResponse::Replied {
+                                    reply: HttpQueryResponseReply { arg: Blob(vec) },
+                                },
+                                WasmResult::Reject(message) => HttpQueryResponse::Rejected {
+                                    error_code: ErrorCode::CanisterRejectedMessage.to_string(),
+                                    reject_code: RejectCode::CanisterReject as u64,
+                                    reject_message: message,
+                                },
+                            },
+
+                            Err(user_error) => HttpQueryResponse::Rejected {
+                                error_code: user_error.code().to_string(),
+                                reject_code: user_error.reject_code() as u64,
+                                reject_message: user_error.to_string(),
+                            },
+                        };
+
+                        Ok(http_query_response)
+                    }
+                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
                 };
 
-                let http_query_response = match result {
-                    Ok(res) => match res {
-                        WasmResult::Reply(vec) => HttpQueryResponse::Replied {
-                            reply: HttpQueryResponseReply { arg: Blob(vec) },
-                        },
-                        WasmResult::Reject(message) => HttpQueryResponse::Rejected {
-                            error_code: ErrorCode::CanisterRejectedMessage.to_string(),
-                            reject_code: RejectCode::CanisterReject as u64,
-                            reject_message: message,
-                        },
-                    },
-
-                    Err(user_error) => HttpQueryResponse::Rejected {
-                        error_code: user_error.code().to_string(),
-                        reject_code: user_error.reject_code() as u64,
-                        reject_message: user_error.to_string(),
-                    },
-                };
-
-                let _ = tx.send(Ok(http_query_response));
+                let _ = tx.send(Ok(result));
             }
             start.elapsed()
         });

@@ -94,8 +94,13 @@
 //! <img src="../../../../../docs/assets/p2p.png" height="960"
 //! width="540"/> </div> <hr/>
 
+use crossbeam_channel::{select, tick, Receiver as CrossbeamReceiver, RecvError};
+use event_handler::GossipArc;
 use ic_config::transport::TransportConfig;
-use ic_interfaces::{artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache};
+use ic_interfaces::{
+    artifact_manager::{ArtifactManager, JoinGuard},
+    consensus_pool::ConsensusPoolCache,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::ReplicaLogger;
@@ -105,12 +110,15 @@ use serde::{Deserialize, Serialize};
 use std::{
     error,
     fmt::{Display, Formatter, Result as FmtResult},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::{Builder as ThreadBuilder, JoinHandle},
+    time::Duration,
 };
-use tokio::sync::mpsc::Receiver;
 use tower::util::BoxCloneService;
 
-mod advert_broadcaster;
 mod artifact_download_list;
 mod discovery;
 mod download_management;
@@ -121,7 +129,6 @@ mod gossip_types;
 mod metrics;
 mod peer_context;
 
-pub use advert_broadcaster::AdvertBroadcasterImpl;
 pub use event_handler::MAX_ADVERT_BUFFER;
 
 /// Custom P2P result type returning a P2P error in case of error.
@@ -155,9 +162,9 @@ pub(crate) mod utils {
 /// Starts the P2P stack and returns the objects that interact with P2P.
 #[allow(clippy::too_many_arguments)]
 pub fn start_p2p(
-    metrics_registry: MetricsRegistry,
-    log: ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    _rt_handle: &tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
     _transport_config: TransportConfig,
@@ -165,8 +172,8 @@ pub fn start_p2p(
     transport: Arc<dyn Transport>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
-    advert_receiver: Receiver<GossipAdvert>,
-) {
+    advert_receiver: CrossbeamReceiver<GossipAdvert>,
+) -> Box<dyn JoinGuard> {
     let p2p_transport_channels = vec![TransportChannelId::from(0)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
         node_id,
@@ -177,26 +184,67 @@ pub fn start_p2p(
         transport.clone(),
         p2p_transport_channels,
         log.clone(),
-        &metrics_registry,
+        metrics_registry,
     ));
 
     let event_handler = event_handler::AsyncTransportEventHandlerImpl::new(
         node_id,
         log.clone(),
-        &metrics_registry,
+        metrics_registry,
         event_handler::ChannelConfig::default(),
         gossip.clone(),
     );
     transport.set_event_handler(BoxCloneService::new(event_handler));
 
-    crate::advert_broadcaster::start_advert_broadcast_task(
-        rt_handle.clone(),
-        log,
-        advert_receiver,
-        gossip.clone(),
-    );
+    start_p2p_event_loop(advert_receiver, gossip)
+}
 
-    crate::event_handler::start_ticker_task(rt_handle, gossip);
+struct P2PEventLoopJoinGuard {
+    shutdown: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Drop for P2PEventLoopJoinGuard {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            self.shutdown.store(true, Ordering::SeqCst);
+            handle.join().unwrap();
+        }
+    }
+}
+
+impl JoinGuard for P2PEventLoopJoinGuard {}
+
+fn start_p2p_event_loop(
+    rx: CrossbeamReceiver<GossipAdvert>,
+    gossip: GossipArc,
+) -> Box<dyn JoinGuard> {
+    let shutdown = Arc::new(AtomicBool::new(false));
+
+    // Spawn the processor thread
+    let shutdown_cl = shutdown.clone();
+
+    let handle = ThreadBuilder::new()
+        .name("P2P_EventLoop".to_string())
+        .spawn(move || {
+            let ticker = tick(Duration::from_millis(100));
+            while !shutdown_cl.load(Ordering::SeqCst) {
+                select! {
+                    recv(rx) -> recv_res => {
+                        match recv_res {
+                            Ok(advert) => gossip.broadcast_advert(advert),
+                            Err(RecvError {}) => break,
+                        }
+                    }
+                    recv(ticker) -> _ => gossip.on_gossip_timer(),
+                }
+            }
+        })
+        .unwrap();
+    Box::new(P2PEventLoopJoinGuard {
+        handle: Some(handle),
+        shutdown,
+    })
 }
 
 /// Generic P2P Error codes.

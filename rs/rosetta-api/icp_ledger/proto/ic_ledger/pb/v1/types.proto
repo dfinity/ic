@@ -21,20 +21,17 @@ message LedgerInit {
   uint32 max_message_size_bytes = 4;
 }
 
-
 // The format of values serialized to/from the stable memory during and upgrade
-message LedgerUpgrade {
-}
-
+message LedgerUpgrade {}
 
 // Make a payment
 message SendRequest {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  Memo memo = 1                  [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  Payment payment = 2            [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  Tokens max_fee = 3              [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Memo memo = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Payment payment = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Tokens max_fee = 3 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   Subaccount from_subaccount = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  AccountIdentifier to = 5       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  AccountIdentifier to = 5 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   BlockIndex created_at = 6;
   TimeStamp created_at_time = 7;
 }
@@ -46,15 +43,14 @@ message SendResponse {
 // Notify a canister that it has received a payment
 message NotifyRequest {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  BlockIndex block_height = 1                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  Tokens max_fee = 2                               [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  Subaccount from_subaccount = 3                  [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  BlockIndex block_height = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Tokens max_fee = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Subaccount from_subaccount = 3 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   ic_base_types.pb.v1.PrincipalId to_canister = 4 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-  Subaccount to_subaccount = 5                    [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  Subaccount to_subaccount = 5 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
-message NotifyResponse {
-}
+message NotifyResponse {}
 
 message TransactionNotificationRequest {
   ic_base_types.pb.v1.PrincipalId from = 1;
@@ -79,7 +75,7 @@ message CyclesNotificationResponse {
 }
 
 // Get the balance of an account
-message AccountBalanceRequest  {
+message AccountBalanceRequest {
   AccountIdentifier account = 1;
 }
 
@@ -88,8 +84,7 @@ message AccountBalanceResponse {
 }
 
 // Get the length of the chain with a certification
-message TipOfChainRequest {
-}
+message TipOfChainRequest {}
 
 message TipOfChainResponse {
   Certification certification = 1;
@@ -97,8 +92,7 @@ message TipOfChainResponse {
 }
 
 // How many Tokens are there not in the minting account
-message TotalSupplyRequest {
-}
+message TotalSupplyRequest {}
 
 message TotalSupplyResponse {
   Tokens total_supply = 1;
@@ -138,11 +132,10 @@ message Refund {
   string error = 3;
 }
 
-message ToppedUp {
-}
+message ToppedUp {}
 
 message EncodedBlocks {
-    repeated EncodedBlock blocks = 1;
+  repeated EncodedBlock blocks = 1;
 }
 
 message GetBlocksResponse {
@@ -172,7 +165,6 @@ message ArchiveIndexResponse {
   repeated ArchiveIndexEntry entries = 1;
 }
 
-
 // ** ARCHIVE CANISTER ENDPOINTS **
 
 // * Archive canister *
@@ -182,43 +174,35 @@ message ArchiveInit {
   uint32 max_message_size_bytes = 2;
 }
 
-
 // Add blocks to the archive canister
 message ArchiveAddRequest {
   repeated Block blocks = 1;
 }
 
-message ArchiveAddResponse {
-}
-
+message ArchiveAddResponse {}
 
 // Fetch a list of all of the archive nodes
-message GetNodesRequest {
-}
+message GetNodesRequest {}
 
 message GetNodesResponse {
   repeated ic_base_types.pb.v1.PrincipalId nodes = 1;
 }
 
-
 // ** BASIC TYPES **
 message Tokens {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  uint64 e8s = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-
+  uint64 e8s = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
 message Payment {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  Tokens receiver_gets = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-
+  Tokens receiver_gets = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
 message BlockIndex {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  uint64 height = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  uint64 height = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
-
 
 // This is the
 message Block {
@@ -279,6 +263,7 @@ message TransferFrom {
 message Approve {
   Tokens allowance = 1;
   TimeStamp expires_at = 2;
+  Tokens expected_allowance = 3;
 }
 
 message Mint {
@@ -289,32 +274,30 @@ message Mint {
 message Burn {
   AccountIdentifier from = 1;
   Tokens amount = 3;
+  AccountIdentifier spender = 4;
 }
-
 
 message AccountIdentifier {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   // Can contain either:
   //  * the 32 byte identifier (4 byte checksum + 28 byte hash)
   //  * the 28 byte hash
-  bytes hash = 1        [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-
+  bytes hash = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
 message Subaccount {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   bytes sub_account = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
-
 }
 
 message Memo {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  uint64 memo = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  uint64 memo = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
 message Icrc1Memo {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
-  bytes memo = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  bytes memo = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
 message TimeStamp {
@@ -325,9 +308,7 @@ message Certification {
   bytes certification = 1;
 }
 
-message TransferFeeRequest {
-
-}
+message TransferFeeRequest {}
 
 message TransferFeeResponse {
   Tokens transfer_fee = 1;

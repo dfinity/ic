@@ -1,9 +1,12 @@
 use super::{storage_operations, types::RosettaBlock};
 use anyhow::Result;
 use ic_icrc1::Transaction;
+use ic_icrc1_tokens_u64::U64;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
 use std::{path::Path, sync::Mutex};
+
+type Tokens = U64;
 
 #[derive(Debug)]
 pub struct StorageClient {
@@ -83,13 +86,19 @@ impl StorageClient {
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
     // with the given transaction hash exists
-    pub fn get_transaction_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Vec<Transaction>> {
+    pub fn get_transaction_by_hash(
+        &self,
+        hash: ByteBuf,
+    ) -> anyhow::Result<Vec<Transaction<Tokens>>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_transactions_by_hash(&open_connection, hash)
     }
 
     // Gets a transaction with a certain index. Returns None if no transaction exists in the database with that index. Returns an error if multiple transactions with that index exist
-    pub fn get_transaction_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<Transaction>> {
+    pub fn get_transaction_at_idx(
+        &self,
+        block_idx: u64,
+    ) -> anyhow::Result<Option<Transaction<Tokens>>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_transaction_at_idx(&open_connection, block_idx)
     }
@@ -117,10 +126,14 @@ impl StorageClient {
                 from_subaccount BLOB,
                 to_principal BLOB,
                 to_subaccount BLOB,
+                spender_principal BLOB,
+                spender_subaccount BLOB,
                 memo BLOB,
                 amount INTEGER,
+                expected_allowance INTEGER,
                 fee INTEGER,
                 transaction_created_at_time INTEGER,
+                approval_expires_at INTEGER,
                 PRIMARY KEY(block_idx),
                 FOREIGN KEY(block_idx) REFERENCES blocks(idx)
             )
@@ -141,7 +154,9 @@ mod tests {
     use super::*;
     use crate::common::utils::unit_test_utils::create_tmp_dir;
     use ic_icrc1::Block;
-    use ic_icrc1_test_utils::{blocks_strategy, valid_blockchain_with_gaps_strategy};
+    use ic_icrc1_test_utils::{
+        arb_small_amount, blocks_strategy, valid_blockchain_with_gaps_strategy,
+    };
     use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
 
@@ -157,7 +172,7 @@ mod tests {
 
     proptest! {
        #[test]
-       fn test_read_and_write_blocks(block in blocks_strategy(),index in (0..10000u64)){
+       fn test_read_and_write_blocks(block in blocks_strategy(arb_small_amount()),index in (0..10000u64)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let rosetta_block = RosettaBlock::from_icrc_ledger_block(block,index).unwrap();
            storage_client_memory.store_blocks(vec![rosetta_block.clone()]).unwrap();
@@ -199,7 +214,7 @@ mod tests {
         }
 
        #[test]
-       fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(),1..100)){
+       fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(arb_small_amount()),1..100)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
            for (index,block) in blocks.clone().into_iter().enumerate(){

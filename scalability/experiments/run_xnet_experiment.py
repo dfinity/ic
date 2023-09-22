@@ -43,7 +43,7 @@ gflags.DEFINE_integer("increment_rps", 250, "Increment for total rate in each it
 gflags.DEFINE_integer("max_iterations", 25, "Maximum number of iterations")
 
 
-CANISTER = "xnet-test-canister.wasm"
+CANISTER = "xnet-test-canister"
 
 
 # Suggested subnet for experimenting: large02, large04 w/ four subnets
@@ -80,7 +80,7 @@ class XnetExperiment(base_experiment.BaseExperiment):
                 # but that will make the code quite a bit more complex.
                 # Also, currently install_canister_nonblocking doesn't determine the canister
                 # ID at all.
-                cid = self.install_canister(h, canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}"))
+                cid = self.install_canister(h, canister=CANISTER)
                 if cid is not None:
                     self.canisters_per_host[h].append(cid)
         time_install = time.time() - t_start

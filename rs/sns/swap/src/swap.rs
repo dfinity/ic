@@ -10,7 +10,8 @@ use crate::{
         settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
         BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
-        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
+        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
         GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
         GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
         GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
@@ -50,12 +51,14 @@ use rust_decimal::prelude::ToPrimitive;
 use std::{
     borrow::Cow,
     collections::BTreeMap,
+    fmt,
     num::{NonZeroU128, NonZeroU64},
     ops::{
         Bound::{Included, Unbounded},
         Div,
     },
     str::FromStr,
+    time::Duration,
 };
 
 // TODO(NNS1-1589): Get these from the canonical location.
@@ -81,14 +84,15 @@ const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 /// Range of allowed memos for neurons distributed via an SNS swap. This range is used to choose
-/// the memos of Swap neurons, and to enforce that other memos (e.g. for Airdrop neurons) do not
-/// conflict with the memos of Swap neurons.
-pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
+/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for Airdrop
+/// neurons) do not conflict with the neuron basket memos.
+pub const NEURON_BASKET_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
 
 /// The principal with all bytes set to zero. The main property
-/// of this principal is that for any principal p != FIRST_PRINCIPAL_BYTES
-/// then p.as_slice() < FIRST_PRINCIPAL_BYTES.as_slice().
+/// of this principal is that for any principal p, the following condition holds:
+/// (p != FIRST_PRINCIPAL_BYTES) ==> FIRST_PRINCIPAL_BYTES.as_slice() < p.as_slice()
+/// Here, the `<` symbol means lexicographical comparison of sequences of bytes.
 pub const FIRST_PRINCIPAL_BYTES: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] =
     [0; PrincipalId::MAX_LENGTH_IN_BYTES];
 
@@ -193,7 +197,13 @@ impl NeuronBasketConstructionParameters {
             .map(|i| i * self.dissolve_delay_interval_seconds)
             .collect::<Vec<u64>>();
 
-        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count);
+        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count)
+            // TODO: Bubble up. The only cases in which AAE returns Err are
+            // 1. the second argument is nonzero, but we already asserted that
+            // it isn't 2. AAE detects that it has a bug, but ofc, we do not
+            // know how that can happen (other than the fact that humans are
+            // fallible).
+            .expect("Internal bug.");
 
         assert_eq!(dissolve_delay_seconds_list.len(), chunks_e8s.len());
 
@@ -215,15 +225,63 @@ impl NeuronBasketConstructionParameters {
 /// More precisely, result.len() == len. result.sum() == total. Each element of
 /// result is approximately equal to the others. However, unless len divides
 /// total evenly, the elements of result will inevitabley be not equal.
-pub fn apportion_approximately_equally(total: u64, len: u64) -> Vec<u64> {
-    assert!(len > 0, "len must be greater than zero");
-    let quotient = total.saturating_div(len);
-    let remainder = total % len;
+///
+/// There are two ways that Err can be returned:
+///
+///   1. Caller mistake: len == 0
+///
+///   2. This has a bug. See implementation comments for why we know of know way
+///      this can happen, but can detect if it does.
+pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>, String> {
+    let quotient = total
+        .checked_div(len)
+        .ok_or_else(|| format!("Unable to divide total={} by len={}", total, len))?;
+    let remainder = total % len; // For unsigned integers, % cannot overflow.
 
+    // So far, we have only apportioned quotient * len. To reach the desired
+    // total, we must still somehow add remainder (per Euclid's Division
+    // Theorem). That is accomplished right after this.
     let mut result = vec![quotient; len as usize];
-    *result.first_mut().unwrap() += remainder;
 
-    result
+    // Divy out the remainder: Starting from the last element, increment
+    // elements by 1. The number of such increments performed here is remainder,
+    // bringing our total back to the desired amount.
+    assert!(
+        remainder < result.len() as u64, // By Euclid's Division Theorem,
+        "{} vs. {}",
+        remainder,
+        result.len(),
+    );
+    let mut iter_mut = result.iter_mut();
+    for _ in 0..remainder {
+        let element: &mut u64 = iter_mut
+            .next_back()
+            // We can prove that this will not panic:
+            // The number of iterations of this loop is total % len.
+            // This must be < len (by Euclid's Division Theorem).
+            // Thus, the number of iterations that this loop goes through is < len.
+            // Thus, the number of times next_back is called is < len.
+            // next_back only returns None after len calls.
+            // Therefore, next_back does not return None here.
+            // Therefore, this expect will never panic.
+            .ok_or_else(|| {
+                format!(
+                    "Ran out of elements to increment. total={}, len={}",
+                    total, len,
+                )
+            })?;
+
+        // This cannot overflow because the result must be <= total. Thus, this
+        // will not panic.
+        *element = element.checked_add(1).ok_or_else(|| {
+            format!(
+                "Incrementing element by 1 resulted in overflow. total={}, len={}",
+                total, len,
+            )
+        })?;
+    }
+
+    Ok(result)
 }
 
 // High level documentation in the corresponding Protobuf message.
@@ -249,8 +307,9 @@ impl Swap {
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
+            auto_finalize_swap_response: None,
         };
-        if init.is_swap_init_for_single_proposal() {
+        if init.is_swap_init_for_one_proposal_flow() {
             // Automatically fill out the fields that the (legacy) open request
             // used to provide, supporting clients who read legacy Swap fields.
             {
@@ -378,8 +437,21 @@ impl Swap {
         );
         self.already_tried_to_auto_finalize = Some(true);
 
-        let finalize_response = self.finalize(now_fn, environment).await;
-        Ok(finalize_response)
+        // Attempt finalization
+        let auto_finalize_swap_response = self.finalize(now_fn, environment).await;
+
+        // Record the result
+        if self.auto_finalize_swap_response.is_some() {
+            log!(
+                ERROR,
+                "Somehow, auto-finalization happend twice (second time at {}). Overriding self.auto_finalize_swap_response, old value was: {:?}",
+                now_fn(true),
+                auto_finalize_swap_response,
+            );
+        }
+        self.auto_finalize_swap_response = Some(auto_finalize_swap_response.clone());
+
+        Ok(auto_finalize_swap_response)
     }
 
     /// Opens the SNS decentralization swap (only for the legacy flow).
@@ -406,7 +478,11 @@ impl Swap {
     ) -> Result<OpenResponse, String> {
         // Precondition 1
         if self.lifecycle() != Lifecycle::Pending {
-            return Err("Invalid lifecycle state to OPEN the swap: must be PENDING".to_string());
+            return Err(format!(
+                "Invalid lifecycle state to open the swap: must be {:?}, was {:?}",
+                Lifecycle::Pending,
+                self.lifecycle()
+            ));
         }
         // Precondition 2
         req.validate(now_seconds, self.init_or_panic())?;
@@ -516,7 +592,7 @@ impl Swap {
                     &parsed_principal,
                     amount_sns_e8s,
                     neuron_basket_construction_parameters,
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                 );
             neurons.extend(direct_participant_sns_neuron_recipes);
 
@@ -529,7 +605,7 @@ impl Swap {
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
         // for all CF investors.
-        let mut global_cf_memo: u64 = SALE_NEURON_MEMO_RANGE_START;
+        let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
         for cf_participant in self.cf_participants.iter() {
             for cf_neuron in cf_participant.cf_neurons.iter() {
                 let amount_sns_e8s = Swap::scale(
@@ -755,8 +831,7 @@ impl Swap {
     ) -> Result<RefreshBuyerTokensResponse, String> {
         if self.lifecycle() != Lifecycle::Open {
             return Err(
-                "The token amount can only be refreshed when the canister is in the OPEN state"
-                    .to_string(),
+                format!("The token amount can only be refreshed when the canister is in the OPEN state. Current state is {:?}.", self.lifecycle()),
             );
         }
         if self.icp_target_reached() {
@@ -797,8 +872,7 @@ impl Swap {
         // call to get the account balance was outstanding.
         if self.lifecycle() != Lifecycle::Open {
             return Err(
-                "The token amount can only be refreshed when the canister is in the OPEN state"
-                    .to_string(),
+                format!("The token amount can only be refreshed when the canister is in the OPEN state. Current state is {:?}.", self.lifecycle()),
             );
         }
 
@@ -2052,15 +2126,28 @@ impl Swap {
         caller: PrincipalId,
         time: u64,
     ) -> NewSaleTicketResponse {
-        if self.lifecycle() < Lifecycle::Open {
+        // Return an error if we are not in Lifecycle::Open.
+        if self.lifecycle().is_before_open() {
             return NewSaleTicketResponse::err_sale_not_open();
         }
-        if self.lifecycle() > Lifecycle::Open {
+        if self.lifecycle().is_after_open() {
             return NewSaleTicketResponse::err_sale_closed();
         }
+        if self.lifecycle() != Lifecycle::Open {
+            // It must be that we are in Lifecycle::Unspecified, but this also
+            // accounts for cases that might have been overlooked.
+            log!(
+                ERROR,
+                "We are not in Lifecycle::Open. Swap:\n{:#?}",
+                SwapDigest::new(self),
+            );
+            return NewSaleTicketResponse::err_sale_not_open();
+        }
+
         if caller.is_anonymous() {
             return NewSaleTicketResponse::err_invalid_principal();
         }
+
         // subaccounts must be 32 bytes
         if request
             .subaccount
@@ -2248,9 +2335,9 @@ impl Swap {
             if !to_purge.is_empty() {
                 log!(
                     INFO,
-                    "Purging {} open tickets because they are older than {} seconds (number of open tickets: {})",
+                    "Purging {} open tickets because they are older than {:?} (number of open tickets: {})",
                     to_purge.len(),
-                    max_age_in_nanoseconds,
+                    Duration::from_nanos(max_age_in_nanoseconds),
                     tickets.borrow().len(),
                 );
             }
@@ -2497,6 +2584,21 @@ impl Swap {
         }
     }
 
+    /// Returns the current lifecycle stage (e.g. Open, Committed, etc)
+    pub fn get_auto_finalization_status(
+        &self,
+        _request: &GetAutoFinalizationStatusRequest,
+    ) -> GetAutoFinalizationStatusResponse {
+        GetAutoFinalizationStatusResponse {
+            is_auto_finalize_enabled: self
+                .init
+                .as_ref()
+                .and_then(|init| init.should_auto_finalize),
+            has_auto_finalize_been_attempted: self.already_tried_to_auto_finalize,
+            auto_finalize_swap_response: self.auto_finalize_swap_response.clone(),
+        }
+    }
+
     /// If there is an open swap ticket for the caller then it returns it;
     /// otherwise returns none.
     ///
@@ -2581,6 +2683,11 @@ impl Swap {
             .min(LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP) // cap
             as usize;
 
+        // Disallow indexing outside of the bounds of self.cf_participants
+        if offset >= self.cf_participants.len() {
+            return ListCommunityFundParticipantsResponse::default();
+        }
+
         let end = (offset + limit).min(self.cf_participants.len());
         let cf_participants = self.cf_participants[offset..end].to_vec();
 
@@ -2623,15 +2730,19 @@ impl Swap {
         &self,
         request: ListSnsNeuronRecipesRequest,
     ) -> ListSnsNeuronRecipesResponse {
-        let limit = request
-            .limit
+        let ListSnsNeuronRecipesRequest { limit, offset } = request;
+        let offset = offset.unwrap_or_default() as usize;
+        let limit = limit
             .unwrap_or(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT)
             .min(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT) as usize;
 
-        let start_at = request.offset.unwrap_or_default() as usize;
-        let end = (start_at + limit).min(self.neuron_recipes.len());
+        // Disallow indexing outside of the bounds of self.neuron_recipes
+        if offset >= self.neuron_recipes.len() {
+            return ListSnsNeuronRecipesResponse::default();
+        }
 
-        let sns_neuron_recipes = self.neuron_recipes[start_at..end].to_vec();
+        let end = (offset + limit).min(self.neuron_recipes.len());
+        let sns_neuron_recipes = self.neuron_recipes[offset..end].to_vec();
 
         ListSnsNeuronRecipesResponse { sns_neuron_recipes }
     }
@@ -2641,15 +2752,15 @@ impl Swap {
 ///
 /// # Arguments
 ///
-/// * `tot_participation` - The current amount of tokens commited to
+/// * `tot_participation` - The current amount of tokens committed to
 ///                         the swap by all users.
 /// * `max_tot_participation` - The maximum amount of tokens that can
-///                             be commited to the swap.
+///                             be committed to the swap.
 /// * `min_user_participation` - The minimum amount of tokens that a
 ///                              user must commit to participate to the swap.
 /// * `max_user_participation` - The maximum amount of tokens that a
 ///                              user can commit to participate to the swap.
-/// * `user_participation` - The current amount of tokens commited to the
+/// * `user_participation` - The current amount of tokens committed to the
 ///                          swap by the user that requested the increment.
 /// * `requested_increment` - The amount of tokens by which the user wants
 ///                           to increase its participation in the swap.
@@ -3005,6 +3116,83 @@ fn insert_buyer_into_buyers_list_index(buyer_principal_id: PrincipalId) -> Resul
     memory::BUYERS_LIST_INDEX.with(|buyer_list| buyer_list.borrow_mut().push(&buyer_principal_id))
 }
 
+/// A version of Swap that implements a shorter version of Debug, suitable for
+/// logs. Potentially large collection fields are summarized and/or decimated.
+struct SwapDigest<'a> {
+    swap: &'a Swap,
+}
+
+impl<'a> SwapDigest<'a> {
+    fn new(swap: &'a Swap) -> Self {
+        Self { swap }
+    }
+}
+
+impl<'a> fmt::Debug for SwapDigest<'a> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        let Swap {
+            lifecycle,
+            init,
+            params,
+            open_sns_token_swap_proposal_id,
+            finalize_swap_in_progress,
+            decentralization_sale_open_timestamp_seconds,
+            next_ticket_id,
+            purge_old_tickets_last_completion_timestamp_nanoseconds,
+            purge_old_tickets_next_principal,
+            already_tried_to_auto_finalize,
+            auto_finalize_swap_response,
+
+            // These are (potentially large) collections. To avoid an
+            // overwhelmingly large log message, we need summarize and/or
+            // decimate these.
+            cf_participants,
+            buyers,
+            neuron_recipes,
+        } = self.swap;
+
+        formatter
+            .debug_struct("Swap(digest)")
+            .field("lifecycle", lifecycle)
+            .field("init", init)
+            .field("params", params)
+            .field(
+                "open_sns_token_swap_proposal_id",
+                open_sns_token_swap_proposal_id,
+            )
+            .field("finalize_swap_in_progress", finalize_swap_in_progress)
+            .field(
+                "decentralization_sale_open_timestamp_seconds",
+                decentralization_sale_open_timestamp_seconds,
+            )
+            .field("next_ticket_id", next_ticket_id)
+            .field(
+                "purge_old_tickets_last_completion_timestamp_nanoseconds",
+                purge_old_tickets_last_completion_timestamp_nanoseconds,
+            )
+            .field(
+                "purge_old_tickets_next_principal",
+                purge_old_tickets_next_principal,
+            )
+            .field(
+                "already_tried_to_auto_finalize",
+                already_tried_to_auto_finalize,
+            )
+            .field("auto_finalize_swap_response", auto_finalize_swap_response)
+            // Summarize and/or decimate (potentially large) collection fields.
+            //
+            // TODO: Include some samples? E.g. the first, and last element, and
+            // maybe some random elements in the middle.
+            .field(
+                "cf_participants",
+                &format!("<len={}>", cf_participants.len()),
+            )
+            .field("buyers", &format!("<len={}>", buyers.len()))
+            .field("neuron_recipes", &format!("<len={}>", neuron_recipes.len()))
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -3335,6 +3523,16 @@ mod tests {
                 cf_participants: cf_participants[2..].to_vec(),
             },
         );
+
+        assert_eq!(
+            swap.list_community_fund_participants(&ListCommunityFundParticipantsRequest {
+                offset: Some((cf_participants.len() + 1) as u64), // Give an offset outside the bounds
+                limit: Some(10),                                  // Limit is irrelevant
+            }),
+            ListCommunityFundParticipantsResponse {
+                cf_participants: vec![],
+            }
+        )
     }
 
     #[test]
@@ -3376,23 +3574,23 @@ mod tests {
                 .generate_vesting_schedule(/* total_amount_e8s = */ 9),
             vec![
                 ScheduledVestingEvent {
-                    amount_e8s: 5,
+                    amount_e8s: 1,
                     dissolve_delay_seconds: 0,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 100,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 200,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 300,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 400,
                 },
             ],
@@ -3428,10 +3626,12 @@ mod tests {
                     .sum::<u64>(),
                 total_e8s,
             );
-            for i in 1..vesting_schedule.len() {
-                assert_eq!(
-                    vesting_schedule.get(i).unwrap().amount_e8s,
-                    total_e8s / count,
+            let lower_bound_e8s = total_e8s / count;
+            let upper_bound_e8s = lower_bound_e8s + 1;
+            for scheduled_vesting_event in &vesting_schedule {
+                assert!(
+                    lower_bound_e8s <= scheduled_vesting_event.amount_e8s
+                        && scheduled_vesting_event.amount_e8s <= upper_bound_e8s,
                     "{:#?}",
                     vesting_schedule,
                 );
@@ -3618,6 +3818,16 @@ mod tests {
                 sns_neuron_recipes: neuron_recipes[1..3].to_vec()
             }
         );
+
+        assert_eq!(
+            swap.list_sns_neuron_recipes(ListSnsNeuronRecipesRequest {
+                limit: Some(2),                                  // Limit is irrelevant
+                offset: Some((neuron_recipes.len() + 1) as u64), // Give an offset outside the bounds
+            }),
+            ListSnsNeuronRecipesResponse {
+                sns_neuron_recipes: vec![],
+            }
+        )
     }
 
     proptest! {
@@ -3673,6 +3883,7 @@ mod tests {
                 purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
                 purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
                 already_tried_to_auto_finalize: Some(false),
+                auto_finalize_swap_response: None,
             };
             let mut ticket_ids = HashSet::new();
             for pid in pids {
@@ -3977,6 +4188,7 @@ mod tests {
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
+            auto_finalize_swap_response: None,
         };
 
         let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {

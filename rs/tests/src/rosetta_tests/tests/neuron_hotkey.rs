@@ -13,7 +13,7 @@ use ic_rosetta_api::request_types::{AddHotKey, PublicKeyOrPrincipal, RemoveHotKe
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
 use icp_ledger::Operation;
 use slog::Logger;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,7 +29,7 @@ pub fn test(env: TestEnv) {
     // Create neurons.
     let neuron1 = create_neuron(2001, |_| {}, &mut ledger_balances);
     let neuron2 = create_neuron(2002, |_| {}, &mut ledger_balances);
-    let mut neurons = HashMap::new();
+    let mut neurons = BTreeMap::new();
     neurons.insert(neuron1.neuron.id.unwrap().id, neuron1.neuron.clone());
     neurons.insert(neuron2.neuron.id.unwrap().id, neuron2.neuron.clone());
 
@@ -235,6 +235,7 @@ async fn test_wrong_key(ros: &RosettaApiClient, _logger: &Logger) {
     let t = Operation::Transfer {
         from: acc_a,
         to: acc_id(1051),
+        spender: None,
         amount: Tokens::from_e8s(100),
         fee: Tokens::from_e8s(TRANSFER_FEE),
     };

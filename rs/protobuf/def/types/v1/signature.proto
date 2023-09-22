@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package types.v1;
+
+import "types/v1/types.proto";
+
+message BasicSignature {
+  bytes signature = 1;
+  NodeId signer = 2;
+}
+
+message ThresholdSignature {
+  bytes signature = 1;
+  NiDkgId signer = 2;
+}
+
+message ThresholdSignatureShare {
+  bytes signature = 1;
+  NodeId signer = 2;
+}

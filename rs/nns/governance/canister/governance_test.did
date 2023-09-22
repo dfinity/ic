@@ -139,6 +139,7 @@ type Followees = record { followees : vec NeuronId };
 type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
+  making_sns_proposal : opt MakingSnsProposal;
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
@@ -156,8 +157,14 @@ type Governance = record {
   genesis_timestamp_seconds : nat64;
 };
 type GovernanceCachedMetrics = record {
+  total_maturity_e8s_equivalent : nat64;
   not_dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
+  dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;
   garbage_collectable_neurons_count : nat64;
+  dissolving_neurons_staked_maturity_e8s_equivalent_buckets : vec record {
+    nat64;
+    float64;
+  };
   neurons_with_invalid_stake_count : nat64;
   not_dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   total_supply_icp : nat64;
@@ -167,8 +174,15 @@ type GovernanceCachedMetrics = record {
   total_staked_e8s : nat64;
   not_dissolving_neurons_count : nat64;
   total_locked_e8s : nat64;
+  neurons_fund_total_active_neurons : nat64;
+  total_staked_maturity_e8s_equivalent : nat64;
+  not_dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;
   dissolved_neurons_e8s : nat64;
   neurons_with_less_than_6_months_dissolve_delay_e8s : nat64;
+  not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets : vec record {
+    nat64;
+    float64;
+  };
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
@@ -228,6 +242,11 @@ type ListProposalInfo = record {
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };
 type MakeProposalResponse = record { proposal_id : opt NeuronId };
+type MakingSnsProposal = record {
+  proposal : opt Proposal;
+  caller : opt principal;
+  proposer_id : opt NeuronId;
+};
 type ManageNeuron = record {
   id : opt NeuronId;
   command : opt Command;
@@ -484,6 +503,7 @@ type SwapParameters = record {
   minimum_participant_icp : opt Tokens;
   start_time : opt GlobalTimeOfDay;
   maximum_icp : opt Tokens;
+  neurons_fund_investment_icp : opt Tokens;
   restricted_countries : opt Countries;
 };
 type Tally = record {

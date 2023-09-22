@@ -3,7 +3,6 @@ use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
@@ -2408,7 +2407,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // Change the cycles balance to force the response resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance(CyclesUseCase::Memory);
+        .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2493,7 +2492,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // Change the cycles balance to force the cleanup resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance(CyclesUseCase::Memory);
+        .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2505,4 +2504,57 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
         available_memory_before_starting_callback,
         test.subnet_available_memory().get_execution_memory()
     );
+}
+
+#[test]
+fn cycles_balance_changes_applied_correctly() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
+    let b_id = test
+        .universal_canister_with_cycles(Cycles::new(81_000_000_000))
+        .unwrap();
+
+    test.ingress(
+        b_id,
+        "update",
+        wasm()
+            .call_with_cycles(
+                a_id.get(),
+                "update",
+                call_args().other_side(wasm().accept_cycles(Cycles::new(u128::MAX))),
+                Cycles::new(60_000_000_000),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let mut b = wasm().accept_cycles(Cycles::new(u128::MAX));
+
+    for _ in 0..400 {
+        b = b.call_simple(a_id, "update", call_args());
+    }
+
+    let b = b.push_int(42).reply_int().build();
+
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args().other_side(b.clone()),
+            Cycles::new(5_000_000_000_000),
+        )
+        .build();
+    let a_balance_old = test.canister_state(a_id).system_state.balance();
+    let b_balance_old = test.canister_state(b_id).system_state.balance();
+    let res = test.ingress(a_id, "update", a).unwrap();
+    match res {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(msg) => unreachable!("rejected : {}", msg),
+    }
+    let a_balance_new = test.canister_state(a_id).system_state.balance();
+    let b_balance_new = test.canister_state(b_id).system_state.balance();
+
+    assert!(a_balance_old + b_balance_old > a_balance_new + b_balance_new);
 }

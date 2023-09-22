@@ -1,15 +1,17 @@
 use super::{
     checkpoint::{Checkpoint, MappingSerialization},
     page_allocator::PageAllocatorSerialization,
-    Buffer, FileDescriptor, PageAllocator, PageAllocatorRegistry, PageDelta, PageIndex, PageMap,
-    PageMapSerialization,
+    Buffer, FileDescriptor, PageAllocatorRegistry, PageIndex, PageMap, PageMapSerialization,
 };
-use crate::page_map::{MemoryRegion, TestPageAllocatorFileDescriptorImpl};
+use crate::page_map::{
+    MemoryInstructions, MemoryMapOrData, TestPageAllocatorFileDescriptorImpl, WRITE_BUCKET_PAGES,
+};
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
+use static_assertions::const_assert_ne;
 use std::sync::Arc;
-use std::{fs::OpenOptions, ops::Range};
+use std::{fs::OpenOptions, path::Path};
 
 fn assert_equal_page_maps(page_map1: &PageMap, page_map2: &PageMap) {
     assert_eq!(page_map1.num_host_pages(), page_map2.num_host_pages());
@@ -102,6 +104,29 @@ fn new_delta_wins_on_update() {
 
 #[test]
 fn persisted_map_is_equivalent_to_the_original() {
+    fn persist_check_eq_and_load(
+        pagemap: &mut PageMap,
+        heap_file: &Path,
+        pages_to_update: &[(PageIndex, [u8; PAGE_SIZE])],
+    ) -> PageMap {
+        pagemap.update(
+            &pages_to_update
+                .iter()
+                .map(|(idx, p)| (*idx, p))
+                .collect::<Vec<_>>(),
+        );
+        pagemap.persist_delta(heap_file).unwrap();
+        let persisted_map = PageMap::open(
+            heap_file,
+            Height::new(0),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        assert_eq!(*pagemap, persisted_map);
+        persisted_map
+    }
+
     let tmp = tempfile::Builder::new()
         .prefix("checkpoints")
         .tempdir()
@@ -110,53 +135,46 @@ fn persisted_map_is_equivalent_to_the_original() {
 
     let base_page = [42u8; PAGE_SIZE];
     let base_data = vec![&base_page; 50];
-
-    let base_pages: Vec<(PageIndex, &[u8; PAGE_SIZE])> = base_data
-        .iter()
-        .enumerate()
-        .map(|(i, page)| (PageIndex::new(i as u64), *page))
-        .collect();
-
-    let mut base_map = PageMap::new_for_testing();
-    base_map.update(base_pages.as_slice());
-    base_map.persist_delta(&heap_file).unwrap();
-
-    let mut original_map = PageMap::open(
+    let mut pagemap = persist_check_eq_and_load(
+        &mut PageMap::new_for_testing(),
         &heap_file,
-        Height::new(0),
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-    )
-    .unwrap();
+        &base_data
+            .iter()
+            .enumerate()
+            .map(|(i, page)| (PageIndex::new(i as u64), **page))
+            .collect::<Vec<_>>(),
+    );
 
-    assert_eq!(base_map, original_map);
-
-    let page_1 = [1u8; PAGE_SIZE];
-    let page_3 = [3u8; PAGE_SIZE];
-    let page_4 = [4u8; PAGE_SIZE];
-    let page_60 = [60u8; PAGE_SIZE];
-    let page_62 = [62u8; PAGE_SIZE];
-    let page_100 = [100u8; PAGE_SIZE];
-
-    let pages = &[
-        (PageIndex::new(1), &page_1),
-        (PageIndex::new(3), &page_3),
-        (PageIndex::new(4), &page_4),
-        (PageIndex::new(60), &page_60),
-        (PageIndex::new(62), &page_62),
-        (PageIndex::new(100), &page_100),
-    ];
-
-    original_map.update(pages);
-
-    original_map.persist_delta(&heap_file).unwrap();
-    let persisted_map = PageMap::open(
+    let mut pagemap = persist_check_eq_and_load(
+        &mut pagemap,
         &heap_file,
-        Height::new(0),
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-    )
-    .unwrap();
+        &[
+            (PageIndex::new(1), [1u8; PAGE_SIZE]),
+            (PageIndex::new(3), [3u8; PAGE_SIZE]),
+            (PageIndex::new(4), [4u8; PAGE_SIZE]),
+            (PageIndex::new(60), [60u8; PAGE_SIZE]),
+            (PageIndex::new(63), [63u8; PAGE_SIZE]),
+            (PageIndex::new(100), [100u8; PAGE_SIZE]),
+        ],
+    );
 
-    assert_eq!(persisted_map, original_map);
+    let mut pagemap = persist_check_eq_and_load(
+        &mut pagemap,
+        &heap_file,
+        &[(PageIndex::new(1), [255u8; PAGE_SIZE])],
+    );
+    // Check that it's possible to serialize without reloading.
+    persist_check_eq_and_load(
+        &mut pagemap,
+        &heap_file,
+        &[(PageIndex::new(104), [104u8; PAGE_SIZE])],
+    );
+    persist_check_eq_and_load(
+        &mut pagemap,
+        &heap_file,
+        &[(PageIndex::new(103), [103u8; PAGE_SIZE])],
+    );
+    assert_eq!(105 * PAGE_SIZE as u64, heap_file.metadata().unwrap().len());
 }
 
 #[test]
@@ -279,43 +297,6 @@ fn serialize_page_map() {
     assert_equal_page_maps(&replica, &sandbox);
 }
 
-#[test]
-fn write_amplification_is_calculated_correctly() {
-    let allocator: PageAllocator = PageAllocator::new_for_testing();
-
-    let page = [1u8; PAGE_SIZE];
-
-    let pages = &[
-        (PageIndex::new(1), &page),
-        // gap 1
-        (PageIndex::new(3), &page),
-        (PageIndex::new(4), &page),
-        // gap 100
-        (PageIndex::new(105), &page),
-    ];
-
-    let pages = allocator.allocate(pages);
-
-    let delta = PageDelta::from(pages);
-
-    // Amplification of 1 doesn't allow gaps
-    assert_eq!(delta.write_amplification_to_gap(1000, 1.0), 0);
-
-    // Amplification smaller than 1 is safe
-    assert_eq!(delta.write_amplification_to_gap(1000, 0.5), 0);
-    assert_eq!(delta.write_amplification_to_gap(1000, -10.0), 0);
-
-    // Small amplification should allow the small gap, but not the large
-    assert!(delta.write_amplification_to_gap(1000, 2.0) < 100);
-    assert!(delta.write_amplification_to_gap(1000, 2.0) >= 1);
-
-    // Large amplification should allow both gaps
-    assert!(delta.write_amplification_to_gap(1000, 100.0) >= 100);
-
-    // Maximum gap is respected
-    assert_eq!(delta.write_amplification_to_gap(50, 100.0), 50);
-}
-
 /// Check that the value provided by `calculate_dirty_pages` agrees with the
 /// actual change in number of dirty pages and return the number of new dirty
 /// pages.
@@ -407,7 +388,7 @@ fn calc_dirty_pages_matches_actual_change() {
 }
 
 #[test]
-fn zeros_region_after_delta() {
+fn get_memory_instructions_returns_deltas() {
     let mut page_map = PageMap::new_for_testing();
     let tmp = tempfile::Builder::new()
         .prefix("checkpoints")
@@ -416,6 +397,25 @@ fn zeros_region_after_delta() {
     let heap_file = tmp.path().join("heap");
     let pages = &[(PageIndex::new(1), &[1u8; PAGE_SIZE])];
     page_map.update(pages);
+
+    assert_eq!(
+        MemoryInstructions {
+            range: PageIndex::new(0)..PageIndex::new(u64::MAX),
+            instructions: vec![]
+        },
+        page_map.get_base_memory_instructions()
+    );
+    let range = PageIndex::new(0)..PageIndex::new(10);
+    assert_eq!(
+        MemoryInstructions {
+            range: range.clone(),
+            instructions: vec![(
+                PageIndex::new(1)..PageIndex::new(2),
+                MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+            )]
+        },
+        page_map.get_memory_instructions(range.clone(), range.clone(), 0)
+    );
 
     page_map.persist_delta(&heap_file).unwrap();
 
@@ -426,69 +426,156 @@ fn zeros_region_after_delta() {
     )
     .unwrap();
 
-    let zero_range = page_map.get_memory_region(PageIndex::new(5));
+    assert!(matches!(
+        page_map.get_base_memory_instructions().instructions[..],
+        [(ref range, _)] if *range == (PageIndex::new(0)..PageIndex::new(2))
+    ));
     assert_eq!(
-        MemoryRegion::Zeros(Range {
-            start: PageIndex::new(2),
-            end: PageIndex::new(u64::MAX)
-        }),
-        zero_range
-    );
-
-    let pages = &[(PageIndex::new(3), &[1u8; PAGE_SIZE])];
-    page_map.update(pages);
-
-    let zero_range = page_map.get_memory_region(PageIndex::new(5));
-    assert_eq!(
-        MemoryRegion::Zeros(Range {
-            start: PageIndex::new(4),
-            end: PageIndex::new(u64::MAX)
-        }),
-        zero_range
-    );
-}
-
-#[test]
-fn zeros_region_within_delta() {
-    let mut page_map = PageMap::new_for_testing();
-    let tmp = tempfile::Builder::new()
-        .prefix("checkpoints")
-        .tempdir()
-        .unwrap();
-    let heap_file = tmp.path().join("heap");
-    let pages = &[(PageIndex::new(1), &[1u8; PAGE_SIZE])];
-    page_map.update(pages);
-
-    page_map.persist_delta(&heap_file).unwrap();
-
-    let mut page_map = PageMap::open(
-        &heap_file,
-        Height::new(0),
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-    )
-    .unwrap();
-
-    let zero_range = page_map.get_memory_region(PageIndex::new(5));
-    assert_eq!(
-        MemoryRegion::Zeros(Range {
-            start: PageIndex::new(2),
-            end: PageIndex::new(u64::MAX)
-        }),
-        zero_range
+        MemoryInstructions {
+            range: range.clone(),
+            instructions: vec![]
+        },
+        page_map.get_memory_instructions(range.clone(), range.clone(), 0)
     );
 
     let pages = &[
         (PageIndex::new(3), &[1u8; PAGE_SIZE]),
-        (PageIndex::new(10), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(5), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(20), &[1u8; PAGE_SIZE]),
     ];
     page_map.update(pages);
 
-    let zero_range = page_map.get_memory_region(PageIndex::new(5));
+    assert!(matches!(
+        page_map.get_base_memory_instructions().instructions[..],
+        [(ref range, _)] if *range == (PageIndex::new(0)..PageIndex::new(2))
+    ));
     assert_eq!(
-        MemoryRegion::Zeros(Range {
-            start: PageIndex::new(4),
-            end: PageIndex::new(10)
-        }),
-        zero_range
+        MemoryInstructions {
+            range: range.clone(),
+            instructions: vec![
+                (
+                    PageIndex::new(3)..PageIndex::new(4),
+                    MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                ),
+                (
+                    PageIndex::new(5)..PageIndex::new(6),
+                    MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
+                )
+            ]
+        },
+        page_map.get_memory_instructions(range.clone(), range, 0)
+    );
+
+    // Add a page that is not an end of the bucket.
+    const_assert_ne!((24 + 1) % WRITE_BUCKET_PAGES, 0);
+    let pages = &[(PageIndex::new(24), &[1u8; PAGE_SIZE])];
+    page_map.update(pages);
+
+    // No trailing zero pages are serialized.
+    page_map.persist_delta(&heap_file).unwrap();
+    assert_eq!(25 * PAGE_SIZE as u64, heap_file.metadata().unwrap().len());
+}
+
+#[test]
+fn get_memory_instructions_respects_min_range() {
+    let mut page_map = PageMap::new_for_testing();
+    let pages: Vec<_> = (10..20)
+        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .collect();
+    page_map.update(&pages);
+
+    assert_eq!(
+        PageIndex::new(12)..PageIndex::new(17),
+        page_map
+            .get_memory_instructions(
+                PageIndex::new(12)..PageIndex::new(17),
+                PageIndex::new(0)..PageIndex::new(30),
+                2
+            )
+            .range
+    );
+}
+
+#[test]
+fn get_memory_instructions_returns_max_range_on_empty_map() {
+    let page_map = PageMap::new_for_testing();
+
+    assert_eq!(
+        PageIndex::new(0)..PageIndex::new(30),
+        page_map
+            .get_memory_instructions(
+                PageIndex::new(12)..PageIndex::new(17),
+                PageIndex::new(0)..PageIndex::new(30),
+                2
+            )
+            .range
+    );
+
+    assert_eq!(
+        PageIndex::new(0)..PageIndex::new(30),
+        page_map
+            .get_memory_instructions(
+                PageIndex::new(12)..PageIndex::new(17),
+                PageIndex::new(0)..PageIndex::new(30),
+                0
+            )
+            .range
+    );
+}
+
+#[test]
+fn get_memory_instructions_grows_left_and_right() {
+    let mut page_map = PageMap::new_for_testing();
+    let pages: Vec<_> = (10..20)
+        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .collect();
+    page_map.update(&pages);
+    let pages = &[
+        (PageIndex::new(5), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(35), &[1u8; PAGE_SIZE]),
+    ];
+    page_map.update(pages);
+
+    assert_eq!(
+        PageIndex::new(7)..PageIndex::new(12),
+        page_map
+            .get_memory_instructions(
+                PageIndex::new(7)..PageIndex::new(8),
+                PageIndex::new(7)..PageIndex::new(30),
+                2
+            )
+            .range
+    );
+
+    assert_eq!(
+        PageIndex::new(17)..PageIndex::new(30),
+        page_map
+            .get_memory_instructions(
+                PageIndex::new(19)..PageIndex::new(21),
+                PageIndex::new(3)..PageIndex::new(30),
+                3
+            )
+            .range
+    );
+
+    // A case where it is allowed to grow either left or right
+    let result = page_map.get_memory_instructions(
+        PageIndex::new(14)..PageIndex::new(15),
+        PageIndex::new(3)..PageIndex::new(30),
+        3,
+    );
+    assert_eq!(3, result.range.end.get() - result.range.start.get());
+    assert_eq!(3, result.instructions.len());
+
+    // Grows to edge pages at 5 and 35 not inclusive
+    assert_eq!(
+        PageIndex::new(6)..PageIndex::new(35),
+        page_map
+            .get_memory_instructions(
+                PageIndex::new(10)..PageIndex::new(20),
+                PageIndex::new(0)..PageIndex::new(100),
+                10
+            )
+            .range
     );
 }

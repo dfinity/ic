@@ -4,11 +4,13 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-rsa = "0.4.0"
+rsa = { version = "0.9.2", features = [ "sha2" ] }
 ic-types = { path = "../../../../../types/types" }
-ic-crypto-sha = { path = "../../../../sha" }
+ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 num-traits = { version= "0.2.9", default-features = false, features = ["libm"] }
+pkcs8 = "0.10.2"
+sha2 = "0.10.2"
 serde = { version = "1.0.99", features = [ "derive" ] }
 simple_asn1 = "0.6.1"
 num-bigint = "~0.4.3"

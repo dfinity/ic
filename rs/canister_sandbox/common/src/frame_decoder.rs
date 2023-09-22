@@ -11,7 +11,7 @@ pub struct FrameDecoder<Message: DeserializeOwned + Clone> {
 
 enum FrameDecoderState {
     NoLength,
-    Length(u32),
+    Length(u64),
 }
 
 impl<Message: DeserializeOwned + Clone> FrameDecoder<Message> {
@@ -33,11 +33,11 @@ impl<Message: DeserializeOwned + Clone> FrameDecoder<Message> {
         loop {
             match &self.state {
                 FrameDecoderState::NoLength => {
-                    if data.len() < 4 {
-                        data.reserve(4);
+                    if data.len() < 8 {
+                        data.reserve(8);
                         return None;
                     } else {
-                        let size = data.get_u32();
+                        let size = data.get_u64();
                         self.state = FrameDecoderState::Length(size);
                     }
                 }

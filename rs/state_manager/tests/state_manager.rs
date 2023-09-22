@@ -1,6 +1,8 @@
-use ic_base_types::NumBytes;
+use ic_certification_version::{CertificationVersion::V11, CURRENT_CERTIFICATION_VERSION};
 use ic_config::state_manager::Config;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{
+    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, MixedHashTree, Path as LabelPath,
+};
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
 use ic_interfaces::{artifact_pool::UnvalidatedArtifact, certification::Verifier};
@@ -8,9 +10,11 @@ use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamErr
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
-    ReplicatedState, Stream,
+    page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NetworkTopology, NumWasmPages,
+    PageMap, ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
@@ -38,7 +42,7 @@ use ic_types::{
     state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK},
     time::Time,
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
+    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
 use nix::sys::time::TimeValLike;
 use nix::sys::{
@@ -46,6 +50,7 @@ use nix::sys::{
     time::TimeSpec,
 };
 use proptest::prelude::*;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -56,12 +61,12 @@ use std::{
 
 pub mod common;
 use common::*;
-use ic_registry_subnet_type::SubnetType;
 
 const NUM_THREADS: u32 = 3;
 
 fn make_mutable(path: &Path) -> std::io::Result<()> {
     let mut perms = std::fs::metadata(path)?.permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
     std::fs::set_permissions(path, perms)?;
     Ok(())
@@ -283,7 +288,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 );
                 assert_eq!(
                     dst_state_manager.checkpoint_heights(),
-                    (1..=i).into_iter().map(|i| height(i)).collect::<Vec<_>>()
+                    (1..=i).map(|i| height(i)).collect::<Vec<_>>()
                 );
             }
 
@@ -3337,7 +3342,118 @@ fn certified_read_can_certify_canister_data() {
 }
 
 #[test]
-fn certified_read_returns_none_for_non_existing_entries() {
+fn certified_read_can_certify_node_public_keys_since_v12() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+
+        let canister_id: CanisterId = canister_test_id(100);
+        insert_dummy_canister(&mut state, canister_id);
+
+        state.metadata.batch_time += std::time::Duration::new(0, 100);
+        let mut subnets = BTreeMap::new();
+
+        let mut node_public_keys: BTreeMap<NodeId, Vec<u8>> = BTreeMap::new();
+        for i in 0..40 {
+            node_public_keys.insert(node_test_id(i), vec![i as u8; 44]);
+        }
+
+        subnets.insert(
+            subnet_test_id(42), // its own subnet id
+            SubnetTopology {
+                public_key: vec![1u8; 133],
+                nodes: node_public_keys.keys().cloned().collect(),
+                subnet_type: SubnetType::System,
+                subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
+            },
+        );
+
+        let network_topology = NetworkTopology {
+            subnets,
+            nns_subnet_id: subnet_test_id(42),
+            ..Default::default()
+        };
+
+        state.metadata.network_topology = network_topology;
+        state.metadata.node_public_keys = node_public_keys;
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let subnet_id = subnet_test_id(42).get();
+        let node_id = node_test_id(39).get();
+        let path: Vec<&[u8]> = vec![
+            b"subnet",
+            subnet_id.as_ref(),
+            b"node",
+            node_id.as_ref(),
+            b"public_key",
+        ];
+
+        let label_path = LabelPath::new(path.iter().map(label).collect::<Vec<_>>());
+
+        let labeled_tree =
+            sparse_labeled_tree_from_paths(&[label_path]).expect("failed to create labeled tree");
+        let delivered_certification = certify_height(&state_manager, height(1));
+
+        let (_state, mixed_tree, cert) = state_manager
+            .read_certified_state(&labeled_tree)
+            .expect("failed to read certified state");
+        assert_eq!(cert, delivered_certification);
+
+        if CURRENT_CERTIFICATION_VERSION > V11 {
+            assert_eq!(
+                tree_payload(mixed_tree),
+                SubTree(flatmap! {
+                    label("subnet") => SubTree(
+                        flatmap! {
+                            label(subnet_test_id(42).get_ref()) => SubTree(
+                                flatmap!{
+                                    label("node") => SubTree(
+                                        flatmap! {
+                                            label(node_test_id(39).get_ref()) => SubTree(
+                                                flatmap!(label("public_key") => Leaf(vec![39u8; 44]))
+                                            ),
+                                        })
+                            })
+                        })
+                })
+            );
+        } else {
+            assert!(
+                mixed_tree.lookup(&path[..]).is_absent(),
+                "mixed_tree: {:#?}",
+                mixed_tree
+            );
+        }
+    })
+}
+
+#[test]
+fn certified_read_succeeds_for_empty_tree() {
+    use ic_crypto_tree_hash::MixedHashTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {});
+
+        certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+
+        assert!(
+            matches!(&mixed_tree, Pruned(_)),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+    })
+}
+
+#[test]
+fn certified_read_returns_absence_proof_for_non_existing_entries() {
     state_manager_test(|_metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
 
@@ -3361,8 +3477,56 @@ fn certified_read_returns_none_for_non_existing_entries() {
         });
 
         certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
 
-        assert_eq!(None, state_manager.read_certified_state(&path));
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(0).as_bytes()) => LabeledTree::Leaf(())
+                })
+        });
+
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(0).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+    })
+}
+
+#[test]
+fn certified_read_returns_absence_proof_for_non_existing_entries_in_empty_state() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(2).as_bytes()) => LabeledTree::Leaf(())
+                })
+        });
+
+        certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
     })
 }
 
@@ -3425,6 +3589,72 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
                                 label("status") => Leaf(b"processing".to_vec()),
                             })
 
+                    })
+            })
+        );
+    })
+}
+
+#[test]
+fn certified_read_can_produce_proof_of_absence() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+        state.set_ingress_status(
+            message_test_id(1),
+            IngressStatus::Known {
+                receiver: canister_test_id(1).get(),
+                user_id: user_test_id(1),
+                time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
+            },
+            NumBytes::from(u64::MAX),
+        );
+        state.set_ingress_status(
+            message_test_id(3),
+            IngressStatus::Known {
+                receiver: canister_test_id(1).get(),
+                user_id: user_test_id(1),
+                time: mock_time(),
+                state: IngressState::Processing,
+            },
+            NumBytes::from(u64::MAX),
+        );
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(1)) => LabeledTree::Leaf(()),
+                    label(message_test_id(2)) => LabeledTree::Leaf(()),
+                })
+        });
+
+        certify_height(&state_manager, height(1));
+
+        let (_state, mixed_tree, _cert) = state_manager
+            .read_certified_state(&path)
+            .expect("failed to read certified state");
+
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+
+        assert_eq!(
+            tree_payload(mixed_tree),
+            SubTree(flatmap! {
+                label("request_status") =>
+                    SubTree(flatmap! {
+                        label(message_test_id(1)) =>
+                            SubTree(flatmap! {
+                                label("status") => Leaf(b"replied".to_vec()),
+                                label("reply") => Leaf(b"done".to_vec()),
+                            }),
                     })
             })
         );
@@ -3656,7 +3886,9 @@ fn remove_old_diverged_checkpoint() {
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
                     UtimensatFlags::NoFollowSymlink,
-                ) else { return };
+                ) else {
+                    return;
+                };
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
                 let (_, state) = state_manager.take_tip();
@@ -3738,7 +3970,9 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
                     UtimensatFlags::NoFollowSymlink,
-                ) else { return };
+                ) else {
+                    return;
+                };
 
                 panic!();
             }),

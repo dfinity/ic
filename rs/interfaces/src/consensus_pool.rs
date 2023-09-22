@@ -9,10 +9,9 @@ use ic_protobuf::{
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
-        ecdsa::EcdsaPayload, Block, BlockProposal, CatchUpPackage, CatchUpPackageShare,
-        ConsensusMessage, ContentEq, Finalization, FinalizationShare, HasHeight, HashedBlock,
-        Notarization, NotarizationShare, RandomBeacon, RandomBeaconShare, RandomTape,
-        RandomTapeShare,
+        Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq,
+        Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization, NotarizationShare,
+        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
     time::Time,
     Height,
@@ -333,6 +332,20 @@ pub trait ConsensusPoolCache: Send + Sync {
         certified_height + HEIGHT_CONSIDERED_BEHIND
             < self.finalized_block().context.certified_height
     }
+
+    /// Find ancestor blocks of `block`, and return an iterator that starts
+    /// from `block` and ends when a parent is not found (e.g. genesis).
+    fn chain_iterator<'a>(
+        &self,
+        pool: &'a dyn ConsensusPool,
+        block: Block,
+    ) -> Box<dyn Iterator<Item = Block> + 'a> {
+        Box::new(ChainIterator::new(
+            pool,
+            block,
+            Some(self.catch_up_package().content.block),
+        ))
+    }
 }
 
 /// Cache of blocks from the block chain.
@@ -345,12 +358,11 @@ pub trait ConsensusBlockCache: Send + Sync {
 /// Snapshot of the block chain
 #[allow(clippy::len_without_is_empty)]
 pub trait ConsensusBlockChain: Send + Sync {
-    /// Returns the height and the ECDSA payload of the tip in the block chain.
-    fn tip(&self) -> (Height, Option<Arc<EcdsaPayload>>);
+    /// Returns the block at the tip in the block chain.
+    fn tip(&self) -> &Block;
 
-    /// Returns the ECDSA payload from the block at the given height.
-    /// The implementation can choose the number of past blocks to cache.
-    fn ecdsa_payload(&self, height: Height) -> Result<Arc<EcdsaPayload>, ConsensusBlockChainErr>;
+    /// Returns the Block at the given height.
+    fn get_block_by_height(&self, height: Height) -> Result<&Block, ConsensusBlockChainErr>;
 
     /// Returns the length of the chain.
     fn len(&self) -> usize;
@@ -359,7 +371,6 @@ pub trait ConsensusBlockChain: Send + Sync {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsensusBlockChainErr {
     BlockNotFound(Height),
-    EcdsaPayloadNotFound(Height),
 }
 
 /// An iterator for block ancestors.

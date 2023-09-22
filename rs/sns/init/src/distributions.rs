@@ -5,7 +5,6 @@ use crate::{
     },
     SnsCanisterIds,
 };
-use anyhow::anyhow;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::{
@@ -18,7 +17,7 @@ use ic_sns_governance::{
     pb::v1::{neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission},
     types::ONE_MONTH_SECONDS,
 };
-use ic_sns_swap::swap::{SALE_NEURON_MEMO_RANGE_END, SALE_NEURON_MEMO_RANGE_START};
+use ic_sns_swap::swap::{NEURON_BASKET_MEMO_RANGE_START, SALE_NEURON_MEMO_RANGE_END};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
 use std::collections::BTreeMap;
@@ -38,7 +37,7 @@ impl FractionalDeveloperVotingPower {
     pub fn get_account_ids_and_tokens(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<BTreeMap<Account, Tokens>> {
+    ) -> Result<BTreeMap<Account, Tokens>, String> {
         let mut accounts = BTreeMap::new();
 
         self.insert_developer_accounts(sns_canister_ids, &mut accounts)?;
@@ -55,7 +54,7 @@ impl FractionalDeveloperVotingPower {
     pub fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,
-    ) -> anyhow::Result<BTreeMap<String, Neuron>> {
+    ) -> Result<BTreeMap<String, Neuron>, String> {
         let developer_neurons = &self.developer_distribution()?.developer_neurons;
         let airdrop_neurons = &self.airdrop_distribution()?.airdrop_neurons;
 
@@ -99,25 +98,25 @@ impl FractionalDeveloperVotingPower {
     pub fn validate(
         &self,
         nervous_system_parameters: &NervousSystemParameters,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let developer_distribution = self
             .developer_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Error: developer_distribution must be specified"))?;
+            .ok_or("Error: developer_distribution must be specified")?;
 
         self.treasury_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Error: treasury_distribution must be specified"))?;
+            .ok_or("Error: treasury_distribution must be specified")?;
 
         let swap_distribution = self
             .swap_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Error: swap_distribution must be specified"))?;
+            .ok_or("Error: swap_distribution must be specified")?;
 
         let airdrop_distribution = self
             .airdrop_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Error: airdrop_distribution must be specified"))?;
+            .ok_or("Error: airdrop_distribution must be specified")?;
 
         self.validate_neurons(
             developer_distribution,
@@ -127,26 +126,27 @@ impl FractionalDeveloperVotingPower {
 
         match Self::get_total_distributions(&airdrop_distribution.airdrop_neurons) {
             Ok(_) => (),
-            Err(_) => return Err(anyhow!("Error: The sum of all airdrop allocated tokens overflowed and is an invalid distribution")),
+            Err(_) => return Err("Error: The sum of all airdrop allocated tokens overflowed and is an invalid distribution".to_string()),
         };
 
         if swap_distribution.initial_swap_amount_e8s == 0 {
-            return Err(anyhow!(
+            return Err(
                 "Error: swap_distribution.initial_swap_amount_e8s must be greater than 0"
-            ));
+                    .to_string(),
+            );
         }
 
         if swap_distribution.total_e8s < swap_distribution.initial_swap_amount_e8s {
-            return Err(anyhow!("Error: swap_distribution.total_e8 must be greater than or equal to swap_distribution.initial_swap_amount_e8s"));
+            return Err("Error: swap_distribution.total_e8 must be greater than or equal to swap_distribution.initial_swap_amount_e8s".to_string());
         }
 
         let total_developer_e8s = match Self::get_total_distributions(&developer_distribution.developer_neurons) {
             Ok(total) => total,
-            Err(_) => return Err(anyhow!("Error: The sum of all developer allocated tokens overflowed and is an invalid distribution")),
+            Err(_) => return Err("Error: The sum of all developer allocated tokens overflowed and is an invalid distribution".to_string()),
         };
 
         if total_developer_e8s > swap_distribution.total_e8s {
-            return Err(anyhow!("Error: The sum of all developer allocated tokens must be less than or equal to swap_distribution.total_e8s"));
+            return Err("Error: The sum of all developer allocated tokens must be less than or equal to swap_distribution.total_e8s".to_string());
         }
 
         Ok(())
@@ -158,7 +158,7 @@ impl FractionalDeveloperVotingPower {
         neuron_distribution: &NeuronDistribution,
         voting_power_percentage_multiplier: u64,
         parameters: &NervousSystemParameters,
-    ) -> anyhow::Result<Neuron> {
+    ) -> Result<Neuron, String> {
         let (
             principal_id,
             stake_e8s,
@@ -205,7 +205,7 @@ impl FractionalDeveloperVotingPower {
         developer_distribution: &DeveloperDistribution,
         airdrop_distribution: &AirdropDistribution,
         nervous_system_parameters: &NervousSystemParameters,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let neuron_minimum_dissolve_delay_to_vote_seconds = nervous_system_parameters
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .as_ref()
@@ -223,7 +223,7 @@ impl FractionalDeveloperVotingPower {
             .count();
 
         if missing_developer_principals_count != 0 {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: {} developer_neurons are missing controllers",
                 missing_developer_principals_count
             ));
@@ -241,13 +241,14 @@ impl FractionalDeveloperVotingPower {
             .collect::<BTreeMap<_, _>>();
 
         if deduped_dev_neurons.len() != developer_distribution.developer_neurons.len() {
-            return Err(anyhow!(
-                "Error: Duplicate controllers detected in developer_neurons"
-            ));
+            return Err(
+                "Error: Neurons with the same controller and memo detected in developer_neurons"
+                    .to_string(),
+            );
         }
 
         if deduped_dev_neurons.len() > MAX_DEVELOPER_DISTRIBUTION_COUNT {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: The number of developer neurons must be less than {}. Current count is {}",
                 MAX_DEVELOPER_DISTRIBUTION_COUNT,
                 deduped_dev_neurons.len(),
@@ -255,11 +256,11 @@ impl FractionalDeveloperVotingPower {
         }
 
         for (controller, memo) in deduped_dev_neurons.keys() {
-            if SALE_NEURON_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
-                return Err(anyhow!(
+            if NEURON_BASKET_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
+                return Err(format!(
                     "Error: Developer neuron with controller {} cannot have a memo in the range {} to {}",
                     controller.unwrap(),
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                     SALE_NEURON_MEMO_RANGE_END
                 ));
             }
@@ -272,7 +273,7 @@ impl FractionalDeveloperVotingPower {
             .count();
 
         if missing_airdrop_principals_count != 0 {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: {} airdrop_neurons are missing controllers",
                 missing_airdrop_principals_count
             ));
@@ -290,13 +291,14 @@ impl FractionalDeveloperVotingPower {
             .collect::<BTreeMap<_, _>>();
 
         if deduped_airdrop_neurons.len() != airdrop_distribution.airdrop_neurons.len() {
-            return Err(anyhow!(
-                "Error: Duplicate controllers detected in airdrop_neurons"
-            ));
+            return Err(
+                "Error: Neurons with the same controller and memo detected in airdrop_neurons"
+                    .to_string(),
+            );
         }
 
         if deduped_airdrop_neurons.len() > MAX_AIRDROP_DISTRIBUTION_COUNT {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: The number of airdrop neurons must be less than {}. Current count is {}",
                 MAX_AIRDROP_DISTRIBUTION_COUNT,
                 deduped_airdrop_neurons.len(),
@@ -304,11 +306,11 @@ impl FractionalDeveloperVotingPower {
         }
 
         for (controller, memo) in deduped_airdrop_neurons.keys() {
-            if SALE_NEURON_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
-                return Err(anyhow!(
+            if NEURON_BASKET_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
+                return Err(format!(
                     "Error: Airdrop neuron with controller {} cannot have a memo in the range {} to {}",
                     controller.unwrap(),
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                     SALE_NEURON_MEMO_RANGE_END
                 ));
             }
@@ -323,7 +325,7 @@ impl FractionalDeveloperVotingPower {
         }
 
         if !duplicated_neuron_principals.is_empty() {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: The following controllers are present in AirdropDistribution \
                 and DeveloperDistribution: {:?}",
                 duplicated_neuron_principals
@@ -340,7 +342,7 @@ impl FractionalDeveloperVotingPower {
             });
 
         if !configured_at_least_one_voting_neuron {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: There needs to be at least one voting-eligible neuron configured. To be \
                  eligible to vote, a neuron must have dissolve_delay_seconds of at least {}",
                 neuron_minimum_dissolve_delay_to_vote_seconds
@@ -358,7 +360,7 @@ impl FractionalDeveloperVotingPower {
             .collect();
 
         if !misconfigured_dissolve_delay_principals.is_empty() {
-            return Err(anyhow!(
+            return Err(format!(
                 "Error: The following PrincipalIds have a dissolve_delay_seconds configured greater than \
                  the allowed max_dissolve_delay_seconds ({}): {:?}", max_dissolve_delay_seconds, misconfigured_dissolve_delay_principals
             ));
@@ -372,7 +374,7 @@ impl FractionalDeveloperVotingPower {
         &self,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut BTreeMap<Account, Tokens>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         for neuron_distribution in &self.developer_distribution()?.developer_neurons {
             let principal_id = neuron_distribution.controller()?;
 
@@ -392,7 +394,7 @@ impl FractionalDeveloperVotingPower {
         &self,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut BTreeMap<Account, Tokens>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let treasury = self.treasury_distribution()?;
 
         let (locked_treasury_distribution_account, locked_treasury_distribution) =
@@ -414,7 +416,7 @@ impl FractionalDeveloperVotingPower {
         &self,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut BTreeMap<Account, Tokens>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         let swap = self.swap_distribution()?;
 
         let swap_canister_account = Account {
@@ -441,7 +443,7 @@ impl FractionalDeveloperVotingPower {
         &self,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut BTreeMap<Account, Tokens>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), String> {
         for neuron_distribution in &self.airdrop_distribution()?.airdrop_neurons {
             let principal_id = neuron_distribution.controller()?;
 
@@ -494,15 +496,16 @@ impl FractionalDeveloperVotingPower {
 
     /// Safely get the sum of all the e8 denominated neuron distributions. The maximum amount
     /// of tokens e8s must be less than or equal to u64::MAX.
-    fn get_total_distributions(distributions: &Vec<NeuronDistribution>) -> anyhow::Result<u64> {
+    fn get_total_distributions(distributions: &Vec<NeuronDistribution>) -> Result<u64, String> {
         let mut distribution_total: u64 = 0;
         for distribution in distributions {
             distribution_total = match distribution_total.checked_add(distribution.stake_e8s) {
                 Some(total) => total,
                 None => {
-                    return Err(anyhow!(
+                    return Err(
                         "The total distribution overflowed and is not a valid distribution"
-                    ))
+                            .to_string(),
+                    )
                 }
             }
         }
@@ -510,32 +513,32 @@ impl FractionalDeveloperVotingPower {
         Ok(distribution_total)
     }
 
-    fn developer_distribution(&self) -> anyhow::Result<&DeveloperDistribution> {
+    fn developer_distribution(&self) -> Result<&DeveloperDistribution, String> {
         self.developer_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Expected developer distribution to exist"))
+            .ok_or_else(|| "Expected developer distribution to exist".to_string())
     }
 
-    fn treasury_distribution(&self) -> anyhow::Result<&TreasuryDistribution> {
+    fn treasury_distribution(&self) -> Result<&TreasuryDistribution, String> {
         self.treasury_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Expected treasury distribution to exist"))
+            .ok_or_else(|| "Expected treasury distribution to exist".to_string())
     }
 
-    fn swap_distribution(&self) -> anyhow::Result<&SwapDistribution> {
+    pub(crate) fn swap_distribution(&self) -> Result<&SwapDistribution, String> {
         self.swap_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Expected swap distribution to exist"))
+            .ok_or_else(|| "Expected swap distribution to exist".to_string())
     }
 
-    fn airdrop_distribution(&self) -> anyhow::Result<&AirdropDistribution> {
+    fn airdrop_distribution(&self) -> Result<&AirdropDistribution, String> {
         self.airdrop_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Expected airdrop distribution to exist"))
+            .ok_or_else(|| "Expected airdrop distribution to exist".to_string())
     }
 
     /// This gives us some values that work for testing but would not be useful
-    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    /// in a real world scenario. They are only meant to validate, not be sensible.
     pub fn with_valid_values_for_testing() -> Self {
         FractionalDeveloperVotingPower {
             developer_distribution: Some(DeveloperDistribution {
@@ -557,13 +560,13 @@ impl FractionalDeveloperVotingPower {
 
 impl NeuronDistribution {
     /// Internal helper method that provides a consistent error message.
-    fn controller(&self) -> anyhow::Result<PrincipalId> {
+    fn controller(&self) -> Result<PrincipalId, String> {
         self.controller
-            .ok_or_else(|| anyhow!("Expected controller to exist"))
+            .ok_or_else(|| "Expected controller to exist".to_string())
     }
 
     /// This gives us some values that work for testing but would not be useful
-    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    /// in a real world scenario. They are only meant to validate, not be sensible.
     pub fn with_valid_values_for_testing() -> Self {
         NeuronDistribution {
             controller: Some(PrincipalId::new_user_test_id(1)),
@@ -611,7 +614,7 @@ mod test {
         pb::v1::{neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission},
         types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
     };
-    use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
+    use ic_sns_swap::swap::NEURON_BASKET_MEMO_RANGE_START;
     use icrc_ledger_types::icrc1::account::Account;
     use std::str::FromStr;
 
@@ -1438,14 +1441,14 @@ mod test {
             .expect("initial_token_distribution is invalid");
 
         // A developer distribution with a memo in the Sale neuron memo range should fail validation
-        distribution1.memo = SALE_NEURON_MEMO_RANGE_START + 10;
+        distribution1.memo = NEURON_BASKET_MEMO_RANGE_START + 10;
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![distribution1.clone()],
         });
 
         assert_eq!(initial_token_distribution
             .validate(&nervous_system_parameters)
-            .unwrap_err().to_string(), "Error: Developer neuron with controller 6fyp7-3ibaa-aaaaa-aaaap-4ai cannot have a memo in the range 1000000 to 10000000".to_string());
+            .unwrap_err(), "Error: Developer neuron with controller 6fyp7-3ibaa-aaaaa-aaaap-4ai cannot have a memo in the range 1000000 to 10000000".to_string());
 
         // Reset the developer neuron memo
         distribution1.memo = 0;
@@ -1454,14 +1457,14 @@ mod test {
         });
 
         // An airdrop distribution with a memo in the Sale neuron memo range should fail validation
-        distribution2.memo = SALE_NEURON_MEMO_RANGE_START + 888;
+        distribution2.memo = NEURON_BASKET_MEMO_RANGE_START + 888;
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
             airdrop_neurons: vec![distribution2],
         });
 
         assert_eq!(initial_token_distribution
                        .validate(&nervous_system_parameters)
-                       .unwrap_err().to_string(),
+                       .unwrap_err(),
                    "Error: Airdrop neuron with controller djduj-3qcaa-aaaaa-aaaap-4ai cannot have a memo in the range 1000000 to 10000000".to_string());
     }
 }

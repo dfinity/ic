@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(warn_log_msg.level, slog::Level::Warning.as_usize());
         assert_eq!(warn_log_msg.msg, "hello warn");
 
-        let report_or_failure = rt.block_on(async move { jh.await }).unwrap().unwrap();
+        let report_or_failure = rt.block_on(jh).unwrap().unwrap();
 
         assert_matches!(report_or_failure, Some(ReportOrFailure::Failure(msg)) if msg == "oh, a panic!");
     }
@@ -304,7 +304,7 @@ mod tests {
         // shutdown log_server
         std::mem::drop(subproc_logger);
 
-        let report_or_failure = rt.block_on(async move { jh.await }).unwrap().unwrap();
+        let report_or_failure = rt.block_on(jh).unwrap().unwrap();
         assert_matches!(report_or_failure, Some(ReportOrFailure::Report(msg)) if msg == expected_msg);
     }
 

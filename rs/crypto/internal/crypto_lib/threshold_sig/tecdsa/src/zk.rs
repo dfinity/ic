@@ -42,7 +42,7 @@ impl ProofOfEqualOpeningsInstance {
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
         let a = EccPoint::pedersen(secret, masking)?;
-        let b = EccPoint::mul_by_g(secret)?;
+        let b = EccPoint::mul_by_g(secret);
         Ok(Self {
             curve_type,
             g,
@@ -214,7 +214,7 @@ impl ProofOfProductInstance {
         &self,
         proof: &ProofOfProduct,
     ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
-        let r1_com = EccPoint::mul_by_g(&proof.response1)?
+        let r1_com = EccPoint::mul_by_g(&proof.response1)
             .sub_points(&self.lhs_com.scalar_mul(&proof.challenge)?)?;
 
         let r2_com =
@@ -357,11 +357,10 @@ impl ProofOfDLogEquivalenceInstance {
         &self,
         proof: &ProofOfDLogEquivalence,
     ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
-        let g_z = self.g.scalar_mul(&proof.response)?;
-        let h_z = self.h.scalar_mul(&proof.response)?;
+        let nchallenge = proof.challenge.negate();
 
-        let g_r = g_z.sub_points(&self.g_x.scalar_mul(&proof.challenge)?)?;
-        let h_r = h_z.sub_points(&self.h_x.scalar_mul(&proof.challenge)?)?;
+        let g_r = EccPoint::mul_2_points(&self.g, &proof.response, &self.g_x, &nchallenge)?;
+        let h_r = EccPoint::mul_2_points(&self.h, &proof.response, &self.h_x, &nchallenge)?;
 
         Ok((g_r, h_r))
     }

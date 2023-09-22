@@ -61,6 +61,67 @@ impl std::fmt::Display for CyclesAccountManagerError {
     }
 }
 
+/// Measures how much a resource such as compute or storage is being used.
+/// It will be used in resource reservation to scale reservation parameters
+/// depending on the resource usage.
+///
+/// The default implementation corresponds to a no-op (empty) resource
+/// saturation with `threshold = capacity = 0`.
+///
+/// This struct maintains an invariant that `usage <= capacity` and
+/// `threshold <= capacity`.  There are no constraints between `usage` and
+/// `threshold`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ResourceSaturation {
+    usage: u64,
+    threshold: u64,
+    capacity: u64,
+}
+
+impl ResourceSaturation {
+    /// Creates a new `ResourceSaturation` based on the given resource usages,
+    /// threshold, and capacity. All arguments have the same unit that depends
+    /// on the concrete resource:
+    ///    - The unit of compute is percents.
+    ///    - The unit of storage is bytes.
+    ///
+    /// See the comment of the `scale()` function for explanation of how the
+    /// arguments are used.
+    pub fn new(usage: u64, threshold: u64, capacity: u64) -> Self {
+        let usage = usage.min(capacity);
+        let threshold = threshold.min(capacity);
+        Self {
+            usage,
+            threshold,
+            capacity,
+        }
+    }
+
+    /// Scales the given value proportionally to the resource saturation.
+    /// More specifically, the value is scaled by `(U - T) / (C - T)`,
+    /// where
+    /// - `U` is the usage.
+    /// - `T` is the threshold.
+    /// - `C` is the capacity.
+    ///
+    /// The function returns `0` if `C == T`.
+    ///
+    /// Note that the invariant of this struct guarantees that `U <= C`,
+    /// so the result of this function does not exceed the input value.
+    pub fn reservation_factor(&self, value: u64) -> u64 {
+        let capacity = self.capacity.saturating_sub(self.threshold);
+        let usage = self.usage.saturating_sub(self.threshold);
+        if capacity == 0 {
+            0
+        } else {
+            let result = (value as u128 * usage as u128) / capacity as u128;
+            // We know that the result fits in 64 bits because `value` fits in
+            // 64 bits and `usage / capacity <= 1`.
+            result.try_into().unwrap()
+        }
+    }
+}
+
 /// Handles any operation related to cycles accounting, such as charging (due to
 /// using system resources) or refunding unused cycles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -189,7 +250,8 @@ impl CyclesAccountManager {
             + self.compute_allocation_cost(compute_allocation, day, subnet_size)
     }
 
-    /// Returns the freezing threshold for this canister in Cycles.
+    /// Returns the freezing threshold for this canister in cycles after
+    /// taking the reserved balance into account.
     pub fn freeze_threshold_cycles(
         &self,
         freeze_threshold: NumSeconds,
@@ -197,6 +259,7 @@ impl CyclesAccountManager {
         memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
+        reserved_balance: Cycles,
     ) -> Cycles {
         let idle_cycles_burned_rate: u128 = self
             .idle_cycles_burned_rate(
@@ -208,7 +271,12 @@ impl CyclesAccountManager {
             .get();
         let seconds_per_day = 24 * 60 * 60;
 
-        Cycles::from(idle_cycles_burned_rate * freeze_threshold.get() as u128 / seconds_per_day)
+        let threshold = Cycles::from(
+            idle_cycles_burned_rate * freeze_threshold.get() as u128 / seconds_per_day,
+        );
+
+        // Here we rely on the saturating subtraction for Cycles.
+        threshold - reserved_balance
     }
 
     /// Withdraws `cycles` worth of cycles from the canister's balance.
@@ -232,6 +300,7 @@ impl CyclesAccountManager {
         cycles_balance: &mut Cycles,
         cycles: Cycles,
         subnet_size: usize,
+        reserved_balance: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.withdraw_with_threshold(
             canister_id,
@@ -243,6 +312,7 @@ impl CyclesAccountManager {
                 canister_current_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
+                reserved_balance,
             ),
         )
     }
@@ -270,6 +340,7 @@ impl CyclesAccountManager {
             canister_current_memory_usage,
             canister_compute_allocation,
             subnet_size,
+            canister.system_state.reserved_balance(),
         );
         if canister.has_paused_execution() || canister.has_paused_install_code() {
             if canister.system_state.debited_balance() < cycles + threshold {
@@ -319,6 +390,7 @@ impl CyclesAccountManager {
             canister_current_memory_usage,
             canister_compute_allocation,
             subnet_size,
+            system_state.reserved_balance(),
         );
         self.consume_with_threshold(system_state, cycles, threshold, use_case)
     }
@@ -351,6 +423,7 @@ impl CyclesAccountManager {
                 canister_current_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
+                system_state.reserved_balance(),
             ),
             CyclesUseCase::Instructions,
         )
@@ -575,6 +648,7 @@ impl CyclesAccountManager {
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
+        reserved_balance: Cycles,
     ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
         //   - the fee to do the xnet call (request + response)
@@ -599,6 +673,7 @@ impl CyclesAccountManager {
                 canister_current_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
+                reserved_balance,
             ),
         )?;
 
@@ -684,6 +759,7 @@ impl CyclesAccountManager {
             canister_current_memory_usage,
             canister_compute_allocation,
             subnet_size,
+            system_state.reserved_balance(),
         );
 
         if threshold + requested > system_state.balance() {
@@ -707,15 +783,31 @@ impl CyclesAccountManager {
         threshold: Cycles,
         use_case: CyclesUseCase,
     ) -> Result<(), CanisterOutOfCyclesError> {
+        let effective_cycles_balance = match use_case {
+            CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
+                // The resource use cases first drain the `reserved_balance` and
+                // after that the main balance.
+                system_state.balance() + system_state.reserved_balance()
+            }
+            CyclesUseCase::IngressInduction
+            | CyclesUseCase::Instructions
+            | CyclesUseCase::RequestAndResponseTransmission
+            | CyclesUseCase::CanisterCreation
+            | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::HTTPOutcalls
+            | CyclesUseCase::DeletedCanisters
+            | CyclesUseCase::NonConsumed => system_state.balance(),
+        };
+
         self.verify_cycles_balance_with_treshold(
             system_state.canister_id,
-            system_state.balance(),
+            effective_cycles_balance,
             cycles,
             threshold,
         )?;
 
+        debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
         system_state.remove_cycles(cycles, use_case);
-        system_state.observe_consumed_cycles(cycles);
         Ok(())
     }
 
@@ -819,7 +911,7 @@ impl CyclesAccountManager {
         duration_between_blocks: Duration,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let bytes_to_charge = match canister.memory_allocation() {
+        let canister_memory_bytes_to_charge = match canister.memory_allocation() {
             // The canister has explicitly asked for a memory allocation, so charge
             // based on it accordingly.
             MemoryAllocation::Reserved(bytes) => bytes,
@@ -828,13 +920,29 @@ impl CyclesAccountManager {
         };
         if let Err(err) = self.charge_for_memory(
             &mut canister.system_state,
-            bytes_to_charge,
+            canister_memory_bytes_to_charge,
             duration_between_blocks,
             subnet_size,
         ) {
             info!(
                 log,
                 "Charging canister {} for memory allocation/usage failed with {}",
+                canister.canister_id(),
+                err
+            );
+            return Err(err);
+        }
+
+        let message_memory_bytes_to_charge = canister.message_memory_usage();
+        if let Err(err) = self.charge_for_memory(
+            &mut canister.system_state,
+            message_memory_bytes_to_charge,
+            duration_between_blocks,
+            subnet_size,
+        ) {
+            info!(
+                log,
+                "Charging canister {} for message memory usage failed with {}",
                 canister.canister_id(),
                 err
             );

@@ -1,10 +1,10 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/config",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -32,18 +32,33 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+rust_library(
+    name = "state_tool_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_state_tool",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    visibility = ["//rs/recovery/subnet_splitting:__subpackages__"],
+    deps = DEPENDENCIES,
+)
+
 rust_binary(
     name = "state-tool",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES + [":state_tool_lib"],
 )
 
 rust_test(
     name = "state_tool_test",
     aliases = ALIASES,
-    crate = ":state-tool",
+    crate = ":state_tool_lib",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

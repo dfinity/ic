@@ -59,6 +59,51 @@ dfx canister --network ic call ledger icrc1_transfer "(record { from_subaccount 
 
 === ckBTC to Bitcoin
 ```
+ ┌────┐    ┌────────────┐         ┌──────┐                  ┌───────────────┐
+ │User│    │ckBTC Ledger│         │Minter│                  │Bitcoin Network│
+ └─┬──┘    └─────┬──────┘         └──┬───┘                  └───────┬───────┘
+   │             │                   │                              │        
+   │icrc2_approve│                   │                              │        
+   │────────────>│                   │                              │        
+   │             │                   │                              │        
+   │   retrieve_btc_with_approval    │                              │        
+   │────────────────────────────────>│                              │        
+   │             │                   │                              │        
+   │             │icrc2_transfer_from│                              │        
+   │             │<──────────────────│                              │        
+   │             │                   │                              │        
+   │             │                   │Send BTC to withdrawal address│        
+   │             │                   │─────────────────────────────>│        
+ ┌─┴──┐    ┌─────┴──────┐         ┌──┴───┐                  ┌───────┴───────┐
+ │User│    │ckBTC Ledger│         │Minter│                  │Bitcoin Network│
+ └────┘    └────────────┘         └──────┘                  └───────────────┘
+```
+1. Approve the minter's principal:
++
+----
+dfx canister --network ic call ledger icrc2_approve "(record {spender=record{owner=principal \"mqygn-kiaaa-aaaar-qaadq-cai\"}; amount=AMOUNT)"
+----
++
+2. Call the `retrieve_btc_with_approval` endpoint with the desired BTC destination address where you want to receive your Bitcoin.
+   Replace BTC_ADDRESS with your BTC address (the minter supports all address formats).
+   Replace AMOUNT with the amount that you transferred minus the transfer fee of 0.0000001 ckBTC (the equivalent of 10 Satoshi).
++
+----
+dfx canister --network ic call minter retrieve_btc_with_approval "(record {address=\"BTC_ADDRESS\"; amount=AMOUNT;})"
+----
++
+You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while).
+
+[NOTE]
+====
+You can query the status of your `retrieve_btc_with_approval` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc): 
+----
+dfx canister --network ic call minter retrieve_btc_status "(record { block_index = BLOCK_INDEX; })"
+----
+====
+
+=== ckBTC to Bitcoin (old flow)
+```
  ┌────┐                ┌──────┐┌────────────┐
  │User│                │Minter││ckBTC ledger│
  └─┬──┘                └──┬───┘└─────┬──────┘
@@ -100,7 +145,7 @@ dfx canister --network ic call ledger icrc1_transfer "(record {from=null; to=$cl
 ----
 +
 4. Call the `retrieve_btc` endpoint with the desired BTC destination address where you want to receive your Bitcoin.
-   Replace BTC_ADDRESS with your BTC address (the minter supports P2WPKH, P2PKH, and P2SH addresses).
+   Replace BTC_ADDRESS with your BTC address (the minter supports all address formats).
    Replace AMOUNT with the amount that you transferred minus the transfer fee of 0.0000001 ckBTC (the equivalent of 10 Satoshi).
 +
 ----
@@ -108,11 +153,3 @@ dfx canister --network ic call minter retrieve_btc "(record {address=\"BTC_ADDRE
 ----
 
 You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while). 
-
-[NOTE]
-====
-You can query the status of your `retrieve_btc` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc): 
-----
-dfx canister --network ic call minter retrieve_btc_status "(record { block_index = BLOCK_INDEX; })"
-----
-====

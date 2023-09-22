@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
+    "//rs/replica:__subpackages__",
 ])
 
 DEPENDENCIES = [

@@ -59,10 +59,8 @@ impl<T: CreateRegistryClient> CreateRegistryClient for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -88,10 +86,8 @@ impl<T: Snapshot> Snapshot for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         let (out, registry_version) = match out {
             Ok(rt) => {
@@ -125,10 +121,8 @@ impl<T: Reload> Reload for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -159,10 +153,8 @@ impl<T: Persist> Persist for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -188,10 +180,8 @@ impl<T: Run> Run for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -264,10 +254,10 @@ impl<T: Check> Check for CheckWithMetrics<T> {
             height_gauge,
         } = &self.1;
 
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
-        height_gauge.observe(&cx, block_height, gauge_labels);
-        status_gauge.observe(&cx, out.is_ok().into(), gauge_labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
+        height_gauge.observe(block_height, gauge_labels);
+        status_gauge.observe(out.is_ok().into(), gauge_labels);
 
         info!(
             action,

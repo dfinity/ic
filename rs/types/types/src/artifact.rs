@@ -24,6 +24,8 @@ use crate::{
     CryptoHashOfState, Height, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use serde::{Deserialize, Serialize};
@@ -309,6 +311,7 @@ pub struct ConsensusMessageFilter {
 
 /// [`IngressMessageId`] includes expiry time in addition to [`MessageId`].
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressMessageId {
     expiry: Time,
     pub message_id: MessageId,
@@ -525,7 +528,7 @@ impl ChunkableArtifact for StateSyncMessage {
 // 2. Even if we use it for other purposes (e.g. in a HashSet), this
 //    is still safe because identical (height, root_hash) should
 //    lead to identical checkpoint_root.
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for StateSyncMessage {
     fn hash<Hasher: std::hash::Hasher>(&self, state: &mut Hasher) {
         self.height.hash(state);

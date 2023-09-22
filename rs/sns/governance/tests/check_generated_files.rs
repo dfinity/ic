@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 #[test]
 fn check_generated_files() {
-    let cmd = "cargo run --bin ic-sns-governance-protobuf-generator";
+    let cmd = "bazel run //rs/sns/governance/protobuf_generator:protobuf_generator";
 
     let manifest_dir = PathBuf::from(
         std::env::var("CARGO_MANIFEST_DIR")

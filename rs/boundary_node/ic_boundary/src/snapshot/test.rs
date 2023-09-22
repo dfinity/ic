@@ -6,9 +6,9 @@ use std::{
     time::SystemTime,
 };
 
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
@@ -77,7 +77,6 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
         let http_endpoint = ConnectionEndpoint {
             ip_addr: node_ip,
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
 
         data_provider
@@ -96,7 +95,7 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
             .add(
                 &make_crypto_tls_cert_key(node_id),
                 reg_ver,
-                Some(valid_tls_certificate()),
+                Some(valid_tls_certificate_and_validation_time().0),
             )
             .expect("failed to add TLS certificate to registry");
 
@@ -160,9 +159,9 @@ fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
 
 #[tokio::test]
 async fn test_routing_table() -> Result<(), Error> {
-    let rt = ArcSwapOption::const_empty();
+    let rt = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(&rt, reg);
+    let mut runner = Runner::new(Arc::clone(&rt), reg);
     runner.run().await?;
     let rt = rt.load_full().unwrap();
 
@@ -206,7 +205,9 @@ async fn test_routing_table() -> Result<(), Error> {
 
         assert_eq!(
             sn.nodes[0].tls_certificate,
-            valid_tls_certificate().certificate_der,
+            valid_tls_certificate_and_validation_time()
+                .0
+                .certificate_der,
         );
     }
 
@@ -238,10 +239,10 @@ fn check_certificate_verification(
 
 #[tokio::test]
 async fn test_verify_tls_certificate() -> Result<(), Error> {
-    let rt = ArcSwapOption::const_empty();
+    let rt = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(&rt, reg);
-    let helper = TlsVerifier::new(&rt);
+    let mut runner = Runner::new(Arc::clone(&rt), reg);
+    let helper = TlsVerifier::new(Arc::clone(&rt));
     runner.run().await?;
 
     let rt = rt.load_full().unwrap();
@@ -252,7 +253,9 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
         check_certificate_verification(
             &helper,
             node_name.as_str(),
-            valid_tls_certificate().certificate_der,
+            valid_tls_certificate_and_validation_time()
+                .0
+                .certificate_der,
         )?;
 
         // Check with different cert -> should fail
@@ -269,9 +272,9 @@ async fn test_resolve() -> Result<(), Error> {
     use hyper::client::connect::dns::Name;
 
     let reg = Arc::new(create_fake_registry_client(4));
-    let rt = ArcSwapOption::const_empty();
-    let helper = DnsResolver::new(&rt);
-    let mut runner = Runner::new(&rt, reg);
+    let rt = Arc::new(ArcSwapOption::empty());
+    let helper = DnsResolver::new(Arc::clone(&rt));
+    let mut runner = Runner::new(Arc::clone(&rt), reg);
     runner.run().await?;
 
     // Check that resolved node's IPs match expected ones

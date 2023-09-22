@@ -30,7 +30,7 @@ fi
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
-    --config ci \
+    ${BAZEL_CI_CONFIG} \
     --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \

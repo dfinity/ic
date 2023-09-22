@@ -36,17 +36,13 @@ pub struct WasmImportsDetails {
     pub imports_mint_cycles: bool,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
-pub struct Complexity(u64);
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Complexity(pub u64);
 
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct WasmValidationDetails {
-    // The number of exported functions that are not in the list of
-    // allowed exports and whose name starts with the reserved
-    // "canister_" prefix.
-    pub reserved_exports: usize,
     pub imports_details: WasmImportsDetails,
     pub wasm_metadata: WasmMetadata,
     pub largest_function_instruction_count: NumInstructions,
@@ -211,6 +207,7 @@ fn validate_and_instrument(
         config.cost_to_compile_wasm_instruction,
         config.feature_flags.write_barrier,
         config.feature_flags.wasm_native_stable_memory,
+        config.metering_type,
         config.subnet_type,
         config.dirty_page_overhead,
     )?;

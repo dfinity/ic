@@ -22,6 +22,7 @@
 //!
 //! Please refer to the trait documentation for details.
 
+use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf, Signable,
     UserPublicKey,
@@ -188,7 +189,7 @@ pub trait CanisterSigVerifier<T: Signable> {
         signature: &CanisterSigOf<T>,
         signed_bytes: &T,
         public_key: &UserPublicKey,
-        registry_version: RegistryVersion,
+        root_of_trust: &IcRootOfTrust,
     ) -> CryptoResult<()>;
 }
 

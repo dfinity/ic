@@ -6,30 +6,28 @@
 //! each other.
 //!
 //! COMPONENTS:
-//!  - Connection Manager (connection_manager.rs): Main logic that keeps peers connected.
-//!  - Request Handler (request_handler.rs): Accepts streams on a active connection.
-//!    spawned by the connection manager for each connection.
-//!  - Connection Handle (connection_handle.rs): Provides an rpc interface to a peer.
+//!  - Connection Manager (connection_manager.rs): Keeps peers connected.
+//!  - Request Handler (request_handler.rs): Accepts streams on an active connection.
+//!    Spawned by the connection manager for each connection.
+//!  - Connection Handle (connection_handle.rs): Provides rpc and push interfaces to a peer.
 //!
 //! API:
 //!  - Constructor takes a topology watcher. The topology defines the
-//!    set of peers, to which transport tries to keep an active connection.
-//!  - Constructor also takes an Router. Incoming requests are routed to a handler
+//!    set of peers, to which transport tries to keep active connections.
+//!  - Constructor also takes a Router. Incoming requests are routed to a handler
 //!    based on the URI specified in the request.
-//!  - `get_peer_handle`: Can be used to get a `ConnectionHandle` to a peer.
-//!     A connection handle is small wrapper around the actual quic connection
-//!     with an rpc interface. Rpc's need to specify an URI to get routed to
-//!     the correct handler.
+//!  - `get_conn_handle`: Can be used to get a `ConnectionHandle` to a peer.
+//!     The connection handle is small wrapper around the actual quic connection
+//!     with an rpc/push interface. Passed in requests need to specify an URI to get
+//!     routed to the correct handler.
 //!
 //! GUARANTEES:
-//!  - If a peer is reachable, part of the topology and well-behaving
-//!    transport will eventually open a connection.
-//!  - The connection handle returned by `get_peer_handle` can be broken.
+//!  - If a peer is reachable, part of the topology and well-behaving transport will eventually
+//!    open a connection.
+//!  - The connection handle returned by `get_conn_handle` can be broken.
 //!    It is responsibility of the transport user to have an adequate retry logic.
-//!    Note: Currently the `TransportClient` which is a small wrapper around transport
-//!          calls `get_peer_handle` for each rpc and therefore always has the latest
-//!          possible handle to a peer.
-
+//!
+//!
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -40,7 +38,6 @@ use std::{
 use async_trait::async_trait;
 use axum::Router;
 use bytes::Bytes;
-use connection_handle::ConnectionHandle;
 use either::Either;
 use http::{Request, Response};
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
@@ -52,6 +49,7 @@ use ic_peer_manager::SubnetTopology;
 use ic_types::NodeId;
 use quinn::AsyncUdpSocket;
 
+use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
 
 mod connection_handle;
@@ -65,29 +63,26 @@ pub struct QuicTransport(Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>);
 
 impl QuicTransport {
     pub fn build(
+        log: &ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
         rt: tokio::runtime::Handle,
-        log: ReplicaLogger,
         tls_config: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         node_id: NodeId,
         topology_watcher: tokio::sync::watch::Receiver<SubnetTopology>,
         udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
-        metrics_registry: &MetricsRegistry,
-        state_sync_router: Router,
+        // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
+        router: Option<Router>,
     ) -> QuicTransport {
-        info!(log, "Building Quic transport.");
+        info!(log, "Starting Quic transport.");
 
         let peer_map = Arc::new(RwLock::new(HashMap::new()));
 
-        // If we have multiple services we need to combine the routers here.
-        // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
-        let router = state_sync_router;
-
         start_connection_manager(
             log,
-            rt,
             metrics_registry,
+            rt,
             tls_config.clone(),
             registry_client,
             sev_handshake,
@@ -95,13 +90,13 @@ impl QuicTransport {
             peer_map.clone(),
             topology_watcher,
             udp_socket,
-            router,
+            router.unwrap_or_default(),
         );
 
         QuicTransport(peer_map)
     }
 
-    pub(crate) fn get_peer_handle(
+    pub(crate) fn get_conn_handle(
         &self,
         peer_id: &NodeId,
     ) -> Result<ConnectionHandle, TransportError> {
@@ -111,25 +106,26 @@ impl QuicTransport {
             .unwrap()
             .get(peer_id)
             .ok_or(TransportError::Disconnected {
-                connection_error: Some(String::from("Currently not connected to this peer")),
+                connection_error: String::from("Currently not connected to this peer"),
             })?
             .clone();
         Ok(conn)
     }
 }
+
 #[async_trait]
 impl Transport for QuicTransport {
     async fn rpc(
         &self,
-        peer: &NodeId,
+        peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError> {
-        let peer = self.get_peer_handle(peer)?;
+        let peer = self.get_conn_handle(peer_id)?;
         peer.rpc(request).await
     }
 
-    async fn push(&self, peer: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
-        let peer = self.get_peer_handle(peer)?;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+        let peer = self.get_conn_handle(peer_id)?;
         peer.push(request).await
     }
 
@@ -142,7 +138,7 @@ impl Transport for QuicTransport {
 pub enum TransportError {
     Disconnected {
         // Potential reason for not being connected
-        connection_error: Option<String>,
+        connection_error: String,
     },
     Io {
         error: std::io::Error,
@@ -153,14 +149,9 @@ impl std::fmt::Display for TransportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Disconnected {
-                connection_error: Some(e),
+                connection_error: e,
             } => {
                 write!(f, "Disconnected/No connection to peer: {}", e)
-            }
-            Self::Disconnected {
-                connection_error: None,
-            } => {
-                write!(f, "Disconnected/No connection to peer")
             }
             Self::Io { error } => {
                 write!(f, "Io error: {}", error)
@@ -173,11 +164,44 @@ impl std::fmt::Display for TransportError {
 pub trait Transport: Send + Sync {
     async fn rpc(
         &self,
-        peer: &NodeId,
+        peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError>;
 
-    async fn push(&self, peer: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
 
     fn peers(&self) -> Vec<NodeId>;
+}
+
+/// This is a workaround for being able to iniate quic transport
+/// with both a real and virtual udp socket. This is needed due
+/// to an inconsistency with the quinn API. This is fixed upstream
+/// and can be removed with quinn 0.11.0.
+/// https://github.com/quinn-rs/quinn/pull/1595
+#[derive(Debug)]
+pub struct DummyUdpSocket;
+
+impl AsyncUdpSocket for DummyUdpSocket {
+    fn poll_send(
+        &self,
+        _state: &quinn::udp::UdpState,
+        _cx: &mut std::task::Context,
+        _transmits: &[quinn::udp::Transmit],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        todo!()
+    }
+    fn poll_recv(
+        &self,
+        _cx: &mut std::task::Context,
+        _bufs: &mut [std::io::IoSliceMut<'_>],
+        _meta: &mut [quinn::udp::RecvMeta],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        todo!()
+    }
+    fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        todo!()
+    }
+    fn may_fragment(&self) -> bool {
+        todo!()
+    }
 }

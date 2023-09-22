@@ -9,6 +9,8 @@ use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -25,6 +27,7 @@ mod tests;
 
 /// Globally unique identifier of an IDKG transcript.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptId {
     /// Identifier incremented by consensus.
     id: u64,
@@ -578,10 +581,15 @@ impl InitialIDkgDealings {
     ///   `MultipleDealingsFromSameDealer` is returned.
     /// * There are at least `params.unverified_dealings_collection_threshold()` dealings from
     ///   distinct dealers, otherwise the error variant `UnsatisfiedCollectionThreshold` is returned.
+    /// * The `params.dealers` and `params.receivers` are disjoint, otherwise the error variant
+    ///   `DealersAndReceiversNotDisjoint` is returned.
     pub fn new(
         params: IDkgTranscriptParams,
         dealings: Vec<SignedIDkgDealing>,
     ) -> Result<Self, InitialIDkgDealingsValidationError> {
+        if !params.dealers.get().is_disjoint(params.receivers.get()) {
+            return Err(InitialIDkgDealingsValidationError::DealersAndReceiversNotDisjoint);
+        }
         match params.unverified_dealings_collection_threshold() {
             Some(threshold) => {
                 let mut dealings_map = BTreeMap::new();

@@ -10,7 +10,7 @@ use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use candid::Principal;
 use ethnum::u256;
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_test_utilities::types::ids::node_test_id;
 
@@ -50,13 +50,15 @@ fn test_principal_to_u256() -> Result<(), Error> {
     Ok(())
 }
 
-fn node(i: u64, subnet_id: Principal) -> Node {
+pub fn node(i: u64, subnet_id: Principal) -> Node {
     Node {
         id: node_test_id(1001 + i).get().0,
         subnet_id,
         addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
         port: 8080,
-        tls_certificate: valid_tls_certificate().certificate_der,
+        tls_certificate: valid_tls_certificate_and_validation_time()
+            .0
+            .certificate_der,
         replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
     }
 }
@@ -196,8 +198,8 @@ async fn test_persist() -> Result<(), Error> {
     let routes = generate_test_routes(0);
     let routing_table = generate_test_routing_table(0);
 
-    let rt_init = ArcSwapOption::const_empty();
-    let mut persister = Persister::new(&rt_init);
+    let rt_init = Arc::new(ArcSwapOption::empty());
+    let persister = Persister::new(Arc::clone(&rt_init));
 
     // Persist the routing table
     let result = persister.persist(routing_table.clone()).await.unwrap();
@@ -236,43 +238,61 @@ fn test_lookup() -> Result<(), Error> {
     let r = generate_test_routes(0);
 
     assert_eq!(
-        r.lookup("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap().id,
+        r.lookup(Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap())
+            .unwrap()
+            .id,
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
-        r.lookup("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap().id,
+        r.lookup(Principal::from_text("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap())
+            .unwrap()
+            .id,
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
-        r.lookup("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap().id,
+        r.lookup(Principal::from_text("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap())
+            .unwrap()
+            .id,
         "snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"
     );
 
     assert_eq!(
-        r.lookup("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap().id,
+        r.lookup(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+            .unwrap()
+            .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup("sqjm4-qahae-aq").unwrap().id,
+        r.lookup(Principal::from_text("sqjm4-qahae-aq").unwrap())
+            .unwrap()
+            .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap().id,
+        r.lookup(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+            .unwrap()
+            .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap().id,
+        r.lookup(Principal::from_text("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap())
+            .unwrap()
+            .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     // Test failure
-    assert!(r.lookup("32fn4-qqaaa-aaaak-ad65a-cai").is_err());
-    assert!(r.lookup("3we4s-lyaaa-aaaak-aegrq-cai").is_err());
+    assert!(r
+        .lookup(Principal::from_text("32fn4-qqaaa-aaaak-ad65a-cai").unwrap())
+        .is_none());
+    assert!(r
+        .lookup(Principal::from_text("3we4s-lyaaa-aaaak-aegrq-cai").unwrap())
+        .is_none());
 
     Ok(())
 }

@@ -4,8 +4,9 @@ use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
     RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
 };
+use crate::state::{ReimburseDepositTask, ReimbursementReason};
 use candid::Principal;
-use ic_btc_interface::{Txid, Utxo};
+use ic_btc_interface::Utxo;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
@@ -65,7 +66,7 @@ pub enum Event {
         request_block_indices: Vec<u64>,
         /// The Txid of the Bitcoin transaction.
         #[serde(rename = "txid")]
-        txid: Txid,
+        txid: [u8; 32],
         /// UTXOs used for the transaction.
         #[serde(rename = "utxos")]
         utxos: Vec<Utxo>,
@@ -88,10 +89,10 @@ pub enum Event {
     ReplacedBtcTransaction {
         /// The Txid of the old Bitcoin transaction.
         #[serde(rename = "old_txid")]
-        old_txid: Txid,
+        old_txid: [u8; 32],
         /// The Txid of the new Bitcoin transaction.
         #[serde(rename = "new_txid")]
-        new_txid: Txid,
+        new_txid: [u8; 32],
         /// The output with the minter's change.
         #[serde(rename = "change_output")]
         change_output: ChangeOutput,
@@ -108,7 +109,7 @@ pub enum Event {
     #[serde(rename = "confirmed_transaction")]
     ConfirmedBtcTransaction {
         #[serde(rename = "txid")]
-        txid: Txid,
+        txid: [u8; 32],
     },
 
     /// Indicates that the given UTXO went through a KYT check.
@@ -137,15 +138,46 @@ pub enum Event {
         #[serde(rename = "block_index")]
         block_index: u64,
     },
+
     /// Indicates that the KYT check for the specified address failed.
     #[serde(rename = "retrieve_btc_kyt_failed")]
     RetrieveBtcKytFailed {
+        /// The owner of the address.
         owner: Principal,
+        /// The address that failed the KYT check.
         address: String,
+        /// The amount associated with the failed KYT check.
         amount: u64,
+        /// Unique identifier for the failed check.
         uuid: String,
+        /// The KYT provider responsible for the failed check.
         kyt_provider: Principal,
+        /// The block index where the failed check occurred.
         block_index: u64,
+    },
+
+    /// Indicates a reimbursement.
+    #[serde(rename = "schedule_deposit_reimbursement")]
+    ScheduleDepositReimbursement {
+        /// The beneficiary.
+        account: Account,
+        /// The token amount to reimburse.
+        amount: u64,
+        /// The reason of the reimbursement.
+        reason: ReimbursementReason,
+        /// The corresponding burn block on the ledger.
+        burn_block_index: u64,
+        /// The fee charged for the KYT check.
+        kyt_fee: u64,
+    },
+
+    /// Indicates that a reimbursement has been executed.
+    #[serde(rename = "reimbursed_failed_deposit")]
+    ReimbursedFailedDeposit {
+        /// The burn block on the ledger.
+        burn_block_index: u64,
+        /// The mint block on the ledger.
+        mint_block_index: u64,
     },
 }
 
@@ -241,7 +273,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                     None => {
                         return Err(ReplayLogError::InconsistentLog(format!(
                             "Cannot replace a non-existent transaction {}",
-                            &old_txid
+                            crate::tx::DisplayTxid(&old_txid)
                         )))
                     }
                 };
@@ -298,6 +330,28 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             }
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
                 *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
+            }
+            Event::ScheduleDepositReimbursement {
+                account,
+                amount,
+                burn_block_index,
+                kyt_fee,
+                reason,
+            } => {
+                state.reimbursement_map.insert(
+                    burn_block_index,
+                    ReimburseDepositTask {
+                        account,
+                        amount,
+                        kyt_fee,
+                        reason,
+                    },
+                );
+            }
+            Event::ReimbursedFailedDeposit {
+                burn_block_index, ..
+            } => {
+                state.reimbursement_map.remove(&burn_block_index);
             }
         }
     }

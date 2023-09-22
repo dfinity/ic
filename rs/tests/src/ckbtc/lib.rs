@@ -32,7 +32,7 @@ use ic_config::{
 };
 use ic_ic00_types::CanisterIdRecord;
 use ic_ic00_types::ProvisionalCreateCanisterWithCyclesArgs;
-use ic_icrc1_ledger::{InitArgs, LedgerArgument};
+use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -46,7 +46,6 @@ use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
-use icrc_ledger_types::icrc1::account::Account;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
 use std::str::FromStr;
@@ -58,7 +57,7 @@ pub(crate) const ADDRESS_LENGTH: usize = 44;
 
 pub(crate) const TRANSFER_FEE: u64 = 1_000;
 
-pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
+pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
@@ -261,30 +260,22 @@ pub(crate) async fn install_ledger(
     logger: &Logger,
 ) -> CanisterId {
     info!(&logger, "Installing ledger ...");
-    let minting_account = Account {
-        owner: minting_user.0,
-        subaccount: None,
-    };
-    let init_args = LedgerArgument::Init(InitArgs {
-        minting_account,
-        initial_balances: vec![],
-        transfer_fee: TRANSFER_FEE,
-        token_name: "Wrapped Bitcoin".to_string(),
-        token_symbol: "ckBTC".to_string(),
-        metadata: vec![],
-        archive_options: ArchiveOptions {
-            trigger_threshold: 1000,
-            num_blocks_to_archive: 1000,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: minting_user,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
-        fee_collector_account: None,
-        max_memo_length: Some(CKBTC_LEDGER_MEMO_SIZE),
-        feature_flags: None,
-    });
+    let init_args = LedgerArgument::Init(
+        InitArgsBuilder::with_symbol_and_name("ckBTC", "Wrapped Bitcoin")
+            .with_minting_account(minting_user.0)
+            .with_transfer_fee(TRANSFER_FEE)
+            .with_max_memo_length(CKBTC_LEDGER_MEMO_SIZE)
+            .with_archive_options(ArchiveOptions {
+                trigger_threshold: 1000,
+                num_blocks_to_archive: 1000,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: minting_user,
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            })
+            .build(),
+    );
     install_icrc1_ledger(env, canister, &init_args).await;
     canister.canister_id()
 }

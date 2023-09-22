@@ -77,12 +77,15 @@ mod tests {
     };
     use ic_test_utilities::{
         state::new_canister_state,
-        types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        types::messages::ResponseBuilder,
+        types::ids::{
+            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
+        },
+        types::messages::{RequestBuilder, ResponseBuilder},
     };
     use ic_types::{
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
+        messages::RequestMetadata,
         xnet::{StreamIndex, StreamIndexedQueue},
         CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
@@ -198,6 +201,26 @@ mod tests {
             for _ in 1..6 {
                 stream.push(ResponseBuilder::new().build().into());
             }
+            for i in 1..6 {
+                stream.push(
+                    RequestBuilder::new()
+                        .metadata(
+                            (certification_version >= CertificationVersion::V14).then_some(
+                                RequestMetadata {
+                                    call_tree_depth: (i % 2 > 0).then_some(i % 3),
+                                    call_tree_start_time: (i % 3 > 0)
+                                        .then_some(i % 2)
+                                        .map(Time::from_nanos_since_unix_epoch),
+                                    call_subtree_deadline: (i % 4 > 0)
+                                        .then_some(i % 3)
+                                        .map(Time::from_nanos_since_unix_epoch),
+                                },
+                            ),
+                        )
+                        .build()
+                        .into(),
+                );
+            }
             if certification_version >= CertificationVersion::V8 {
                 stream.push_reject_signal(10.into());
                 stream.increment_signals_end();
@@ -229,6 +252,11 @@ mod tests {
                     NumBytes::from(u64::MAX),
                 );
             }
+
+            state.metadata.node_public_keys = btreemap! {
+                node_test_id(1) => vec![1; 44],
+                node_test_id(2) => vec![2; 44],
+            };
 
             let mut routing_table = RoutingTable::new();
             routing_table
@@ -273,19 +301,23 @@ mod tests {
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
         let expected_hashes: [&str; CertificationVersion::COUNT] = [
-            "C6BC681D0760A9CF36232892FE14E045ECE4EC406BF46117334DDE0E3603A6D5",
-            "598F69AB872954AF52188C640BF3C180E90821F259225B3CD5EFCD2AD9EF8F88",
-            "B120396B7F0885B30E52D3BACDA38E9EB2C07C054E8E4045E845AF15B97844C4",
-            "52029C1F4C483B2B69ADF77AC9877D2E7A305BD06B4D9A10E95B7B1AC9B0464C",
-            "52029C1F4C483B2B69ADF77AC9877D2E7A305BD06B4D9A10E95B7B1AC9B0464C",
-            "52029C1F4C483B2B69ADF77AC9877D2E7A305BD06B4D9A10E95B7B1AC9B0464C",
-            "A08B206B6E2D2B0F2EE3D334C01AD79163BECDE24FAF21723F5D1F434357F5AA",
-            "A08B206B6E2D2B0F2EE3D334C01AD79163BECDE24FAF21723F5D1F434357F5AA",
-            "D963A967586652BBBAFBD630A1DB53442F01548A5AC42E5A33D1BFEF61BFD9A0",
-            "D963A967586652BBBAFBD630A1DB53442F01548A5AC42E5A33D1BFEF61BFD9A0",
-            "1213C1D177E064FB70CB9B62BFE20DB823A109B71B4DAC7E41AEAE07DEFDA6FC",
-            "C3F332850C080533635500BE033EF6383321032644914CF3356EFC9733A3E55D",
+            "1B931426F36191153996B82CE305BE659AAE65D8AE75B4839736176C0453BDF3",
+            "3B3F058CD6BAF16A990585223CDD9ED98BC5507B51403707E486B764F1FF5DAE",
+            "5F17DC054CBE03F1887400247E4255764AAF3CDBFBA0AD4F414CB7ABAA4782C2",
+            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
+            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
+            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
+            "F86FEBBF994627432621BE7DEBD9D59BECEBD922C9C8B4F7F37BD34A5709F16B",
+            "F86FEBBF994627432621BE7DEBD9D59BECEBD922C9C8B4F7F37BD34A5709F16B",
+            "410BD1929B6884DE65DDBACC54749FDCC2A5FA3585898B9B2644147DE2760678",
+            "410BD1929B6884DE65DDBACC54749FDCC2A5FA3585898B9B2644147DE2760678",
+            "4BAB4FD35605188FDDCA534204C8E8852C9E450CEB6BE53129FB84DF109D8905",
+            "1ED37E00D177681A4111B6D45F518DF3E414B0B614333BB6552EBC0D8492B687",
+            "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
+            "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
+            "E1108326097AE9BF8212F333F4F46B9619B947CDF2A73F3223BBEBC6FC2033B6",
         ];
+
         for certification_version in CertificationVersion::iter() {
             assert_partial_state_hash_matches(
                 certification_version,

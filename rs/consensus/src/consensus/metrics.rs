@@ -877,8 +877,25 @@ impl EcdsaTranscriptMetrics {
             transcript_e2e_latency: metrics_registry.histogram_vec(
                 "ecdsa_transcript_e2e_latency",
                 "End to end latency to build the transcript, in sec",
-                decimal_buckets(0, 3),
+                linear_buckets(0.5, 0.5, 30),
                 &["type"],
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct EcdsaQuadrupleMetrics {
+    pub quadruple_e2e_latency: Histogram,
+}
+
+impl EcdsaQuadrupleMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            quadruple_e2e_latency: metrics_registry.histogram(
+                "ecdsa_quadruple_e2e_latency",
+                "End to end latency to build the quadruple, in sec",
+                linear_buckets(2.0, 0.5, 60),
             ),
         }
     }
@@ -922,7 +939,7 @@ impl EcdsaSignatureMetrics {
             signature_e2e_latency: metrics_registry.histogram(
                 "ecdsa_signature_e2e_latency",
                 "End to end latency to build the signature, in sec",
-                decimal_buckets(0, 3),
+                linear_buckets(0.5, 0.5, 30),
             ),
         }
     }

@@ -122,6 +122,7 @@ fn send(requests: &mut Vec<Request>, arg: Blob, from: AccountIdentifier) -> Resu
     requests.push(Request::Transfer(Operation::Transfer {
         from,
         to,
+        spender: None,
         amount,
         fee,
     }));

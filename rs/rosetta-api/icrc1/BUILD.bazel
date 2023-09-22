@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -6,7 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
     "//rs/types/base_types",
@@ -14,9 +14,11 @@ DEPENDENCIES = [
     "@crate_index//:ciborium",
     "@crate_index//:hex",
     "@crate_index//:ic-cdk",
+    "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:thiserror",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -43,18 +45,23 @@ MACRO_DEV_DEPENDENCIES = [
 
 rust_library(
     name = "icrc1",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_icrc1",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
 )
 
-# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
-# rust_doc_test(
-#     name = "icrc1_doc_test",
-#     crate = ":icrc1",
-# )
+rust_test(
+    name = "icrc1_unit_test",
+    crate = ":icrc1",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "icrc1_doc_test",
+    crate = ":icrc1",
+)
 
 rust_test(
     name = "icrc1_test",
@@ -62,6 +69,8 @@ rust_test(
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         ":icrc1",
+        "//rs/rosetta-api/icrc1/tokens_u64",
+        "//rs/rosetta-api/icrc1/tokens_u256",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     ] + DEV_DEPENDENCIES,
 )

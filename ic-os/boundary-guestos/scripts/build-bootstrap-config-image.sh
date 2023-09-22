@@ -39,10 +39,15 @@ options may be specified:
   --hostname name
     Name to assign to the host. Will be used in logging.
 
-  --name_servers servers
+  --ipv4_name_servers servers
     DNS servers to use. Can be multiple servers separated by space (make sure
     to quote the argument string so it appears as a single argument to the
-    script, e.g. --name_servers "8.8.8.8 1.1.1.1").
+    script, e.g., --name_servers "8.8.8.8 1.1.1.1").
+
+  --ipv6_name_servers servers
+    DNS servers to use. Can be multiple servers separated by space (make sure
+    to quote the argument string so it appears as a single argument to the
+    script, e.g., --name_servers "2606:4700:4700::1111 2606:4700:4700::1001").
 
   --elasticsearch_url url
     Logging url to use.
@@ -76,31 +81,71 @@ options may be specified:
     specify an identity file for the prober
 
   --system-domains
-    comma-delimited list of domains serving system canisters (e.g. ic0.dev or ic0.app)
+    comma-delimited list of domains serving system canisters (e.g., ic0.dev or ic0.app)
 
   --application-domains
-    comma-delimited list of domains serving application canisters (e.g. ic0.dev or ic0.app)
+    comma-delimited list of domains serving application canisters (e.g., ic0.dev or ic0.app)
 
   --certdir
     specify the directory holding TLS certificates for the hosted domain
-    (default: None i.e. snakeoil/self certified certificate will be used)
+    (default: None i.e., snakeoil/self certified certificate will be used)
 
   --ipv4_http_ips
-    the ipv4 blocks (e.g. "1.2.3.4/5") to be whitelisted for inbound http(s)
+    the ipv4 blocks (e.g., "1.2.3.4/5") to be whitelisted for inbound http(s)
     traffic. Multiple block may be specified separated by commas.
 
   --ipv6_http_ips
-    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound http(s)
+    the ipv6 blocks (e.g., "1:2:3:4::/64") to be whitelisted for inbound http(s)
     traffic. Multiple block may be specified separated by commas.
 
   --ipv6_debug_ips
-    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound debug
-    (e.g. ssh) traffic. Multiple block may be specified separated by commas.
+    the ipv6 blocks (e.g., "1:2:3:4::/64") to be whitelisted for inbound debug
+    (e.g., ssh) traffic. Multiple block may be specified separated by commas.
 
   --ipv6_monitoring_ips
-    the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound
-    monitoring (e.g. prometheus) traffic. Multiple block may be specified separated by
+    the ipv6 blocks (e.g., "1:2:3:4::/64") to be whitelisted for inbound
+    monitoring (e.g., prometheus) traffic. Multiple block may be specified separated by
     commas.
+
+  --require_seo_certification
+    flag to enforce certification for all crawler and bot requests that are redirected
+    to icx-proxy to bypass the service worker.
+
+  --require_underscore_certification
+    flag to enforce certification for all requests going to /_/raw/ that are
+    passed through icx-proxy.
+
+  --certificate_orchestrator_uri
+    the API domain to reach the certificate orchestrator canister (e.g., https://ic0.app/).
+
+  --certificate_orchestrator_canister_id
+    the canister ID of the certificate orchestrator.
+
+  --certificate_issuer_delegation_domain
+    the delegation domain, which is used for the DNS-01 ACME challenges.
+
+  --certificate_issuer_name_servers
+    name servers used for verifying custom-domains DNS configuration
+
+  --certificate_issuer_name_servers_port
+    port used for communicating with name servers
+
+  --certificate_issuer_acme_provider_url
+    URL of the ACME provider (e.g., https://acme-v02.api.letsencrypt.org for Let's Encrypt).
+
+  --certificate_issuer_cloudflare_api_url
+    the URL of the DNS provider that controls the delegation domain.
+
+  --certificate_issuer_cloudflare_api_key
+    the API key that controls the delegation domain.
+
+  --certificate_issuer_identity
+    path to the file containing an allowlisted identity in the certificate orchestrator.
+
+  --certificate_issuer_encryption_key
+    path to the file containing the symmetric encryption key to encrypt the certificates
+    (and the corresponding private keys) before uploading them to the certificate
+    orchestrator canister.
 
   --ic_registry_local_store
     path to a local registry store to be used instead of the one provided by the
@@ -149,6 +194,30 @@ function check_ipv6_prefixes() {
     return ${fail}
 }
 
+# check variables ensures that either ALL or NONE
+# of the given variable names are set
+#
+# Arguments:
+# - $@ space seperated list of variable names
+function check_variables() {
+    declare -a REQUIRED_VARIABLES=($@)
+
+    COUNT=0
+    if [[ "${#REQUIRED_VARIABLES[@]}" -gt 0 ]]; then
+        for VAR in "${REQUIRED_VARIABLES[@]}"; do
+            if [[ -v "${VAR}" && ! -z "${!VAR}" ]]; then
+                ((COUNT++))
+            fi
+        done
+    fi
+
+    if ! [[ "${COUNT}" == 0 || "${COUNT}" == "${#REQUIRED_VARIABLES[@]}" ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
 # Arguments:
 # - $1 the tar file to build
 # - all remaining arguments: parameters to encode into the bootstrap
@@ -157,6 +226,12 @@ function build_ic_bootstrap_tar() {
     shift
 
     local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
+
+    # Custom domains
+    local CERTIFICATE_ORCHESTRATOR_URI CERTIFICATE_ORCHESTRATOR_CANISTER_ID CERTIFICATE_ISSUER_DELEGATION_DOMAIN
+    local CERTIFICATE_ISSUER_ACME_PROVIDER_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY
+    local CERTIFICATE_ISSUER_NAME_SERVERS CERTIFICATE_ISSUER_NAME_SERVERS_PORT CERTIFICATE_ISSUER_IDENTITY CERTIFICATE_ISSUER_ENCRYPTION_KEY
+
     while true; do
         if [ $# == 0 ]; then
             break
@@ -177,8 +252,11 @@ function build_ic_bootstrap_tar() {
             --hostname)
                 local HOSTNAME="$2"
                 ;;
-            --name_servers)
-                local NAME_SERVERS="$2"
+            --ipv4_name_servers)
+                local IPV4_NAME_SERVERS="$2"
+                ;;
+            --ipv6_name_servers)
+                local IPV6_NAME_SERVERS="$2"
                 ;;
             --elasticsearch_url)
                 local ELASTICSEARCH_URL="$2"
@@ -233,6 +311,36 @@ function build_ic_bootstrap_tar() {
                 ;;
             --require_underscore_certification)
                 REQUIRE_UNDERSCORE_CERTIFICATION="$2"
+                ;;
+            --certificate_orchestrator_uri)
+                CERTIFICATE_ORCHESTRATOR_URI="$2"
+                ;;
+            --certificate_orchestrator_canister_id)
+                CERTIFICATE_ORCHESTRATOR_CANISTER_ID="$2"
+                ;;
+            --certificate_issuer_delegation_domain)
+                CERTIFICATE_ISSUER_DELEGATION_DOMAIN="$2"
+                ;;
+            --certificate_issuer_name_servers)
+                CERTIFICATE_ISSUER_NAME_SERVERS="$2"
+                ;;
+            --certificate_issuer_name_servers_port)
+                CERTIFICATE_ISSUER_NAME_SERVERS_PORT="$2"
+                ;;
+            --certificate_issuer_acme_provider_url)
+                CERTIFICATE_ISSUER_ACME_PROVIDER_URL="$2"
+                ;;
+            --certificate_issuer_cloudflare_api_url)
+                CERTIFICATE_ISSUER_CLOUDFLARE_API_URL="$2"
+                ;;
+            --certificate_issuer_cloudflare_api_key)
+                CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY="$2"
+                ;;
+            --certificate_issuer_identity)
+                CERTIFICATE_ISSUER_IDENTITY="$2"
+                ;;
+            --certificate_issuer_encryption_key)
+                CERTIFICATE_ISSUER_ENCRYPTION_KEY="$2"
                 ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
@@ -305,6 +413,25 @@ function build_ic_bootstrap_tar() {
     check_ipv6_prefixes ${IPV6_DEBUG_IPS:=""} || fail=1
     check_ipv6_prefixes ${IPV6_MONITORING_IPS:=""} || fail=1
 
+    # Verify Configuration for Custom-Domains
+    CUSTOM_DOMAINS_VARIABLES=(
+        CERTIFICATE_ORCHESTRATOR_URI
+        CERTIFICATE_ORCHESTRATOR_CANISTER_ID
+        CERTIFICATE_ISSUER_DELEGATION_DOMAIN
+        CERTIFICATE_ISSUER_NAME_SERVERS
+        CERTIFICATE_ISSUER_NAME_SERVERS_PORT
+        CERTIFICATE_ISSUER_ACME_PROVIDER_URL
+        CERTIFICATE_ISSUER_CLOUDFLARE_API_URL
+        CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY
+        CERTIFICATE_ISSUER_IDENTITY
+        CERTIFICATE_ISSUER_ENCRYPTION_KEY
+    )
+
+    if ! check_variables "${CUSTOM_DOMAINS_VARIABLES[@]}"; then
+        err "some of the certificate issuance options are not set. Either all or none have to be set"
+        fail=1
+    fi
+
     if [[ "${fail}" == 1 ]]; then
         exit 1
     fi
@@ -316,7 +443,8 @@ ipv6_address=${IPV6_ADDRESS:-}
 ipv6_gateway=${IPV6_GATEWAY:-}
 ipv4_address=${IPV4_ADDRESS:-}
 ipv4_gateway=${IPV4_GATEWAY:-}
-name_servers=${NAME_SERVERS:-}
+ipv4_name_servers=${IPV4_NAME_SERVERS:-}
+ipv6_name_servers=${IPV6_NAME_SERVERS:-}
 hostname=${HOSTNAME}
 ipv6_replica_ips=${IPV6_REPLICA_IPS}
 EOF
@@ -370,6 +498,23 @@ EOF
         cp "${CERT_DIR}/fullchain.pem" "${BOOTSTRAP_TMPDIR}/certs"
         cp "${CERT_DIR}/privkey.pem" "${BOOTSTRAP_TMPDIR}/certs"
         cp "${CERT_DIR}/chain.pem" "${BOOTSTRAP_TMPDIR}/certs"
+    fi
+
+    # setup custom domains
+    if [[ ! -z "${CERTIFICATE_ORCHESTRATOR_URI:-}" ]]; then
+        cp "${CERTIFICATE_ISSUER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/certificate_issuer_identity.pem"
+        cp "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" "${BOOTSTRAP_TMPDIR}/certificate_issuer_enc_key.pem"
+
+        cat >"${BOOTSTRAP_TMPDIR}/certificate_issuer.conf" <<EOF
+certificate_orchestrator_uri=${CERTIFICATE_ORCHESTRATOR_URI}
+certificate_orchestrator_canister_id=${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}
+certificate_issuer_delegation_domain=${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}
+certificate_issuer_name_servers=${CERTIFICATE_ISSUER_NAME_SERVERS}
+certificate_issuer_name_servers_port=${CERTIFICATE_ISSUER_NAME_SERVERS_PORT}
+certificate_issuer_acme_provider_url=${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}
+certificate_issuer_cloudflare_api_url=${CERTIFICATE_ISSUER_CLOUDFLARE_API_URL}
+certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
+EOF
     fi
 
     # use the registry local store

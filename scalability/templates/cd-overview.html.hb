@@ -116,6 +116,10 @@
     </script>
 
     <h4>Latency</h4>
+
+    <p>Older data is not displayed, as query latencies used to have an unreasonable high time out and
+    therefore make the plot unreadable.</p>
+
     <div id="plot_exp1_query_latency" class="plot"></div>
     <script>
       const plot_exp1_links_latency = new Map();
@@ -162,6 +166,107 @@
       }, false);
     </script>
 
+    <h4>Failure rate</h4>
+
+    <div id="plot_exp1_update_failure_rate" class="plot"></div>
+    <script>
+      const plot_exp1_update_links_failure_rate = new Map();
+      {{#each plot_exp1_update_failure_rate.data}}
+        plot_exp1_update_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_update_failure_rate');
+          Plotly.newPlot(plot, {{{plot_exp1_update_failure_rate.plot}}},  {{{plot_exp1_update_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_update_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h4>Latency</h4>
+
+    <p>Older data is not displayed, as query latencies used to have an unreasonable high time out and
+    therefore make the plot unreadable.</p>
+
+    <div id="plot_exp1_update_latency" class="plot"></div>
+    <script>
+      const plot_exp1_update_links_latency = new Map();
+      {{#each plot_exp1_update_latency.data}}
+        plot_exp1_update_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_update_latency');
+          Plotly.newPlot(plot, {{{plot_exp1_update_latency.plot}}},  {{{plot_exp1_update_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_update_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h2>Boundary node performance</h2>
+    <a name="boundary-nodes" />
+
+    <p>
+      The following analyses end-to-end performance of an IC instance when called through boundary nodes.
+      This basically executes the same benchmark as <a href="#sys-baseline-queries">above</a>, but through boundary nodes.
+    </p>
+
+    <h3>Query calls</h3>
+
+    <h4>Failure rate</h4>
+    <div id="plot_boundary_nodes_query_failure_rate" class="plot"></div>
+    <script>
+      const plot_boundary_nodes_links_failure_rate = new Map();
+      {{#each plot_boundary_nodes_query_failure_rate.data}}
+        plot_boundary_nodes_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_boundary_nodes_query_failure_rate');
+          Plotly.newPlot(plot, {{{plot_boundary_nodes_query_failure_rate.plot}}},  {{{plot_boundary_nodes_query_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_boundary_nodes_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h4>Latency</h4>
+
+    <div id="plot_boundary_nodes_query_latency" class="plot"></div>
+    <script>
+      const plot_boundary_nodes_links_latency = new Map();
+      {{#each plot_boundary_nodes_query_latency.data}}
+        plot_boundary_nodes_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_boundary_nodes_query_latency');
+          Plotly.newPlot(plot, {{{plot_boundary_nodes_query_latency.plot}}},  {{{plot_boundary_nodes_query_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_boundary_nodes_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+
     <h2>Experiment 2: Memory under load</h2>
     <a name="memory" />
 
@@ -198,6 +303,50 @@
               window.open(link, "_self");
           });
 
+      }, false);
+    </script>
+
+    <h3>Failure rate</h4>
+    <div id="plot_exp2_update_failure_rate" class="plot"></div>
+    <script>
+      const plot_exp2_update_links_failure_rate = new Map();
+      {{#each plot_exp2_update_failure_rate.data}}
+        plot_exp2_update_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp2_update_failure_rate');
+          Plotly.newPlot(plot, {{{plot_exp2_update_failure_rate.plot}}},  {{{plot_exp2_update_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_update_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h3>Latency</h4>
+
+
+    <div id="plot_exp2_update_latency" class="plot"></div>
+    <script>
+      const plot_exp2_update_links_latency = new Map();
+      {{#each plot_exp2_update_latency.data}}
+        plot_exp2_update_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp2_update_latency');
+          Plotly.newPlot(plot, {{{plot_exp2_update_latency.plot}}},  {{{plot_exp2_update_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_update_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
       }, false);
     </script>
 

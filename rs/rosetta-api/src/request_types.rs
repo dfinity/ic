@@ -830,6 +830,36 @@ impl From<FollowMetadata> for Object {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ApproveMetadata {
+    pub from: AccountIdentifier,
+    pub spender: AccountIdentifier,
+    pub allowance: Tokens,
+    pub expected_allowance: Option<Tokens>,
+    pub expires_at: Option<u64>,
+}
+
+impl TryFrom<Option<Object>> for ApproveMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a Approve operation metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl From<ApproveMetadata> for Object {
+    fn from(m: ApproveMetadata) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// Transaction is a bit of a misnomer, since operations can succeed or fail
 /// independently from a Transaction.
 #[derive(Default)]
@@ -856,47 +886,77 @@ impl TransactionBuilder {
     }
 
     /// Add a `Request::Transfer` to the Transaction.
-    /// This handles `Send`, `Mint`, and `Burn`.
+    /// This handles `Send`, `Mint`, `Approve` and `Burn`.
     pub fn transfer(
         &mut self,
         operation: &LedgerOperation,
         token_name: &str,
     ) -> Result<(), ApiError> {
-        let mut push_op = |_type: OperationType, account: &AccountIdentifier, amount: i128| {
+        let mut push_op = |_type: OperationType,
+                           account: Option<crate::models::AccountIdentifier>,
+                           amount: Option<crate::models::amount::Amount>,
+                           metadata: Option<Object>| {
             let operation_identifier = self.allocate_op_id();
             self.ops.push(Operation {
                 operation_identifier,
                 _type,
                 status: None,
-                account: Some(to_model_account_identifier(account)),
-                amount: Some(signed_amount(amount, token_name)),
+                account,
+                amount,
                 related_operations: None,
                 coin_change: None,
-                metadata: None,
+                metadata,
             });
         };
 
         match operation {
-            LedgerOperation::Burn { from, amount } => {
-                push_op(OperationType::Burn, from, -i128::from(amount.get_e8s()));
+            LedgerOperation::Burn { from, amount, .. } => {
+                push_op(
+                    OperationType::Burn,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-i128::from(amount.get_e8s()), token_name)),
+                    None,
+                );
             }
             LedgerOperation::Mint { to, amount } => {
-                push_op(OperationType::Mint, to, i128::from(amount.get_e8s()));
+                push_op(
+                    OperationType::Mint,
+                    Some(to_model_account_identifier(to)),
+                    Some(signed_amount(i128::from(amount.get_e8s()), token_name)),
+                    None,
+                );
             }
             LedgerOperation::Approve {
-                from, spender, fee, ..
+                from,
+                spender,
+                fee,
+                allowance,
+                expected_allowance,
+                expires_at,
             } => {
-                push_op(OperationType::Transaction, from, 0);
-                push_op(OperationType::Transaction, spender, 0);
-                push_op(OperationType::Fee, from, -i128::from(fee.get_e8s()));
+                push_op(
+                    OperationType::Approve,
+                    Some(to_model_account_identifier(from)),
+                    None,
+                    Some(
+                        ApproveMetadata {
+                            from: *from,
+                            allowance: *allowance,
+                            spender: *spender,
+                            expected_allowance: *expected_allowance,
+                            expires_at: expires_at.map(|ts| ts.as_nanos_since_unix_epoch()),
+                        }
+                        .into(),
+                    ),
+                );
+                push_op(
+                    OperationType::Fee,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-i128::from(fee.get_e8s()), token_name)),
+                    None,
+                );
             }
             LedgerOperation::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            }
-            | LedgerOperation::TransferFrom {
                 from,
                 to,
                 amount,
@@ -904,9 +964,24 @@ impl TransactionBuilder {
                 ..
             } => {
                 let amount = i128::from(amount.get_e8s());
-                push_op(OperationType::Transaction, from, -amount);
-                push_op(OperationType::Transaction, to, amount);
-                push_op(OperationType::Fee, from, -i128::from(fee.get_e8s()));
+                push_op(
+                    OperationType::Transaction,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-amount, token_name)),
+                    None,
+                );
+                push_op(
+                    OperationType::Transaction,
+                    Some(to_model_account_identifier(to)),
+                    Some(signed_amount(amount, token_name)),
+                    None,
+                );
+                push_op(
+                    OperationType::Fee,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-i128::from(fee.get_e8s()), token_name)),
+                    None,
+                );
             }
         };
         Ok(())

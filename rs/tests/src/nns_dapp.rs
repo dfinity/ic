@@ -20,9 +20,9 @@ use slog::info;
 use std::collections::HashMap;
 
 pub const INTERNET_IDENTITY_WASM: &str =
-    "external/ii_test_canister/file/internet_identity_test.wasm";
-pub const NNS_DAPP_WASM: &str = "external/nns_dapp_canister/file/nns_dapp_canister.wasm";
-pub const SNS_AGGREGATOR_WASM: &str = "external/sns_aggregator/file/sns_aggregator_dev.wasm";
+    "external/ii_dev_canister/file/internet_identity_dev.wasm.gz";
+pub const NNS_DAPP_WASM: &str = "external/nns_dapp_canister/file/nns_dapp_canister.wasm.gz";
+pub const SNS_AGGREGATOR_WASM: &str = "external/sns_aggregator/file/sns_aggregator_dev.wasm.gz";
 
 /// Init and post_upgrade arguments for NNS frontend dapp.
 #[derive(Debug, Default, Eq, PartialEq, CandidType, Serialize, Deserialize)]

@@ -1,11 +1,22 @@
+#![allow(dead_code, unused_variables)]
+
+mod parse;
+#[cfg(test)]
+mod tests;
+
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
 };
-use ic_interfaces::self_validating_payload::{
-    InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
-    SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
+use ic_interfaces::{
+    batch_payload::{BatchPayloadBuilder, PastPayload},
+    consensus::{PayloadPermanentError, PayloadValidationError},
+    self_validating_payload::{
+        InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
+        SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
+    },
+    validation::ValidationError,
 };
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
 use ic_interfaces_registry::RegistryClient;
@@ -26,7 +37,6 @@ const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
 const ADAPTER_REQUEST_STATUS_SUCCESS: &str = "success";
 const BUILD_PAYLOAD_STATUS_SUCCESS: &str = "success";
 const VALIDATION_STATUS_VALID: &str = "valid";
-const INVALID_SELF_VALIDATING_PAYLOAD: &str = "InvalidSelfValidatingPayload";
 
 // Internal error type, to simplify error handling.
 #[derive(Error, Debug)]
@@ -105,7 +115,7 @@ impl BitcoinPayloadBuilder {
     fn get_self_validating_payload_impl(
         &self,
         validation_context: &ValidationContext,
-        past_payloads: &[&SelfValidatingPayload],
+        past_callback_ids: BTreeSet<u64>,
         byte_limit: NumBytes,
     ) -> Result<SelfValidatingPayload, GetPayloadError> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
@@ -115,24 +125,8 @@ impl BitcoinPayloadBuilder {
             .map_err(|e| GetPayloadError::GetStateFailed(validation_context.certified_height, e))?
             .take();
 
-        Ok(self.build_payload(state, past_payloads, byte_limit))
-    }
-
-    // Builds a payload for requests from the Bitcoin Wasm canister.
-    fn build_payload(
-        &self,
-        state: Arc<ReplicatedState>,
-        past_payloads: &[&SelfValidatingPayload],
-        byte_limit: NumBytes,
-    ) -> SelfValidatingPayload {
         let mut responses = vec![];
         let mut current_payload_size: u64 = 0;
-
-        let past_callback_ids: BTreeSet<u64> = past_payloads
-            .iter()
-            .flat_map(|x| x.get())
-            .map(|x| x.callback_id)
-            .collect();
 
         for (callback_id, request) in bitcoin_requests_iter(&state) {
             // We have already created a payload with the response for
@@ -196,14 +190,13 @@ impl BitcoinPayloadBuilder {
             }
         }
 
-        SelfValidatingPayload::new(responses)
+        Ok(SelfValidatingPayload::new(responses))
     }
 
     fn validate_self_validating_payload_impl(
         &self,
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
-        _past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
         let timer = Timer::start();
 
@@ -246,35 +239,22 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         byte_limit: NumBytes,
     ) -> (SelfValidatingPayload, NumBytes) {
         let timer = Timer::start();
+
+        let past_callback_ids: BTreeSet<u64> = past_payloads
+            .iter()
+            .flat_map(|x| x.get())
+            .map(|x| x.callback_id)
+            .collect();
+
         let payload = match self.get_self_validating_payload_impl(
             validation_context,
-            past_payloads,
+            past_callback_ids,
             byte_limit,
         ) {
             Ok(payload) => {
-                // As a safety measure, the payload is validated, before submitting it.
-                match self.validate_self_validating_payload(
-                    &payload,
-                    validation_context,
-                    past_payloads,
-                ) {
-                    Ok(_) => {
-                        self.metrics
-                            .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, timer);
-                        payload
-                    }
-                    Err(e) => {
-                        log!(
-                            self.log,
-                            slog::Level::Error,
-                            "Created an invalid SelfValidatingPayload: {:?}",
-                            e
-                        );
-                        self.metrics
-                            .observe_build_duration(INVALID_SELF_VALIDATING_PAYLOAD, timer);
-                        SelfValidatingPayload::default()
-                    }
-                }
+                self.metrics
+                    .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, timer);
+                payload
             }
             Err(e) => {
                 log!(self.log, e.log_level(), "{}", e);
@@ -293,9 +273,9 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         &self,
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
-        past_payloads: &[&SelfValidatingPayload],
+        _past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        self.validate_self_validating_payload_impl(payload, validation_context, past_payloads)
+        self.validate_self_validating_payload_impl(payload, validation_context)
     }
 }
 
@@ -326,5 +306,53 @@ fn bitcoin_requests_iter(
         )
 }
 
-#[cfg(test)]
-mod tests;
+impl BatchPayloadBuilder for BitcoinPayloadBuilder {
+    fn build_payload(
+        &self,
+        height: Height,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
+        let timer = Timer::start();
+
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
+        let payload = match self.get_self_validating_payload_impl(context, delivered_ids, max_size)
+        {
+            Ok(payload) => payload,
+            Err(e) => {
+                log!(self.log, e.log_level(), "{}", e);
+                self.metrics
+                    .observe_build_duration(e.to_label_value(), timer);
+
+                return vec![];
+            }
+        };
+
+        parse::payload_to_bytes(&payload, max_size)
+    }
+
+    fn validate_payload(
+        &self,
+        height: Height,
+        payload: &[u8],
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Result<(), PayloadValidationError> {
+        if payload.is_empty() {
+            return Ok(());
+        }
+
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
+        let payload = parse::bytes_to_payload(payload).map_err(|e| {
+            ValidationError::Permanent(PayloadPermanentError::SelfValidatingPayloadValidationError(
+                InvalidSelfValidatingPayload::DecodeError(e),
+            ))
+        })?;
+
+        let _ = self.validate_self_validating_payload_impl(&payload, context)?;
+        Ok(())
+    }
+}
+
+// TODO: Into Messages

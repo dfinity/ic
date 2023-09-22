@@ -5,6 +5,8 @@ use crate::{
     crypto::CryptoHashOf,
     *,
 };
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
 use std::hash::Hash;
@@ -12,6 +14,7 @@ use std::sync::Arc;
 
 /// A payload, that contains information needed during a regular round.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
     pub dealings: dkg::Dealings,
@@ -20,6 +23,7 @@ pub struct DataPayload {
 
 /// The payload of a summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
     pub ecdsa: ecdsa::Summary,
@@ -48,6 +52,7 @@ impl SummaryPayload {
 
 /// Block payload is either summary or a data payload).
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum BlockPayload {
     /// A BlockPayload::Summary contains only a DKG Summary
     Summary(SummaryPayload),
@@ -132,6 +137,7 @@ impl BlockPayload {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PayloadType {
     Summary,
     Data,
@@ -226,15 +232,6 @@ impl Payload {
 impl AsRef<BlockPayload> for Payload {
     fn as_ref(&self) -> &BlockPayload {
         self.payload.get_value().as_ref()
-    }
-}
-
-impl From<Payload> for BlockPayload {
-    fn from(payload: Payload) -> BlockPayload {
-        match Arc::try_unwrap(payload.payload) {
-            Ok(payload) => payload.into_inner().into_inner(),
-            Err(payload) => payload.get_value().as_ref().clone(),
-        }
     }
 }
 

@@ -52,7 +52,7 @@ impl RoundRobin {
     /// robin schedule. Return as soon as a call returns a non-empty ChangeSet.
     /// Otherwise try calling the next one, and return empty ChangeSet if all
     /// calls from the given list have been tried.
-    pub fn call_next<'a, T>(&self, calls: &[&'a dyn Fn() -> Vec<T>]) -> Vec<T> {
+    pub fn call_next<T>(&self, calls: &[&dyn Fn() -> Vec<T>]) -> Vec<T> {
         let mut result;
         let mut index = self.index.borrow_mut();
         let mut next = *index;

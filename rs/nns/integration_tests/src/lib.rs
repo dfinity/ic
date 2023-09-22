@@ -122,3 +122,12 @@ mod sns_wasm_allowed_principals;
 
 #[cfg(test)]
 mod neuron_following;
+
+#[cfg(test)]
+mod neuron_voting;
+
+#[cfg(test)]
+mod uninstall_canister_by_proposal;
+
+#[cfg(test)]
+mod canister_upgrade;

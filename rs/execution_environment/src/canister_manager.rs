@@ -19,25 +19,25 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
-use ic_interfaces::messages::CanisterCall;
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState,
-    SystemState,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, CallOrigin, CanisterState,
+    CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_system_api::ExecutionParameters;
-use ic_types::messages::{MessageId, SignedIngressContent};
-use ic_types::nominal_cycles::NominalCycles;
-use ic_types::NumInstructions;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
-    messages::{Payload, RejectContext, Response as CanisterResponse, StopCanisterContext},
+    messages::{
+        CanisterCall, MessageId, Payload, RejectContext, Response as CanisterResponse,
+        SignedIngressContent, StopCanisterContext,
+    },
+    nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
     InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
-    PrincipalId, QueryAllocation, SubnetId, Time,
+    NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;
@@ -66,6 +66,7 @@ pub(crate) enum DtsInstallCodeResult {
     Finished {
         canister: CanisterState,
         message: CanisterCall,
+        call_id: Option<InstallCodeCallId>,
         instructions_used: NumInstructions,
         result: Result<InstallCodeResult, CanisterManagerError>,
     },
@@ -403,6 +404,7 @@ impl CanisterManager {
             canister_cycles_balance,
             &self.cycles_account_manager,
             subnet_size,
+            Cycles::zero(),
         )
     }
 
@@ -481,6 +483,7 @@ impl CanisterManager {
             canister.system_state.balance(),
             &self.cycles_account_manager,
             subnet_size,
+            canister.system_state.reserved_balance(),
         )?;
 
         let is_controllers_change =
@@ -641,6 +644,7 @@ impl CanisterManager {
             context,
             message,
             None,
+            None,
             old_canister,
             time,
             "NOT_USED".into(),
@@ -654,6 +658,7 @@ impl CanisterManager {
         match dts_result {
             DtsInstallCodeResult::Finished {
                 canister,
+                call_id: _,
                 message: _,
                 instructions_used,
                 result,
@@ -696,6 +701,7 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         message: CanisterCall,
+        call_id: Option<InstallCodeCallId>,
         prepaid_execution_cycles: Option<Cycles>,
         mut canister: CanisterState,
         time: Time,
@@ -711,6 +717,7 @@ impl CanisterManager {
             return DtsInstallCodeResult::Finished {
                 canister,
                 message,
+                call_id,
                 instructions_used: NumInstructions::from(0),
                 result: Err(err),
             };
@@ -732,6 +739,7 @@ impl CanisterManager {
                         return DtsInstallCodeResult::Finished {
                             canister,
                             message,
+                            call_id,
                             instructions_used: NumInstructions::from(0),
                             result: Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
                         };
@@ -740,12 +748,13 @@ impl CanisterManager {
             }
         };
 
-        let original = OriginalContext {
+        let original: OriginalContext = OriginalContext {
             execution_parameters,
             mode: context.mode,
             canister_layout_path,
             config: self.config.clone(),
             message,
+            call_id,
             prepaid_execution_cycles,
             time,
             compilation_cost_handling,
@@ -1207,7 +1216,6 @@ impl CanisterManager {
         );
 
         system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
-        system_state.observe_consumed_cycles(creation_fee);
         let scheduler_state = SchedulerState::new(state.metadata.batch_time);
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 
@@ -1679,10 +1687,10 @@ pub fn uninstall_canister(
                         respondent: canister_id,
                         originator_reply_callback: *callback_id,
                         refund: call_context.available_cycles(),
-                        response_payload: Payload::Reject(RejectContext {
-                            code: RejectCode::CanisterReject,
-                            message: String::from("Canister has been uninstalled."),
-                        }),
+                        response_payload: Payload::Reject(RejectContext::new(
+                            RejectCode::CanisterReject,
+                            "Canister has been uninstalled.",
+                        )),
                     }));
                 }
                 CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
@@ -1714,8 +1722,12 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
     ) -> DtsInstallCodeResult;
 
     /// Aborts the paused execution.
-    /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles);
+    /// Returns the original message, the cycles prepaid for execution,
+    /// and a call id that exist only for inter-canister messages.
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles);
 }
 
 #[cfg(test)]

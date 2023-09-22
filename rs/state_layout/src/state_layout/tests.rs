@@ -3,8 +3,8 @@ use super::*;
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
 use ic_replicated_state::canister_state::system_state::CanisterHistory;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities::{
     mock_time,
@@ -15,6 +15,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
 use std::sync::Arc;
 
 fn default_canister_state_bits() -> CanisterStateBits {
@@ -29,6 +30,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         freeze_threshold: NumSeconds::from(0),
         cycles_balance: Cycles::zero(),
         cycles_debit: Cycles::zero(),
+        reserved_balance: Cycles::zero(),
         status: CanisterStatus::Stopped,
         scheduled_as_first: 0,
         skipped_round_due_to_no_messages: 0,
@@ -198,6 +200,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
             prepaid_execution_cycles: Cycles::new(1),
+            call_id: None,
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::clone(&request))),
@@ -206,6 +209,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
             prepaid_execution_cycles: Cycles::new(3),
+            call_id: Some(InstallCodeCallId::new(3u64)),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(&response))),

@@ -54,7 +54,7 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
 
         for _r in 0..100 {
             let s = EccScalar::random(curve_type, &mut rng);
-            let gs = EccPoint::mul_by_g(&s)?;
+            let gs = EccPoint::mul_by_g(&s);
 
             assert_serialization_round_trips(gs);
         }
@@ -214,7 +214,7 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
             for scalar in scalars {
                 // random point
                 let random_scalar = EccScalar::random(curve_type, &mut rng);
-                let mut random_point = EccPoint::mul_by_g(&random_scalar)?;
+                let mut random_point = EccPoint::mul_by_g(&random_scalar);
                 let expected_point = random_point.scalar_mul(&scalar)?;
                 assert!(!random_point.is_precopmuted());
                 random_point.precompute(window_size)?;
@@ -280,7 +280,7 @@ fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
 fn test_mul_n_ct_pippenger_is_correct() -> ThresholdEcdsaResult<()> {
     let mut rng = reproducible_rng();
     let mut random_point_and_scalar = |curve_type| -> ThresholdEcdsaResult<(EccPoint, EccScalar)> {
-        let p = EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng))?;
+        let p = EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng));
         Ok((p, EccScalar::random(curve_type, &mut rng)))
     };
 

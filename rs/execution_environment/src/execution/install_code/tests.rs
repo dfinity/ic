@@ -15,6 +15,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use ic_types_test_utils::ids::user_test_id;
+use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
 use std::mem::size_of;
 
 const DTS_INSTALL_WAT: &str = r#"
@@ -770,6 +771,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         NumBytes::new(canister_history_memory_usage as u64),
         ComputeAllocation::zero(),
         test.subnet_size(),
+        Cycles::zero(),
     );
     let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
     let payload = InstallCodeArgs {
@@ -900,4 +902,343 @@ fn dts_uninstall_with_aborted_install_code() {
 
     let result = check_ingress_status(test.ingress_status(&message_id)).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+}
+
+#[test]
+fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any install code calls before executing the message.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+
+    let args = InstallCodeArgs {
+        canister_id: canister_id.get(),
+        mode: CanisterInstallMode::Install,
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    for _ in 0..4 {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        // Check that the SubnetCallContextManager contains the call after paused execution.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_call_context_manager
+                .install_code_calls_len(),
+            1
+        );
+        test.execute_slice(canister_id);
+    }
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    // Finished the execution of install code.
+    // Check that the SubnetCallContextManager does not contain the call anymore.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+}
+
+#[test]
+fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any install code calls before executing the message.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+
+    let args = InstallCodeArgs {
+        canister_id: canister_id.get(),
+        mode: CanisterInstallMode::Install,
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    for _ in 0..3 {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        // Check that the SubnetCallContextManager contains the call after paused execution.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_call_context_manager
+                .install_code_calls_len(),
+            1
+        );
+        test.execute_slice(canister_id);
+    }
+    test.abort_all_paused_executions();
+
+    // Continues to keep track of install code context after aborting the execution.
+    for _ in 0..5 {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        // Check that the SubnetCallContextManager contains the call.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_call_context_manager
+                .install_code_calls_len(),
+            1
+        );
+        test.execute_slice(canister_id);
+    }
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    // Finished the execution of install code.
+    // Check that the SubnetCallContextManager does not contain the call anymore.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+}
+
+#[test]
+fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let ingress_memory_capacity = test.ingress_memory_capacity();
+
+    // Create two canisters.
+    let canister_id_1 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let canister_id_2 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    let canister_states = test
+        .state()
+        .canister_states
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let install_code_args = |canister_id: CanisterId| InstallCodeArgs {
+        canister_id: canister_id.get(),
+        mode: CanisterInstallMode::Install,
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    // SubnetCallContextManager does not contain any entries before executing the messages.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+
+    //
+    // Test install code call with canister request origin.
+    //
+    assert_eq!(
+        test.canister_state(canister_id_1)
+            .system_state
+            .task_queue
+            .len(),
+        0
+    );
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        install_code_args(canister_id_1).encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // SubnetCallContextManager contains a install code call after executing the message.
+    assert_eq!(
+        test.canister_state(canister_id_1).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+
+    // Will keep the entry from the SubnetCallContextManager and does not produce a response.
+    let is_local_canister = |canister_id: CanisterId| canister_states.contains(&canister_id);
+    test.state_mut()
+        .reject_in_progress_management_calls(is_local_canister, ingress_memory_capacity);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Faking canister migration to another subnet.
+    // Will remove the entry from the SubnetCallContextManager and produce a response.
+    let is_not_local_canister = |canister_id: CanisterId| !canister_states.contains(&canister_id);
+    test.state_mut()
+        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+
+    //
+    // Test install code call with ingress origin.
+    //
+    assert_eq!(
+        test.canister_state(canister_id_2)
+            .system_state
+            .task_queue
+            .len(),
+        0
+    );
+
+    // Send install code message and start execution.
+    let message_id = test.dts_install_code(install_code_args(canister_id_2));
+
+    assert_eq!(
+        test.canister_state(canister_id_2).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+
+    test.state_mut()
+        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&message_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {} migrated during a subnet split", canister_id_2),
+        ))
+    );
 }

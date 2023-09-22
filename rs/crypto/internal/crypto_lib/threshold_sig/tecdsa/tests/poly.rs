@@ -322,7 +322,7 @@ fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
     for curve in EccCurveType::all() {
         for num_coefficients in 1..30 {
             let sk = EccScalar::random(curve, &mut rng);
-            let pk = EccPoint::mul_by_g(&sk)?;
+            let pk = EccPoint::mul_by_g(&sk);
 
             let poly = Polynomial::random_with_constant(&sk, num_coefficients, &mut rng)?;
 
@@ -331,7 +331,7 @@ fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
 
             for r in &x {
                 let p_r = poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?;
-                let mut g_p_r = EccPoint::mul_by_g(&p_r)?;
+                let mut g_p_r = EccPoint::mul_by_g(&p_r);
                 g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }
@@ -359,7 +359,7 @@ fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 
             for r in &x {
                 let p_r = poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?;
-                let mut g_p_r = EccPoint::mul_by_g(&p_r)?;
+                let mut g_p_r = EccPoint::mul_by_g(&p_r);
                 g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }
@@ -368,7 +368,7 @@ fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 
             assert_eq!(
                 coefficients.interpolate_point(&y)?,
-                EccPoint::mul_by_g(&poly.evaluate_at(&value)?)?
+                EccPoint::mul_by_g(&poly.evaluate_at(&value)?)
             );
         }
     }
@@ -422,7 +422,7 @@ fn poly_point_interpolation_at_zero_rejects_duplicates() -> ThresholdEcdsaResult
 
             for r in &x {
                 let mut g_p_r =
-                    EccPoint::mul_by_g(&poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?)?;
+                    EccPoint::mul_by_g(&poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?);
                 g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }
@@ -441,7 +441,7 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
     for curve in EccCurveType::all() {
         for num_coefficients in 2..20 {
             let sk = EccScalar::random(curve, &mut rng);
-            let pk = EccPoint::mul_by_g(&sk)?;
+            let pk = EccPoint::mul_by_g(&sk);
 
             let poly = Polynomial::random_with_constant(&sk, num_coefficients, &mut rng)?;
             let x = random_node_indexes(num_coefficients - 1);
@@ -449,7 +449,7 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
 
             for r in &x {
                 let mut g_p_r =
-                    EccPoint::mul_by_g(&poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?)?;
+                    EccPoint::mul_by_g(&poly.evaluate_at(&EccScalar::from_node_index(curve, *r))?);
                 g_p_r.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
                 y.push(g_p_r);
             }

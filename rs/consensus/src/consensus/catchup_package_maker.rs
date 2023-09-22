@@ -305,7 +305,7 @@ mod tests {
             pool.advance_round_normal_operation_n(interval_length);
 
             let mut proposal = pool.make_next_block();
-            let mut block = proposal.content.as_mut();
+            let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
             pool.insert_validated(proposal.clone());

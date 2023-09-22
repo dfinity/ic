@@ -7,7 +7,7 @@ mod test_utils;
 use crate::test_utils::*;
 
 fn verify_data(tag: String, expected: &str, serialized: &[u8]) {
-    let hash = ic_crypto_sha::Sha256::hash(serialized);
+    let hash = ic_crypto_sha2::Sha256::hash(serialized);
     let hex_encoding = hex::encode(&hash[0..8]);
 
     if hex_encoding != expected {
@@ -256,7 +256,7 @@ fn verify_fixed_serialization_continues_to_be_accepted() -> Result<(), Threshold
 fn mega_k256_keyset_serialization_is_stable() -> Result<(), ThresholdEcdsaError> {
     let seed = Seed::from_bytes(b"ic-crypto-k256-keyset-serialization-stabilty-test");
 
-    let (pk, sk) = gen_keypair(EccCurveType::K256, seed)?;
+    let (pk, sk) = gen_keypair(EccCurveType::K256, seed);
 
     assert_eq!(
         hex::encode(sk.serialize()),

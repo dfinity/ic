@@ -14,6 +14,7 @@ base64 = "0.11"
 bincode = "1.3.3"
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
+chacha20poly1305 = "0.10.0"
 proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
@@ -23,6 +24,7 @@ crossbeam-channel = "0.5.5"
 crossbeam-utils = "0.8.11"
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
+dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 flate2 = "1.0.22"
@@ -44,7 +46,7 @@ ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cup-explorer = { path = "../cup_explorer" }
@@ -71,7 +73,7 @@ ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-recovery = { path = "../recovery" }
-ic-subnet-splitting= { path = "../recovery/subnet_splitting" }
+ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
@@ -100,6 +102,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
+indoc = "1.0.6"
 json5 = "0.4.1"
 k256 = { workspace = true }
 hyper = "0.14.18"
@@ -140,7 +143,6 @@ serde = { version = "1.0.115", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 serde_json = "1.0.54"
-serde_millis = "0.1"
 slog = { version = "2.5.2", features = ["release_max_level_trace"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
@@ -320,14 +322,6 @@ name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
-name = "ic-systest-workload-counter-canister-test"
-path = "testing_verification/workload_counter_canister_test.rs"
-
-[[bin]]
-name = "ic-systest-create-subnet-pre-master-test"
-path = "nns/create_subnet_pre_master_test.rs"
-
-[[bin]]
 name = "ic-systest-node-assign-test"
 path = "consensus/orchestrator/node_assign_test.rs"
 
@@ -348,20 +342,16 @@ name = "ic-systest-rejoin-test"
 path = "message_routing/rejoin_test.rs"
 
 [[bin]]
+name = "ic-systest-rejoin-test-large-state"
+path = "message_routing/rejoin_test_large_state.rs"
+
+[[bin]]
 name = "ic-systest-liveness-with-equivocation-test"
 path = "consensus/liveness_with_equivocation_test.rs"
 
 [[bin]]
 name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
-
-[[bin]]
-name = "ic-systest-single-large-node"
-path = "testing_verification/testnets/single_large_node.rs"
-
-[[bin]]
-name = "ic-systest-single-app-large-node"
-path = "testing_verification/testnets/single_app_large_node.rs"
 
 [[bin]]
 name = "ic-systest-cow-safety-test"
@@ -416,10 +406,6 @@ name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-two-third-latency"
-path = "networking/two_third_latency_test.rs"
-
-[[bin]]
 name = "ic-systest-boundary-node-integration"
 path = "boundary_nodes/boundary_node_integration_test.rs"
 
@@ -434,6 +420,10 @@ path = "boundary_nodes/boundary_nodes_snp_test.rs"
 [[bin]]
 name = "ic-systest-boundary-node-update-workload-test"
 path = "boundary_nodes/boundary_node_update_workload_test.rs"
+
+[[bin]]
+name = "ic-systest-custom-domains-integration"
+path = "boundary_nodes/custom_domains_integration_test.rs"
 
 [[bin]]
 name = "ic-systest-general-execution"
@@ -572,6 +562,10 @@ name = "ic-systest-small"
 path = "testing_verification/testnets/small.rs"
 
 [[bin]]
+name = "ic-systest-small-api"
+path = "testing_verification/testnets/small_api_boundary.rs"
+
+[[bin]]
 name = "ic-systest-small-nns"
 path = "testing_verification/testnets/small_nns.rs"
 
@@ -584,6 +578,10 @@ name = "ic-systest-medium"
 path = "testing_verification/testnets/medium.rs"
 
 [[bin]]
+name = "ic-systest-large"
+path = "testing_verification/testnets/large.rs"
+
+[[bin]]
 name = "ic-systest-consensus-performance"
 path = "consensus/consensus_performance.rs"
 
@@ -594,3 +592,11 @@ path = "consensus/throughput_with_large_messages.rs"
 [[bin]]
 name = "ic-systest-consensus-performance-requests"
 path = "consensus/throughput_with_small_messages.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-performance"
+path = "consensus/tecdsa/tecdsa_performance.rs"
+
+[[bin]]
+name = "ic-systest-boundary-node-performance"
+path = "boundary_nodes/boundary_node_performance_test.rs"

@@ -9,33 +9,12 @@ use ic_types::{artifact, chunkable, p2p, NodeId};
 /// that does the shutdown is required.
 pub trait JoinGuard {}
 
-/// The trait is used by all P2P clients in order to (broadcast) transfer a message
-/// to all recipients simultaneously. Where the (peers) receipients are determined by the
-/// subnet membership at the time of execution.
-pub trait AdvertBroadcaster {
-    /// The method completes "fast", otherwise it can negatively impact consensus' finalization rate.
-    /// Implementers update their internal state to refelect the most recent artifact pool content.
-    /// The eventual delivery of the artifact pools, done by P2P, doesn't affect the time it takes
-    /// for the method to complete.
-    /// The passed in advert can be either a deletion or an insertion
-    /// (the deletion marker is part of the type).
-    fn process_delta(&self, advert: p2p::GossipAdvert);
-}
-
 #[derive(From, Debug)]
 /// An error type that combines 'NotProcessed' status with an actual
 /// error that might be returned by artifact pools. It is used as
 /// the return type for the `on_artifact` function of `ArtifactManager`.
 pub enum OnArtifactError {
     NotProcessed,
-    AdvertMismatch(AdvertMismatchError),
-    MessageConversionfailed(p2p::GossipAdvert),
-}
-
-#[derive(Debug)]
-pub struct AdvertMismatchError {
-    pub received: p2p::GossipAdvert,
-    pub expected: p2p::GossipAdvert,
 }
 
 /// An abstraction of artifact processing for a sub-type of the overall
@@ -154,12 +133,8 @@ pub trait ArtifactManager: Send + Sync {
     ///
     /// See `ArtifactClient::on_artifact` for more details.
     #[allow(clippy::result_large_err)]
-    fn on_artifact(
-        &self,
-        msg: artifact::Artifact,
-        advert: p2p::GossipAdvert,
-        peer_id: &NodeId,
-    ) -> Result<(), OnArtifactError>;
+    fn on_artifact(&self, msg: artifact::Artifact, peer_id: &NodeId)
+        -> Result<(), OnArtifactError>;
 
     /// Check if the artifact specified by the id already exists in the
     /// corresponding artifact pool.

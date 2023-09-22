@@ -86,18 +86,18 @@ class DependencyScanner:
                 )
                 current_findings: typing.List[Finding] = list(finding_by_id.values())
                 if len(current_findings) > 0:
+                    existing_findings_by_vul_dep_id = {}
+                    for finding in existing_findings.values():
+                        dependency_id = finding.vulnerable_dependency.id
+                        if dependency_id not in existing_findings_by_vul_dep_id:
+                            existing_findings_by_vul_dep_id[dependency_id] = []
+                        existing_findings_by_vul_dep_id[dependency_id].append(finding)
                     for index, finding in enumerate(current_findings):
                         jira_finding = existing_findings.get(finding.id())
                         if jira_finding:
                             # update vulnerabilities and clear risk if we have new vulnerabilities
                             if jira_finding.vulnerabilities != current_findings[index].vulnerabilities:
-                                previous_vulnerabilities = set(map(lambda x: x.id, jira_finding.vulnerabilities))
-                                current_vulnerabilities = set(
-                                    map(lambda x: x.id, current_findings[index].vulnerabilities)
-                                )
-                                if len(current_vulnerabilities.difference(previous_vulnerabilities)) > 0:
-                                    jira_finding.risk = None
-                                jira_finding.vulnerabilities = current_findings[index].vulnerabilities
+                                jira_finding.update_risk_and_vulnerabilities_for_same_finding(current_findings[index])
                             if (
                                 jira_finding.first_level_dependencies
                                 != current_findings[index].first_level_dependencies
@@ -118,9 +118,20 @@ class DependencyScanner:
                             jira_finding.score = current_findings[index].score
                             self.finding_data_source.create_or_update_open_finding(jira_finding)
                         else:
-                            current_findings[index].risk_assessor = self.finding_data_source.get_risk_assessor()
+                            cur_finding = current_findings[index]
+                            cur_finding.risk_assessor = self.finding_data_source.get_risk_assessor()
+                            prev_open_findings = existing_findings_by_vul_dep_id[cur_finding.vulnerable_dependency.id] if cur_finding.vulnerable_dependency.id in existing_findings_by_vul_dep_id else []
+                            prev_deleted_findings = self.finding_data_source.get_deleted_findings(repository.name, self.dependency_manager.get_scanner_id(), cur_finding.vulnerable_dependency.id)
+                            cur_finding.update_risk_and_vulnerabilities_for_related_findings(prev_open_findings + prev_deleted_findings)
+
                             # rest of the parameters needs to be set by the risk assessor for a new finding.
-                            self.finding_data_source.create_or_update_open_finding(current_findings[index])
+                            self.finding_data_source.create_or_update_open_finding(cur_finding)
+                            for prev_finding in prev_open_findings:
+                                self.finding_data_source.link_findings(prev_finding, cur_finding)
+                            if len(prev_deleted_findings) > 0:
+                                # only link the last created deleted finding to the current finding
+                                self.finding_data_source.link_findings(prev_deleted_findings[0], cur_finding)
+
                 findings_to_remove = set(existing_findings.keys()).difference(map(lambda x: x.id(), current_findings))
                 for key in findings_to_remove:
                     self.finding_data_source.delete_finding(existing_findings[key])

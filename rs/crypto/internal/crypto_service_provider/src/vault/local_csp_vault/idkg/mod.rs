@@ -649,8 +649,7 @@ impl From<MEGaKeysetFromSksError> for IDkgLoadTranscriptError {
 fn generate_idkg_key_material_from_seed(
     seed: Seed,
 ) -> Result<(MEGaPublicKey, CspSecretKey, KeyId), CspCreateMEGaKeyError> {
-    let (public_key, private_key) = gen_keypair(EccCurveType::K256, seed)
-        .map_err(CspCreateMEGaKeyError::FailedKeyGeneration)?;
+    let (public_key, private_key) = gen_keypair(EccCurveType::K256, seed);
 
     let key_id =
         KeyId::try_from(&public_key).map_err(|e| CspCreateMEGaKeyError::InternalError {

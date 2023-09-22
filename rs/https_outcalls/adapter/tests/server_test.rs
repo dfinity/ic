@@ -128,7 +128,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .key_path(cert_dir.path().join("key.pem"))
             .bind_ephemeral(([127, 0, 0, 1], 0));
 
-        tokio::spawn(async { fut.await });
+        tokio::spawn(fut);
         format!("localhost:{}", addr.port())
     }
 

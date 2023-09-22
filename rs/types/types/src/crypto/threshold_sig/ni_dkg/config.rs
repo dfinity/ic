@@ -12,7 +12,7 @@ use std::convert::TryFrom;
 use std::num::TryFromIntError;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub mod dealers;
 pub mod errors;

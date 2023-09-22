@@ -5,12 +5,12 @@ use ic_types::{
         dkg,
         ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
         hashed::Hashed,
-        Block, CatchUpContent, FinalizationContent, HashedBlock, NotarizationContent,
-        RandomBeaconContent, RandomTapeContent,
+        Block, BlockMetadata, BlockProposal, CatchUpContent, FinalizationContent, HashedBlock,
+        NotarizationContent, RandomBeaconContent, RandomTapeContent,
     },
     crypto::{
         canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
-        threshold_sig::ni_dkg::{DkgId, NiDkgId},
+        threshold_sig::ni_dkg::NiDkgId,
         CryptoError, CryptoHashOf, CryptoHashable, CryptoResult, Signable, Signed,
     },
     signature::{
@@ -44,6 +44,33 @@ pub trait SignVerify<Message, Signature, KeySelector> {
         message: &Signed<Message, Signature>,
         selector: KeySelector,
     ) -> ValidationResult<CryptoError>;
+}
+
+impl<C: BasicSigner<BlockMetadata> + BasicSigVerifier<BlockMetadata>>
+    SignVerify<Hashed<CryptoHashOf<Block>, Block>, BasicSignature<BlockMetadata>, RegistryVersion>
+    for C
+{
+    fn sign(
+        &self,
+        message: &Hashed<CryptoHashOf<Block>, Block>,
+        signer: NodeId,
+        selector: RegistryVersion,
+    ) -> CryptoResult<BasicSignature<BlockMetadata>> {
+        self.sign_basic(&BlockMetadata::from(message), signer, selector)
+            .map(|signature| BasicSignature { signature, signer })
+    }
+    fn verify(
+        &self,
+        message: &BlockProposal,
+        selector: RegistryVersion,
+    ) -> ValidationResult<CryptoError> {
+        self.verify_basic_sig(
+            &message.signature.signature,
+            &BlockMetadata::from(&message.content),
+            message.signature.signer,
+            selector,
+        )
+    }
 }
 
 impl<Message: Signable, C: BasicSigner<Message> + BasicSigVerifier<Message>>
@@ -199,7 +226,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         signer: NodeId,
         dkg_id: NiDkgId,
     ) -> CryptoResult<ThresholdSignatureShare<Message>> {
-        self.sign_threshold(message, DkgId::NiDkgId(dkg_id))
+        self.sign_threshold(message, dkg_id)
             .map(|signature| ThresholdSignatureShare { signature, signer })
     }
 
@@ -212,7 +239,7 @@ where {
         self.verify_threshold_sig_share(
             &message.signature.signature,
             &message.content,
-            DkgId::NiDkgId(dkg_id),
+            dkg_id,
             message.signature.signer,
         )
     }
@@ -406,7 +433,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
                 .iter()
                 .map(|share| (share.signer, share.signature.clone()))
                 .collect(),
-            DkgId::NiDkgId(dkg_id),
+            dkg_id,
         )
         .map(|signature| ThresholdSignature {
             signer: dkg_id,
@@ -422,7 +449,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         self.verify_threshold_sig_combined(
             &message.signature.signature,
             &message.content,
-            DkgId::NiDkgId(message.signature.signer),
+            message.signature.signer,
         )
     }
 }
@@ -431,7 +458,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
 /// consensus. Anything that implements the Crypto trait automatically
 /// implements this trait.
 pub trait ConsensusCrypto:
-    SignVerify<HashedBlock, BasicSignature<Block>, RegistryVersion>
+    SignVerify<HashedBlock, BasicSignature<BlockMetadata>, RegistryVersion>
     + SignVerify<NotarizationContent, MultiSignatureShare<NotarizationContent>, RegistryVersion>
     + SignVerify<FinalizationContent, MultiSignatureShare<FinalizationContent>, RegistryVersion>
     + SignVerify<SignedIDkgDealing, BasicSignature<SignedIDkgDealing>, RegistryVersion>

@@ -256,7 +256,7 @@ fn test_registration_encoding() {
         direction: Direction::Received,
     };
     assert_eq!(
-        serde_json::to_value(&request).unwrap(),
+        serde_json::to_value(request).unwrap(),
         serde_json::json!({
             "network": "Bitcoin",
             "asset": "BTC",

@@ -12,7 +12,6 @@ NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
     "ic-https-outcalls-adapter",
-    "ic-onchain-observability-adapter",
     "replica",
 ]
 
@@ -34,7 +33,6 @@ BINARIES = {
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
-    "ic-onchain-observability-adapter": "//rs/monitoring/onchain_observability/adapter:ic-onchain-observability-adapter",
     "ic-nns-init": "//rs/nns/init:ic-nns-init",
     "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
     "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
@@ -58,6 +56,8 @@ BINARIES = {
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
+    "drun": "//rs/drun:drun",
+    "pocket-ic": "//rs/pocket_ic_backend:pocket-ic-backend",
 }
 
 [release_nostrip_binary(

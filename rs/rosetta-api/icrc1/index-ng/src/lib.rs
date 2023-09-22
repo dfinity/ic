@@ -79,3 +79,16 @@ pub struct Status {
 pub struct FeeCollectorRanges {
     pub ranges: Vec<(Account, Vec<(BlockIndex, BlockIndex)>)>,
 }
+
+#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+pub struct LogEntry {
+    pub timestamp: u64,
+    pub file: String,
+    pub line: u32,
+    pub message: String,
+}
+
+#[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
+pub struct Log {
+    pub entries: Vec<LogEntry>,
+}

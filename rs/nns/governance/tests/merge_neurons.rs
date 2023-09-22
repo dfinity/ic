@@ -22,9 +22,7 @@ use ic_nns_governance::{
         ONE_YEAR_SECONDS,
     },
     pb::v1::{
-        governance_error::ErrorType::{
-            self, InvalidCommand, NotAuthorized, NotFound, PreconditionFailed,
-        },
+        governance_error::ErrorType::{self, NotAuthorized, NotFound, PreconditionFailed},
         manage_neuron::{
             claim_or_refresh::By, ClaimOrRefresh, Command, Follow, Merge, NeuronIdOrSubaccount,
         },
@@ -358,8 +356,8 @@ fn test_merge_neurons_fails() {
             &NeuronId { id: 7 },
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
-        if code == InvalidCommand as i32 &&
-           msg == "Subaccount of source neuron is not valid");
+        if code == NotFound as i32 &&
+           msg.contains("has invalid account"));
 
     // 12. Subaccount of target neuron to be merged must be present
     assert_matches!(
@@ -369,8 +367,8 @@ fn test_merge_neurons_fails() {
             &NeuronId { id: 8 },
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
-        if code == InvalidCommand as i32 &&
-           msg == "Subaccount of target neuron is not valid");
+        if code == NotFound as i32 &&
+           msg.contains("has invalid account"));
 
     // 13. Neither neuron can be the proposer of an open proposal
     let _pid = nns.propose_and_vote("-----------P", "the unique proposal".to_string());
@@ -771,7 +769,7 @@ fn do_test_merge_neurons(
     #[cfg(feature = "test")]
     let fee = nns
         .governance
-        .proto
+        .heap_data
         .economics
         .as_ref()
         .unwrap()
@@ -1062,7 +1060,7 @@ fn test_neuron_merge_follow() {
     #[cfg(feature = "test")]
     let fee = nns
         .governance
-        .proto
+        .heap_data
         .economics
         .as_ref()
         .unwrap()

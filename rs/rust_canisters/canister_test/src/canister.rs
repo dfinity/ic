@@ -211,7 +211,7 @@ impl Wasm {
                 }
                 Err(e) => {
                     eprintln!(
-                        "Installation of wasm into cansiter with ID: {} failed with: {}",
+                        "Installation of wasm into canister with ID: {} failed with: {}",
                         canister_id, e
                     );
                     match backoff.next_backoff() {

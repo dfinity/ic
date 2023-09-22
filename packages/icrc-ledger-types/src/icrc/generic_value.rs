@@ -34,13 +34,9 @@ impl Value {
     pub fn hash(&self) -> Hash {
         match self {
             Value::Nat(nat) => {
-                let n = nat
-                    .0
-                    .to_u128()
-                    .expect("BUG: blocks cannot contain values larger than u128::MAX");
-                let mut buf = [0u8; INT128_BUF_SIZE];
-                let offset = leb128(&mut buf, n);
-                Sha256::digest(&buf[0..=offset]).into()
+                let mut buf = vec![];
+                nat.encode(&mut buf).expect("bug: cannot encode a Nat");
+                Sha256::digest(&buf).into()
             }
             Value::Nat64(n) => {
                 let mut buf = [0u8; INT128_BUF_SIZE];

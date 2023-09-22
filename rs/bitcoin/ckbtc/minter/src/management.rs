@@ -140,8 +140,9 @@ pub async fn get_utxos(
     min_confirmations: u32,
     source: CallSource,
 ) -> Result<GetUtxosResponse, CallError> {
-    // NB. The prices are 10B on the mainnet and 4B on the testnet:
-    // https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs
+    // NB. The minimum number of cycles that need to be sent with the call is 10B (4B) for
+    // Bitcoin mainnet (Bitcoin testnet):
+    // https://internetcomputer.org/docs/current/developer-docs/integrations/bitcoin/bitcoin-how-it-works#api-fees--pricing
     let get_utxos_cost_cycles = match network {
         Network::Mainnet => 10_000_000_000,
         Network::Testnet | Network::Regtest => 4_000_000_000,
@@ -299,12 +300,14 @@ pub async fn fetch_utxo_alerts(
     caller: Principal,
     utxo: &Utxo,
 ) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
+    let txid = TryInto::<[u8; 32]>::try_into(utxo.outpoint.txid.as_ref())
+        .unwrap_or_else(|_| panic!("BUG: UTXO ID {:?} is not 32 bytes long", utxo.outpoint.txid));
     let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
         kyt_principal,
         "fetch_utxo_alerts",
         (DepositRequest {
             caller,
-            txid: utxo.outpoint.txid,
+            txid,
             vout: utxo.outpoint.vout,
         },),
     )

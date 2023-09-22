@@ -21,6 +21,7 @@ use ic_agent::{
 };
 use ic_config::http_handler::Config;
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_pprof::Pprof;
 use ic_protobuf::registry::crypto::v1::{
@@ -126,7 +127,7 @@ fn test_healthy_behind() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -151,7 +152,7 @@ fn test_healthy_behind() {
 // specified through the url `/api/v2/canister/<effective_canister_id>/read_state`. Read state requests that request paths
 // with different canister ids should be rejected.
 #[test]
-fn test_unathorized_controller() {
+fn test_unauthorized_controller() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -169,7 +170,7 @@ fn test_unathorized_controller() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -207,7 +208,7 @@ fn test_unathorized_controller() {
 
 // Test that that http endpoint rejects queries with mismatch between canister id an effective canister id.
 #[test]
-fn test_unathorized_query() {
+fn test_unauthorized_query() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -225,7 +226,7 @@ fn test_unathorized_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -240,11 +241,11 @@ fn test_unathorized_query() {
     rt.spawn(async move {
         loop {
             let (_, resp) = query_handler.next_request().await.unwrap();
-            resp.send_response(HttpQueryResponse::Replied {
+            resp.send_response(Ok(HttpQueryResponse::Replied {
                 reply: HttpQueryResponseReply {
                     arg: Blob("success".into()),
                 },
-            })
+            }))
         }
     });
 
@@ -293,7 +294,7 @@ fn test_unathorized_query() {
 
 // Test that that http endpoint rejects calls with mismatch between canister id an effective canister id.
 #[test]
-fn test_unathorized_call() {
+fn test_unauthorized_call() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -311,7 +312,7 @@ fn test_unathorized_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -412,7 +413,7 @@ async fn test_connection_read_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let (mut request_sender, status_code) = create_conn_and_send_request(addr).await;
@@ -447,7 +448,7 @@ fn test_request_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -466,11 +467,11 @@ fn test_request_timeout() {
         loop {
             let (_, resp) = query_handler.next_request().await.unwrap();
             sleep(Duration::from_secs(request_timeout_seconds + 1)).await;
-            resp.send_response(HttpQueryResponse::Replied {
+            resp.send_response(Ok(HttpQueryResponse::Replied {
                 reply: HttpQueryResponseReply {
                     arg: Blob("success".into()),
                 },
-            })
+            }))
         }
     });
 
@@ -514,7 +515,7 @@ fn test_payload_too_large() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let request = |body: Vec<u8>| {
@@ -565,7 +566,7 @@ fn test_request_too_slow() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     rt.block_on(async {
@@ -612,7 +613,7 @@ fn test_status_code_when_ingress_filter_fails() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -671,7 +672,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -722,7 +723,7 @@ fn test_too_long_paths_are_rejected() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
@@ -747,4 +748,71 @@ fn test_too_long_paths_are_rejected() {
     });
 
     assert_eq!(Err(expected_error_response), actual_response);
+}
+
+/// This test verifies that the http endpoint returns 503 (SERVICE_UNAVAILABLE) when the
+/// per canister certified state is unavailable. I.e. when the
+/// [`QueryExecutionService`](ic_interfaces::execution_environment::QueryExecutionService)
+/// returns [QueryExecutionError::CertifiedStateUnavailable`].
+#[test]
+fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let (_, _, mut query_handler) = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        Arc::new(Pprof),
+    );
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+
+    // Mock the query handler to return CertifiedStateUnavailable.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = query_handler.next_request().await.unwrap();
+            resp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable))
+        }
+    });
+
+    let query = QueryBuilder::new(&agent, canister, "test".to_string())
+        .with_effective_canister_id(canister)
+        .sign()
+        .unwrap();
+
+    rt.block_on(async {
+        wait_for_status_healthy(&agent).await.unwrap();
+
+        let response = agent
+            .query_signed(query.effective_canister_id, query.signed_query.clone())
+            .await;
+
+        let expected_status_code = StatusCode::SERVICE_UNAVAILABLE;
+
+        match response {
+            Err(AgentError::HttpError(HttpErrorPayload { status, .. })) => {
+                assert_eq!(expected_status_code, status, "received the wrong")
+            }
+            _ => panic!(
+                "Received unexpected response: {:?}. Expected an HTTP error with status code: {:?}.",
+                response, expected_status_code
+            ),
+        }
+    })
 }

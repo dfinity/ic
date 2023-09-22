@@ -1,11 +1,6 @@
 //! Protocol buffer equivalents to `LabeledTree<Vec<u8>>` and `Witness`, for
 //! backwards- and forwards-compatible XNet wire format.
 
-#[cfg(test)]
-mod mixed_hash_tree_tests;
-#[cfg(test)]
-mod tests;
-
 use crate::{Digest, FlatMap, Label, LabeledTree, MixedHashTree, Witness};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
@@ -22,18 +17,20 @@ fn sub_tree_proto_from(map: FlatMap<Label, LabeledTreeOfBytes>) -> labeled_tree:
         children: map
             .into_iter()
             .map(|(label, node)| labeled_tree::Child {
-                label: label.to_vec(),
+                label: label.into_vec(),
                 node: Some(node.into()),
             })
             .collect(),
     }
 }
 impl From<LabeledTreeOfBytes> for pb::LabeledTree {
-    fn from(tree: LabeledTreeOfBytes) -> Self {
+    fn from(mut tree: LabeledTreeOfBytes) -> Self {
         Self {
-            node_enum: match tree {
-                LabeledTree::Leaf(leaf) => Some(NodeEnum::Leaf(leaf)),
-                LabeledTree::SubTree(map) => Some(NodeEnum::SubTree(sub_tree_proto_from(map))),
+            node_enum: match &mut tree {
+                LabeledTree::Leaf(leaf) => Some(NodeEnum::Leaf(std::mem::take(leaf))),
+                LabeledTree::SubTree(children) => Some(NodeEnum::SubTree(sub_tree_proto_from(
+                    std::mem::take(children),
+                ))),
             },
         }
     }
@@ -86,7 +83,7 @@ impl From<Witness> for pb::Witness {
             })),
 
             Witness::Node { label, sub_witness } => WitnessEnum::Node(Box::new(witness::Node {
-                label: label.to_vec(),
+                label: label.into_vec(),
                 sub_witness: Some(sub_witness.into()),
             })),
 
@@ -154,7 +151,7 @@ impl From<MixedHashTree> for pb::MixedHashTree {
                 right_tree: Some(Box::new(lr.1.into())),
             })),
             T::Labeled(label, subtree) => TreeEnum::Labeled(Box::new(Labeled {
-                label: label.to_vec(),
+                label: label.into_vec(),
                 subtree: Some(Box::new(Self::from(*subtree))),
             })),
             T::Leaf(data) => TreeEnum::LeafData(data),

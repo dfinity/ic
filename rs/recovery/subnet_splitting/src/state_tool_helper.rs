@@ -3,14 +3,17 @@ use crate::utils::canister_id_ranges_to_strings;
 use ic_base_types::SubnetId;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{download_binary, path_exists, write_bytes},
+    file_sync_helper::{download_binary, path_exists, write_bytes, write_file},
     util::block_on,
 };
 use ic_registry_routing_table::CanisterIdRange;
-use ic_types::ReplicaVersion;
+use ic_registry_subnet_type::SubnetType;
+use ic_state_tool::commands::{manifest::compute_manifest, verify_manifest::verify_manifest};
+use ic_types::{ReplicaVersion, Time};
 use slog::{info, Logger};
 
 use std::{
+    fs::File,
     iter::once,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -41,13 +44,16 @@ impl StateToolHelper {
             .map(|_| state_tool_helper)
     }
 
-    /// Computes manifest of a checkpoint.
-    ///
-    /// Calls `state-tool manifest --state $dir > $output_path`.
-    pub(crate) fn compute_manifest(&self, dir: &Path, output_path: &Path) -> RecoveryResult<()> {
-        self.execute("manifest", Some(output_path), |command| {
-            command.args(["--state", dir.display().to_string().as_str()])
-        })
+    /// Computes manifest of a checkpoint at `dir` and writes it to `output_path`.
+    pub(crate) fn compute_manifest(dir: &Path, output_path: &Path) -> RecoveryResult<()> {
+        compute_manifest(dir)
+            .map_err(|err| {
+                RecoveryError::StateToolError(format!(
+                    "Failed to compute the state manifest: {}",
+                    err
+                ))
+            })
+            .and_then(|manifest| write_file(output_path, manifest))
     }
 
     /// Splits a manifest, to verify the manifests resulting from a subnet split.
@@ -60,7 +66,9 @@ impl StateToolHelper {
         manifest_path: &Path,
         source_subnet: SubnetId,
         destination_subnet: SubnetId,
+        batch_time: Time,
         canister_id_ranges: &[CanisterIdRange],
+        subnet_type: SubnetType,
         output_path: &Path,
     ) -> RecoveryResult<()> {
         self.execute("split_manifest", Some(output_path), |command| {
@@ -68,7 +76,11 @@ impl StateToolHelper {
                 .args(["--path", manifest_path.display().to_string().as_str()])
                 .args(["--from-subnet", source_subnet.to_string().as_str()])
                 .args(["--to-subnet", destination_subnet.to_string().as_str()])
-                .args(["--subnet-type", "application"])
+                .args(["--subnet-type", subnet_type.as_ref()])
+                .args([
+                    "--batch-time-nanos",
+                    batch_time.as_nanos_since_unix_epoch().to_string().as_str(),
+                ])
                 .args(
                     once("--migrated-ranges".to_string())
                         .chain(canister_id_ranges_to_strings(canister_id_ranges).into_iter()),
@@ -76,13 +88,20 @@ impl StateToolHelper {
         })
     }
 
-    /// Verifies whether the textual representation of a manifest matches its root hash.
-    ///
-    /// Calls `state-tool verify_manifest --file $manifest_path`.
-    pub(crate) fn verify_manifest(&self, manifest_path: &Path) -> RecoveryResult<()> {
-        self.execute("verify_manifest", /*output_path=*/ None, |command| {
-            command.args(["--file", manifest_path.display().to_string().as_str()])
-        })
+    /// Verifies whether the textual representation of a manifest matches its root hash, and
+    /// returns the root hash.
+    pub(crate) fn verify_manifest(manifest_path: &Path) -> RecoveryResult<String> {
+        let manifest_file = File::open(manifest_path)
+            .map_err(|err| RecoveryError::file_error(manifest_path, err))?;
+
+        verify_manifest(manifest_file)
+            .map_err(|err| {
+                RecoveryError::StateToolError(format!(
+                    "Failed to verify the state manifest: {}",
+                    err
+                ))
+            })
+            .map(hex::encode)
     }
 
     fn execute(

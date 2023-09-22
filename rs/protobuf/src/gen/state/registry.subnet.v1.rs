@@ -269,6 +269,26 @@ pub struct InitialIDkgDealings {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgComplaint {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub raw_complaint: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgOpening {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub raw_opening: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExtendedDerivationPath {
     #[prost(message, optional, tag = "1")]
     pub caller: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
@@ -301,7 +321,7 @@ pub struct GossipConfig {
     /// period for polling the registry for updates 1_000/3_000/30_000
     #[prost(uint32, tag = "7")]
     pub registry_poll_period_ms: u32,
-    /// period for sending a retransmission request    
+    /// period for sending a retransmission request
     ///
     /// config for advert distribution.
     #[prost(uint32, tag = "8")]
@@ -321,9 +341,6 @@ pub struct SubnetFeatures {
     /// Status of the SEV-SNP feature.
     #[prost(enumeration = "SevFeatureStatus", optional, tag = "7")]
     pub sev_status: ::core::option::Option<i32>,
-    /// Controls whether to collect/publish data to the onchain observability canister
-    #[prost(bool, optional, tag = "8")]
-    pub onchain_observability: ::core::option::Option<bool>,
 }
 /// Per subnet ECDSA configuration
 #[allow(clippy::derive_partial_eq_without_eq)]

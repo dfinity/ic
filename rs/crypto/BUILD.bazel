@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/logmon",
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/node_key_validation/tls_cert_validation",
+    "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/tecdsa",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
@@ -77,7 +78,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/canister_sigs",
@@ -103,6 +104,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:mockall_0_8_3",
     "@crate_index//:proptest",
     "@crate_index//:rsa",
+    "@crate_index//:sha2",
     "@crate_index//:slog-async",
 ]
 

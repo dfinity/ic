@@ -74,10 +74,16 @@ pub(crate) fn make_checkpoint(
         recv.recv().unwrap()?
     };
 
-    // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
-    let (send, recv) = unbounded();
-    tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
-    recv.recv().unwrap();
+    {
+        // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
+        let _timer = metrics
+            .make_checkpoint_step_duration
+            .with_label_values(&["wait_for_reflinking"])
+            .start_timer();
+        let (send, recv) = unbounded();
+        tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
+        recv.recv().unwrap();
+    }
 
     let state = {
         let _timer = metrics
@@ -343,6 +349,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_metrics,
         canister_state_bits.cycles_balance,
         canister_state_bits.cycles_debit,
+        canister_state_bits.reserved_balance,
         canister_state_bits.task_queue.into_iter().collect(),
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,

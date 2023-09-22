@@ -93,7 +93,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
             if let Err(err) = self.request_validator.validate_request(
                 ingress_message.as_ref(),
                 current_time,
-                registry_version,
+                &self.registry_root_of_trust_provider(registry_version),
             ) {
                 debug!(
                     self.log,

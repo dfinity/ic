@@ -3,7 +3,7 @@ use crate::pb_internal::v1::PrincipalId as PrincipalIdProto;
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use candid::types::principal::{Principal, PrincipalError};
 use candid::types::{Type, TypeId};
-use ic_crypto_sha::Sha224;
+use ic_crypto_sha2::Sha224;
 use ic_protobuf::types::v1 as pb;
 use ic_stable_structures::{BoundedStorable, Storable};
 use serde::{Deserialize, Serialize};

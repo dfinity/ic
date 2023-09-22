@@ -1,7 +1,7 @@
 use crate::LOG_PREFIX;
 use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::CanisterId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,

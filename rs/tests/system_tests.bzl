@@ -160,7 +160,8 @@ def system_test(
         src = bin_name,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
-        tags = tags + ["requires-network", "system_test"],
+        tags = tags + ["requires-network", "system_test"] +
+               (["manual"] if "experimental_system_test_colocation" in tags else []),
         timeout = test_timeout,
         # TODO: set flaky = False by default when PFOPS-3148 is resolved
         flaky = flaky,

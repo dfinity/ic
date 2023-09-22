@@ -1,8 +1,8 @@
-///! State management module.
-///!
-///! The state is stored in the global thread-level variable `__STATE`.
-///! This module provides utility functions to manage the state. Most
-///! code should use those functions instead of touching `__STATE` directly.
+//! State management module.
+//!
+//! The state is stored in the global thread-level variable `__STATE`.
+//! This module provides utility functions to manage the state. Most
+//! code should use those functions instead of touching `__STATE` directly.
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -18,7 +18,7 @@ use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
-use ic_btc_interface::{OutPoint, Txid, Utxo};
+use ic_btc_interface::{OutPoint, Utxo};
 use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -88,7 +88,7 @@ pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
     pub requests: Vec<RetrieveBtcRequest>,
     /// The identifier of the unconfirmed transaction.
-    pub txid: Txid,
+    pub txid: [u8; 32],
     /// The list of UTXOs we used in the transaction.
     pub used_utxos: Vec<Utxo>,
     /// The IC time at which we submitted the Bitcoin transaction.
@@ -118,7 +118,7 @@ pub enum FinalizedStatus {
     /// The transaction that retrieves BTC got enough confirmations.
     Confirmed {
         /// The witness transaction identifier of the transaction.
-        txid: Txid,
+        txid: [u8; 32],
     },
 }
 
@@ -128,7 +128,7 @@ pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
     /// Awaiting the Bitcoin canister to accept the transaction.
-    Sending { txid: Txid },
+    Sending { txid: [u8; 32] },
 }
 
 /// The status of a retrieve_btc request.
@@ -142,13 +142,13 @@ pub enum RetrieveBtcStatus {
     /// Waiting for a signature on a transaction satisfy this request.
     Signing,
     /// Sending the transaction satisfying this request.
-    Sending { txid: Txid },
+    Sending { txid: [u8; 32] },
     /// Awaiting for confirmations on the transaction satisfying this request.
-    Submitted { txid: Txid },
+    Submitted { txid: [u8; 32] },
     /// The retrieval amount was too low. Satisfying the request is impossible.
     AmountTooLow,
     /// Confirmed a transaction satisfying this request.
-    Confirmed { txid: Txid },
+    Confirmed { txid: [u8; 32] },
 }
 
 /// Controls which operations the minter can perform.
@@ -279,9 +279,9 @@ pub struct CkBtcMinterState {
     pub stuck_transactions: Vec<SubmittedBtcTransaction>,
 
     /// Maps ID of a stuck transaction to the ID of the corresponding replacement transaction.
-    pub replacement_txid: BTreeMap<Txid, Txid>,
+    pub replacement_txid: BTreeMap<[u8; 32], [u8; 32]>,
     /// Maps ID of a replacement transaction to the ID of the corresponding stuck transaction.
-    pub rev_replacement_txid: BTreeMap<Txid, Txid>,
+    pub rev_replacement_txid: BTreeMap<[u8; 32], [u8; 32]>,
 
     /// Finalized retrieve_btc requests for which we received enough confirmations.
     pub finalized_requests: VecDeque<FinalizedBtcRetrieval>,
@@ -347,6 +347,24 @@ pub struct CkBtcMinterState {
 
     /// UTXOs that the KYT provider considered tainted.
     pub quarantined_utxos: BTreeSet<Utxo>,
+
+    /// Map from burn block index to amount to reimburse because of
+    /// KYT fees.
+    pub reimbursement_map: BTreeMap<u64, ReimburseDepositTask>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub struct ReimburseDepositTask {
+    pub account: Account,
+    pub amount: u64,
+    pub kyt_fee: u64,
+    pub reason: ReimbursementReason,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize, candid::CandidType, Copy)]
+pub enum ReimbursementReason {
+    TaintedDestination,
+    CallFailed,
 }
 
 impl CkBtcMinterState {
@@ -419,6 +437,18 @@ impl CkBtcMinterState {
         }
     }
 
+    pub fn validate_config(&self) {
+        if self.kyt_fee > self.retrieve_btc_min_amount {
+            ic_cdk::trap("kyt_fee cannot be greater than retrieve_btc_min_amount");
+        }
+        if self.ecdsa_key_name.is_empty() {
+            ic_cdk::trap("ecdsa_key_name is not set");
+        }
+        if self.kyt_principal.is_none() {
+            ic_cdk::trap("KYT principal is not set");
+        }
+    }
+
     pub fn check_invariants(&self) -> Result<(), String> {
         for utxo in self.available_utxos.iter() {
             ensure!(
@@ -462,7 +492,7 @@ impl CkBtcMinterState {
             ensure!(
                 self.replacement_txid.contains_key(&tx.txid),
                 "stuck transaction {} does not have a replacement id",
-                &tx.txid,
+                crate::tx::DisplayTxid(&tx.txid),
             );
         }
 
@@ -472,7 +502,7 @@ impl CkBtcMinterState {
                     .iter()
                     .any(|tx| &tx.txid == old_txid),
                 "not found stuck transaction {}",
-                old_txid,
+                crate::tx::DisplayTxid(old_txid),
             );
 
             ensure!(
@@ -481,7 +511,7 @@ impl CkBtcMinterState {
                     .chain(self.stuck_transactions.iter())
                     .any(|tx| &tx.txid == new_txid),
                 "not found replacement transaction {}",
-                new_txid,
+                crate::tx::DisplayTxid(new_txid),
             );
         }
 
@@ -495,8 +525,8 @@ impl CkBtcMinterState {
                 self.rev_replacement_txid.get(new_txid),
                 Some(old_txid),
                 "no back link for {} -> {} TX replacement",
-                old_txid,
-                new_txid,
+                crate::tx::DisplayTxid(old_txid),
+                crate::tx::DisplayTxid(new_txid),
             );
         }
 
@@ -638,7 +668,7 @@ impl CkBtcMinterState {
         }
     }
 
-    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) {
+    pub(crate) fn finalize_transaction(&mut self, txid: &[u8; 32]) {
         let finalized_tx = if let Some(pos) = self
             .submitted_transactions
             .iter()
@@ -654,7 +684,7 @@ impl CkBtcMinterState {
         } else {
             ic_cdk::trap(&format!(
                 "Attempted to finalized a non-existent transaction {}",
-                txid
+                crate::tx::DisplayTxid(txid)
             ));
         };
 
@@ -672,7 +702,7 @@ impl CkBtcMinterState {
         self.cleanup_tx_replacement_chain(txid);
     }
 
-    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) {
+    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &[u8; 32]) {
         let mut txids_to_remove = BTreeSet::new();
 
         // Collect transactions preceding the confirmed transaction.
@@ -724,7 +754,11 @@ impl CkBtcMinterState {
     }
 
     /// Replaces a stuck transaction with a newly sent transaction.
-    pub(crate) fn replace_transaction(&mut self, old_txid: &Txid, mut tx: SubmittedBtcTransaction) {
+    pub(crate) fn replace_transaction(
+        &mut self,
+        old_txid: &[u8; 32],
+        mut tx: SubmittedBtcTransaction,
+    ) {
         assert_ne!(old_txid, &tx.txid);
         assert_eq!(
             self.replacement_txid.get(old_txid),
@@ -753,7 +787,7 @@ impl CkBtcMinterState {
 
     /// Returns the identifier of the most recent replacement transaction for the given stuck
     /// transaction id.
-    pub fn find_last_replacement_tx(&self, txid: &Txid) -> Option<&Txid> {
+    pub fn find_last_replacement_tx(&self, txid: &[u8; 32]) -> Option<&[u8; 32]> {
         let mut last = self.replacement_txid.get(txid)?;
         while let Some(newer_txid) = self.replacement_txid.get(last) {
             last = newer_txid;
@@ -1090,6 +1124,7 @@ impl From<InitArgs> for CkBtcMinterState {
             checked_utxos: Default::default(),
             ignored_utxos: Default::default(),
             quarantined_utxos: Default::default(),
+            reimbursement_map: Default::default(),
         }
     }
 }

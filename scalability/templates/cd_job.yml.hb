@@ -22,12 +22,9 @@
 
       # Critical experiment runs passed, disable strict failure mode
       set +eo pipefail
-      
+
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      {{#if is_max_capacity_run}}
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
-      {{/if}}
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -

@@ -1,3 +1,4 @@
+use crate::DirectAuthenticationScheme::{CanisterSignature, UserKeyPair};
 use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
 use ic_certification_test_utils::{generate_root_of_trust, serialize_to_cbor};
 use ic_crypto_internal_basic_sig_iccsa_test_utils::CanisterState;
@@ -10,6 +11,7 @@ use ic_types::messages::{
     HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, ReadState,
     SignedDelegation, SignedIngressContent, UserQuery,
 };
+use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
 use rand::{CryptoRng, Rng};
 use simple_asn1::OID;
@@ -21,6 +23,9 @@ use strum_macros::EnumCount;
 mod tests;
 
 const ANONYMOUS_SENDER: u8 = 0x04;
+pub const CANISTER_ID_SIGNER: CanisterId = CanisterId::from_u64(1185);
+pub const CANISTER_SIGNATURE_SEED: [u8; 1] = [42];
+pub const CURRENT_TIME: Time = GENESIS;
 
 pub type HttpRequestBuilder<C> = HttpRequestBuilderGeneric<C, AuthenticationScheme>;
 pub struct HttpRequestBuilderGeneric<C, T> {
@@ -687,6 +692,40 @@ impl RootOfTrust {
             secret_key,
         }
     }
+}
+
+pub fn all_authentication_schemes<R: Rng + CryptoRng>(rng: &mut R) -> Vec<AuthenticationScheme> {
+    use strum::EnumCount;
+
+    let schemes = vec![
+        AuthenticationScheme::Anonymous,
+        AuthenticationScheme::Direct(random_user_key_pair(rng)),
+        AuthenticationScheme::Direct(canister_signature_with_hard_coded_root_of_trust()),
+        AuthenticationScheme::Delegation(
+            DelegationChain::rooted_at(random_user_key_pair(rng))
+                .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
+                .build(),
+        ),
+    ];
+    assert_eq!(schemes.len(), AuthenticationScheme::COUNT + 1);
+    schemes
+}
+
+pub fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
+    UserKeyPair(Ed25519KeyPair::generate(rng))
+}
+
+pub fn canister_signature_with_hard_coded_root_of_trust() -> DirectAuthenticationScheme {
+    canister_signature(hard_coded_root_of_trust())
+}
+
+pub fn canister_signature(root_of_trust: RootOfTrust) -> DirectAuthenticationScheme {
+    CanisterSignature(CanisterSigner {
+        seed: CANISTER_SIGNATURE_SEED.to_vec(),
+        canister_id: CANISTER_ID_SIGNER,
+        root_public_key: root_of_trust.public_key,
+        root_secret_key: root_of_trust.secret_key,
+    })
 }
 
 pub fn hard_coded_root_of_trust() -> RootOfTrust {

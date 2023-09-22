@@ -125,12 +125,10 @@ use registry_canister::mutations::{
     do_add_hostos_version::AddHostOsVersionPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
-    do_bless_replica_version::BlessReplicaVersionPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
     do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
-    do_retire_replica_version::RetireReplicaVersionPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
@@ -313,15 +311,6 @@ enum SubCommand {
     GetBlessedReplicaVersions,
     /// Get the latest routing table.
     GetRoutingTable,
-    /// Submits a proposal to get a given replica version, to be downloaded from
-    /// download.dfinity.systems, blessed.
-    ProposeToBlessReplicaVersion(ProposeToBlessReplicaVersionCmd),
-    /// Submits a proposal to get the given replica version blessed. This
-    /// command gives you maximum flexibility for specifying the download
-    /// locations. It is usually preferable to use
-    /// --propose-to-bless-replica-version instead, which is less flexible, but
-    /// easier to use.
-    ProposeToBlessReplicaVersionFlexible(ProposeToBlessReplicaVersionFlexibleCmd),
     /// Submits a proposal to update currently elected replica versions, by electing
     /// a new version and/or unelecting multiple versions.
     ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
@@ -339,8 +328,6 @@ enum SubCommand {
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
     /// Submits a proposal to uninstall and install root to a particular version
     ProposeToHardResetNnsRootToVersion(ProposeToHardResetNnsRootToVersionCmd),
-    /// Submits a proposal to remove the blessing of replica versions
-    ProposeToRetireReplicaVersion(ProposeToRetireReplicaVersionCmd),
     /// Submits a proposal to uninstall code of a canister.
     ProposeToUninstallCode(ProposeToUninstallCodeCmd),
     /// Submits a proposal to set authorized subnetworks that the cycles minting
@@ -912,106 +899,6 @@ impl ProposalPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
     }
 }
 
-/// Sub-command to submit a proposal to bless a new replica version with
-/// multiple URLs.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToBlessReplicaVersionCmd {
-    /// Version ID. This can be anything, it has no semantics. The reason it is
-    /// part of the payload is that it will be needed in the subsequent step
-    /// of upgrading individual subnets.
-    pub replica_version_id: String,
-
-    /// The hex-formatted SHA-256 hash of the archive served by
-    /// 'release_package_urls'.
-    release_package_sha256_hex: String,
-
-    /// The URLs against which an HTTP GET request will return a release
-    /// package that corresponds to this version.
-    pub release_package_urls: Vec<String>,
-}
-
-impl ProposalTitle for ProposeToBlessReplicaVersionCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!("Bless replica version: {}", self.replica_version_id,),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<BlessReplicaVersionPayload> for ProposeToBlessReplicaVersionCmd {
-    async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
-        BlessReplicaVersionPayload {
-            replica_version_id: self.replica_version_id.clone(),
-            binary_url: "".into(),
-            sha256_hex: "".into(),
-            node_manager_binary_url: "".into(),
-            node_manager_sha256_hex: "".into(),
-            release_package_url: "".into(),
-            release_package_sha256_hex: self.release_package_sha256_hex.clone(),
-            release_package_urls: Some(self.release_package_urls.clone()),
-            guest_launch_measurement_sha256_hex: None,
-        }
-    }
-}
-
-/// Sub-command to submit a proposal to bless a new replica version, with full
-/// details.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToBlessReplicaVersionFlexibleCmd {
-    /// Version ID. This can be anything, it has no semantics. The reason it is
-    /// part of the payload is that it will be needed in the subsequent step
-    /// of upgrading individual subnets.
-    pub replica_version_id: String,
-
-    /// The URL against which a HTTP GET request will return a release
-    /// package that corresponds to this version. If set,
-    /// {replica, orchestrator}_{url, sha256_hex} will be ignored
-    pub release_package_url: Option<String>,
-
-    /// The hex-formatted SHA-256 hash of the archive served by
-    /// 'release_package_url'. Must be present if release_package_url is
-    /// present.
-    release_package_sha256_hex: Option<String>,
-}
-
-impl ProposalTitle for ProposeToBlessReplicaVersionFlexibleCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!("Bless replica version: {}", self.replica_version_id,),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<BlessReplicaVersionPayload> for ProposeToBlessReplicaVersionFlexibleCmd {
-    async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
-        let release_package_url = self
-            .release_package_url
-            .clone()
-            .expect("Release package url is required");
-
-        BlessReplicaVersionPayload {
-            replica_version_id: self.replica_version_id.clone(),
-            binary_url: "".into(),
-            sha256_hex: "".into(),
-            node_manager_binary_url: "".into(),
-            node_manager_sha256_hex: "".into(),
-            release_package_url: "".into(),
-            release_package_sha256_hex: self
-                .release_package_sha256_hex
-                .clone()
-                .expect("Release package sha256 is required"),
-            release_package_urls: Some(vec![release_package_url]),
-            guest_launch_measurement_sha256_hex: None,
-        }
-    }
-}
-
 /// Sub-command to submit a proposal to update elected replica versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -1061,46 +948,6 @@ impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
         };
         payload.validate().expect("Failed to validate payload");
         payload
-    }
-}
-
-/// Sub-command to submit a proposal to retire replica versions by their ids.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToRetireReplicaVersionCmd {
-    /// The replica version ids to retire
-    pub replica_version_ids: Vec<String>,
-}
-
-impl ProposalTitle for ProposeToRetireReplicaVersionCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => {
-                if self.replica_version_ids.len() == 1 {
-                    format!(
-                        "Retire replica version {}",
-                        self.replica_version_ids.first().unwrap()
-                    )
-                } else {
-                    String::from("Retire multiple replica versions")
-                }
-            }
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<RetireReplicaVersionPayload> for ProposeToRetireReplicaVersionCmd {
-    async fn payload(&self, _: Url) -> RetireReplicaVersionPayload {
-        assert!(
-            !self.replica_version_ids.is_empty(),
-            "RetireReplicaVersionPayload cannot be empty."
-        );
-
-        RetireReplicaVersionPayload {
-            replica_version_ids: self.replica_version_ids.clone(),
-        }
     }
 }
 
@@ -2955,7 +2802,11 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             node_operator_principal_id: Some(self.node_operator_principal_id),
             node_allowance: self.node_allowance,
             node_provider_principal_id: Some(self.node_provider_principal_id),
-            dc_id: self.dc_id.clone().unwrap_or_default(),
+            dc_id: self
+                .dc_id
+                .as_ref()
+                .map(|dc| dc.to_lowercase())
+                .unwrap_or_default(),
             rewardable_nodes,
             ipv6: self.ipv6.clone(),
         }
@@ -3025,7 +2876,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(self.node_operator_id),
             node_allowance: self.node_allowance,
-            dc_id: self.dc_id.clone(),
+            dc_id: self.dc_id.as_ref().map(|dc| dc.to_lowercase()),
             rewardable_nodes,
             node_provider_id: self.node_provider_id,
             ipv6: self.ipv6.clone(),
@@ -3800,6 +3651,9 @@ struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long, value_parser=parse_duration)]
     swap_duration: nervous_system_pb::Duration,
 
+    #[clap(long, value_parser=parse_tokens)]
+    neurons_fund_investment_icp: nervous_system_pb::Tokens,
+
     // Ledger
     // ------
     #[clap(long, value_parser=parse_tokens)]
@@ -3891,6 +3745,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             restrict_swap_in_country: restricted_countries,
             swap_start_time,
             swap_duration,
+            neurons_fund_investment_icp,
 
             transaction_fee,
             token_name,
@@ -4007,6 +3862,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             let maximum_participant_icp = Some(swap_maximum_participant_icp);
             let start_time = swap_start_time;
             let duration = Some(swap_duration);
+            let neurons_fund_investment_icp = Some(neurons_fund_investment_icp);
 
             let neuron_basket_construction_parameters = {
                 let count = Some(swap_neuron_count);
@@ -4032,6 +3888,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 neuron_basket_construction_parameters,
                 start_time,
                 duration,
+                neurons_fund_investment_icp,
             })
         };
 
@@ -4308,10 +4165,7 @@ async fn main() {
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
-            SubCommand::ProposeToBlessReplicaVersion(_) => (),
-            SubCommand::ProposeToBlessReplicaVersionFlexible(_) => (),
             SubCommand::ProposeToUpdateElectedReplicaVersions(_) => (),
-            SubCommand::ProposeToRetireReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToClearProvisionalWhitelist(_) => (),
             SubCommand::ProposeToUpdateRecoveryCup(_) => (),
@@ -4520,7 +4374,7 @@ async fn main() {
 
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
-            let file_downloader = FileDownloader::new(None);
+            let file_downloader = FileDownloader::new(None).follow_redirects();
             if version.release_package_urls.iter().all(|url| {
                 tokio::runtime::Handle::current()
                     .block_on(file_downloader.download_file(url, &tmp_file, None))
@@ -4631,51 +4485,6 @@ async fn main() {
             for (key_id, subnets) in signing_subnets.iter() {
                 println!("KeyId {:?}: {:?}", key_id, subnets);
             }
-        }
-        SubCommand::ProposeToBlessReplicaVersion(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::BlessReplicaVersion,
-                make_canister_client(
-                    opts.nns_url,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
-        }
-        SubCommand::ProposeToBlessReplicaVersionFlexible(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::BlessReplicaVersion,
-                make_canister_client(
-                    opts.nns_url,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
-        }
-        SubCommand::ProposeToRetireReplicaVersion(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::RetireReplicaVersion,
-                make_canister_client(
-                    opts.nns_url,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
         }
         SubCommand::ProposeToUpdateElectedReplicaVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);

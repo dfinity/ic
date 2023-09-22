@@ -333,6 +333,13 @@ impl PayloadBuilder {
         self
     }
 
+    /// Store the curent stack data (in a global variable) on the heap.
+    /// NOTE: This does _not_ correspond to a Wasm global.
+    pub fn set_global_data_from_stack(mut self) -> Self {
+        self.0.push(Ops::SetGlobal as u8);
+        self
+    }
+
     /// Get data (stored in a global variable) from the heap.
     /// NOTE: This does _not_ correspond to a Wasm global.
     pub fn get_global_data(mut self) -> Self {
@@ -687,7 +694,7 @@ mod test {
     fn check_hardcoded_sha256_is_up_to_date() {
         assert_eq!(
             UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha::Sha256::hash(UNIVERSAL_CANISTER_WASM)
+            ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM)
         );
     }
 

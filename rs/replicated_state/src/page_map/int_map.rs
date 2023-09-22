@@ -6,10 +6,11 @@ mod test;
 use std::{cmp::Ordering, sync::Arc};
 
 /// Big-endian patricia trees.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 enum Tree<T> {
     /// An empty tree.
     /// Allowing empty trees simplifies the code a bit.
+    #[default]
     Empty,
     /// A key-value pair.
     Leaf(u64, T),
@@ -41,12 +42,6 @@ enum Tree<T> {
         left: Arc<Tree<T>>,
         right: Arc<Tree<T>>,
     },
-}
-
-impl<T> Default for Tree<T> {
-    fn default() -> Self {
-        Tree::Empty
-    }
 }
 
 /// Creates a branch node having subtrees t0 and t1 as children.
@@ -90,6 +85,10 @@ fn take_arc<T: Clone>(p: Arc<T>) -> T {
     }
 }
 
+/// The return type of the `bounds()` method.
+/// See the comments of the public `bounds()` method.
+pub(crate) type Bounds<'a, K, V> = (Option<(K, &'a V)>, Option<(K, &'a V)>);
+
 impl<T: Clone> Tree<T> {
     fn get(&self, key: u64) -> Option<&T> {
         match self {
@@ -118,14 +117,14 @@ impl<T: Clone> Tree<T> {
         }
     }
 
-    // See the comments of the public `bounds()` method.
-    fn bounds(&self, key: u64) -> (Option<u64>, Option<u64>) {
+    /// See the comments of the public `bounds()` method.
+    fn bounds(&self, key: u64) -> Bounds<u64, T> {
         match self {
             Tree::Empty => (None, None),
-            Tree::Leaf(k, _) => match key.cmp(k) {
-                Ordering::Less => (None, Some(*k)),
-                Ordering::Equal => (Some(key), Some(key)),
-                Ordering::Greater => (Some(*k), None),
+            Tree::Leaf(k, v) => match key.cmp(k) {
+                Ordering::Less => (None, Some((*k, v))),
+                Ordering::Equal => (Some((key, v)), Some((key, v))),
+                Ordering::Greater => (Some((*k, v)), None),
             },
             Tree::Branch {
                 prefix,
@@ -133,20 +132,20 @@ impl<T: Clone> Tree<T> {
                 left,
                 right,
             } => match mask(key, *branching_bit).cmp(prefix) {
-                Ordering::Less => (None, (*left).min_key()),
-                Ordering::Greater => ((*right).max_key(), None),
+                Ordering::Less => (None, (*left).min()),
+                Ordering::Greater => ((*right).max(), None),
                 Ordering::Equal => {
                     if key & (1 << branching_bit) == 0 {
                         let (start, end) = (*left).bounds(key);
                         if end.is_none() {
-                            (start, (*right).min_key())
+                            (start, (*right).min())
                         } else {
                             (start, end)
                         }
                     } else {
                         let (start, end) = (*right).bounds(key);
                         if start.is_none() {
-                            ((*left).max_key(), end)
+                            ((*left).max(), end)
                         } else {
                             (start, end)
                         }
@@ -156,17 +155,17 @@ impl<T: Clone> Tree<T> {
         }
     }
 
-    // Returns the smallest key in the given tree.
+    // Returns the smallest key/value pair in the given tree.
     // If the tree is empty, then it returns `None`.
-    fn min_key(&self) -> Option<u64> {
+    fn min(&self) -> Option<(u64, &T)> {
         let mut node = self;
         loop {
             match node {
                 Tree::Empty => {
                     return None;
                 }
-                Tree::Leaf(k, _) => {
-                    return Some(*k);
+                Tree::Leaf(k, v) => {
+                    return Some((*k, v));
                 }
                 Tree::Branch {
                     prefix: _,
@@ -180,17 +179,17 @@ impl<T: Clone> Tree<T> {
         }
     }
 
-    // Returns the largest key in the given tree.
+    // Returns the largest key/value pair in the given tree.
     // If the tree is empty, then it returns `None`.
-    fn max_key(&self) -> Option<u64> {
+    fn max(&self) -> Option<(u64, &T)> {
         let mut node = self;
         loop {
             match node {
                 Tree::Empty => {
                     return None;
                 }
-                Tree::Leaf(k, _) => {
-                    return Some(*k);
+                Tree::Leaf(k, v) => {
+                    return Some((*k, v));
                 }
                 Tree::Branch {
                     prefix: _,
@@ -403,19 +402,19 @@ impl<T: Clone> IntMap<T> {
     }
 
     // Returns `(lower, upper)` inclusive bounds for the given key such that:
-    // - `lower` is the largest key in the tree that is smaller or equal to the
+    // - `lower` is the largest key/value pair in the tree that is smaller or equal to the
     //   given key. If such a key doesn't exist then, `lower = None`.
-    // - `upper` is the smallest key in the tree that is larger or equal to the
+    // - `upper` is the smallest key/value pair in the tree that is larger or equal to the
     //   given key. If such a key doesn't exist then, `upper = None`.
     //
     // In all cases the following post-conditions hold:
-    // - lower <= key <= upper,
-    // - for all i in [lower + 1..upper - 1]: self.get(i) == None,
-    // - lower != None implies self.get(lower) != None,
-    // - upper != None implies self.get(upper) != None,
+    // - lower.0 <= key <= upper.0,
+    // - for all i in [lower.0 + 1..upper.0 - 1]: self.get(i) == None,
+    // - lower == Some((k, v)) implies self.get(k) == v,
+    // - upper == Some((k, v)) implies self.get(k) == v,
     //
     // Complexity: O(min(N, 64))
-    pub fn bounds(&self, key: u64) -> (Option<u64>, Option<u64>) {
+    pub fn bounds(&self, key: u64) -> Bounds<u64, T> {
         self.0.bounds(key)
     }
 
@@ -458,7 +457,7 @@ impl<T: Clone> IntMap<T> {
     /// Returns the largest key in the given tree.
     /// If the tree is empty, then it returns `None`.
     pub fn max_key(&self) -> Option<u64> {
-        self.0.max_key()
+        self.0.max().map(|(k, _v)| k)
     }
 }
 

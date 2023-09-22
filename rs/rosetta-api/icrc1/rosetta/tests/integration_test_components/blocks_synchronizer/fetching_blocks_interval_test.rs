@@ -2,7 +2,7 @@ use crate::common::local_replica;
 use crate::common::local_replica::test_identity;
 use ic_agent::Identity;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::InitArgs;
+use ic_icrc1_ledger::InitArgsBuilder;
 use ic_icrc1_test_utils::{transfer_args_with_sender, DEFAULT_TRANSFER_FEE};
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
 use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, blocks_verifier};
@@ -64,26 +64,21 @@ proptest! {
     // Deploy an icrc ledger canister
     let icrc_ledger_canister_id =
         local_replica::deploy_icrc_ledger_with_custom_args(&replica_context,
-            InitArgs {
-                minting_account: *TEST_ACCOUNT,
-                fee_collector_account: None,
-                initial_balances: vec![(*TEST_ACCOUNT,1_000_000_000_000)],
-                transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
-                token_name: "Test Token".to_owned(),
-                token_symbol: "TT".to_owned(),
-                metadata: vec![],
-                archive_options: ArchiveOptions {
-                    trigger_threshold: 10_000,
-                    num_blocks_to_archive: 10_000,
-                    node_max_memory_size_bytes: None,
-                    max_message_size_bytes: None,
-                    controller_id: PrincipalId::new_user_test_id(100),
-                    cycles_for_archive_creation: None,
-                    max_transactions_per_response: None,
-                },
-                max_memo_length: None,
-                feature_flags: None,
-            }).await;
+            InitArgsBuilder::for_tests()
+            .with_minting_account(*TEST_ACCOUNT)
+            .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+            .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+            .with_archive_options(ArchiveOptions {
+                trigger_threshold: 10_000,
+                num_blocks_to_archive: 10_000,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: PrincipalId::new_user_test_id(100),
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            })
+            .build()
+        ).await;
 
     // Create a testing agent
     let agent = Arc::new(Icrc1Agent {
@@ -143,27 +138,22 @@ proptest! {
     // Deploy an icrc ledger canister and make sure an archive is created
     let icrc_ledger_canister_id =
     local_replica::deploy_icrc_ledger_with_custom_args(&replica_context,
-        InitArgs {
-            minting_account: *TEST_ACCOUNT,
-            fee_collector_account: None,
-            initial_balances: vec![(*TEST_ACCOUNT,1_000_000_000_000)],
-            transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
-            token_name: "Test Token".to_owned(),
-            token_symbol: "TT".to_owned(),
-            metadata: vec![],
-            archive_options: ArchiveOptions {
-                // Create archive after every ten blocks
-                trigger_threshold: 10,
-                num_blocks_to_archive: 5,
-                node_max_memory_size_bytes: None,
-                max_message_size_bytes: None,
-                controller_id: PrincipalId::new_user_test_id(100),
-                cycles_for_archive_creation: None,
-                max_transactions_per_response: None,
-            },
-            max_memo_length: None,
-            feature_flags: None,
-        }).await;
+        InitArgsBuilder::for_tests()
+        .with_minting_account(*TEST_ACCOUNT)
+        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+        .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+        .with_archive_options(ArchiveOptions {
+            // Create archive after every ten blocks
+            trigger_threshold: 10,
+            num_blocks_to_archive: 5,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_user_test_id(100),
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        })
+        .build()
+    ).await;
 
     // Create a testing agent
     let agent = Arc::new(Icrc1Agent {

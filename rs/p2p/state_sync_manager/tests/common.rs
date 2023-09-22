@@ -88,6 +88,11 @@ impl State {
         state.height
     }
 
+    pub fn set_height(&self, h: Height) {
+        let mut state = self.0.lock().unwrap();
+        state.height = h;
+    }
+
     pub fn chunk(&self, chunk_id: ChunkId) -> Option<Vec<u8>> {
         let state = self.0.lock().unwrap();
         state
@@ -150,10 +155,6 @@ pub struct FakeStateSync {
 }
 
 impl FakeStateSync {
-    pub fn set_use_global(&self, global: bool) {
-        self.uses_global.store(global, Ordering::SeqCst);
-    }
-
     pub fn is_equal(&self, other: &Self) -> bool {
         match (self.uses_global(), other.uses_global()) {
             (true, true) => true,
@@ -181,14 +182,14 @@ impl FakeStateSync {
 }
 
 impl StateSyncClient for FakeStateSync {
-    fn latest_state(&self) -> Option<StateSyncArtifactId> {
+    fn available_states(&self) -> Vec<StateSyncArtifactId> {
         if self.disconnected.load(Ordering::SeqCst) {
-            return None;
+            return vec![];
         }
         if self.uses_global() {
-            Some(self.global_state.artifact_id())
+            vec![self.global_state.artifact_id()]
         } else {
-            Some(self.local_state.artifact_id())
+            vec![self.local_state.artifact_id()]
         }
     }
 
@@ -235,9 +236,9 @@ impl StateSyncClient for FakeStateSync {
             })
     }
 
-    fn deliver_state_sync(&self, _msg: StateSyncMessage, _peer_id: NodeId) {
+    fn deliver_state_sync(&self, msg: StateSyncMessage, _peer_id: NodeId) {
         if !self.uses_global() {
-            self.set_use_global(true);
+            self.local_state.set_height(msg.height);
         } else {
             panic!("Node that follows global state should not start state sync");
         }

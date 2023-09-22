@@ -907,7 +907,7 @@ pub fn test_threshold_ecdsa_key_rotation(test_env: TestEnv) {
             vec![ECDSA_KEY_TRANSCRIPT_CREATED.to_string()],
         );
         loop {
-            match metrics.fetch().await {
+            match metrics.fetch::<u64>().await {
                 Ok(val) => {
                     created = val[ECDSA_KEY_TRANSCRIPT_CREATED][0];
                     if created > 1 {

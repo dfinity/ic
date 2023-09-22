@@ -45,6 +45,18 @@ pub struct InstanceStats {
     /// Number of times a write access is handled when the page has not yet been
     /// read.
     pub direct_write_count: usize,
+
+    /// Number of sigsegv handled.
+    pub sigsegv_count: usize,
+
+    /// Number of calls to mmap.
+    pub mmap_count: usize,
+
+    /// Number of calls to mprotect.
+    pub mprotect_count: usize,
+
+    /// Number of pages loaded by copying the data.
+    pub copy_page_count: usize,
 }
 
 /// Errors that can be returned when fetching the available memory on a subnet.
@@ -172,6 +184,10 @@ pub struct SubnetAvailableMemory {
     message_memory: i64,
     /// The memory available for Wasm custom sections.
     wasm_custom_sections_memory: i64,
+    /// Specifies the factor by which the subnet available memory was scaled
+    /// using the division operator. It is useful for approximating the global
+    /// available memory from the per-thread available memory.
+    scaling_factor: i64,
 }
 
 impl SubnetAvailableMemory {
@@ -184,6 +200,9 @@ impl SubnetAvailableMemory {
             execution_memory,
             message_memory,
             wasm_custom_sections_memory,
+            // The newly created value is not scaled (divided), which
+            // corresponds to the scaling factor of 1.
+            scaling_factor: 1,
         }
     }
 
@@ -201,6 +220,17 @@ impl SubnetAvailableMemory {
     /// execution available memory.
     pub fn get_wasm_custom_sections_memory(&self) -> i64 {
         self.wasm_custom_sections_memory
+    }
+
+    /// Returns the scaling factor that specifies by how much the initial
+    /// available memory was scaled using the division operator.
+    ///
+    /// It is useful for approximating the global available memory from the
+    /// per-thread available memory. Note that the approximation may be off in
+    /// both directions because there is no way to deterministically know how
+    /// much other threads have allocated.
+    pub fn get_scaling_factor(&self) -> i64 {
+        self.scaling_factor
     }
 
     /// Try to use some memory capacity and fail if not enough is available
@@ -289,6 +319,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
             execution_memory: self.execution_memory / rhs,
             message_memory: self.message_memory / rhs,
             wasm_custom_sections_memory: self.wasm_custom_sections_memory / rhs,
+            scaling_factor: self.scaling_factor * rhs,
         }
     }
 }
@@ -313,9 +344,17 @@ pub type IngressFilterService = BoxCloneService<
     Infallible,
 >;
 
+/// Errors that can occur when handling a query execution request.
+pub enum QueryExecutionError {
+    CertifiedStateUnavailable,
+}
+
+/// The response type to a `call()` request in [`QueryExecutionService`].
+pub type QueryExecutionResponse = Result<HttpQueryResponse, QueryExecutionError>;
+
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>;
+    BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Interface for the component to execute queries on canisters.  It can be used
 /// by the HttpHandler and other system components to execute queries.

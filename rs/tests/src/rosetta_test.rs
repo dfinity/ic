@@ -41,7 +41,7 @@ use ic_rosetta_test_utils::{
 use ic_types::{messages::Blob, CanisterId};
 use lazy_static::lazy_static;
 use slog::info;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 use url::Url;
@@ -129,7 +129,7 @@ pub fn test_everything(env: TestEnv) {
         .build()
         .unwrap();
 
-    let neurons = HashMap::new();
+    let neurons = BTreeMap::new();
 
     let governance_canister_init = Governance {
         economics: Some(NetworkEconomics::with_default_values()),

@@ -10,7 +10,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/protobuf",
@@ -22,7 +22,9 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:comparable",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:sha2",

@@ -94,7 +94,7 @@ fn test_add_and_remove_nodes_from_registry() {
             node_operator_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             node_allowance: 5,
             node_provider_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-            dc_id: "AN1".into(),
+            dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
         };

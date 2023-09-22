@@ -138,6 +138,7 @@ pub struct CanisterStateBits {
     pub freeze_threshold: NumSeconds,
     pub cycles_balance: Cycles,
     pub cycles_debit: Cycles,
+    pub reserved_balance: Cycles,
     pub status: CanisterStatus,
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
@@ -532,9 +533,9 @@ impl StateLayout {
         }
     }
 
-    pub fn scratchpad_to_checkpoint<'a, T>(
+    pub fn scratchpad_to_checkpoint<T>(
         &self,
-        layout: CheckpointLayout<RwPolicy<'a, T>>,
+        layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
@@ -542,16 +543,16 @@ impl StateLayout {
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
-        sync_and_mark_files_readonly(scratchpad, &self.metrics, thread_pool).map_err(|err| {
-            LayoutError::IoError {
+        sync_and_mark_files_readonly(&self.log, scratchpad, &self.metrics, thread_pool).map_err(
+            |err| LayoutError::IoError {
                 path: scratchpad.to_path_buf(),
                 message: format!(
                     "Could not sync and mark readonly scratchpad for checkpoint {}",
                     height
                 ),
                 io_err: err,
-            }
-        })?;
+            },
+        )?;
         std::fs::rename(scratchpad, cp_path).map_err(|err| {
             if is_already_exists_err(&err) {
                 LayoutError::AlreadyExists(height)
@@ -1596,6 +1597,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
             cycles_debit: Some(item.cycles_debit.into()),
+            reserved_balance: Some(item.reserved_balance.into()),
             canister_status: Some((&item.status).into()),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
@@ -1660,6 +1662,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .transpose()?
             .unwrap_or_else(Cycles::zero);
 
+        let reserved_balance = value
+            .reserved_balance
+            .map(|c| c.try_into())
+            .transpose()?
+            .unwrap_or_else(Cycles::zero);
+
         let task_queue = value
             .task_queue
             .into_iter()
@@ -1686,6 +1694,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
             cycles_debit,
+            reserved_balance,
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",
@@ -1854,6 +1863,7 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 /// Recursively set permissions to readonly for all files under the given
 /// `path`.
 fn sync_and_mark_files_readonly(
+    #[allow(unused)] log: &ReplicaLogger,
     path: &Path,
     #[allow(unused)] metrics: &StateLayoutMetrics,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
@@ -1889,6 +1899,7 @@ fn sync_and_mark_files_readonly(
         metrics
             .state_layout_syncfs_duration
             .observe(elapsed.as_secs_f64());
+        info!(log, "syncfs took {:?}", elapsed);
     }
     Ok(())
 }
@@ -1990,6 +2001,7 @@ fn copy_file_and_set_permissions(
     let mut permissions = dst_metadata.permissions();
     match dst_permissions {
         FilePermissions::ReadOnly => permissions.set_readonly(true),
+        #[allow(clippy::permissions_set_readonly_false)]
         FilePermissions::ReadWrite => permissions.set_readonly(false),
     }
     std::fs::set_permissions(dst, permissions)?;

@@ -7,6 +7,7 @@ use std::fmt::{Display, Formatter};
 mod internal;
 
 pub use internal::IngressMessageVerifier;
+pub use internal::IngressMessageVerifierBuilder;
 pub use internal::TimeProvider;
 
 /// Validate an incoming HTTP request according to the

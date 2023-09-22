@@ -55,9 +55,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
         ))
     });
 
-    if state.kyt_principal.is_none() {
-        ic_cdk::trap("KYT principal is not set");
-    }
+    state.validate_config();
 
     replace_state(state);
 

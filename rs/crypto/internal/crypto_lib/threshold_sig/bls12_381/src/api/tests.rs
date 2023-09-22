@@ -315,15 +315,15 @@ proptest! {
         })]
 
         #[test]
-        fn individual_signature_verifies(seed: [u8;32], threshold in 0_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
+        fn individual_signature_verifies(seed: [u8;32], threshold in 1_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
             test_individual_signature_verifies(Seed::from_bytes(&seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
         #[test]
-        fn combined_signature_verifies(seed: [u8;32], threshold in 0_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
+        fn combined_signature_verifies(seed: [u8;32], threshold in 1_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
             test_combined_signature_verifies(Seed::from_bytes(&seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
         #[test]
-        fn threshold_sig_api_and_core_match(seed: [u8;32], threshold in 0_u32..10, redundancy in 0_u32..10, message: Vec<u8>) {
+        fn threshold_sig_api_and_core_match(seed: [u8;32], threshold in 1_u32..10, redundancy in 0_u32..10, message: Vec<u8>) {
             test_threshold_sig_api_and_core_match(Seed::from_bytes(&seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
 }

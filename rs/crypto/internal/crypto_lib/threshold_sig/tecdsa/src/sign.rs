@@ -368,7 +368,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         }
 
         let master_public_key = key_transcript.constant_term();
-        let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
+        let tweak_g = EccPoint::mul_by_g(&key_tweak);
         let public_key = tweak_g.add_points(&master_public_key)?;
 
         // This return shouldn't happen because we already checked that s != 0 above
@@ -426,7 +426,7 @@ pub fn derive_public_key(
     };
     // Compute tweak
     let (key_tweak, chain_key) = derivation_path.derive_tweak(&raw_master_pk)?;
-    let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
+    let tweak_g = EccPoint::mul_by_g(&key_tweak);
     let public_key = tweak_g.add_points(&raw_master_pk)?;
 
     Ok(EcdsaPublicKey {

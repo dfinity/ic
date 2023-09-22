@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #[rustfmt::skip]
 use walkdir::WalkDir;
+use crate::driver::constants;
 use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
@@ -25,6 +26,7 @@ use crate::driver::{
     test_env_api::HasIcDependencies,
     test_setup::GroupSetup,
 };
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -43,14 +45,13 @@ use crate::driver::{
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
 };
+use slog::{debug, error, info, trace, warn, Logger};
 use std::{
     collections::{BTreeMap, HashMap},
     iter::once,
     net::Ipv6Addr,
     time::Duration,
 };
-
-use slog::{debug, error, info, trace, warn, Logger};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
@@ -275,10 +276,10 @@ fn compose_seq(
     compose(root_task, EvalOrder::Sequential, vec![first, second], ctx)
 }
 
-fn get_setup_env(gctx: GroupContext) -> TestEnv {
+fn ensure_setup_env(gctx: GroupContext) -> TestEnv {
     trace!(gctx.log(), "get_setup_env()");
     let process_ctx = ProcessContext::new(gctx, String::from(SETUP_TASK_NAME)).unwrap();
-    process_ctx.group_context.create_setup_env().unwrap()
+    process_ctx.group_context.ensure_setup_env().unwrap()
 }
 
 fn get_or_create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
@@ -578,7 +579,7 @@ impl SystemTestGroup {
                                                     "Streaming Journald for newly discovered [uvm={key}] with ipv6={value}"
                                                 );
                                                 // The task starts, but the handle is never joined.
-                                                let _ = rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
+                                                rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
                                                 value
                                             });
                                     }
@@ -610,33 +611,38 @@ impl SystemTestGroup {
                         let group_ctx = group_ctx.clone();
                         debug!(logger, ">>> keepalive");
                         loop {
-                            let group_ctx = group_ctx.clone();
-                            if let Ok((group_setup, env)) =
-                                get_or_create_env(group_ctx, keepalive_task_id.clone()).and_then(
-                                    |env| GroupSetup::try_read_attribute(&env).map(|x| (x, env)),
-                                )
-                            {
-                                let farm_url = env.get_farm_url().unwrap();
-                                let farm = Farm::new(farm_url.clone(), env.logger());
-                                let group_name = group_setup.farm_group_name;
-                                if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
-                                    panic!(
-                                        "{}",
-                                        format!(
-                                            "Failed to keep group {} alive via endpoint {:?}: {:?}",
-                                            group_name, farm_url, e
-                                        )
-                                    )
-                                };
-                                debug!(
-                                    logger,
-                                    "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
-                                    group_name,
-                                    GROUP_TTL,
-                                    farm_url
+                            let group_ctx: GroupContext = group_ctx.clone();
+                            let setup_dir = group_ctx.group_dir.join(constants::GROUP_SETUP_DIR);
+                            if setup_dir.exists() {
+                                let env = TestEnv::new_without_duplicating_logger(
+                                    setup_dir,
+                                    logger.clone(),
                                 );
+                                if let Ok(group_setup) = GroupSetup::try_read_attribute(&env) {
+                                    let farm_url = env.get_farm_url().unwrap();
+                                    let farm = Farm::new(farm_url.clone(), env.logger());
+                                    let group_name = group_setup.farm_group_name;
+                                    if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                                        panic!(
+                                            "{}",
+                                            format!(
+                                                "Failed to keep group {} alive via endpoint {:?}: {:?}",
+                                                group_name, farm_url, e
+                                            )
+                                        )
+                                    };
+                                    debug!(
+                                        logger,
+                                        "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
+                                        group_name,
+                                        GROUP_TTL,
+                                        farm_url
+                                    );
+                                } else {
+                                    info!(logger, "Farm group not created yet.");
+                                }
                             } else {
-                                info!(logger, "Farm group not created yet.");
+                                info!(logger, "Setup directory not created yet.");
                             }
                             std::thread::sleep(KEEPALIVE_INTERVAL);
                         }
@@ -658,7 +664,7 @@ impl SystemTestGroup {
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
-                    let env = get_setup_env(group_ctx);
+                    let env = ensure_setup_env(group_ctx);
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
@@ -931,7 +937,7 @@ impl SystemTestGroup {
 
     fn delete_farm_group(ctx: GroupContext) {
         info!(ctx.log(), "Deleting farm group.");
-        let env = get_setup_env(ctx);
+        let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
         let farm_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_url, env.logger());

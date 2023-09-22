@@ -2,7 +2,6 @@ use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
 use ic_base_types::{NodeId, PrincipalId};
-use ic_crypto_internal_csp::Csp;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -219,7 +218,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
 }
 
 fn combine_sig_shares<R: Rng + CryptoRng + Sync + Send + 'static>(
-    combiner: &TempCryptoComponentGeneric<Csp, R>,
+    combiner: &TempCryptoComponentGeneric<R>,
     inputs: &ThresholdEcdsaSigInputs,
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> ThresholdEcdsaCombinedSignature {
@@ -278,7 +277,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
 }
 
 fn verify_combined_sig<R: Rng + CryptoRng + Sync + Send + 'static>(
-    verifier: &TempCryptoComponentGeneric<Csp, R>,
+    verifier: &TempCryptoComponentGeneric<R>,
     inputs: &ThresholdEcdsaSigInputs,
     signature: &ThresholdEcdsaCombinedSignature,
 ) {

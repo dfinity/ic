@@ -1,80 +1,32 @@
-use ic_base_types::RegistryVersion;
-use ic_crypto_test_utils_ni_dkg::{
-    create_dealing, create_transcript, load_transcript, retain_only_active_keys, verify_dealing,
-    NiDkgTestEnvironment,
-};
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
-
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, SamplingMode,
 };
 
-use std::collections::HashSet;
-use std::path::PathBuf;
+use rand::CryptoRng;
 
-use nidkg_benches_test_vectors::NiDkgBenchDataManager;
+use ic_base_types::RegistryVersion;
+use ic_crypto_test_utils_ni_dkg::{
+    create_dealing, create_dealings, create_transcript, load_transcript, retain_only_active_keys,
+    run_ni_dkg_and_create_single_transcript, verify_dealing, NiDkgTestEnvironment,
+    RandomNiDkgConfig,
+};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_types::consensus::get_faults_tolerated;
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    config::NiDkgConfig, NiDkgDealing, NiDkgTag, NiDkgTranscript,
+};
+use ic_types::NodeId;
+use rand::Rng;
+use std::collections::{BTreeMap, HashSet};
 
 criterion_main!(benches);
 criterion_group!(benches, crypto_nidkg_benchmarks,);
 
 fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
-    let test_cases = vec![
-        TestCase {
-            sample_size: 50,
-            sampling_mode: SamplingMode::Flat,
-            num_of_nodes: 2,
-            num_of_dealers: 1,
-            dkg_tag: NiDkgTag::LowThreshold,
-        },
-        TestCase {
-            sample_size: 30,
-            sampling_mode: SamplingMode::Flat,
-            num_of_nodes: 4,
-            num_of_dealers: 3,
-            dkg_tag: NiDkgTag::HighThreshold,
-        },
-        TestCase {
-            sample_size: 10,
-            sampling_mode: SamplingMode::Flat,
-            num_of_nodes: 10,
-            num_of_dealers: 4,
-            dkg_tag: NiDkgTag::LowThreshold,
-        },
-        TestCase {
-            sample_size: 10,
-            sampling_mode: SamplingMode::Flat,
-            num_of_nodes: 10,
-            num_of_dealers: 7,
-            dkg_tag: NiDkgTag::HighThreshold,
-        },
-        TestCase {
-            sample_size: 10,
-            sampling_mode: SamplingMode::Flat,
-            num_of_nodes: 28,
-            num_of_dealers: 19,
-            dkg_tag: NiDkgTag::HighThreshold,
-        },
-    ];
-
-    let toplevel_path: PathBuf = {
-        match std::env::var("CARGO_MANIFEST_DIR") {
-            Ok(cargo_manifest_dir) => [&cargo_manifest_dir, "benches/test_vectors_nidkg"]
-                .iter()
-                .collect(),
-            Err(_) => [
-                &std::env::var("BUILD_WORKSPACE_DIRECTORY")
-                    .expect("Env variable `BUILD_WORKSPACE_DIRECTORY` for Bazel or `CARGO_MANIFEST_DIR` for Cargo should be set"),
-                "rs/crypto/benches/test_vectors_nidkg",
-            ]
-                .iter()
-                .collect(),
-        }
-    };
-    let data_mgr = NiDkgBenchDataManager::new(toplevel_path);
-
-    data_mgr.recreate_if_requested(&test_cases);
+    let rng = &mut reproducible_rng();
+    let test_cases = test_cases(&[13, 28, 40]);
 
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
@@ -82,67 +34,85 @@ fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
-        bench_create_initial_dealing(group, &test_case, &data_mgr);
-        bench_create_reshare_dealing(group, &test_case, &data_mgr);
-        bench_verify_dealing(group, &test_case, &data_mgr);
-        bench_create_transcript(group, &test_case, &data_mgr);
-        bench_load_transcript(group, &test_case, &data_mgr);
-        bench_retain_keys(group, &test_case, &data_mgr);
+        bench_create_initial_dealing(group, &test_case, rng);
+        bench_create_reshare_dealing(group, &test_case, rng);
+        bench_verify_dealing(group, &test_case, rng);
+        bench_create_transcript(group, &test_case, rng);
+        bench_load_transcript(group, &test_case, rng);
+        bench_retain_keys(group, &test_case, rng);
     }
 }
 
-fn bench_create_initial_dealing<M: Measurement>(
+fn test_cases(num_dealers: &[usize]) -> Vec<TestCase> {
+    let mut cases = vec![];
+    for n in num_dealers {
+        cases.push(TestCase::new(*n, NiDkgTag::LowThreshold));
+        cases.push(TestCase::new(*n, NiDkgTag::HighThreshold));
+    }
+    cases
+}
+
+fn bench_create_initial_dealing<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    data_mgr: &NiDkgBenchDataManager,
+    rng: &mut R,
 ) {
+    let (env, config) = prepare_create_initial_dealing_test_vectors(test_case, rng);
+
     group.bench_function("create_initial_dealing", |bench| {
-        let (env_path, config, creator_node_id) =
-            data_mgr.get_create_initial_dealing_test_vectors(test_case);
-
         bench.iter_batched_ref(
-            || NiDkgTestEnvironment::new_from_dir(&env_path),
-            |env| create_dealing(&config, &env.crypto_components, creator_node_id),
+            || config.random_dealer_id(rng),
+            |creator_node_id| {
+                create_dealing(config.get(), &env.crypto_components, *creator_node_id)
+            },
             SmallInput,
         )
     });
 }
 
-fn bench_create_reshare_dealing<M: Measurement>(
+fn bench_create_reshare_dealing<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    data_mgr: &NiDkgBenchDataManager,
+    rng: &mut R,
 ) {
+    let (env, config) = prepare_create_reshare_dealing_test_vectors(test_case, rng);
+
     group.bench_function("create_reshare_dealing", |bench| {
-        let (env_path, config, creator_node_id) =
-            data_mgr.get_create_reshare_dealing_test_vectors(test_case);
-
         bench.iter_batched_ref(
-            || NiDkgTestEnvironment::new_from_dir(&env_path),
-            |env| create_dealing(&config, &env.crypto_components, creator_node_id),
+            || config.random_dealer_id(rng),
+            |creator_node_id| {
+                create_dealing(config.get(), &env.crypto_components, *creator_node_id)
+            },
             SmallInput,
         )
     });
 }
 
-fn bench_verify_dealing<M: Measurement>(
+fn bench_verify_dealing<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    data_mgr: &NiDkgBenchDataManager,
+    rng: &mut R,
 ) {
-    group.bench_function("verify_dealing", |bench| {
-        let (env_path, config, dealing, creator_node_id, verifier_node_id) =
-            data_mgr.get_verify_dealing_test_vectors(test_case);
+    let (env, config, dealings) = prepare_verify_dealing_test_vectors(test_case, rng);
 
+    group.bench_function("verify_dealing", |bench| {
         bench.iter_batched_ref(
-            || NiDkgTestEnvironment::new_from_dir(&env_path),
-            |env| {
+            || {
+                let (dealer_id, dealing) = dealings
+                    .get(rng.gen_range(0..test_case.num_of_dealers))
+                    .unwrap();
+
+                let receiver_id = config.random_receiver_id(rng);
+
+                (&env.crypto_components, *dealer_id, dealing, receiver_id)
+            },
+            |(crypto_components, dealer, dealing, receiver_id)| {
                 verify_dealing(
-                    &config,
-                    &env.crypto_components,
-                    creator_node_id,
-                    verifier_node_id,
-                    &dealing,
+                    config.get(),
+                    crypto_components,
+                    *dealer,
+                    *receiver_id,
+                    dealing,
                 )
             },
             SmallInput,
@@ -150,38 +120,57 @@ fn bench_verify_dealing<M: Measurement>(
     });
 }
 
-fn bench_create_transcript<M: Measurement>(
+fn bench_create_transcript<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    data_mgr: &NiDkgBenchDataManager,
+    rng: &mut R,
 ) {
-    group.bench_function("create_transcript", |bench| {
-        let (env_path, config, dealings, creator_node_id) =
-            data_mgr.get_create_transcript_test_vectors(test_case);
+    let (env, config, dealings, creator_node_id) =
+        prepare_create_transcript_test_vectors(test_case, rng);
 
+    group.bench_function("create_transcript", |bench| {
         bench.iter_batched_ref(
-            || NiDkgTestEnvironment::new_from_dir(&env_path),
-            |env| create_transcript(&config, &env.crypto_components, &dealings, creator_node_id),
+            || &env.crypto_components,
+            |crypto_components| {
+                create_transcript(&config, crypto_components, &dealings, creator_node_id)
+            },
             SmallInput,
         )
     });
 }
 
-fn bench_load_transcript<M: Measurement>(
+fn bench_load_transcript<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    data_mgr: &NiDkgBenchDataManager,
+    rng: &mut R,
 ) {
-    group.bench_function("load_transcript", |bench| {
-        let (env_path, transcript, loader_node_id) =
-            data_mgr.get_load_transcript_test_vectors(test_case);
+    let (env_to_copy, config, transcript_to_load) =
+        prepare_load_transcript_test_vectors(test_case, rng);
 
+    let path = std::path::Path::new("load_transcript_env");
+
+    group.bench_function("load_transcript", |bench| {
         bench.iter_batched_ref(
-            || NiDkgTestEnvironment::new_from_dir(&env_path),
-            |env| load_transcript(&transcript, &env.crypto_components, loader_node_id),
+            || {
+                // clean-up the dir if it exists
+                let _ = std::fs::remove_dir_all(path);
+
+                env_to_copy.save_to_dir(path);
+                (
+                    NiDkgTestEnvironment::new_from_dir(path, rng),
+                    transcript_to_load.clone(),
+                    config.random_receiver_id(rng),
+                )
+            },
+            |(env, transcript, loader_id)| {
+                load_transcript(transcript, &env.crypto_components, *loader_id);
+            },
             SmallInput,
         )
     });
+
+    // clean-up the dir if the benchmark was enabled
+    let _ = std::fs::remove_dir_all(path);
 }
 
 /// The complexity of `retain_active_keys` depends on the Hamming distance
@@ -189,42 +178,58 @@ fn bench_load_transcript<M: Measurement>(
 /// benchmarks where we set the initial registry version to 3 and increment it
 /// by 2^exp. Note that the likelihood of "bigger registry version jumps"
 /// continuously descreses in a real deployment.
-fn bench_retain_keys<M: Measurement>(
+fn bench_retain_keys<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    data_mgr: &NiDkgBenchDataManager,
+    rng: &mut R,
 ) {
-    for exp in [0, 1, 5, 10, 15, 20, 25, 30].iter() {
+    let (env_to_copy, config, transcript1, transcript2) =
+        prepare_retain_keys_test_vectors(test_case, rng);
+    let path = std::path::Path::new("retain_active_keys_env");
+
+    for exp in [0, 1, 5, 15, 30].iter() {
         group.bench_with_input(
             BenchmarkId::new("retain_active_keys", exp),
             exp,
             |bench, exp| {
                 bench.iter_batched(
                     || {
-                        // instantiate test environment from a file
-                        let (env_path, transcripts, retainer_node) =
-                            data_mgr.get_retain_keys_test_vectors(test_case);
-                        let env = NiDkgTestEnvironment::new_from_dir(&env_path);
+                        let retainer_node_id = config.random_receiver_id(rng);
+                        // clean-up the dir if it exists
+                        let _ = std::fs::remove_dir_all(path);
+                        env_to_copy.save_to_dir(path);
+                        let env = NiDkgTestEnvironment::new_from_dir(path, rng);
 
-                        let transcripts = increment_registry_version(transcripts, 2);
+                        let mut transcripts = HashSet::new();
+                        transcripts.insert(transcript1.clone());
+                        transcripts.insert(transcript2.clone());
+
+                        transcripts = increment_registry_version(transcripts.clone(), 1);
                         retain_only_active_keys(
                             &env.crypto_components,
-                            retainer_node,
+                            retainer_node_id,
                             transcripts.clone(),
                         );
 
-                        let transcripts = increment_registry_version(transcripts, 1u64 << *exp);
+                        transcripts = increment_registry_version(transcripts.clone(), 1 << exp);
 
-                        (env.crypto_components, retainer_node, transcripts)
+                        (env, retainer_node_id, transcripts.clone())
                     },
-                    |(crypto_components, retainer_node, transcripts)| {
-                        retain_only_active_keys(&crypto_components, retainer_node, transcripts)
+                    |(env, retainer_node_id, transcripts)| {
+                        retain_only_active_keys(
+                            &env.crypto_components,
+                            retainer_node_id,
+                            transcripts,
+                        )
                     },
                     SmallInput,
                 )
             },
         );
     }
+
+    // clean-up the dir if the benchmark was enabled
+    let _ = std::fs::remove_dir_all(path);
 }
 
 /// Adds `arg` to the registry version of each transcript in `transcript`
@@ -259,344 +264,47 @@ impl TestCase {
             self.num_of_nodes, self.num_of_dealers, tag_name
         )
     }
+
+    pub fn new(num_of_nodes: usize, dkg_tag: NiDkgTag) -> Self {
+        match dkg_tag {
+            NiDkgTag::LowThreshold => Self {
+                sample_size: 10,
+                sampling_mode: SamplingMode::Flat,
+                num_of_nodes,
+                num_of_dealers: num_of_nodes,
+                dkg_tag,
+            },
+            NiDkgTag::HighThreshold => Self {
+                sample_size: 10,
+                sampling_mode: SamplingMode::Flat,
+                num_of_nodes,
+                num_of_dealers: num_of_nodes,
+                dkg_tag,
+            },
+        }
+    }
 }
 
-mod nidkg_benches_test_vectors {
-    use super::TestCase;
-    use ic_crypto_test_utils_ni_dkg::{NiDkgTestEnvironment, RandomNiDkgConfig};
-    use serde::{de, ser};
-    use std::collections::HashSet;
-    use std::path::PathBuf;
+fn retain_only(env: &mut NiDkgTestEnvironment, node_to_retain: &NodeId) {
+    env.crypto_components.retain(|k, _| k == node_to_retain);
+}
 
-    use ic_crypto_test_utils_ni_dkg::{
-        create_dealing, create_dealings, load_transcript, run_ni_dkg_and_create_single_transcript,
-    };
-    use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
-    use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgTranscript};
-    use ic_types::{NodeId, PrincipalId};
-    use std::collections::BTreeMap;
-    use std::path::Path;
-    use std::str::FromStr;
-
-    pub struct NiDkgBenchDataManager {
-        pub paths: TestVectorsPaths,
-    }
-
-    impl NiDkgBenchDataManager {
-        pub fn new(toplevel_path: PathBuf) -> Self {
-            Self {
-                paths: TestVectorsPaths { toplevel_path },
-            }
-        }
-
-        pub fn recreate_if_requested(&self, test_cases: &[TestCase]) {
-            // To recreate all the test vectors for these benchmarks,
-            // set the environment variable
-            // `CRYPTO_BENCHES_NIDKG_RECREATE_TEST_VECTORS=yes`.
-            let should_recreate = std::env::var("CRYPTO_BENCHES_NIDKG_RECREATE_TEST_VECTORS")
-                .map_or("NO".to_string(), |s| s.to_ascii_uppercase())
-                == "YES";
-            if should_recreate {
-                if std::path::Path::new(&self.paths.toplevel()).exists() {
-                    std::fs::remove_dir_all(self.paths.toplevel())
-                        .expect("failed to remove old test vectors directory");
-                }
-                self.establish(test_cases);
-            }
-        }
-
-        pub fn get_create_initial_dealing_test_vectors(
-            &self,
-            test_case: &TestCase,
-        ) -> (PathBuf, NiDkgConfig, NodeId) {
-            let testvec_dir = self.paths.create_initial_dealing(test_case);
-            let config = read_data(&testvec_dir.join("config.cbor"));
-            let creator_node_id = read_data(&testvec_dir.join("creator_node_id.cbor"));
-
-            (
-                self.paths.create_initial_dealing_env(test_case),
-                config,
-                creator_node_id,
-            )
-        }
-
-        pub fn get_create_reshare_dealing_test_vectors(
-            &self,
-            test_case: &TestCase,
-        ) -> (PathBuf, NiDkgConfig, NodeId) {
-            let testvec_dir = self.paths.create_reshare_dealing(test_case);
-            let config = read_data(&testvec_dir.join("config.cbor"));
-            let creator_node_id = read_data(&testvec_dir.join("creator_node_id.cbor"));
-
-            (
-                self.paths.create_reshare_dealing_env(test_case),
-                config,
-                creator_node_id,
-            )
-        }
-
-        pub fn get_verify_dealing_test_vectors(
-            &self,
-            test_case: &TestCase,
-        ) -> (PathBuf, NiDkgConfig, NiDkgDealing, NodeId, NodeId) {
-            let testvec_dir = self.paths.verify_dealing(test_case);
-            let config = read_data(&testvec_dir.join("config.cbor"));
-            let dealing = read_data(&testvec_dir.join("dealing.cbor"));
-            let creator_node_id = read_data(&testvec_dir.join("creator_node_id.cbor"));
-            let verifier_node_id = read_data(&testvec_dir.join("verifier_node_id.cbor"));
-
-            (
-                self.paths.verify_dealing_env(test_case),
-                config,
-                dealing,
-                creator_node_id,
-                verifier_node_id,
-            )
-        }
-
-        pub fn get_create_transcript_test_vectors(
-            &self,
-            test_case: &TestCase,
-        ) -> (PathBuf, NiDkgConfig, BTreeMap<NodeId, NiDkgDealing>, NodeId) {
-            fn node_ids_from_dir_names(toplevel_path: &Path) -> BTreeMap<NodeId, PathBuf> {
-                std::fs::read_dir(toplevel_path)
-                    .expect("dealings directory doesn't exist")
-                    .into_iter()
-                    .map(|e| e.unwrap().path())
-                    .filter(|e| e.is_file())
-                    .map(|p| {
-                        (
-                            NodeId::from(
-                                PrincipalId::from_str(
-                                    p.with_extension("").file_name().unwrap().to_str().unwrap(),
-                                )
-                                .unwrap(),
-                            ),
-                            p,
-                        )
-                    })
-                    .collect()
-            }
-
-            let testvec_dir = self.paths.create_transcript(test_case);
-            let dealings_testvec_dir = self.paths.create_transcript_dealings(test_case);
-            let config = read_data(&testvec_dir.join("config.cbor"));
-            let dealings = node_ids_from_dir_names(&dealings_testvec_dir)
-                .iter()
-                .map(|(node_id, dealing_file)| {
-                    let dealing = read_data(dealing_file);
-                    (*node_id, dealing)
-                })
-                .collect();
-            let creator_node_id = read_data(&testvec_dir.join("creator_node_id.cbor"));
-
-            (
-                self.paths.create_transcript_env(test_case),
-                config,
-                dealings,
-                creator_node_id,
-            )
-        }
-
-        pub fn get_load_transcript_test_vectors(
-            &self,
-            test_case: &TestCase,
-        ) -> (PathBuf, NiDkgTranscript, NodeId) {
-            let testvec_dir = self.paths.load_transcript(test_case);
-            let transcript = read_data(&testvec_dir.join("transcript.cbor"));
-            let loader_node_id = read_data(&testvec_dir.join("loader_node_id.cbor"));
-
-            (
-                self.paths.load_transcript_env(test_case),
-                transcript,
-                loader_node_id,
-            )
-        }
-
-        pub fn get_retain_keys_test_vectors(
-            &self,
-            test_case: &TestCase,
-        ) -> (PathBuf, HashSet<NiDkgTranscript>, NodeId) {
-            let testvec_dir = self.paths.retain_keys(test_case);
-            let transcript1 = read_data(&testvec_dir.join("transcript1.cbor"));
-            let transcript2 = read_data(&testvec_dir.join("transcript2.cbor"));
-            let mut retained_transcripts = HashSet::new();
-            retained_transcripts.insert(transcript1);
-            retained_transcripts.insert(transcript2);
-            let retainer_node_id = read_data(&testvec_dir.join("retainer_node_id.cbor"));
-
-            (
-                self.paths.retain_keys_env(test_case),
-                retained_transcripts,
-                retainer_node_id,
-            )
-        }
-
-        /// Create all test vectors, and write them to disk
-        fn establish(&self, test_cases: &[TestCase]) {
-            self.establish_create_initial_dealing_test_vectors(test_cases);
-            self.establish_create_reshare_dealing_test_vectors(test_cases);
-            self.establish_verify_dealing_test_vectors(test_cases);
-            self.establish_create_transcript_test_vectors(test_cases);
-            self.establish_load_transcript_test_vectors(test_cases);
-            self.establish_retain_keys_test_vectors(test_cases);
-        }
-
-        fn establish_create_initial_dealing_test_vectors(&self, test_cases: &[TestCase]) {
-            for test_case in test_cases {
-                let (mut env, config, creator_node_id) =
-                    prepare_create_initial_dealing_test_vectors(test_case);
-
-                let testvec_dir = self.paths.create_initial_dealing(test_case);
-                let env_testvec_dir = self.paths.create_initial_dealing_env(test_case);
-                create_dir(&testvec_dir);
-                create_dir(&env_testvec_dir);
-
-                retain_only(&mut env, &creator_node_id);
-                env.save_to_dir(&env_testvec_dir);
-
-                write_data(&testvec_dir.join("config.cbor"), &config);
-                write_data(&testvec_dir.join("creator_node_id.cbor"), &creator_node_id);
-            }
-        }
-
-        fn establish_create_reshare_dealing_test_vectors(&self, test_cases: &[TestCase]) {
-            for test_case in test_cases {
-                let (mut env, config, creator_node_id) =
-                    prepare_create_reshare_dealing_test_vectors(test_case);
-
-                let testvec_dir = self.paths.create_reshare_dealing(test_case);
-                create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.create_reshare_dealing_env(test_case);
-                create_dir(&env_testvec_dir);
-
-                retain_only(&mut env, &creator_node_id);
-                env.save_to_dir(&env_testvec_dir);
-
-                write_data(&testvec_dir.join("config.cbor"), &config);
-                write_data(&testvec_dir.join("creator_node_id.cbor"), &creator_node_id);
-            }
-        }
-
-        fn establish_verify_dealing_test_vectors(&self, test_cases: &[TestCase]) {
-            for test_case in test_cases {
-                let (mut env, config, dealing, creator_node_id, verifier_node_id) =
-                    prepare_verify_dealing_test_vectors(test_case);
-
-                let testvec_dir = self.paths.verify_dealing(test_case);
-                create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.verify_dealing_env(test_case);
-                create_dir(&env_testvec_dir);
-
-                retain_only(&mut env, &verifier_node_id);
-                env.save_to_dir(&env_testvec_dir);
-
-                write_data(&testvec_dir.join("config.cbor"), &config);
-                write_data(&testvec_dir.join("dealing.cbor"), &dealing);
-                write_data(&testvec_dir.join("creator_node_id.cbor"), &creator_node_id);
-                write_data(
-                    &testvec_dir.join("verifier_node_id.cbor"),
-                    &verifier_node_id,
-                );
-            }
-        }
-
-        fn establish_create_transcript_test_vectors(&self, test_cases: &[TestCase]) {
-            for test_case in test_cases {
-                let (mut env, config, dealings, creator_node_id) =
-                    prepare_create_transcript_test_vectors(test_case);
-
-                let testvec_dir = self.paths.create_transcript(test_case);
-                let dealings_testvec_dir = self.paths.create_transcript_dealings(test_case);
-                create_dir(&dealings_testvec_dir);
-                let env_testvec_dir = self.paths.create_transcript_env(test_case);
-                create_dir(&env_testvec_dir);
-
-                retain_only(&mut env, &creator_node_id);
-                env.save_to_dir(&env_testvec_dir);
-
-                write_data(&testvec_dir.join("config.cbor"), &config);
-                for (node_id, dealing) in dealings {
-                    write_data(
-                        &dealings_testvec_dir
-                            .join(node_id.to_string())
-                            .with_extension("cbor"),
-                        &dealing,
-                    );
-                }
-                write_data(&testvec_dir.join("creator_node_id.cbor"), &creator_node_id);
-            }
-        }
-
-        fn establish_load_transcript_test_vectors(&self, test_cases: &[TestCase]) {
-            for test_case in test_cases {
-                let (mut env, transcript, loader_node_id) =
-                    prepare_load_transcript_test_vectors(test_case);
-
-                let testvec_dir = self.paths.load_transcript(test_case);
-                create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.load_transcript_env(test_case);
-                create_dir(&env_testvec_dir);
-
-                retain_only(&mut env, &loader_node_id);
-                env.save_to_dir(&env_testvec_dir);
-
-                write_data(&testvec_dir.join("transcript.cbor"), &transcript);
-                write_data(&testvec_dir.join("loader_node_id.cbor"), &loader_node_id);
-            }
-        }
-
-        fn establish_retain_keys_test_vectors(&self, test_cases: &[TestCase]) {
-            for test_case in test_cases {
-                let (mut env, transcript1, transcript2, retainer_node_id) =
-                    prepare_retain_keys_test_vectors(test_case);
-
-                let testvec_dir = self.paths.retain_keys(test_case);
-                create_dir(&testvec_dir);
-                let env_testvec_dir = self.paths.retain_keys_env(test_case);
-                create_dir(&env_testvec_dir);
-
-                retain_only(&mut env, &retainer_node_id);
-                env.save_to_dir(&env_testvec_dir);
-
-                write_data(
-                    &testvec_dir.join("retainer_node_id.cbor"),
-                    &retainer_node_id,
-                );
-                write_data(&testvec_dir.join("transcript1.cbor"), &transcript1);
-                write_data(&testvec_dir.join("transcript2.cbor"), &transcript2);
-            }
-        }
-    }
-
-    fn prepare_create_initial_dealing_test_vectors(
-        test_case: &TestCase,
-    ) -> (NiDkgTestEnvironment, NiDkgConfig, NodeId) {
-        let config = RandomNiDkgConfig::builder()
-            .subnet_size(test_case.num_of_nodes)
-            .dkg_tag(test_case.dkg_tag)
-            .dealer_count(test_case.num_of_dealers)
-            .build();
-        let env = NiDkgTestEnvironment::new_for_config(config.get());
-        let creator_node_id = config.random_dealer_id();
-
-        (env, config.get().to_owned(), creator_node_id)
-    }
-
-    fn prepare_create_reshare_dealing_test_vectors(
-        test_case: &TestCase,
-    ) -> (NiDkgTestEnvironment, NiDkgConfig, NodeId) {
-        let config0 = RandomNiDkgConfig::builder()
-            .subnet_size(test_case.num_of_nodes)
-            .dkg_tag(test_case.dkg_tag)
-            .dealer_count(test_case.num_of_dealers)
-            .build();
-        let mut env = NiDkgTestEnvironment::new_for_config(config0.get());
-        let transcript0 =
-            run_ni_dkg_and_create_single_transcript(config0.get(), &env.crypto_components);
-        let config = RandomNiDkgConfig::reshare(transcript0, 0..=0, test_case.num_of_nodes);
-        env.update_for_config(config.get());
-        let creator_node_id = config.random_dealer_id();
+fn prepare_create_reshare_dealing_test_vectors<R: Rng + CryptoRng>(
+    test_case: &TestCase,
+    rng: &mut R,
+) -> (NiDkgTestEnvironment, RandomNiDkgConfig) {
+    let config0 = RandomNiDkgConfig::builder()
+        .subnet_size(test_case.num_of_nodes)
+        .dkg_tag(test_case.dkg_tag)
+        .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
+        .build(rng);
+    let mut env = NiDkgTestEnvironment::new_for_config(config0.get(), rng);
+    let transcript0 =
+        run_ni_dkg_and_create_single_transcript(config0.get(), &env.crypto_components);
+    let config = RandomNiDkgConfig::reshare(transcript0, 0..=0, test_case.num_of_nodes, rng);
+    env.update_for_config(config.get(), rng);
+    for creator_node_id in config.dealer_ids() {
         load_transcript(
             config
                 .get()
@@ -606,221 +314,133 @@ mod nidkg_benches_test_vectors {
             &env.crypto_components,
             creator_node_id,
         );
-
-        (env, config.get().to_owned(), creator_node_id)
     }
 
-    fn prepare_verify_dealing_test_vectors(
-        test_case: &TestCase,
-    ) -> (
-        NiDkgTestEnvironment,
-        NiDkgConfig,
-        NiDkgDealing,
-        NodeId,
-        NodeId,
-    ) {
-        let config = RandomNiDkgConfig::builder()
-            .subnet_size(test_case.num_of_nodes)
-            .dkg_tag(test_case.dkg_tag)
-            .dealer_count(test_case.num_of_dealers)
-            .build();
-        let env = NiDkgTestEnvironment::new_for_config(config.get());
-        let creator_node_id = config.random_dealer_id();
-        let verifier_node_id = config.random_receiver_id();
-        let dealing = create_dealing(config.get(), &env.crypto_components, creator_node_id);
+    (env, config)
+}
 
-        (
-            env,
-            config.get().to_owned(),
-            dealing,
-            creator_node_id,
-            verifier_node_id,
-        )
-    }
+fn prepare_create_initial_dealing_test_vectors<R: Rng + CryptoRng>(
+    test_case: &TestCase,
+    rng: &mut R,
+) -> (NiDkgTestEnvironment, RandomNiDkgConfig) {
+    let config = RandomNiDkgConfig::builder()
+        .subnet_size(test_case.num_of_nodes)
+        .dkg_tag(test_case.dkg_tag)
+        .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
+        .build(rng);
+    let env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
+    (env, config)
+}
 
-    fn prepare_create_transcript_test_vectors(
-        test_case: &TestCase,
-    ) -> (
-        NiDkgTestEnvironment,
-        NiDkgConfig,
-        BTreeMap<NodeId, NiDkgDealing>,
-        NodeId,
-    ) {
-        let config = RandomNiDkgConfig::builder()
-            .subnet_size(test_case.num_of_nodes)
-            .dkg_tag(test_case.dkg_tag)
-            .dealer_count(test_case.num_of_dealers)
-            .build();
-        let env = NiDkgTestEnvironment::new_for_config(config.get());
-        let dealings = create_dealings(config.get(), &env.crypto_components);
-        let creator_node_id = config.random_receiver_id();
+fn prepare_verify_dealing_test_vectors<R: Rng + CryptoRng>(
+    test_case: &TestCase,
+    rng: &mut R,
+) -> (
+    NiDkgTestEnvironment,
+    RandomNiDkgConfig,
+    Vec<(NodeId, NiDkgDealing)>,
+) {
+    let config = RandomNiDkgConfig::builder()
+        .subnet_size(test_case.num_of_nodes)
+        .dkg_tag(test_case.dkg_tag)
+        .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
+        .build(rng);
+    let env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
 
-        (env, config.get().to_owned(), dealings, creator_node_id)
-    }
+    let mut dealers: Vec<_> = config.dealer_ids().drain().collect();
+    dealers.sort_unstable();
 
-    fn prepare_load_transcript_test_vectors(
-        test_case: &TestCase,
-    ) -> (NiDkgTestEnvironment, NiDkgTranscript, NodeId) {
-        let config = RandomNiDkgConfig::builder()
-            .subnet_size(test_case.num_of_nodes)
-            .dkg_tag(test_case.dkg_tag)
-            .dealer_count(test_case.num_of_dealers)
-            .build();
-        let env = NiDkgTestEnvironment::new_for_config(config.get());
-        let transcript =
-            run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
-        let loader_node_id = config.random_receiver_id();
+    let dealings: Vec<_> = dealers
+        .into_iter()
+        .map(|dealer_id| {
+            (
+                dealer_id,
+                create_dealing(config.get(), &env.crypto_components, dealer_id),
+            )
+        })
+        .collect();
 
-        (env, transcript, loader_node_id)
-    }
+    (env, config, dealings)
+}
 
-    fn prepare_retain_keys_test_vectors(
-        test_case: &TestCase,
-    ) -> (
-        NiDkgTestEnvironment,
-        NiDkgTranscript,
-        NiDkgTranscript,
-        NodeId,
-    ) {
-        // Create just the initial remote sharing and transcript (using requested
-        // tag/threshold).
-        let config0 = RandomNiDkgConfig::builder()
-            .subnet_size(test_case.num_of_nodes)
-            .dkg_tag(test_case.dkg_tag)
-            .dealer_count(test_case.num_of_dealers)
-            .registry_version(ic_base_types::RegistryVersion::from(1))
-            .build();
-        let mut env = NiDkgTestEnvironment::new_for_config(config0.get());
-        let transcript0 =
-            run_ni_dkg_and_create_single_transcript(config0.get(), &env.crypto_components);
+fn prepare_create_transcript_test_vectors<R: Rng + CryptoRng>(
+    test_case: &TestCase,
+    rng: &mut R,
+) -> (
+    NiDkgTestEnvironment,
+    NiDkgConfig,
+    BTreeMap<NodeId, NiDkgDealing>,
+    NodeId,
+) {
+    let config = RandomNiDkgConfig::builder()
+        .subnet_size(test_case.num_of_nodes)
+        .dkg_tag(test_case.dkg_tag)
+        .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
+        .build(rng);
+    let mut env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
+    let dealings = create_dealings(config.get(), &env.crypto_components);
+    let creator_node_id = config.random_receiver_id(rng);
+    retain_only(&mut env, &creator_node_id);
 
-        // Reshare locally amongst the same subnet.
-        let config1 = RandomNiDkgConfig::reshare(transcript0, 0..=0, test_case.num_of_nodes);
-        env.update_for_config(config1.get());
-        let transcript1 =
-            run_ni_dkg_and_create_single_transcript(config1.get(), &env.crypto_components);
+    (env, config.get().to_owned(), dealings, creator_node_id)
+}
 
-        // Run an "inverted" DKG,
-        // i.e. low if high is requested and high if low is requested
-        // (the retain_only_active_keys_for_transcript checks that both
-        // high- and low-threshold transcripts are retained)
-        let config2 = config1.new_with_inverted_threshold();
-        env.update_for_config(config2.get());
-        let transcript2 =
-            run_ni_dkg_and_create_single_transcript(config2.get(), &env.crypto_components);
+fn prepare_load_transcript_test_vectors<R: Rng + CryptoRng>(
+    test_case: &TestCase,
+    rng: &mut R,
+) -> (NiDkgTestEnvironment, RandomNiDkgConfig, NiDkgTranscript) {
+    let config = RandomNiDkgConfig::builder()
+        .subnet_size(test_case.num_of_nodes)
+        .dkg_tag(test_case.dkg_tag)
+        .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
+        .build(rng);
+    let env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
+    let transcript = run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
 
-        let retainer_node_id = config2.random_receiver_id();
+    (env, config, transcript)
+}
 
-        // We'll retain only the last two transcripts (one high, one low).
-        (env, transcript1, transcript2, retainer_node_id)
-    }
+fn prepare_retain_keys_test_vectors<R: Rng + CryptoRng>(
+    test_case: &TestCase,
+    rng: &mut R,
+) -> (
+    NiDkgTestEnvironment,
+    RandomNiDkgConfig,
+    NiDkgTranscript,
+    NiDkgTranscript,
+) {
+    // Create just the initial remote sharing and transcript (using requested
+    // tag/threshold).
+    let config0 = RandomNiDkgConfig::builder()
+        .subnet_size(test_case.num_of_nodes)
+        .dkg_tag(test_case.dkg_tag)
+        .dealer_count(test_case.num_of_dealers)
+        .registry_version(ic_base_types::RegistryVersion::from(1))
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
+        .build(rng);
+    let mut env = NiDkgTestEnvironment::new_for_config(config0.get(), rng);
+    let transcript0 =
+        run_ni_dkg_and_create_single_transcript(config0.get(), &env.crypto_components);
 
-    fn retain_only(env: &mut NiDkgTestEnvironment, node_to_retain: &NodeId) {
-        // NOTE: Can't use retain, because it's not stable until v1.53
-        // env.crypto_components.retain(|&k, _| k == node_to_retain);
+    // Reshare locally amongst the same subnet.
+    let config1 = RandomNiDkgConfig::reshare(transcript0, 0..=0, test_case.num_of_nodes, rng);
+    env.update_for_config(config1.get(), rng);
+    let transcript1 =
+        run_ni_dkg_and_create_single_transcript(config1.get(), &env.crypto_components);
 
-        let nodes_to_remove: Vec<NodeId> = env
-            .crypto_components
-            .keys()
-            .copied()
-            .filter(|n| n != node_to_retain)
-            .collect();
-        for node in nodes_to_remove {
-            env.crypto_components.remove(&node);
-        }
-    }
+    // Run an "inverted" DKG,
+    // i.e. low if high is requested and high if low is requested
+    // (the retain_only_active_keys_for_transcript checks that both
+    // high- and low-threshold transcripts are retained)
+    let config2 = config1.new_with_inverted_threshold(rng);
+    env.update_for_config(config2.get(), rng);
+    let transcript2 =
+        run_ni_dkg_and_create_single_transcript(config2.get(), &env.crypto_components);
 
-    fn create_dir(path: &Path) {
-        std::fs::create_dir_all(path).expect("failed to create test vector directory");
-    }
-
-    fn write_data<T>(path: &Path, data: &T)
-    where
-        T: ser::Serialize,
-    {
-        let file = std::fs::File::create(path).expect("failed to create data file");
-        serde_cbor::to_writer(file, data).expect("failed to serialize data to file");
-    }
-
-    fn read_data<T>(path: &Path) -> T
-    where
-        T: de::DeserializeOwned,
-    {
-        let file = std::fs::File::open(path).expect("failed to open data file");
-        serde_cbor::from_reader(&file).expect("failed to load data from file")
-    }
-
-    pub struct TestVectorsPaths {
-        toplevel_path: PathBuf,
-    }
-
-    impl TestVectorsPaths {
-        pub fn toplevel(&self) -> PathBuf {
-            self.toplevel_path.clone()
-        }
-
-        pub fn create_initial_dealing(&self, test_case: &TestCase) -> PathBuf {
-            self.toplevel_path
-                .join("create_initial_dealing")
-                .join(test_case.name())
-        }
-
-        pub fn create_initial_dealing_env(&self, test_case: &TestCase) -> PathBuf {
-            self.create_initial_dealing(test_case).join("env")
-        }
-
-        pub fn create_reshare_dealing(&self, test_case: &TestCase) -> PathBuf {
-            self.toplevel_path
-                .join("create_reshare_dealing")
-                .join(test_case.name())
-        }
-
-        pub fn create_reshare_dealing_env(&self, test_case: &TestCase) -> PathBuf {
-            self.create_reshare_dealing(test_case).join("env")
-        }
-
-        pub fn verify_dealing(&self, test_case: &TestCase) -> PathBuf {
-            self.toplevel_path
-                .join("verify_dealing")
-                .join(test_case.name())
-        }
-
-        pub fn verify_dealing_env(&self, test_case: &TestCase) -> PathBuf {
-            self.verify_dealing(test_case).join("env")
-        }
-
-        pub fn create_transcript(&self, test_case: &TestCase) -> PathBuf {
-            self.toplevel_path
-                .join("create_transcript")
-                .join(test_case.name())
-        }
-
-        pub fn create_transcript_env(&self, test_case: &TestCase) -> PathBuf {
-            self.create_transcript(test_case).join("env")
-        }
-
-        pub fn create_transcript_dealings(&self, test_case: &TestCase) -> PathBuf {
-            self.create_transcript(test_case).join("dealings")
-        }
-
-        pub fn load_transcript(&self, test_case: &TestCase) -> PathBuf {
-            self.toplevel_path
-                .join("load_transcript")
-                .join(test_case.name())
-        }
-
-        pub fn load_transcript_env(&self, test_case: &TestCase) -> PathBuf {
-            self.load_transcript(test_case).join("env")
-        }
-
-        pub fn retain_keys(&self, test_case: &TestCase) -> PathBuf {
-            self.toplevel_path
-                .join("retain_keys")
-                .join(test_case.name())
-        }
-
-        pub fn retain_keys_env(&self, test_case: &TestCase) -> PathBuf {
-            self.retain_keys(test_case).join("env")
-        }
-    }
+    // We'll retain only the last two transcripts (one high, one low).
+    (env, config2, transcript1, transcript2)
 }

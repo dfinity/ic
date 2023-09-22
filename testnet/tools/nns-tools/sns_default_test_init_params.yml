@@ -7,7 +7,7 @@
 # Fee of a ledger transaction.
 # Default value = 10000
 #
-transaction_fee_e8s: 10000
+transaction_fee_e8s: 1
 #
 # The name of the token issued by the SNS ledger.
 # This field has no default, a value must be provided by the user.
@@ -36,7 +36,7 @@ proposal_reject_cost_e8s: 100000000
 # The minimum amount of SNS Token e8s an SNS Ledger account must have to stake a neuron.
 # Default value = 100000000
 #
-neuron_minimum_stake_e8s: 100000000
+neuron_minimum_stake_e8s: 10
 #
 # The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
 # Default value = 15778800
@@ -47,7 +47,7 @@ neuron_minimum_dissolve_delay_to_vote_seconds: 15778800
 # to the running sns binary, so an absolute path to the logo file is recommended.
 # Must have less than 341334 characters, roughly 256Kb.
 #
-logo: ~
+logo: test.png
 #
 # Url to the dapp controlled by the SNS project.
 # Must be a string of max length = 512.

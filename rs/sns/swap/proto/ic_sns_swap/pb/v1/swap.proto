@@ -12,7 +12,6 @@ package ic_sns_swap.pb.v1;
 import "ic_base_types/pb/v1/types.proto";
 import "ic_nervous_system/pb/v1/nervous_system.proto";
 
-
 // Lifecycle states of the swap canister. The details of their meanings
 // are provided in the documentation of the `Swap` message.
 enum Lifecycle {
@@ -22,26 +21,27 @@ enum Lifecycle {
   // tokens have been transferred to the swap canister's account on
   // the SNS ledger, a call to `open` with valid parameters will start
   // the swap.
-  LIFECYCLE_PENDING     = 1;
+  LIFECYCLE_PENDING = 1;
   // In ADOPTED state, the proposal to start the decentralization swap
-  // has been adopted, and the swap can be opened after a delay
-  // specified by params.sale_delay_seconds.
-  LIFECYCLE_ADOPTED     = 5;
+  // has been adopted, and the swap will be automatically opened after a delay.
+  // In the legacy (non-one-proposal) flow, the swap delay is specified by
+  // params.sale_delay_seconds. In the one-proposal flow, the swap delay is
+  // specified by `init.swap_start_timestamp_seconds`.
+  LIFECYCLE_ADOPTED = 5;
   // In OPEN state, prospective buyers can register for the token
   // swap. The swap will be committed when the target (max) ICP has
   // been reached or the swap's due date/time occurs, whichever
   // happens first.
-  LIFECYCLE_OPEN        = 2;
+  LIFECYCLE_OPEN = 2;
   // In COMMITTED state the token price has been determined; on a call to
   // finalize`, buyers receive their SNS neurons and the SNS governance canister
   // receives the ICP.
-  LIFECYCLE_COMMITTED   = 3;
+  LIFECYCLE_COMMITTED = 3;
   // In ABORTED state the token swap has been aborted, e.g., because the due
   // date/time occurred before the minimum (reserve) amount of ICP has been
   // retrieved. On a call to `finalize`, participants get their ICP refunded.
-  LIFECYCLE_ABORTED     = 4;
+  LIFECYCLE_ABORTED = 4;
 }
-
 
 // The `swap` canister smart contract is used to perform a type of
 // single-price auction (SNS/ICP) of one token type SNS for another token
@@ -55,7 +55,7 @@ enum Lifecycle {
 // State (lifecycle) diagram for the swap canister's state.
 //
 // ```text
-//                                                                     sufficient_participation 
+//                                                                     sufficient_participation
 //                                                                     && (swap_due || icp_target_reached)
 // PENDING -------------------> ADOPTED ---------------------> OPEN -----------------------------------------> COMMITTED
 //         Swap recieves a request        The opening delay      |                                                |
@@ -72,7 +72,7 @@ enum Lifecycle {
 // `max_icp_e8s`.
 //
 // `icp_target_reached` means that the total amount of ICP contributed is
-// equal to `max_icp_e8s`. (The total amount of ICP contributed should 
+// equal to `max_icp_e8s`. (The total amount of ICP contributed should
 // never be greater than `max_icp_e8s`.)
 //
 //
@@ -258,6 +258,10 @@ message Swap {
   // Set to true when auto-finalization is attempted. Prevents auto-finalization
   // from being attempted more than once.
   optional bool already_tried_to_auto_finalize = 17;
+
+  // Set when auto-finalization finishes. Calling finalize manually has no effect
+  // on this parameter.
+  optional FinalizeSwapResponse auto_finalize_swap_response = 18;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -286,7 +290,7 @@ message Init {
   // Analogous to `sns_governance_canister_id`, but for the "root"
   // canister instead of the governance canister.
   string sns_root_canister_id = 12;
-  
+
   // If the swap is aborted, control of the canister(s) should be set to these
   // principals. Must not be empty.
   repeated string fallback_controller_principal_ids = 11;
@@ -408,7 +412,6 @@ message CfParticipant {
 // The construction parameters for the basket of neurons created for all
 // investors in the decentralization swap.
 message NeuronBasketConstructionParameters {
-
   // The number of neurons each investor will receive after the
   // decentralization swap. The total tokens swapped for will be
   // evenly distributed across the `count` neurons.
@@ -424,7 +427,7 @@ message Params {
   // The minimum number of buyers that must participate for the swap
   // to take place. Must be greater than zero.
   uint32 min_participants = 1;
-  
+
   // The total number of ICP that is required for this token swap to
   // take place. This number divided by the number of SNS tokens being
   // offered gives the seller's reserve price for the swap, i.e., the
@@ -443,7 +446,7 @@ message Params {
   // waiting for the due date. Must be at least
   // `min_participants * min_participant_icp_e8s`.
   uint64 max_icp_e8s = 3;
-  
+
   // The minimum amount of ICP that each buyer must contribute to
   // participate. Must be greater than zero.
   uint64 min_participant_icp_e8s = 4;
@@ -533,7 +536,7 @@ message BuyerState {
 
 // Information about a direct investor.
 message DirectInvestment {
-  string buyer_principal = 1;  
+  string buyer_principal = 1;
 }
 
 // Information about a Neurons' Fund investment. The NNS Governance
@@ -624,8 +627,7 @@ message OpenRequest {
 
 message OpenResponse {}
 
-message GetCanisterStatusRequest {
-}
+message GetCanisterStatusRequest {}
 
 // TODO: introduce a limits on the number of buyers to include?
 message GetStateRequest {}
@@ -647,7 +649,7 @@ message GetBuyersTotalRequest {}
 
 message GetBuyersTotalResponse {
   // The total amount of ICP deposited by buyers.
-  uint64 buyers_total  = 1;
+  uint64 buyers_total = 1;
 }
 
 message DerivedState {
@@ -672,6 +674,7 @@ message SetOpenTimeWindowRequest {
   // start time.
   TimeWindow open_time_window = 1;
 }
+
 // Response if setting the open time window succeeded.
 message SetOpenTimeWindowResponse {}
 
@@ -762,7 +765,6 @@ message RestoreDappControllersResponse {
   }
 }
 
-
 // Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
 message SetDappControllersCallResult {
   oneof possibility {
@@ -811,63 +813,63 @@ message SetDappControllersResponse {
 // Copied from nns governance.proto.
 message GovernanceError {
   enum ErrorType {
-     ERROR_TYPE_UNSPECIFIED = 0;
-     // The operation was successfully completed.
-     ERROR_TYPE_OK = 1;
-     // This operation is not available, e.g., not implemented.
-     ERROR_TYPE_UNAVAILABLE = 2;
-     // The caller is not authorized to perform this operation.
-     ERROR_TYPE_NOT_AUTHORIZED = 3;
-     // Some entity required for the operation (for example, a neuron) was
-     // not found.
-     ERROR_TYPE_NOT_FOUND = 4;
-     // The command was missing or invalid. This is a permanent error.
-     ERROR_TYPE_INVALID_COMMAND = 5;
-     // The neuron is dissolving or dissolved and the operation requires it to
-     // be not dissolving (that is, having a non-zero dissolve delay that is
-     // accumulating age).
-     ERROR_TYPE_REQUIRES_NOT_DISSOLVING = 6;
-     // The neuron is not dissolving or dissolved and the operation requires
-     // it to be dissolving (that is, having a non-zero dissolve delay with
-     // zero age that is not accumulating).
-     ERROR_TYPE_REQUIRES_DISSOLVING = 7;
-     // The neuron is not dissolving and not dissolved and the operation
-     // requires it to be dissolved (that is, having a dissolve delay of zero
-     // and an age of zero).
-     ERROR_TYPE_REQUIRES_DISSOLVED = 8;
-     // When adding or removing a hot key: the key to add was already
-     // present or the key to remove was not present or the key to add
-     // was invalid or adding another hot key would bring the total
-     // number of the maximum number of allowed hot keys per neuron.
-     ERROR_TYPE_HOT_KEY = 9;
-     // Some canister side resource is exhausted, so this operation cannot be
-     // performed.
-     ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
-     // Some precondition for executing this method was not met (e.g. the
-     // neuron's dissolve time is too short). There could be a change in the
-     // state of the system such that the operation becomes allowed (e.g. the
-     // owner of the neuron increases its dissolve delay).
-     ERROR_TYPE_PRECONDITION_FAILED = 11;
-     // Executing this method failed for some reason external to the
-     // governance canister.
-     ERROR_TYPE_EXTERNAL = 12;
-     // A neuron has an ongoing ledger update and thus can't be
-     // changed.
-     ERROR_TYPE_LEDGER_UPDATE_ONGOING = 13;
-     // There wasn't enough funds to perform the operation.
-     ERROR_TYPE_INSUFFICIENT_FUNDS = 14;
-     // The principal provided was invalid.
-     ERROR_TYPE_INVALID_PRINCIPAL = 15;
-     // The proposal is defective in some way (e.g. title is too long). If the
-     // same proposal is submitted again without modification, it will be
-     // rejected regardless of changes in the system's state (e.g. increasing
-     // the neuron's dissolve delay will not make the proposal acceptable).
-     ERROR_TYPE_INVALID_PROPOSAL = 16;
-     // The neuron attempted to join the Neurons' Fund while already
-     // a member.
-     ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
-     // The neuron attempted to leave the Neurons' Fund but is not a member.
-     ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
+    ERROR_TYPE_UNSPECIFIED = 0;
+    // The operation was successfully completed.
+    ERROR_TYPE_OK = 1;
+    // This operation is not available, e.g., not implemented.
+    ERROR_TYPE_UNAVAILABLE = 2;
+    // The caller is not authorized to perform this operation.
+    ERROR_TYPE_NOT_AUTHORIZED = 3;
+    // Some entity required for the operation (for example, a neuron) was
+    // not found.
+    ERROR_TYPE_NOT_FOUND = 4;
+    // The command was missing or invalid. This is a permanent error.
+    ERROR_TYPE_INVALID_COMMAND = 5;
+    // The neuron is dissolving or dissolved and the operation requires it to
+    // be not dissolving (that is, having a non-zero dissolve delay that is
+    // accumulating age).
+    ERROR_TYPE_REQUIRES_NOT_DISSOLVING = 6;
+    // The neuron is not dissolving or dissolved and the operation requires
+    // it to be dissolving (that is, having a non-zero dissolve delay with
+    // zero age that is not accumulating).
+    ERROR_TYPE_REQUIRES_DISSOLVING = 7;
+    // The neuron is not dissolving and not dissolved and the operation
+    // requires it to be dissolved (that is, having a dissolve delay of zero
+    // and an age of zero).
+    ERROR_TYPE_REQUIRES_DISSOLVED = 8;
+    // When adding or removing a hot key: the key to add was already
+    // present or the key to remove was not present or the key to add
+    // was invalid or adding another hot key would bring the total
+    // number of the maximum number of allowed hot keys per neuron.
+    ERROR_TYPE_HOT_KEY = 9;
+    // Some canister side resource is exhausted, so this operation cannot be
+    // performed.
+    ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
+    // Some precondition for executing this method was not met (e.g. the
+    // neuron's dissolve time is too short). There could be a change in the
+    // state of the system such that the operation becomes allowed (e.g. the
+    // owner of the neuron increases its dissolve delay).
+    ERROR_TYPE_PRECONDITION_FAILED = 11;
+    // Executing this method failed for some reason external to the
+    // governance canister.
+    ERROR_TYPE_EXTERNAL = 12;
+    // A neuron has an ongoing ledger update and thus can't be
+    // changed.
+    ERROR_TYPE_LEDGER_UPDATE_ONGOING = 13;
+    // There wasn't enough funds to perform the operation.
+    ERROR_TYPE_INSUFFICIENT_FUNDS = 14;
+    // The principal provided was invalid.
+    ERROR_TYPE_INVALID_PRINCIPAL = 15;
+    // The proposal is defective in some way (e.g. title is too long). If the
+    // same proposal is submitted again without modification, it will be
+    // rejected regardless of changes in the system's state (e.g. increasing
+    // the neuron's dissolve delay will not make the proposal acceptable).
+    ERROR_TYPE_INVALID_PROPOSAL = 16;
+    // The neuron attempted to join the Neurons' Fund while already
+    // a member.
+    ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
+    // The neuron attempted to leave the Neurons' Fund but is not a member.
+    ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
   }
 
   ErrorType error_type = 1;
@@ -901,8 +903,7 @@ message SettleCommunityFundParticipation {
   // When this happens, maturity needs to be restored to Neurons' Fund neurons.
   // The amounts to be refunded can be found in the ProposalData's
   // `cf_participants` field.
-  message Aborted {
-  }
+  message Aborted {}
 }
 
 // The id of a specific neuron, which equals the neuron's subaccount on
@@ -973,6 +974,21 @@ message GetLifecycleRequest {}
 message GetLifecycleResponse {
   optional Lifecycle lifecycle = 1;
   optional uint64 decentralization_sale_open_timestamp_seconds = 2;
+}
+
+message GetAutoFinalizationStatusRequest {}
+
+message GetAutoFinalizationStatusResponse {
+  // Reflects whether auto-finalization has been enabled via in the init
+  // parameters (`should_auto_finalize`).
+  optional bool is_auto_finalize_enabled = 1;
+
+  // True if and only if auto-finalization has been started.
+  optional bool has_auto_finalize_been_attempted = 2;
+
+  // Will be populated with the FinalizeSwapResponse once auto-finalization has
+  // completed.
+  optional FinalizeSwapResponse auto_finalize_swap_response = 3;
 }
 
 // Request struct for the method `get_init`
@@ -1179,8 +1195,7 @@ message Participant {
 }
 
 // Request struct for the method `get_sale_parameters`.
-message GetSaleParametersRequest {
-}
+message GetSaleParametersRequest {}
 
 // Response struct for the method `get_sale_parameters`.
 message GetSaleParametersResponse {
@@ -1215,13 +1230,12 @@ message ListSnsNeuronRecipesResponse {
   repeated SnsNeuronRecipe sns_neuron_recipes = 1;
 }
 
-
 // Request struct for the method `notfiy_payment_failure`
 message NotifyPaymentFailureRequest {}
 
 // Response for the method `notfiy_payment_failure`
 // Returns the ticket if a ticket was found for the caller and the ticket
-// was removed successfully. Returns None if no ticket was found for the caller. 
+// was removed successfully. Returns None if no ticket was found for the caller.
 message NotifyPaymentFailureResponse {
   optional Ticket ticket = 1;
 }

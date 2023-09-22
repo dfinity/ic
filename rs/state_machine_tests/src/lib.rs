@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
@@ -9,6 +10,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::{
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
@@ -42,8 +44,9 @@ use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::subnet::SubnetListRegistry;
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_ecdsa_signing_subnet_list_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_canister_migrations_record_key, make_crypto_node_key, make_ecdsa_signing_subnet_list_key,
+    make_node_record_key, make_provisional_whitelist_record_key, make_routing_table_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -61,7 +64,9 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter};
+use ic_test_utilities_metrics::{
+    fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
+};
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
@@ -71,7 +76,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubn
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{
     canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId, CombinedThresholdSig,
-    CombinedThresholdSigOf, Signable, Signed,
+    CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::messages::{CallbackId, Certificate, Response};
@@ -93,6 +98,7 @@ pub use ic_types::{
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
+
 use maplit::btreemap;
 use serde::Serialize;
 pub use slog::Level;
@@ -197,7 +203,6 @@ fn make_nodes_registry(
             http: Some(ConnectionEndpoint {
                 ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
                 port: 1234,
-                protocol: 0,
             }),
             p2p_flow_endpoints: vec![],
             chip_id: vec![],
@@ -208,6 +213,15 @@ fn make_nodes_registry(
                 &make_node_record_key(*node_id),
                 registry_version,
                 Some(node_record),
+            )
+            .unwrap();
+
+        let node_key = valid_node_signing_public_key();
+        data_provider
+            .add(
+                &make_crypto_node_key(*node_id, KeyPurpose::NodeSigning),
+                registry_version,
+                Some(node_key),
             )
             .unwrap();
     }
@@ -292,10 +306,10 @@ pub struct StateMachine {
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     _runtime: Runtime,
-    state_dir: TempDir,
-    checkpoints_enabled: std::cell::Cell<bool>,
-    nonce: std::cell::Cell<u64>,
-    time: std::cell::Cell<Time>,
+    pub state_dir: TempDir,
+    checkpoints_enabled: std::sync::atomic::AtomicBool,
+    nonce: std::sync::atomic::AtomicU64,
+    time: std::sync::atomic::AtomicU64,
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
 }
 
@@ -309,7 +323,7 @@ impl fmt::Debug for StateMachine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("StateMachine")
             .field("state_dir", &self.state_dir.path().display())
-            .field("nonce", &self.nonce.get())
+            .field("nonce", &self.nonce.load(Ordering::Relaxed))
             .finish()
     }
 }
@@ -356,7 +370,7 @@ impl StateMachineBuilder {
         }
     }
 
-    fn with_state_dir(self, state_dir: TempDir) -> Self {
+    pub fn with_state_dir(self, state_dir: TempDir) -> Self {
         Self { state_dir, ..self }
     }
 
@@ -669,9 +683,9 @@ impl StateMachine {
             state_dir,
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
-            checkpoints_enabled: std::cell::Cell::new(checkpoints_enabled),
-            nonce: std::cell::Cell::new(nonce),
-            time: std::cell::Cell::new(time),
+            checkpoints_enabled: std::sync::atomic::AtomicBool::new(checkpoints_enabled),
+            nonce: std::sync::atomic::AtomicU64::new(nonce),
+            time: std::sync::atomic::AtomicU64::new(time.as_nanos_since_unix_epoch()),
             ecdsa_subnet_public_keys,
         }
     }
@@ -679,9 +693,9 @@ impl StateMachine {
     fn into_components(self) -> (TempDir, u64, Time, bool) {
         (
             self.state_dir,
-            self.nonce.get(),
-            self.time.get(),
-            self.checkpoints_enabled.get(),
+            self.nonce.into_inner(),
+            Time::from_nanos_since_unix_epoch(self.time.into_inner()),
+            self.checkpoints_enabled.into_inner(),
         )
     }
 
@@ -722,7 +736,8 @@ impl StateMachine {
     /// to the state machine if you want to use [restart_node] and
     /// [await_state_hash] functions.
     pub fn set_checkpoints_enabled(&self, enabled: bool) {
-        self.checkpoints_enabled.set(enabled)
+        self.checkpoints_enabled
+            .store(enabled, core::sync::atomic::Ordering::Relaxed)
     }
 
     /// Returns the latest state.
@@ -833,7 +848,7 @@ impl StateMachine {
 
         let batch = Batch {
             batch_number,
-            requires_full_state_hash: self.checkpoints_enabled.get(),
+            requires_full_state_hash: self.checkpoints_enabled.load(Ordering::Relaxed),
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
@@ -842,7 +857,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
             registry_version: self.registry_client.get_latest_version(),
-            time: self.time.get(),
+            time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
             consensus_responses: payload.consensus_responses,
         };
         self.message_routing
@@ -914,19 +929,35 @@ impl StateMachine {
         .unwrap_or(0)
     }
 
+    /// Total number of running canisters.
+    pub fn num_running_canisters(&self) -> u64 {
+        *fetch_int_gauge_vec(
+            &self.metrics_registry,
+            "replicated_state_registered_canisters",
+        )
+        .get(&Labels::from([("status".into(), "running".into())]))
+        .unwrap_or(&0)
+    }
+
+    /// Total memory footprint of all canisters on this subnet.
+    pub fn canister_memory_usage_bytes(&self) -> u64 {
+        fetch_int_gauge(&self.metrics_registry, "canister_memory_usage_bytes").unwrap_or(0)
+    }
+
     /// Sets the time that the state machine will use for executing next
     /// messages.
     pub fn set_time(&self, time: SystemTime) {
-        self.time.set(Time::from_nanos_since_unix_epoch(
+        self.time.store(
             time.duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64,
-        ));
+            core::sync::atomic::Ordering::Relaxed,
+        );
     }
 
     /// Returns the current state machine time.
     pub fn time(&self) -> SystemTime {
-        SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.get().as_nanos_since_unix_epoch())
+        SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
 
     /// Advances the state machine time by the given amount.
@@ -1049,6 +1080,7 @@ impl StateMachine {
                 .metadata()
                 .expect("failed to get file permission")
                 .permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
             permissions.set_readonly(false);
             file.set_permissions(permissions)
                 .expect("failed to set file persmission");
@@ -1116,7 +1148,7 @@ impl StateMachine {
         canister_id: CanisterId,
     ) -> Result<(), String> {
         // Enable checkpoints and make a tick to write a checkpoint.
-        let cp_enabled = self.checkpoints_enabled.get();
+        let cp_enabled = self.checkpoints_enabled.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);
         self.tick();
         self.set_checkpoints_enabled(cp_enabled);
@@ -1497,10 +1529,11 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> MessageId {
-        self.nonce.set(self.nonce.get() + 1);
+        // increment the global nonce and use it as the current nonce.
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
         let builder = PayloadBuilder::new()
             .with_max_expiry_time_from_now(self.time())
-            .with_nonce(self.nonce.get())
+            .with_nonce(nonce)
             .ingress(sender, canister_id, method, payload);
 
         let msg_id = builder.ingress_ids().pop().unwrap();

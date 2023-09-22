@@ -1,16 +1,17 @@
-use std::{fmt, sync::Arc, time::Duration};
+use std::{fmt, iter::once, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
 use ic_agent::Agent;
+use opentelemetry::{baggage::BaggageExt, trace::FutureExt, KeyValue};
 use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
 use crate::{
     acme::{self, FinalizeError},
-    certificate::{self, Pair},
+    certificate::{self, GetCert, GetCertError, Pair},
     check::Check,
     dns::{self, Resolve},
     registration::{Id, Registration, State},
@@ -110,7 +111,7 @@ impl From<&ProcessError> for Duration {
             ProcessError::AwaitingAcmeOrderCreation => Duration::from_secs(60),
             ProcessError::AwaitingDnsPropagation => Duration::from_secs(60),
             ProcessError::AwaitingAcmeOrderReady => Duration::from_secs(60),
-            ProcessError::FailedUserConfigurationCheck => Duration::from_secs(60),
+            ProcessError::FailedUserConfigurationCheck => Duration::from_secs(10 * 60),
             ProcessError::UnexpectedError(_) => Duration::from_secs(10 * 60),
         }
     }
@@ -379,6 +380,36 @@ impl Process for Processor {
                 Err(_err) => Err(ProcessError::FailedUserConfigurationCheck),
             },
         }
+    }
+}
+
+pub struct WithDetectRenewal<T: Process> {
+    pub processor: T,
+    pub renewal_detector: Arc<dyn GetCert>,
+}
+
+impl<T: Process> WithDetectRenewal<T> {
+    pub fn new(processor: T, renewal_detector: Arc<dyn GetCert>) -> Self {
+        Self {
+            processor,
+            renewal_detector,
+        }
+    }
+}
+
+#[async_trait]
+impl<T: Process> Process for WithDetectRenewal<T> {
+    async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
+        let is_renewal = match self.renewal_detector.get_cert(id).await {
+            Ok(_) => String::from("1"),
+            Err(GetCertError::NotFound) => String::from("0"),
+            Err(err) => return Err(ProcessError::UnexpectedError(anyhow!(err))),
+        };
+        let ctx = opentelemetry::Context::current_with_baggage(once(KeyValue::new(
+            "is_renewal",
+            is_renewal,
+        )));
+        self.processor.process(id, task).with_context(ctx).await
     }
 }
 

@@ -131,6 +131,8 @@ type FirewallRulesScope = variant {
   Subnet : principal;
   Global;
 };
+type GetSubnetForCanisterRequest = record { "principal" : opt principal };
+type GetSubnetForCanisterResponse = record { subnet_id : opt principal };
 type Gps = record { latitude : float32; longitude : float32 };
 type NodeOperatorRecord = record {
   ipv6 : opt text;
@@ -184,6 +186,7 @@ type Result_2 = variant {
   Err : text;
 };
 type Result_3 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
+type Result_4 = variant { Ok : GetSubnetForCanisterResponse; Err : text };
 type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
 type SetFirewallConfigPayload = record {
   ipv4_prefixes : vec text;
@@ -201,7 +204,6 @@ type SubnetFeatures = record {
   canister_sandboxing : bool;
   sev_status : opt SevFeatureStatus;
   http_requests : bool;
-  onchain_observability : opt bool;
 };
 type SubnetType = variant { application; verified_application; system };
 type UpdateElectedReplicaVersionsPayload = record {
@@ -293,6 +295,7 @@ service : {
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (Result_2) query;
   get_node_providers_monthly_xdr_rewards : () -> (Result_3) query;
+  get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (Result_4) query;
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> (Result_1);
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_firewall_rules : (RemoveFirewallRulesPayload) -> ();

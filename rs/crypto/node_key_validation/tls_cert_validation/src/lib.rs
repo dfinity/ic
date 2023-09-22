@@ -1,12 +1,11 @@
 //! Library crate for verifying the validity of a node's TLS certificate.
 
-use chrono::{DateTime, Duration, Utc};
 use core::fmt;
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as BasicSigEd25519SignatureBytes;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::CryptoResult;
-use ic_types::NodeId;
+use ic_types::{NodeId, Time};
 use serde::Deserialize;
 use serde::Serialize;
 use std::convert::TryFrom;
@@ -19,8 +18,10 @@ mod tests;
 
 /// Validated node's TLS certificate.
 ///
-/// The [`certificate`] contained is guaranteed to be immutable and a valid TLS certificate.
-/// Use `try_from((X509PublicKeyCert, NodeId))` to create an instance from an unvalidated certificate and node ID.
+/// The [`certificate`] contained is guaranteed to be immutable and a valid TLS
+/// certificate at a given time. Use `try_from((X509PublicKeyCert, NodeId,
+/// Time))` to create an instance from an unvalidated certificate, node ID, and
+/// time.
 ///
 /// Validation of a *node's TLS certificate* includes verifying that
 /// * the certificate is well-formed, i.e., formatted in X.509 version 3 and
@@ -32,9 +33,8 @@ mod tests;
 /// * the certificate is NOT for a certificate authority. This means either 1)
 ///   there are no BasicConstraints extensions, or 2) if there are
 ///   BasicConstraints then one is `CA` and it's set to `False`.
-/// * the certificate's notBefore date is latest in two minutes from now. This
-///   is to ensure that the certificate is already valid or becomes valid
-///   shortly. The grace period is to account for potential clock differences.
+/// * the certificate's notBefore date is smaller than or equal to the current time.
+///   This is to ensure that the certificate is already valid.
 /// * the certificate's notAfter date indicates according to [RFC 5280 (section
 ///   4.1.2.5)] that the certificate has no well-defined expiration date.
 /// * the certificate's signature algorithm is Ed25519 (OID 1.3.101.112)
@@ -55,19 +55,20 @@ impl ValidTlsCertificate {
     }
 }
 
-impl TryFrom<(X509PublicKeyCert, NodeId)> for ValidTlsCertificate {
+impl TryFrom<(X509PublicKeyCert, NodeId, Time)> for ValidTlsCertificate {
     type Error = TlsCertValidationError;
 
-    fn try_from((certificate, node_id): (X509PublicKeyCert, NodeId)) -> Result<Self, Self::Error> {
+    fn try_from(
+        (certificate, node_id, current_time): (X509PublicKeyCert, NodeId, Time),
+    ) -> Result<Self, Self::Error> {
         let x509_cert = parse_x509_v3_certificate(&certificate.certificate_der)?;
         let subject_cn = single_subject_cn_as_str(&x509_cert)?;
         ensure_subject_cn_equals_node_id(subject_cn, node_id)?;
         ensure_single_issuer_cn_equals_subject_cn(&x509_cert, subject_cn)?;
         ensure_not_ca(&x509_cert)?;
-        ensure_notbefore_date_is_latest_in_two_minutes_from_now(&x509_cert)?;
+        ensure_notbefore_date_is_latest_at(&x509_cert, current_time)?;
         ensure_notafter_date_equals_99991231235959z(&x509_cert)?;
         ensure_signature_algorithm_is_ed25519(&x509_cert)?;
-
         let public_key = ed25519_pubkey_from_x509_cert(&x509_cert)?;
         verify_ed25519_public_key(&public_key)?;
         verify_ed25519_signature(&x509_cert, &public_key).map_err(|e| {
@@ -137,28 +138,24 @@ fn ensure_not_ca(x509_cert: &X509Certificate) -> Result<(), TlsCertValidationErr
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn utc_now() -> DateTime<Utc> {
-    DateTime::<Utc>::from(dfn_core::api::now())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn utc_now() -> DateTime<Utc> {
-    Utc::now()
-}
-
-fn ensure_notbefore_date_is_latest_in_two_minutes_from_now(
+fn ensure_notbefore_date_is_latest_at(
     x509_cert: &X509Certificate,
+    current_time: Time,
 ) -> Result<(), TlsCertValidationError> {
-    let now = utc_now();
-    let two_min_from_now = now + Duration::minutes(2);
-    let two_min_from_now_asn1 = ASN1Time::from_timestamp(two_min_from_now.timestamp());
+    let current_time_u64 = current_time.as_secs_since_unix_epoch();
+    let current_time_i64 = i64::try_from(current_time_u64).map_err(|e| {
+        invalid_tls_certificate_error(format!(
+            "failed to convert current time ({current_time_u64}) to i64: {}",
+            e
+        ))
+    })?;
+    let current_time_asn1 = ASN1Time::from_timestamp(current_time_i64);
 
-    if x509_cert.validity().not_before > two_min_from_now_asn1 {
+    if x509_cert.validity().not_before > current_time_asn1 {
         return Err(invalid_tls_certificate_error(format!(
-            "notBefore date(={:?}) is later than two minutes from now(={})",
+            "notBefore date (={:?}) is in the future compared to current time (={:?})",
             x509_cert.validity().not_before,
-            now
+            current_time_asn1,
         )));
     }
     Ok(())
@@ -204,7 +201,7 @@ fn ed25519_pubkey_from_x509_cert(
     x509_cert: &X509Certificate,
 ) -> Result<BasicSigEd25519PublicKeyBytes, TlsCertValidationError> {
     BasicSigEd25519PublicKeyBytes::try_from(
-        &x509_cert
+        x509_cert
             .tbs_certificate
             .subject_pki
             .subject_public_key
@@ -243,7 +240,7 @@ fn verify_ed25519_signature(
     x509_cert: &X509Certificate,
     public_key: &BasicSigEd25519PublicKeyBytes,
 ) -> CryptoResult<()> {
-    let sig = BasicSigEd25519SignatureBytes::try_from(&x509_cert.signature_value.data.to_vec())?;
+    let sig = BasicSigEd25519SignatureBytes::try_from(x509_cert.signature_value.data.to_vec())?;
     let msg = x509_cert.tbs_certificate.as_ref();
     ic_crypto_internal_basic_sig_ed25519::verify(&sig, msg, public_key)
 }

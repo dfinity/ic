@@ -1,10 +1,32 @@
-//! Wrapper for BLS12-381 operations
+//! BLS12-381 wrapper types and common operations
+//!
+//! This crate provides a stable API for various operations relevant
+//! both to generic uses of BLS12-381 (point multiplication, pairings, ...)
+//! as well as Internet Computer specific functionality, especially functions
+//! necessary to implement the Non Interactive Distributed Key Generation
+//!
+//! It also offers optimized implementations of point multiplication and
+//! multiscalar multiplication which are substantially faster than the basic
+//! implementations from the bls12_381 crate, which this crate uses for
+//! its underlying arithmetic
+//!
+//! It also includes implementations of polynomial arithmetic and
+//! Lagrange interpolation.
 
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 #![warn(rust_2018_idioms)]
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
+
+mod interpolation;
+mod poly;
+
+pub use interpolation::{InterpolationError, LagrangeCoefficients};
+pub use poly::Polynomial;
+
+/// The index of a node.
+pub type NodeIndex = u32;
 
 #[cfg(test)]
 mod tests;
@@ -46,6 +68,10 @@ pub enum PairingInvalidScalar {
 #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Scalar {
     value: ic_bls12_381::Scalar,
+}
+
+lazy_static::lazy_static! {
+    static ref SCALAR_ZERO: Scalar = Scalar::new(ic_bls12_381::Scalar::zero());
 }
 
 impl Ord for Scalar {
@@ -115,9 +141,15 @@ impl Scalar {
         Self::from_u64(v as u64)
     }
 
-    /// Create a scalar from a small integer value + 1
-    pub fn from_node_index(v: u32) -> Self {
-        Self::from_u64(v as u64 + 1)
+    /// Create a scalar used for threshold polynomial evaluation
+    ///
+    /// Normally this is used in threshold schemes, where a polynomial
+    /// `f` is evaluated as `f(x)` where `x` is an integer > 0 which
+    /// is unique to the node. In this scenario, `f(0)` reveals the
+    /// full secret and is never computed. Thus, we number the nodes
+    /// starting from index 1 instead of 0.
+    pub fn from_node_index(node_index: NodeIndex) -> Self {
+        Self::from_u64(node_index as u64 + 1)
     }
 
     /// Create a scalar from a small integer value
@@ -190,6 +222,11 @@ impl Scalar {
     /// Return the scalar 0
     pub fn zero() -> Self {
         Self::new(ic_bls12_381::Scalar::zero())
+    }
+
+    /// Return the scalar 0, as a static reference
+    pub fn zero_ref() -> &'static Self {
+        &SCALAR_ZERO
     }
 
     /// Return the scalar 1

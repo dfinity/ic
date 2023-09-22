@@ -1,0 +1,92 @@
+name: Daniel
+description: >
+    The best software engineer you ever did saw.
+
+logo: test.png
+url: https://forum.dfinity.org/
+
+NnsProposal:
+    title: "Proposal to Create an SNS named Daniel"
+    url: "https://forum.dfinity.org/"
+    summary: "This is just a short summary, but I think it's pretty good."
+
+
+Principals: []
+
+fallback_controller_principals:
+    - ye54c-us65k-r4log-cyhy6-vt33j-z7mwx-ymwzl-yjtti-24xs4-qemd2-rqe
+
+dapp_canisters: []
+
+Token:
+    name: Batman
+    symbol: BTM
+    transaction_fee: 1 e8s
+    logo: test.png
+
+Proposals:
+    rejection_fee: 1 token
+    initial_voting_period: 4d
+    maximum_wait_for_quiet_deadline_extension: 1 day
+
+Neurons:
+    minimum_creation_stake: 10 e8s
+
+Voting:
+    minimum_dissolve_delay: 26 weeks
+
+    MaximumVotingPowerBonuses:
+        DissolveDelay:
+            duration: 8 years
+            bonus: 100%
+
+        Age:
+            duration: 4 years
+            bonus: 25%
+
+    RewardRate:
+        initial: 10%
+        final: 2.25%
+        transition_duration: 12 years
+
+Distribution:
+
+    Neurons:
+
+        - principal: ye54c-us65k-r4log-cyhy6-vt33j-z7mwx-ymwzl-yjtti-24xs4-qemd2-rqe
+          stake: 15 tokens
+          memo: 0
+          dissolve_delay: 1 years
+          vesting_period: 1 year 1 second
+
+    InitialBalances:
+        governance: 60 tokens
+        swap: 40 tokens
+
+    # Optional, but highly recommended. This is a literal
+    # checksum.
+    total: 115 tokens # 60 + 40 + 15
+
+Swap:
+    minimum_participants: 50
+
+    minimum_icp: 123 tokens
+    maximum_icp: 65000 tokens
+
+    minimum_participant_icp: 650 tokens
+    maximum_participant_icp: 6500 tokens
+
+    confirmation_text: Hello, world?
+
+    restricted_countries:
+        - US
+        - CH
+
+    VestingSchedule:
+        events: 3000
+        interval: 17 days
+
+    start_time: 12:00 UTC
+    duration: 7 days
+
+    neurons_fund_investment_icp: 1_000 tokens

@@ -114,6 +114,30 @@ impl IngressStatus {
             IngressStatus::Unknown => 0,
         }
     }
+
+    /// Checks whether the state transition from `self` to `new_status` is valid.
+    pub fn is_valid_state_transition(&self, new_status: &IngressStatus) -> bool {
+        use IngressState::*;
+        use IngressStatus::*;
+        match (self, new_status) {
+            (Unknown, _) => true,
+            (Known { .. }, Unknown) => false,
+            (
+                Known { state, .. },
+                Known {
+                    state: new_state, ..
+                },
+            ) => matches!(
+                (&state, &new_state),
+                (Received, Processing)
+                    | (Received, Completed(_))
+                    | (Received, Failed(_))
+                    | (Processing, Processing)
+                    | (Processing, Completed(_))
+                    | (Processing, Failed(_))
+            ),
+        }
+    }
 }
 
 /// A list of hashsets that implements IngressSetQuery.
@@ -308,7 +332,7 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         f.user_id,
                         "IngressStatus::Failed::user_id",
                     )?)?,
-                    state: IngressState::Failed(UserError::new(
+                    state: IngressState::Failed(UserError::from_proto(
                         ErrorCode::try_from(f.err_code).map_err(|err| match err {
                             TryFromError::ValueOutOfRange(code) => {
                                 ProxyDecodeError::ValueOutOfRange {

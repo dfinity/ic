@@ -34,9 +34,9 @@ use glob::glob;
 use hyper::{Body, Request, Response, StatusCode};
 use mockall::automock;
 use opentelemetry::baggage::BaggageExt;
-use opentelemetry::{global, sdk::Resource, KeyValue};
-use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
+use opentelemetry_prometheus::exporter;
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use serde::Deserialize;
 use tokio::{task, time::Instant};
 use tracing::info;
@@ -95,12 +95,17 @@ async fn main() -> Result<(), Error> {
 
     tracing::subscriber::set_global_default(subscriber).expect("failed to set global subscriber");
 
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .init();
-    let meter = global::meter(SERVICE_NAME);
+    // Metrics
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
+    )
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let meter = provider.meter(SERVICE_NAME);
 
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     let loader = RoutesLoader::new(cli.routes_dir.clone());
@@ -381,14 +386,14 @@ fn create_agent_fn(identity: Arc<BasicIdentity>, root_key: Option<Vec<u8>>) -> i
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 

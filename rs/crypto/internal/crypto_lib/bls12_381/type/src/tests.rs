@@ -1,4 +1,6 @@
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 macro_rules! window_extraction_works_correctly_init {
     ( $( $window_size:expr ),* ) => {
@@ -80,10 +82,9 @@ fn random_bit_indices_works_correctly() {
 
 #[test]
 fn random_bit_indices_works_correctly_for_overflowing_amount() {
-    use rand::SeedableRng;
     const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
-    let mut rng1 = ReproducibleRng::from_seed([0; 32]);
-    let mut rng2 = ReproducibleRng::from_seed([0; 32]);
+    let mut rng1 = ChaCha20Rng::from_seed([0; 32]);
+    let mut rng2 = ChaCha20Rng::from_seed([0; 32]);
 
     // `Scalar::random_bit_indices` for an overflowing `amount` should fall back
     // to the maximum value of `amount`, i.e., `SCALAR_FLOORED_BIT_LENGTH`, and
@@ -104,10 +105,9 @@ fn random_bit_indices_works_correctly_for_overflowing_amount() {
 
 #[test]
 fn random_sparse_scalar_works_correctly_for_overflowing_num_bits() {
-    use rand::SeedableRng;
     const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
-    let mut rng1 = ReproducibleRng::from_seed([0; 32]);
-    let mut rng2 = ReproducibleRng::from_seed([0; 32]);
+    let mut rng1 = ChaCha20Rng::from_seed([0; 32]);
+    let mut rng2 = ChaCha20Rng::from_seed([0; 32]);
 
     // `Scalar::random_sparse` for an overflowing `num_bits` should fall back to
     // `SCALAR_FLOORED_BIT_LENGTH`, and produce the same result for the same RNG

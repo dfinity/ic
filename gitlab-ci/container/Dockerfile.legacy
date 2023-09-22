@@ -18,9 +18,11 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         apt-transport-https ca-certificates curl gnupg lsb-release && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
+    curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
     apt -yq update && \
     apt -yqq install --no-install-recommends \
@@ -32,7 +34,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         policycoreutils python-is-python3 python3 python3-pip python3-cbor shellcheck \
         sudo docker-ce-cli ripgrep patchelf cpio nodejs npm gosu pigz zsh fish hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
-        grub-efi-amd64-bin podman buildah lvm2 fuse-overlayfs google-cloud-cli
+        grub-efi-amd64-bin podman buildah lvm2 fuse-overlayfs google-cloud-cli \
+        python3-dev flex bison libglib2.0-dev libpixman-1-dev python3-setuptools python3-apt libgtk-3-dev \
+        lld-15 llvm-15 llvm-15-dev clang-15 libclang-rt-15-dev
+
+RUN apt -yqq install --no-install-recommends \
+        gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
 
 COPY --from=docker.io/docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
@@ -42,8 +49,8 @@ ARG UID=1000
 RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
     mkdir -p /home/${USER} && \
     chown -R ${UID}.${UID} /home/${USER} && \
-    mkdir -p /cargo /cargo_target /builds /builds/dfinity-lab && \
-    chown -R ${UID}.${UID} /cargo /cargo_target /builds && \
+    mkdir -p /cargo /cargo_target /afl /builds /builds/dfinity-lab && \
+    chown -R ${UID}.${UID} /cargo /afl /cargo_target /builds && \
     chmod +s /usr/sbin/gosu
 
 # Sudo is needed to run `ip tun` commands to create a virtual network for e2e tests
@@ -69,11 +76,24 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown && \
     chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
+# Install AFLplusplus
+ARG AFL_RELEASE_VERSION=4.07c
+RUN cd /afl && \
+    git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
+    cd AFLplusplus && \
+    sed -i 's/(cc_par_cnt + argc >= 1024)/(cc_par_cnt + argc >= 2048)/g' src/afl-cc.c && \
+    sed -i 's/ck_alloc(1024/ck_alloc(2048/g' src/afl-cc.c && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make install && \
+    mv afl-fuzz /afl && \
+    mv afl-showmap /afl && \
+    cd .. && \
+    rm -rf AFLplusplus
+
 # Since we are cloning multiple NPM repos, we need to have multiple node versions installed
 # to switch between them for comptability.
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_agent_js_node_version=16
-ARG sw_node_version=18
 ARG dependency_mgmt_nns_dapp_node_version=18
 ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
@@ -97,7 +117,6 @@ RUN curl --fail \
 
 RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_agent_js_node_version} && \
-    nvm install ${sw_node_version} && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version} && \
     npm install -g @vscode/dev-container-cli
@@ -126,6 +145,8 @@ WORKDIR /
 
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./gitlab-ci/container/files/zshrc /home/ubuntu/.zshrc
+
+COPY ./gitlab-ci/container/TAG /home/ubuntu/.DFINITY-TAG
 
 USER 0
 

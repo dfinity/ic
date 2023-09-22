@@ -13,30 +13,31 @@ impl Default for PayloadBuilder {
                 // TODO(MR-70): use payload builder
                 self_validating: SelfValidatingPayload::default(),
                 canister_http: vec![],
+                query_stats: vec![],
             },
         }
     }
 }
 
 impl PayloadBuilder {
-    /// Create a new XNetPayloadBuilder
+    /// Creates a new `PayloadBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Set the ingress field to ingress_payload
+    /// Sets the `ingress` field.
     pub fn ingress(mut self, ingress_payload: IngressPayload) -> Self {
         self.payload.ingress = ingress_payload;
         self
     }
 
-    /// Set the xnet field to xnet_payload.
+    /// Sets the `xnet` field.
     pub fn xnet(mut self, xnet_payload: XNetPayload) -> Self {
         self.payload.xnet = xnet_payload;
         self
     }
 
-    /// Return the built Payload.
+    /// Returns the built `BatchPayload`.
     pub fn build(&self) -> BatchPayload {
         self.payload.clone()
     }

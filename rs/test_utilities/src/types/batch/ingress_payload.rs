@@ -14,24 +14,24 @@ impl Default for IngressPayloadBuilder {
 }
 
 impl IngressPayloadBuilder {
-    /// Create a new IngressPayloadBuilder.
+    /// Creates a new `IngressPayloadBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Set the IngressPayload.msgs field to the provided messages.
+    /// Sets the `IngressPayload` messages field to the provided messages.
     pub fn msgs(mut self, ingress_msgs: Vec<SignedIngress>) -> Self {
         self.ingress_payload = ingress_msgs;
         self
     }
 
-    /// Append the provided Ingress message to the end of the IngressPayload.
+    /// Appends the provided Ingress message to the end of the `IngressPayload`.
     pub fn add_ingress(mut self, ingress: SignedIngress) -> Self {
         self.ingress_payload.push(ingress);
         self
     }
 
-    /// Return the built IngressPayload.
+    /// Returns the built `IngressPayload`.
     pub fn build(self) -> IngressPayload {
         self.ingress_payload.into()
     }

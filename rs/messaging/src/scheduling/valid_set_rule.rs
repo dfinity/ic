@@ -186,7 +186,7 @@ impl ValidSetRuleImpl {
                     StateError::CanisterStopping(_) => ErrorCode::CanisterStopping,
                     StateError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
                     StateError::UnknownSubnetMethod(_) => ErrorCode::CanisterOutOfCycles,
-                    StateError::InvalidSubnetPayload => ErrorCode::CanisterOutOfCycles,
+                    StateError::InvalidSubnetPayload => ErrorCode::InvalidManagementPayload,
                     StateError::QueueFull { .. } => ErrorCode::IngressHistoryFull,
                     StateError::OutOfMemory { .. }
                     | StateError::InvariantBroken { .. }

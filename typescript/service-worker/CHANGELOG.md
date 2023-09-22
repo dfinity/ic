@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased 
+## Unreleased
+
+## 1.8.7
+
+- Button added to the main error page to uninstall the active service worker and reload all associated client windows
+- Added theme color to the main error page and service worker installation page
+
+## 1.8.6
+
+- Revert usage of DecompressionStreams API, it is not yet widely supported by Safari or Firefox
+
+## 1.8.5
+
+- Fix service worker upgrades that would try to load the new wasm module from the old service worker, the wasm is now inline loaded
+
+## 1.8.4
+
+- upgrade response verification package to version 1.0.0
 
 ## 1.8.3
 
@@ -28,9 +45,9 @@
 
 - Do not throw exceptions for response bodies larger than 10mb
 
-## 1.7.0 
+## 1.7.0
 
-- Integrate verification logic with `@dfinity/response-verification` package 
+- Integrate verification logic with `@dfinity/response-verification` package
 
 ## 1.6.1 (2023-03-26)
 

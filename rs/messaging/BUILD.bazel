@@ -15,6 +15,7 @@ rust_library(
         "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/constants",
+        "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
@@ -48,6 +49,9 @@ rust_test(
     deps = [
         "//rs/interfaces/state_manager/mocks",
         "//rs/registry/fake",
+        "//rs/registry/local_registry",
+        "//rs/registry/local_store",
+        "//rs/registry/local_store/artifacts",
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities",
         "//rs/test_utilities/execution_environment",
@@ -61,6 +65,7 @@ rust_test(
         "@crate_index//:mockall_0_7_2",
         "@crate_index//:rand_0_8_4",
         "@crate_index//:rand_chacha_0_3_1",
+        "@crate_index//:tempfile",
     ],
 )
 

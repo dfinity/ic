@@ -49,21 +49,21 @@ use std::{collections::BTreeMap, convert::TryInto, time::Duration};
 pub mod common;
 
 #[test]
-fn upgrade_root_sns_canister_via_sns_wasms() {
-    run_upgrade_test(SnsCanisterType::Root);
+fn upgrade_root_sns_canister_via_sns_wasms_legacy() {
+    run_upgrade_test_legacy(SnsCanisterType::Root);
 }
 
 #[test]
-fn upgrade_ledger_sns_canister_via_sns_wasms() {
-    run_upgrade_test(SnsCanisterType::Ledger);
+fn upgrade_ledger_sns_canister_via_sns_wasms_legacy() {
+    run_upgrade_test_legacy(SnsCanisterType::Ledger);
 }
 
 #[test]
-fn upgrade_governance_sns_canister_via_sns_wasms() {
-    run_upgrade_test(SnsCanisterType::Governance);
+fn upgrade_governance_sns_canister_via_sns_wasms_legacy() {
+    run_upgrade_test_legacy(SnsCanisterType::Governance);
 }
 
-fn run_upgrade_test(canister_type: SnsCanisterType) {
+fn run_upgrade_test_legacy(canister_type: SnsCanisterType) {
     let wallet_canister_id = CanisterId::from_u64(11);
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
@@ -119,7 +119,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
                 }),
             },
         )),
-        ..SnsInitPayload::with_valid_values_for_testing()
+        ..SnsInitPayload::with_valid_legacy_values_for_testing()
     };
 
     // Will be used to make proposals and such. Fortunately, this guy has lots
@@ -137,6 +137,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         payload,
         EXPECTED_SNS_CREATION_FEE,
     );
+
+    assert_eq!(response.error, None);
 
     let SnsCanisterIds {
         root,
@@ -325,7 +327,7 @@ fn upgrade_swap(
 ///
 /// Using this setup allows us to skip that process and have an SNS with archive canisters more easily.
 #[test]
-fn upgrade_archive_sns_canister_via_sns_wasms() {
+fn upgrade_archive_sns_canister_via_sns_wasms_legacy() {
     let canister_type = SnsCanisterType::Archive;
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
@@ -387,7 +389,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                 }),
             },
         )),
-        ..SnsInitPayload::with_valid_values_for_testing()
+        ..SnsInitPayload::with_valid_legacy_values_for_testing()
     };
 
     // Create some canisterIDs
@@ -426,7 +428,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                 owner: user.into(),
                 subaccount: None,
             },
-            100000000,
+            Nat::from(100_000_000),
         ));
     } else {
         panic!("bug: expected Init got Upgrade");
@@ -575,7 +577,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
 }
 
 #[test]
-fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
+fn test_out_of_sync_version_still_allows_upgrade_to_succeed_legacy() {
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
 
@@ -662,7 +664,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
                 }),
             },
         )),
-        ..SnsInitPayload::with_valid_values_for_testing()
+        ..SnsInitPayload::with_valid_legacy_values_for_testing()
     };
 
     // Create some canisterIDs
@@ -703,7 +705,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
                 owner: user.into(),
                 subaccount: None,
             },
-            100000000,
+            Nat::from(100_000_000),
         ));
     } else {
         panic!("bug: expected Init got Upgrade");
@@ -884,7 +886,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 }
 
 #[test]
-fn test_custom_upgrade_path_for_sns() {
+fn test_custom_upgrade_path_for_sns_legacy() {
     let wallet_canister_id = CanisterId::from_u64(11);
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
@@ -940,7 +942,7 @@ fn test_custom_upgrade_path_for_sns() {
                 }),
             },
         )),
-        ..SnsInitPayload::with_valid_values_for_testing()
+        ..SnsInitPayload::with_valid_legacy_values_for_testing()
     };
 
     let airdrop_sns_neuron_id = sns_governance_pb::NeuronId {
@@ -956,6 +958,8 @@ fn test_custom_upgrade_path_for_sns() {
         payload,
         EXPECTED_SNS_CREATION_FEE,
     );
+
+    assert_eq!(response.error, None);
 
     let SnsCanisterIds { governance, .. } = response.canisters.unwrap();
 

@@ -78,15 +78,15 @@ impl BtcService for BtcServiceImpl {
         &self,
         request: Request<BtcServiceGetSuccessorsRequest>,
     ) -> Result<Response<BtcServiceGetSuccessorsResponse>, Status> {
+        let _timer = self
+            .metrics
+            .request_duration
+            .with_label_values(&[LABEL_GET_SUCCESSOR])
+            .start_timer();
         self.adapter_state.received_now();
         let inner = request.into_inner();
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
-
-        self.metrics
-            .requests
-            .with_label_values(&[LABEL_GET_SUCCESSOR])
-            .inc();
 
         match BtcServiceGetSuccessorsResponse::try_from(
             self.get_successors_handler.get_successors(request).await?,
@@ -103,12 +103,13 @@ impl BtcService for BtcServiceImpl {
         &self,
         request: Request<BtcServiceSendTransactionRequest>,
     ) -> Result<Response<BtcServiceSendTransactionResponse>, Status> {
+        let _timer = self
+            .metrics
+            .request_duration
+            .with_label_values(&[LABEL_SEND_TRANSACTION])
+            .start_timer();
         self.adapter_state.received_now();
         let transaction = request.into_inner().transaction;
-        self.metrics
-            .requests
-            .with_label_values(&[LABEL_SEND_TRANSACTION])
-            .inc();
         self.transaction_manager_tx
             .send(TransactionManagerRequest::SendTransaction(transaction))
             .await
@@ -120,7 +121,7 @@ impl BtcService for BtcServiceImpl {
 }
 
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
-pub fn spawn_grpc_server(
+pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
     adapter_state: AdapterState,

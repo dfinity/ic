@@ -78,7 +78,6 @@ pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
 pub mod nominal_cycles;
-pub mod onchain_observability;
 pub mod p2p;
 pub mod registry;
 pub mod replica_config;
@@ -88,6 +87,9 @@ pub mod single_chunked;
 pub mod state_sync;
 pub mod time;
 pub mod xnet;
+
+#[cfg(test)]
+pub mod exhaustive;
 
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
@@ -104,7 +106,6 @@ use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
-use std::fmt::Display;
 use std::sync::Arc;
 
 pub struct UserTag {}
@@ -130,29 +131,6 @@ pub fn user_id_try_from_protobuf(value: pb::UserId) -> Result<UserId, PrincipalI
     Ok(UserId::from(principal_id))
 }
 
-/// The ID for interactive DKG.
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialOrd, Ord, Hash, PartialEq, Serialize)]
-pub struct IDkgId {
-    pub instance_id: Height,
-    pub subnet_id: SubnetId,
-}
-
-impl Display for IDkgId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "instance_id: '{}', subnet_id: '{}'",
-            self.instance_id, self.subnet_id
-        )
-    }
-}
-
-impl IDkgId {
-    pub fn start_height(&self) -> Height {
-        self.instance_id
-    }
-}
-
 /// A non-negative amount of nodes, typically used in DKG.
 pub type NumberOfNodes = AmountOf<NodeTag, NodeIndex>;
 
@@ -160,6 +138,10 @@ pub struct HeightTag {}
 /// The block height.
 // Note [ExecutionRound vs Height]
 pub type Height = AmountOf<HeightTag, u64>;
+
+pub struct QueryStatsTag {}
+/// The epoch as used by query stats aggregation.
+pub type QueryStatsEpoch = AmountOf<QueryStatsTag, u64>;
 
 /// Converts a NodeId into its protobuf definition.  Normally, we would use
 /// `impl From<NodeId> for pb::NodeId` here however we cannot as both
@@ -484,24 +466,21 @@ impl CanisterTimer {
 /// All long execution start in the Opportunistic mode, and then the scheduler
 /// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO
 /// behavior, and guarantee the progress for long executions.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash)]
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash, Default,
+)]
 pub enum LongExecutionMode {
     /// The long execution might be opportunistically scheduled on the new execution cores,
     /// so its progress depends on the number of new messages to execute.
+    #[default]
     Opportunistic = 0,
     /// The long execution is prioritized to be scheduled on the long execution cores,
     /// so it's quite likely the execution will be finished with no aborts.
     Prioritized = 1,
 }
 
-impl Default for LongExecutionMode {
-    fn default() -> Self {
-        LongExecutionMode::Opportunistic
-    }
-}
-
 /// Represents the memory allocation of a canister.
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Hash)]
+#[derive(Copy, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Hash)]
 pub enum MemoryAllocation {
     /// A reserved number of bytes between 0 and 2^48 inclusively that is
     /// guaranteed to be available to the canister. Charging happens based on
@@ -510,6 +489,7 @@ pub enum MemoryAllocation {
     /// Memory growth of the canister happens dynamically and is subject to the
     /// available memory of the subnet. The canister will be charged for the
     /// memory it's using at any given time.
+    #[default]
     BestEffort,
 }
 
@@ -540,12 +520,6 @@ impl fmt::Display for MemoryAllocation {
             MemoryAllocation::Reserved(bytes) => write!(f, "{}", bytes.display()),
             MemoryAllocation::BestEffort => write!(f, "best-effort"),
         }
-    }
-}
-
-impl Default for MemoryAllocation {
-    fn default() -> Self {
-        MemoryAllocation::BestEffort
     }
 }
 

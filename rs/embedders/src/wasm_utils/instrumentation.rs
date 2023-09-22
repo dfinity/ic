@@ -115,6 +115,7 @@
 use super::system_api_replacements::replacement_functions;
 use super::validation::API_VERSION_IC0;
 use super::{InstrumentationOutput, Segments, SystemApiFunc};
+use ic_config::embedders::MeteringType;
 use ic_config::flag_status::FlagStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
@@ -130,8 +131,8 @@ use crate::wasmtime_embedder::{
     WASM_HEAP_MEMORY_NAME,
 };
 use wasmparser::{
-    BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator, Type,
-    TypeRef, ValType,
+    BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator,
+    StructuralType, SubType, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -157,7 +158,7 @@ impl InjectedImports {
 }
 
 // Gets the cost of an instruction.
-fn instruction_to_cost(i: &Operator) -> u64 {
+pub fn instruction_to_cost(i: &Operator) -> u64 {
     match i {
         // The following instructions are mostly signaling the start/end of code blocks,
         // so we assign 0 cost to them.
@@ -165,6 +166,292 @@ fn instruction_to_cost(i: &Operator) -> u64 {
         Operator::Else => 0,
         Operator::End => 0,
         Operator::Loop { .. } => 0,
+
+        // Default cost of an instruction is 1.
+        _ => 1,
+    }
+}
+
+// Gets the cost of an instruction.
+pub fn instruction_to_cost_new(i: &Operator) -> u64 {
+    // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
+    // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
+    // of operations such as table/memory fill, copy, init. This
+    // dynamic cost is treated separately. Here we only assign a static cost to these instructions.
+    match i {
+        // The following instructions are mostly signaling the start/end of code blocks,
+        // so we assign 0 cost to them.
+        Operator::Block { .. } => 0,
+        Operator::Else => 0,
+        Operator::End => 0,
+        Operator::Loop { .. } => 0,
+
+        // The following instructions generate register/immediate code most of the time,
+        // so we assign 1 cost to them because these are not very costly to execute,
+        // they simply take out resources (registers or instr cache).
+        Operator::I32Const { .. }
+        | Operator::I64Const { .. }
+        | Operator::F32Const { .. }
+        | Operator::F64Const { .. } => 1,
+
+        // All integer arithmetic instructions (32 bit and 64 bit) are of cost 1 with the
+        // exception of division and remainder instructions, which are of cost 10. Validated
+        // in benchmarks.
+        Operator::I32Add { .. }
+        | Operator::I32Sub { .. }
+        | Operator::I32Mul { .. }
+        | Operator::I32And { .. }
+        | Operator::I32Or { .. }
+        | Operator::I32Xor { .. }
+        | Operator::I32Shl { .. }
+        | Operator::I32ShrS { .. }
+        | Operator::I32ShrU { .. }
+        | Operator::I32Rotl { .. }
+        | Operator::I32Rotr { .. }
+        | Operator::I64Add { .. }
+        | Operator::I64Sub { .. }
+        | Operator::I64Mul { .. }
+        | Operator::I64And { .. }
+        | Operator::I64Or { .. }
+        | Operator::I64Xor { .. }
+        | Operator::I64Shl { .. }
+        | Operator::I64ShrS { .. }
+        | Operator::I64ShrU { .. }
+        | Operator::I64Rotl { .. }
+        | Operator::I64Rotr { .. } => 1,
+
+        Operator::I32DivS { .. }
+        | Operator::I32DivU { .. }
+        | Operator::I32RemS { .. }
+        | Operator::I32RemU { .. }
+        | Operator::I64DivS { .. }
+        | Operator::I64DivU { .. }
+        | Operator::I64RemS { .. }
+        | Operator::I64RemU { .. } => 10,
+
+        // All integer (32 and 64 bit) comparison operations are of cost 1.
+        // That is because they boil down to simple arithmetic operations, which are also
+        // of cost 1. Validated in Benchmarks.
+        Operator::I32Eqz { .. }
+        | Operator::I32Eq { .. }
+        | Operator::I32Ne { .. }
+        | Operator::I32LtS { .. }
+        | Operator::I32LtU { .. }
+        | Operator::I32GtS { .. }
+        | Operator::I32GtU { .. }
+        | Operator::I32LeS { .. }
+        | Operator::I32LeU { .. }
+        | Operator::I32GeS { .. }
+        | Operator::I32GeU { .. }
+        | Operator::I64Eqz { .. }
+        | Operator::I64Eq { .. }
+        | Operator::I64Ne { .. }
+        | Operator::I64LtS { .. }
+        | Operator::I64LtU { .. }
+        | Operator::I64GtS { .. }
+        | Operator::I64GtU { .. }
+        | Operator::I64LeS { .. }
+        | Operator::I64LeU { .. }
+        | Operator::I64GeS { .. }
+        | Operator::I64GeU { .. } => 1,
+
+        // All floating point instructions (32 and 64 bit) are of cost 50 because they are expensive CPU operations.
+        //The exception is neg, abs, and copysign, which are cost 2, as they are more efficient.
+        // Comparing floats is cost 1. Validated in Benchmarks.
+        // The cost is adjusted to 20 after benchmarking with real canisters.
+        Operator::F32Add { .. }
+        | Operator::F32Sub { .. }
+        | Operator::F32Mul { .. }
+        | Operator::F32Div { .. }
+        | Operator::F32Min { .. }
+        | Operator::F32Max { .. }
+        | Operator::F32Ceil { .. }
+        | Operator::F32Floor { .. }
+        | Operator::F32Trunc { .. }
+        | Operator::F32Nearest { .. }
+        | Operator::F32Sqrt { .. }
+        | Operator::F64Add { .. }
+        | Operator::F64Sub { .. }
+        | Operator::F64Mul { .. }
+        | Operator::F64Div { .. }
+        | Operator::F64Min { .. }
+        | Operator::F64Max { .. }
+        | Operator::F64Ceil { .. }
+        | Operator::F64Floor { .. }
+        | Operator::F64Trunc { .. }
+        | Operator::F64Nearest { .. }
+        | Operator::F64Sqrt { .. } => 20,
+
+        Operator::F32Abs { .. }
+        | Operator::F32Neg { .. }
+        | Operator::F32Copysign { .. }
+        | Operator::F64Abs { .. }
+        | Operator::F64Neg { .. }
+        | Operator::F64Copysign { .. } => 2,
+
+        // Comparison operations for floats are of cost 3 because they are usually implemented
+        // as arithmetic operations on integers (the individual components, sign, exp, mantissa,
+        // see https://en.wikipedia.org/wiki/Floating-point_arithmetic#Comparison).
+        // Validated in benchmarks.
+        Operator::F32Eq { .. }
+        | Operator::F32Ne { .. }
+        | Operator::F32Lt { .. }
+        | Operator::F32Gt { .. }
+        | Operator::F32Le { .. }
+        | Operator::F32Ge { .. }
+        | Operator::F64Eq { .. }
+        | Operator::F64Ne { .. }
+        | Operator::F64Lt { .. }
+        | Operator::F64Gt { .. }
+        | Operator::F64Le { .. }
+        | Operator::F64Ge { .. } => 3,
+
+        // All Extend instructions are of cost 1.
+        Operator::I32WrapI64 { .. }
+        | Operator::I32Extend8S { .. }
+        | Operator::I32Extend16S { .. }
+        | Operator::I64Extend8S { .. }
+        | Operator::I64Extend16S { .. }
+        | Operator::I64Extend32S { .. }
+        | Operator::F64ReinterpretI64 { .. }
+        | Operator::I64ReinterpretF64 { .. }
+        | Operator::I32ReinterpretF32 { .. }
+        | Operator::F32ReinterpretI32 { .. }
+        | Operator::I64ExtendI32S { .. }
+        | Operator::I64ExtendI32U { .. } => 1,
+
+        // Convert to signed is cheaper than converting to unsigned, validated in benchmarks.
+        Operator::F32ConvertI32S { .. }
+        | Operator::F64ConvertI64S { .. }
+        | Operator::F32ConvertI64S { .. }
+        | Operator::F64ConvertI32S { .. } => 3,
+
+        Operator::F64ConvertI32U { .. }
+        | Operator::F32ConvertI64U { .. }
+        | Operator::F32ConvertI32U { .. }
+        | Operator::F64ConvertI64U { .. } => 16,
+
+        // TruncSat ops are expensive because of floating point manipulation. Cost is 50,
+        // validated in benchmarks.
+        // The cost is adjusted to 20 after benchmarking with real canisters.
+        Operator::I64TruncSatF32S { .. }
+        | Operator::I64TruncSatF32U { .. }
+        | Operator::I64TruncSatF64S { .. }
+        | Operator::I64TruncSatF64U { .. }
+        | Operator::I32TruncSatF32S { .. }
+        | Operator::I32TruncSatF32U { .. }
+        | Operator::I32TruncSatF64S { .. }
+        | Operator::I32TruncSatF64U { .. } => 20,
+
+        // Promote and demote are of cost 1.
+        Operator::F32DemoteF64 { .. } | Operator::F64PromoteF32 { .. } => 1,
+
+        // Trunc ops are expensive because of floating point manipulation. Cost is 30, validated in benchmarks.
+        // The cost is adjusted to 20 after benchmarking with real canisters.
+        Operator::I32TruncF32S { .. }
+        | Operator::I32TruncF32U { .. }
+        | Operator::I32TruncF64S { .. }
+        | Operator::I32TruncF64U { .. }
+        | Operator::I64TruncF32S { .. }
+        | Operator::I64TruncF32U { .. }
+        | Operator::I64TruncF64S { .. }
+        | Operator::I64TruncF64U { .. } => 20,
+
+        // All load/store instructions are of cost 2.
+        // Validated in benchmarks.
+        // The cost is adjusted to 1 after benchmarking with real canisters.
+        Operator::I32Load { .. }
+        | Operator::I64Load { .. }
+        | Operator::F32Load { .. }
+        | Operator::F64Load { .. }
+        | Operator::I32Load8S { .. }
+        | Operator::I32Load8U { .. }
+        | Operator::I32Load16S { .. }
+        | Operator::I32Load16U { .. }
+        | Operator::I64Load8S { .. }
+        | Operator::I64Load8U { .. }
+        | Operator::I64Load16S { .. }
+        | Operator::I64Load16U { .. }
+        | Operator::I64Load32S { .. }
+        | Operator::I64Load32U { .. }
+        | Operator::I32Store { .. }
+        | Operator::I64Store { .. }
+        | Operator::F32Store { .. }
+        | Operator::F64Store { .. }
+        | Operator::I32Store8 { .. }
+        | Operator::I32Store16 { .. }
+        | Operator::I64Store8 { .. }
+        | Operator::I64Store16 { .. }
+        | Operator::I64Store32 { .. } => 1,
+
+        // Global get/set operations are similarly expensive to loads/stores.
+        Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
+
+        // TableGet and TableSet are expensive operations because they
+        // are translated into memory manipulation oprations.
+        // Results based on benchmarks.
+        Operator::TableGet { .. } => 5,
+        Operator::TableSet { .. } => 5,
+
+        // LocalGet and LocalSet, LocalTee and Select are of cost 1.
+        // In principle, they should be equivalent to load/store (cost 2), but they perform load/store
+        // from the stack, which is "nearby" memory, which is likely to be in the cache.
+        Operator::LocalGet { .. }
+        | Operator::LocalSet { .. }
+        | Operator::LocalTee { .. }
+        | Operator::Select { .. } => 1,
+
+        // Memory Grow and Table Grow Size expensive operations because they call
+        // into the system, hence their cost is 300. Memory Size and Table Size are
+        // cheaper, their cost is 20. Results validated in benchmarks.
+        Operator::TableGrow { .. } | Operator::MemoryGrow { .. } => 300,
+        Operator::TableSize { .. } | Operator::MemorySize { .. } => 20,
+
+        // Bulk memory ops are of cost 100. They are heavy operations because
+        // they are translated into function calls in the x86 dissasembly. Validated
+        // in benchmarks.
+        Operator::MemoryFill { .. }
+        | Operator::MemoryCopy { .. }
+        | Operator::TableFill { .. }
+        | Operator::TableCopy { .. }
+        | Operator::MemoryInit { .. }
+        | Operator::TableInit { .. } => 100,
+
+        // Data and Elem drop are of cost 300.
+        Operator::DataDrop { .. } | Operator::ElemDrop { .. } => 300,
+
+        // Call instructions are of cost 20. Validated in benchmarks.
+        // The cost is adjusted to 10 after benchmarking with real canisters.
+        Operator::Call { .. }
+        | Operator::CallIndirect { .. }
+        | Operator::ReturnCall { .. }
+        | Operator::ReturnCallIndirect { .. } => 10,
+
+        // Return, drop, unreachable and nop instructions are of cost 1.
+        Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
+
+        // Branching instructions should be of cost 2.
+        Operator::If { .. }
+        | Operator::Br { .. }
+        | Operator::BrIf { .. }
+        | Operator::BrTable { .. } => 2,
+
+        // Popcnt and Clz instructions are cost 1. Validated in benchmarks.
+        Operator::I32Popcnt { .. }
+        | Operator::I64Popcnt { .. }
+        | Operator::I32Clz { .. }
+        | Operator::I32Ctz { .. }
+        | Operator::I64Clz { .. }
+        | Operator::I64Ctz { .. } => 1,
+
+        // Null references are cheap, validated in benchmarks.
+        Operator::RefNull { .. } => 1,
+        // Checking for null references is the same as branching
+        //but with an added complexity of memory manipulation. Validated in benchmarks.
+        Operator::RefIsNull { .. } => 5,
+        // Function pointers are heavy because they get
+        // translated to memory manipulation. Validated in benchmarks.
+        Operator::RefFunc { .. } => 130,
 
         // Default cost of an instruction is 1.
         _ => 1,
@@ -191,14 +478,19 @@ const MAX_STABLE_MEMORY_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / (WASM_
 /// There is one byte for each OS page in the stable memory.
 const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES / (PAGE_SIZE as u64);
 
-fn add_type(module: &mut Module, ty: Type) -> u32 {
-    let Type::Func(sig) = &ty;
-    for (idx, Type::Func(msig)) in module.types.iter().enumerate() {
-        if *msig == *sig {
-            return idx as u32;
+fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
+    for (idx, existing_subtype) in module.types.iter().enumerate() {
+        if let StructuralType::Func(existing_ty) = &existing_subtype.structural_type {
+            if *existing_ty == ty {
+                return idx as u32;
+            }
         }
     }
-    module.types.push(ty);
+    module.types.push(SubType {
+        is_final: false,
+        supertype_idx: None,
+        structural_type: StructuralType::Func(ty),
+    });
     (module.types.len() - 1) as u32
 }
 
@@ -226,15 +518,15 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
         }
     }
 
-    for (_, _, elem_items) in &mut module.elements {
+    for (_, elem_items) in &mut module.elements {
         match elem_items {
             wasm_transform::ElementItems::Functions(fun_items) => {
                 for idx in fun_items {
                     *idx = f(*idx);
                 }
             }
-            wasm_transform::ElementItems::ConstExprs(expr) => {
-                for ops in expr {
+            wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
+                for ops in exprs {
                     mutate_instructions(&f, ops)
                 }
             }
@@ -273,15 +565,11 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// space, but this would be error-prone).
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
-    let ooi_type = Type::Func(FuncType::new([], []));
+    let ooi_type = FuncType::new([], []);
+    let uam_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
 
-    let uam_type = Type::Func(FuncType::new(
-        [ValType::I64, ValType::I64, ValType::I32],
-        [ValType::I64],
-    ));
-
-    let ooi_type_idx = add_type(&mut module, ooi_type);
-    let uam_type_idx = add_type(&mut module, uam_type);
+    let ooi_type_idx = add_func_type(&mut module, ooi_type);
+    let uam_type_idx = add_func_type(&mut module, uam_type);
 
     // push_front imports
     let ooi_imp = Import {
@@ -303,11 +591,8 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
     module.imports.push(uam_imp);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
-        let tgsm_type = Type::Func(FuncType::new(
-            [ValType::I64, ValType::I64, ValType::I32],
-            [ValType::I64],
-        ));
-        let tgsm_type_idx = add_type(&mut module, tgsm_type);
+        let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
+        let tgsm_type_idx = add_func_type(&mut module, tgsm_type);
         let tgsm_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
@@ -315,8 +600,8 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         };
         module.imports.push(tgsm_imp);
 
-        let it_type = Type::Func(FuncType::new([ValType::I32], []));
-        let it_type_idx = add_type(&mut module, it_type);
+        let it_type = FuncType::new([ValType::I32], []);
+        let it_type_idx = add_func_type(&mut module, it_type);
         let it_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: INTERNAL_TRAP_FUN_NAME,
@@ -324,11 +609,8 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         };
         module.imports.push(it_imp);
 
-        let fr_type = Type::Func(FuncType::new(
-            [ValType::I64, ValType::I64, ValType::I64],
-            [],
-        ));
-        let fr_type_idx = add_type(&mut module, fr_type);
+        let fr_type = FuncType::new([ValType::I64, ValType::I64, ValType::I64], []);
+        let fr_type_idx = add_func_type(&mut module, fr_type);
         let fr_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: STABLE_READ_FIRST_ACCESS_NAME,
@@ -390,6 +672,7 @@ pub(super) fn instrument(
     cost_to_compile_wasm_instruction: NumInstructions,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    metering_type: MeteringType,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
@@ -451,7 +734,7 @@ pub(super) fn instrument(
 
     // inject instructions counter decrementation
     for func_body in &mut module.code_sections {
-        inject_metering(&mut func_body.instructions, &special_indices);
+        inject_metering(&mut func_body.instructions, &special_indices, metering_type);
     }
 
     // Collect all the function types of the locally defined functions inside the
@@ -462,15 +745,22 @@ pub(super) fn instrument(
     // type) reference to the `code_section`.
     let mut func_types = Vec::new();
     for i in 0..module.code_sections.len() {
-        let Type::Func(t) = &module.types[module.functions[i] as usize];
-        func_types.push(t.clone());
+        if let StructuralType::Func(t) = &module.types[module.functions[i] as usize].structural_type
+        {
+            func_types.push((i, t.clone()));
+        } else {
+            return Err(WasmInstrumentationError::InvalidFunctionType(format!(
+                "Function has type which is not a function type. Found type: {:?}",
+                &module.types[module.functions[i] as usize].structural_type
+            )));
+        }
     }
 
     // Inject `update_available_memory` to functions with `memory.grow`
     // instructions.
     if !func_types.is_empty() {
         let func_bodies = &mut module.code_sections;
-        for (func_ix, func_type) in func_types.into_iter().enumerate() {
+        for (func_ix, func_type) in func_types.into_iter() {
             inject_update_available_memory(&mut func_bodies[func_ix], &func_type);
             if write_barrier == FlagStatus::Enabled {
                 inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
@@ -486,6 +776,7 @@ pub(super) fn instrument(
             special_indices,
             subnet_type,
             dirty_page_overhead,
+            metering_type,
         )
     }
 
@@ -564,6 +855,7 @@ fn replace_system_api_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
+    metering_type: MeteringType,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -575,11 +867,14 @@ fn replace_system_api_functions(
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in
-        replacement_functions(special_indices, subnet_type, dirty_page_overhead)
-    {
+    for (api, (ty, body)) in replacement_functions(
+        special_indices,
+        subnet_type,
+        dirty_page_overhead,
+        metering_type,
+    ) {
         if let Some(old_index) = api_indexes.get(&api) {
-            let type_idx = add_type(module, ty);
+            let type_idx = add_func_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
             module.functions.push(type_idx);
             module.code_sections.push(body);
@@ -603,7 +898,7 @@ fn export_additional_symbols<'a>(
 ) -> Module<'a> {
     // push function to decrement the instruction counter
 
-    let func_type = Type::Func(FuncType::new([ValType::I64], [ValType::I64]));
+    let func_type = FuncType::new([ValType::I64], [ValType::I64]);
 
     use Operator::*;
 
@@ -655,7 +950,7 @@ fn export_additional_symbols<'a>(
         instructions,
     };
 
-    let type_idx = add_type(&mut module, func_type);
+    let type_idx = add_func_type(&mut module, func_type);
     module.functions.push(type_idx);
     module.code_sections.push(func_body);
 
@@ -665,10 +960,7 @@ fn export_additional_symbols<'a>(
         // Arg 1 - end of the range
         // Return index 0 is the number of pages that haven't been written to in the given range
         // Return index 1 is the number of pages that haven't been accessed in the given range.
-        let func_type = Type::Func(FuncType::new(
-            [ValType::I32, ValType::I32],
-            [ValType::I32, ValType::I32],
-        ));
+        let func_type = FuncType::new([ValType::I32, ValType::I32], [ValType::I32, ValType::I32]);
         let it = 2; // iterator index
         let tmp = 3;
         let acc_w = 4; // accumulator index
@@ -745,7 +1037,7 @@ fn export_additional_symbols<'a>(
             locals: vec![(4, ValType::I32)],
             instructions,
         };
-        let type_idx = add_type(&mut module, func_type);
+        let type_idx = add_func_type(&mut module, func_type);
         module.functions.push(type_idx);
         module.code_sections.push(func_body);
     }
@@ -883,8 +1175,16 @@ impl InjectionPoint {
 // - we insert a function call before each dynamic cost instruction which
 //   performs an overflow check and then decrements the counter by the value at
 //   the top of the stack.
-fn inject_metering(code: &mut Vec<Operator>, export_data_module: &SpecialIndices) {
-    let points = injections(code);
+fn inject_metering(
+    code: &mut Vec<Operator>,
+    export_data_module: &SpecialIndices,
+    metering_type: MeteringType,
+) {
+    let points = match metering_type {
+        MeteringType::Old => injections_old(code),
+        MeteringType::None => Vec::new(),
+        MeteringType::New => injections_new(code),
+    };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
             scope: Scope::ReentrantBlockStart,
@@ -1214,8 +1514,9 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
 // at the beginning of every basic block (straight-line sequence of instructions
 // with no branches) and before each bulk memory instruction. An injection point
 // contains a "hint" about the context of every basic block, specifically if
-// it's re-entrant or not.
-fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
+// it's re-entrant or not. This version over-estimates the cost of code with
+// returns and jumps.
+fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     let mut stack = Vec::new();
     use Operator::*;
@@ -1247,6 +1548,63 @@ fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
                     Some(val) => val,
                     None => break,
                 };
+            }
+            // Bulk memory instructions require injected metering __before__ the instruction
+            // executes so that size arguments can be read from the stack at runtime.
+            MemoryFill { .. }
+            | MemoryCopy { .. }
+            | MemoryInit { .. }
+            | TableCopy { .. }
+            | TableInit { .. }
+            | TableFill { .. } => {
+                res.push(InjectionPoint::new_dynamic_cost(position));
+            }
+            // Nothing special to be done for other instructions.
+            _ => (),
+        }
+    }
+
+    res.sort_by_key(|k| k.position);
+    res
+}
+
+// This function scans through the Wasm code and creates an injection point
+// at the beginning of every basic block (straight-line sequence of instructions
+// with no branches) and before each bulk memory instruction. An injection point
+// contains a "hint" about the context of every basic block, specifically if
+// it's re-entrant or not.
+fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
+    let mut res = Vec::new();
+    use Operator::*;
+    // The function itself is a re-entrant code block.
+    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
+    for (position, i) in code.iter().enumerate() {
+        curr.cost_detail.increment_cost(instruction_to_cost_new(i));
+        match i {
+            // Start of a re-entrant code block.
+            Loop { .. } => {
+                res.push(curr);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart);
+            }
+            // Start of a non re-entrant code block.
+            If { .. } => {
+                res.push(curr);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart);
+            }
+            // End of a code block but still more code left.
+            Else | Br { .. } | BrIf { .. } | BrTable { .. } => {
+                res.push(curr);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+            }
+            End => {
+                res.push(curr);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+            }
+            Return | Unreachable | ReturnCall { .. } | ReturnCallIndirect { .. } => {
+                res.push(curr);
+                // This injection point will be unreachable itself (most likely empty)
+                // but we create it to keep the algorithm uniform
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.

@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use anyhow::Error;
-use opentelemetry::{Context as OtContext, KeyValue};
+use opentelemetry::KeyValue;
 use serde::Serialize;
 
 use crate::metrics::{MetricParams, WithMetrics};
@@ -55,10 +55,8 @@ impl<T: Render> Render for WithMetrics<T> {
             counter, recorder, ..
         } = &self.1;
 
-        let cx = OtContext::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         out
     }

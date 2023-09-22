@@ -28,7 +28,7 @@ use ic_types::{
     batch::{Batch, BatchMessages},
     consensus::{
         ecdsa::{self, CompletedSignature, EcdsaBlockReader},
-        Block, BlockPayload,
+        Block,
     },
     crypto::{
         canister_threshold_sig::MasterEcdsaPublicKey,
@@ -138,9 +138,10 @@ pub fn deliver_batches(
                 let batch_messages = if block.payload.is_summary() {
                     BatchMessages::default()
                 } else {
-                    let batch_payload = BlockPayload::from(block.payload).into_data().batch;
-                    batch_stats.add_from_payload(&batch_payload);
+                    let batch_payload = &block.payload.as_ref().as_data().batch;
+                    batch_stats.add_from_payload(batch_payload);
                     batch_payload
+                        .clone()
                         .into_messages()
                         .map_err(|err| {
                             error!(log, "batch payload deserialization failed: {:?}", err);
@@ -398,18 +399,18 @@ fn generate_dkg_response_payload(
 
             Some(Payload::Data(initial_transcript_records.encode()))
         }
-        (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: format!("{}{}", err_str1, err_str2),
-        })),
-        (Some(Err(err_str)), _) => Some(Payload::Reject(RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: err_str.to_string(),
-        })),
-        (_, Some(Err(err_str))) => Some(Payload::Reject(RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: err_str.to_string(),
-        })),
+        (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext::new(
+            ic_error_types::RejectCode::CanisterReject,
+            format!("{}{}", err_str1, err_str2),
+        ))),
+        (Some(Err(err_str)), _) => Some(Payload::Reject(RejectContext::new(
+            ic_error_types::RejectCode::CanisterReject,
+            err_str,
+        ))),
+        (_, Some(Err(err_str))) => Some(Payload::Reject(RejectContext::new(
+            ic_error_types::RejectCode::CanisterReject,
+            err_str,
+        ))),
         _ => None,
     }
 }

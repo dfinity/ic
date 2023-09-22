@@ -52,6 +52,7 @@ const HttpRequestType = IDL.Record({
   headers: IDL.Vec(HeaderFieldType),
 });
 beforeEach(() => {
+  jest.useFakeTimers();
   fetch.resetMocks();
   jest
     .spyOn(requestUtils, 'loadResponseVerification')

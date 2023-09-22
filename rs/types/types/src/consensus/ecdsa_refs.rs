@@ -1,11 +1,4 @@
 //! Threshold ECDSA transcript references related defines.
-
-use ic_base_types::NodeId;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
-use std::convert::{AsMut, AsRef, TryFrom, TryInto};
-
 use crate::crypto::{
     canister_threshold_sig::error::{
         IDkgParamsValidationError, PresignatureQuadrupleCreationError,
@@ -21,8 +14,15 @@ use crate::crypto::{
     AlgorithmId,
 };
 use crate::{Height, Randomness, RegistryVersion};
+use ic_base_types::NodeId;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
+use std::convert::{AsMut, AsRef, TryFrom, TryInto};
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
 pub type PseudoRandomId = [u8; 32];
@@ -37,6 +37,7 @@ pub type PseudoRandomId = [u8; 32];
 /// The height field represents at which block the RequestId is created.
 /// It is used for purging purpose.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestId {
     pub quadruple_id: QuadrupleId,
     pub pseudo_random_id: PseudoRandomId,
@@ -76,9 +77,11 @@ impl TryFrom<&pb::RequestId> for RequestId {
 #[derive(
     Copy, Clone, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
 )]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct QuadrupleId(pub u64);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptRef {
     /// The on chain location of the IDkgTranscript.
     /// The height may refer to a summary or data block.
@@ -145,6 +148,7 @@ pub struct TranscriptCastError {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MaskedTranscript(TranscriptRef);
 
 impl AsRef<TranscriptRef> for MaskedTranscript {
@@ -193,6 +197,7 @@ impl TryFrom<&pb::MaskedTranscript> for MaskedTranscript {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscript(TranscriptRef);
 
 impl AsRef<TranscriptRef> for UnmaskedTranscript {
@@ -346,6 +351,7 @@ impl TranscriptAttributes for IDkgTranscriptAttributes {
 /// Wrappers for the common types.
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomTranscriptParams {
     pub fn new(
@@ -394,6 +400,7 @@ impl TryFrom<&pb::RandomTranscriptParams> for RandomTranscriptParams {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfMaskedParams {
     pub fn new(
@@ -442,6 +449,7 @@ impl TryFrom<&pb::ReshareOfMaskedParams> for ReshareOfMaskedParams {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfUnmaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfUnmaskedParams {
     pub fn new(
@@ -521,6 +529,7 @@ impl TryFrom<&pb::ReshareOfUnmaskedParams> for ReshareOfUnmaskedParams {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTimesMaskedParams(IDkgTranscriptParamsRef);
 impl UnmaskedTimesMaskedParams {
     pub fn new(
@@ -577,6 +586,7 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 
 /// ECDSA Quadruple in creation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct QuadrupleInCreation {
     pub kappa_config: RandomTranscriptParams,
     pub kappa_masked: Option<MaskedTranscript>,
@@ -883,6 +893,9 @@ pub trait EcdsaBlockReader: Send + Sync {
     /// Returns the transcripts requested by the tip.
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
+    /// Returns the IDs of quadruples in creation by the tip.
+    fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_>;
+
     /// Returns the signatures requested by the tip.
     fn requested_signatures(
         &self,
@@ -913,6 +926,7 @@ pub trait EcdsaBlockReader: Send + Sync {
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgTranscriptOperationRef {
     Random,
     ReshareOfMasked(MaskedTranscript),
@@ -1075,6 +1089,7 @@ impl TryFrom<&pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptParamsRef {
     pub transcript_id: IDkgTranscriptId,
     pub dealers: BTreeSet<NodeId>,
@@ -1209,6 +1224,7 @@ impl IDkgTranscriptParamsRef {
 /// Counterpart of PreSignatureQuadruple that holds transcript references,
 /// instead of the transcripts.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureQuadrupleRef {
     pub kappa_unmasked_ref: UnmaskedTranscript,
     pub lambda_masked_ref: MaskedTranscript,
@@ -1341,6 +1357,7 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
 /// Counterpart of ThresholdEcdsaSigInputs that holds transcript references,
 /// instead of the transcripts.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdEcdsaSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
     pub hashed_message: [u8; 32],

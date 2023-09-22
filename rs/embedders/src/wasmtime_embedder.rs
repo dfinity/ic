@@ -17,6 +17,7 @@ use wasmtime::{
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
+use ic_config::embedders::MeteringType;
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
@@ -29,7 +30,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
@@ -159,6 +160,14 @@ struct WasmMemoryInfo {
     dirty_page_tracking: DirtyPageTracking,
 }
 
+/// Explicitly disable Wasm features which aren't handled in validation and
+/// instrumentation.
+fn disable_unused_features(config: &mut wasmtime::Config) {
+    // TODO: FOLLOW-1201: Uncomment after the `wasmtime` is upgraded again from `9.0.3`
+    // config.wasm_function_references(false);
+    config.wasm_relaxed_simd(false);
+}
+
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
@@ -186,6 +195,7 @@ impl WasmtimeEmbedder {
         let mut config = wasmtime::Config::default();
         config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
+        disable_unused_features(&mut config);
         if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
             || embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled
         {
@@ -333,6 +343,7 @@ impl WasmtimeEmbedder {
             self.config.feature_flags,
             self.config.stable_memory_dirty_page_limit,
             self.config.stable_memory_accessed_page_limit,
+            self.config.metering_type,
         );
 
         let instance = match linker.instantiate(&mut store, module) {
@@ -442,6 +453,8 @@ impl WasmtimeEmbedder {
             write_barrier: self.config.feature_flags.write_barrier,
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
             modification_tracking,
+            metering_type: self.config.metering_type,
+            dirty_page_overhead: self.config.dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: self.config.stable_memory_dirty_page_limit,
         })
@@ -645,6 +658,10 @@ pub struct PageAccessResults {
     pub read_before_write_count: usize,
     pub direct_write_count: usize,
     pub stable_dirty_pages: Vec<PageIndex>,
+    pub sigsegv_count: usize,
+    pub mmap_count: usize,
+    pub mprotect_count: usize,
+    pub copy_page_count: usize,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
@@ -658,6 +675,8 @@ pub struct WasmtimeInstance<S: SystemApi> {
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
     modification_tracking: ModificationTracking,
+    metering_type: MeteringType,
+    dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
     stable_memory_dirty_page_limit: ic_types::NumPages,
 }
@@ -710,6 +729,10 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 read_before_write_count: 0,
                 direct_write_count: 0,
                 stable_dirty_pages,
+                sigsegv_count: 0,
+                mmap_count: 0,
+                mprotect_count: 0,
+                copy_page_count: 0,
             })
         } else {
             let dirty_pages = match self.modification_tracking {
@@ -749,6 +772,10 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 read_before_write_count: tracker.read_before_write_count(),
                 direct_write_count: tracker.direct_write_count(),
                 stable_dirty_pages,
+                sigsegv_count: tracker.sigsegv_count(),
+                mmap_count: tracker.mmap_count(),
+                mprotect_count: tracker.mprotect_count(),
+                copy_page_count: tracker.copy_page_count(),
             })
         }
     }
@@ -815,6 +842,20 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         self.instance_stats.dirty_pages += access.dirty_pages.len();
         self.instance_stats.read_before_write_count += access.read_before_write_count;
         self.instance_stats.direct_write_count += access.direct_write_count;
+        self.instance_stats.sigsegv_count += access.sigsegv_count;
+        self.instance_stats.mmap_count += access.mmap_count;
+        self.instance_stats.mprotect_count += access.mprotect_count;
+        self.instance_stats.copy_page_count += access.copy_page_count;
+
+        if let MeteringType::New = self.metering_type {
+            // charge for dirty heap pages
+            let x = self.instruction_counter().saturating_sub_unsigned(
+                self.dirty_page_overhead
+                    .get()
+                    .saturating_mul(access.dirty_pages.len() as u64),
+            );
+            self.set_instruction_counter(x);
+        }
 
         let stable_memory_dirty_pages: Vec<_> = match self.wasm_native_stable_memory {
             FlagStatus::Enabled => {

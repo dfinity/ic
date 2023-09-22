@@ -12,13 +12,13 @@ use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::ConsensusPoolCache,
-    execution_environment::{IngressFilterService, QueryExecutionService},
+    execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
     time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::{Labeled, StateReader};
+use ic_interfaces_state_manager::{CertifiedStateReader, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -58,15 +58,16 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{
-        CertificateDelegation, HttpQueryResponse, SignedIngress, SignedIngressContent, UserQuery,
-    },
+    messages::{CertificateDelegation, SignedIngress, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
-use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, sync::RwLock, time::Duration};
+use std::{
+    collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock,
+    time::Duration,
+};
 use tokio::net::{TcpSocket, TcpStream};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
@@ -74,25 +75,29 @@ use tower_test::mock::Handle;
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 pub type QueryExecutionHandle =
-    Handle<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>;
+    Handle<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
-    let (service, handle) =
-        tower_test::mock::pair::<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>();
+    let (service, handle) = tower_test::mock::pair::<
+        (UserQuery, Option<CertificateDelegation>),
+        QueryExecutionResponse,
+    >();
 
     let infallible_service =
         tower::service_fn(move |request: (UserQuery, Option<CertificateDelegation>)| {
             let mut service_clone = service.clone();
             async move {
-                Ok::<HttpQueryResponse, std::convert::Infallible>({
+                Ok::<QueryExecutionResponse, Infallible>(
                     service_clone
                         .ready()
                         .await
                         .expect("Mocking Infallible service. Waiting for readiness failed.")
                         .call(request)
                         .await
-                        .expect("Mocking Infallible service and can therefore not return an error.")
-                })
+                        .expect(
+                            "Mocking Infallible service and can therefore not return an error.",
+                        ),
+                )
             }
         });
     (BoxCloneService::new(infallible_service), handle)
@@ -152,6 +157,33 @@ pub fn default_read_certified_state(
     Some((rs, mht, cert))
 }
 
+pub fn default_certified_state_reader(
+) -> Option<Box<dyn CertifiedStateReader<State = ReplicatedState> + 'static>> {
+    struct FakeCertifiedStateReader(Arc<ReplicatedState>, MixedHashTree, Certification);
+
+    impl CertifiedStateReader for FakeCertifiedStateReader {
+        type State = ReplicatedState;
+
+        fn get_state(&self) -> &ReplicatedState {
+            &self.0
+        }
+
+        fn read_certified_state(
+            &self,
+            _paths: &LabeledTree<()>,
+        ) -> Option<(MixedHashTree, Certification)> {
+            Some((self.1.clone(), self.2.clone()))
+        }
+    }
+
+    let (state, hash_tree, certification) = default_read_certified_state(&LabeledTree::Leaf(()))?;
+    Some(Box::new(FakeCertifiedStateReader(
+        state,
+        hash_tree,
+        certification,
+    )))
+}
+
 pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
 
@@ -195,8 +227,16 @@ pub fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_read_certified_state);
 
     mock_state_manager
+        .expect_read_certified_state()
+        .returning(default_read_certified_state);
+
+    mock_state_manager
         .expect_latest_certified_height()
         .returning(default_latest_certified_height);
+
+    mock_state_manager
+        .expect_get_certified_state_reader()
+        .returning(default_certified_state_reader);
 
     mock_state_manager
 }

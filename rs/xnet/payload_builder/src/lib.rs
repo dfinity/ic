@@ -40,7 +40,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
-    registry::{connection_endpoint::ConnectionEndpoint, RegistryClientError},
+    registry::RegistryClientError,
     xnet::{CertifiedStreamSlice, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
@@ -51,7 +51,6 @@ pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{thread_rng, Rng};
 use std::{
     collections::{BTreeMap, VecDeque},
-    convert::TryFrom,
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -908,10 +907,15 @@ impl XNetEndpointResolver {
         };
 
         let xnet_endpoint = node_record.xnet.ok_or(Error::MissingXNetEndpoint(node))?;
-        let xnet_endpoint = ConnectionEndpoint::try_from(xnet_endpoint)
-            .map_err(|e| Error::InvalidXNetEndpoint(node, e.to_string()))?;
 
-        let socket_addr = SocketAddr::from(&xnet_endpoint);
+        let socket_addr = SocketAddr::new(
+            xnet_endpoint.ip_addr.parse().map_err(|_| {
+                Error::InvalidXNetEndpoint(node, format!("bad ip addr {}", xnet_endpoint.ip_addr))
+            })?,
+            u16::try_from(xnet_endpoint.port).map_err(|_| {
+                Error::InvalidXNetEndpoint(node, format!("bad port {}", xnet_endpoint.port))
+            })?,
+        );
 
         let authority = XNetAuthority {
             node_id: node,

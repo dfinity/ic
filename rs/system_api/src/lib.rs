@@ -7,6 +7,7 @@ pub mod system_api_empty;
 
 use ic_base_types::PrincipalIdBlobParseError;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode,
@@ -158,8 +159,7 @@ pub struct ExecutionParameters {
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
-    pub subnet_memory_capacity: NumBytes,
-    pub subnet_memory_threshold: NumBytes,
+    pub subnet_memory_saturation: ResourceSaturation,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -268,6 +268,7 @@ pub enum ApiType {
     // For executing closures when a `Reply` is received
     ReplyCallback {
         time: Time,
+        caller: PrincipalId,
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
@@ -286,6 +287,7 @@ pub enum ApiType {
     // For executing closures when a `Reject` is received
     RejectCallback {
         time: Time,
+        caller: PrincipalId,
         reject_context: RejectContext,
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
@@ -319,6 +321,7 @@ pub enum ApiType {
 
     // For executing the `canister_heartbeat` or `canister_global_timer` methods
     SystemTask {
+        caller: PrincipalId,
         /// System task to execute.
         /// Only `canister_heartbeat` and `canister_global_timer` are allowed.
         system_task: SystemMethod,
@@ -336,6 +339,7 @@ pub enum ApiType {
     ///
     /// See https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call
     Cleanup {
+        caller: PrincipalId,
         time: Time,
     },
 }
@@ -354,11 +358,13 @@ impl ApiType {
     }
 
     pub fn system_task(
+        caller: PrincipalId,
         system_task: SystemMethod,
         time: Time,
         call_context_id: CallContextId,
     ) -> Self {
         Self::SystemTask {
+            caller,
             time,
             call_context_id,
             outgoing_request: None,
@@ -429,6 +435,7 @@ impl ApiType {
     #[allow(clippy::too_many_arguments)]
     pub fn reply_callback(
         time: Time,
+        caller: PrincipalId,
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
@@ -437,6 +444,7 @@ impl ApiType {
     ) -> Self {
         Self::ReplyCallback {
             time,
+            caller,
             incoming_payload,
             incoming_cycles,
             call_context_id,
@@ -455,6 +463,7 @@ impl ApiType {
     #[allow(clippy::too_many_arguments)]
     pub fn reject_callback(
         time: Time,
+        caller: PrincipalId,
         reject_context: RejectContext,
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
@@ -463,6 +472,7 @@ impl ApiType {
     ) -> Self {
         Self::RejectCallback {
             time,
+            caller,
             reject_context,
             incoming_cycles,
             call_context_id,
@@ -632,43 +642,24 @@ impl MemoryUsage {
     ) -> HypervisorResult<()> {
         let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
             .map_err(|_| HypervisorError::OutOfMemory)?;
-        self.allocate_memory(
-            bytes,
-            NumBytes::from(0),
-            api_type,
-            sandbox_safe_system_state,
-        )
+        self.allocate_execution_memory(bytes, api_type, sandbox_safe_system_state)
     }
 
-    /// Unconditionally deallocates the given number of Wasm pages. Should only
-    /// be called immediately after `allocate_pages()`, with the same number of
-    /// pages, in case growing the heap failed.
-    fn deallocate_pages(&mut self, pages: usize) {
-        // Expected to work as we have converted `pages` to bytes when `increase_usage`
-        // was called and if it would have failed, we wouldn't call `decrease_usage`.
-        let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
-            .expect("could not convert wasm pages to bytes");
-        self.deallocate_memory(bytes, NumBytes::from(0))
-    }
-
-    /// Tries to allocate the requested amount of memory (in bytes). `execution_bytes`
-    /// refers to the number of requested bytes for Wasm/stable memory; and
-    /// `message_bytes` refers to the bytes requested for messages.
+    /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
     /// If the canister has memory allocation, then this function doesn't allocate
     /// bytes, but only increases `current_usage`.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if either the canister memory limit, the subnet memory limit, or the
-    /// message memory limit would be exceeded.
+    /// if either the canister memory limit or the subnet memory limit would be
+    /// exceeded.
     ///
     /// Returns `Err(HypervisorError::InsufficientCyclesInMemoryGrow)` and
     /// leaves `self` unchanged if freezing threshold check is needed for the
     /// given API type and canister would be frozen after the allocation.
-    fn allocate_memory(
+    fn allocate_execution_memory(
         &mut self,
         execution_bytes: NumBytes,
-        message_bytes: NumBytes,
         api_type: &ApiType,
         sandbox_safe_system_state: &SandboxSafeSystemState,
     ) -> HypervisorResult<()> {
@@ -693,13 +684,12 @@ impl MemoryUsage {
             MemoryAllocation::BestEffort => {
                 match self.subnet_available_memory.try_decrement(
                     execution_bytes,
-                    message_bytes,
+                    NumBytes::from(0),
                     NumBytes::from(0),
                 ) {
                     Ok(()) => {
                         self.current_usage = NumBytes::from(new_usage);
                         self.allocated_execution_memory += execution_bytes;
-                        self.allocated_message_memory += message_bytes;
                         Ok(())
                     }
                     Err(_err) => Err(HypervisorError::OutOfMemory),
@@ -719,33 +709,37 @@ impl MemoryUsage {
         }
     }
 
-    /// Deallocates the given number of execution bytes and message bytes.
-    /// Should only be called immediately after `allocate_memory()`, with the
-    /// same number of bytes, in case growing the heap failed or upon clean up.
+    /// Tries to allocate the requested amount of message memory.
     ///
-    /// If the canister has memory allocation, then this function doesn't deallocate
-    /// bytes, but only decreases `current_usage`.
-    fn deallocate_memory(&mut self, execution_bytes: NumBytes, message_bytes: NumBytes) {
-        debug_assert!(self.current_usage >= execution_bytes);
-        self.current_usage -= execution_bytes;
-
-        match self.memory_allocation {
-            MemoryAllocation::BestEffort => {
-                self.subnet_available_memory.increment(
-                    execution_bytes,
-                    message_bytes,
-                    NumBytes::from(0),
-                );
-                debug_assert!(self.allocated_execution_memory >= execution_bytes);
-                debug_assert!(self.allocated_message_memory >= message_bytes);
-                self.allocated_execution_memory -= execution_bytes;
-                self.allocated_message_memory -= message_bytes;
+    /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
+    /// if the message memory limit would be exceeded.
+    fn allocate_message_memory(&mut self, message_bytes: NumBytes) -> HypervisorResult<()> {
+        match self.subnet_available_memory.try_decrement(
+            NumBytes::from(0),
+            message_bytes,
+            NumBytes::from(0),
+        ) {
+            Ok(()) => {
+                self.allocated_message_memory += message_bytes;
+                Ok(())
             }
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                debug_assert!(self.current_usage + execution_bytes <= reserved_bytes);
-                // Nothing to do since we didn't actually allocate new memory.
-            }
+            Err(_err) => Err(HypervisorError::OutOfMemory),
         }
+    }
+
+    /// Deallocates the given number of message bytes.
+    /// Should only be called immediately after `allocate_message_memory()`, with the
+    /// same number of bytes, in case allocation failed.
+    fn deallocate_message_memory(&mut self, message_bytes: NumBytes) {
+        assert!(
+            self.allocated_message_memory >= message_bytes,
+            "Precondition of deallocate_message_memory failed: {} >= {}",
+            self.allocated_message_memory,
+            message_bytes
+        );
+        self.subnet_available_memory
+            .increment(NumBytes::from(0), message_bytes, NumBytes::from(0));
+        self.allocated_message_memory -= message_bytes;
     }
 }
 
@@ -768,6 +762,10 @@ pub struct SystemApiImpl {
     /// should not be accessed through the public stable memory APIs. It can
     /// still be read through the hidden read API for speed on the first access.
     wasm_native_stable_memory: FlagStatus,
+
+    /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
+    /// `canister_query <name>`, or `canister_composite_query <name>`.
+    max_sum_exported_function_name_lengths: usize,
 
     /// Should not be accessed directly from public APIs. Instead read through
     /// [`Self::stable_memory`] or [`Self::stable_memory_mut`].
@@ -806,6 +804,7 @@ impl SystemApiImpl {
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
         wasm_native_stable_memory: FlagStatus,
+        max_sum_exported_function_name_lengths: usize,
         stable_memory: Memory,
         out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
@@ -826,6 +825,7 @@ impl SystemApiImpl {
             memory_usage,
             execution_parameters,
             wasm_native_stable_memory,
+            max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
             out_of_instructions_handler,
@@ -836,10 +836,8 @@ impl SystemApiImpl {
         }
     }
 
-    /// Gets the result of execution, assuming there is no error from
-    /// running the canister. Returns any cycles used for an outgoing request
-    /// that doesn't get sent and returns allocated memory to the subnet if the
-    /// there is an error from running the canister.
+    /// Refunds any cycles used for an outgoing request that doesn't get sent
+    /// and returns the result of execution.
     pub fn take_execution_result(
         &mut self,
         wasm_run_error: Option<&HypervisorError>,
@@ -874,11 +872,8 @@ impl SystemApiImpl {
             .cloned()
             .or_else(|| self.execution_error.take())
         {
-            // Return allocated memory in case of failed message execution.
-            self.memory_usage.deallocate_memory(
-                self.memory_usage.allocated_execution_memory,
-                self.memory_usage.allocated_message_memory,
-            );
+            // There is no need to deallocate memory because all state changes
+            // are discarded for failed executions anyway.
             return Err(err);
         }
         match &mut self.api_type {
@@ -942,12 +937,12 @@ impl SystemApiImpl {
 
     fn get_msg_caller_id(&self, method_name: &str) -> Result<PrincipalId, HypervisorError> {
         match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => Err(self.error_for(method_name)),
-            ApiType::Init { caller, .. }
+            ApiType::Start { .. } => Err(self.error_for(method_name)),
+            ApiType::SystemTask { caller, .. }
+            | ApiType::Cleanup { caller, .. }
+            | ApiType::ReplyCallback { caller, .. }
+            | ApiType::RejectCallback { caller, .. }
+            | ApiType::Init { caller, .. }
             | ApiType::Update { caller, .. }
             | ApiType::ReplicatedQuery { caller, .. }
             | ApiType::PreUpgrade { caller, .. }
@@ -1009,7 +1004,7 @@ impl SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => None,
             ApiType::ReplyCallback { .. } => Some(0),
-            ApiType::RejectCallback { reject_context, .. } => Some(reject_context.code as i32),
+            ApiType::RejectCallback { reject_context, .. } => Some(reject_context.code() as i32),
         }
     }
 
@@ -1242,12 +1237,7 @@ impl SystemApiImpl {
         };
         if self
             .memory_usage
-            .allocate_memory(
-                NumBytes::from(0),
-                reservation_bytes,
-                &self.api_type,
-                &self.sandbox_safe_system_state,
-            )
+            .allocate_message_memory(reservation_bytes)
             .is_err()
         {
             return abort(req, &mut self.sandbox_safe_system_state);
@@ -1262,7 +1252,7 @@ impl SystemApiImpl {
             Ok(()) => Ok(0),
             Err(request) => {
                 self.memory_usage
-                    .deallocate_memory(NumBytes::from(0), reservation_bytes);
+                    .deallocate_message_memory(reservation_bytes);
                 abort(request, &mut self.sandbox_safe_system_state)
             }
         }
@@ -1831,6 +1821,7 @@ impl SystemApi for SystemApiImpl {
                     WasmClosure::new(reject_fun, reject_env),
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
                     MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
+                    self.max_sum_exported_function_name_lengths,
                 )?;
                 *outgoing_request = Some(req);
                 Ok(())
@@ -2045,28 +2036,21 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
-        let result = match self.memory_usage.allocate_pages(
-            additional_pages as usize,
-            &self.api_type,
-            &self.sandbox_safe_system_state,
+        let old_size = self.stable_memory().stable_memory_size;
+        let result = match self.try_grow_stable_memory(
+            old_size.get() as u64,
+            additional_pages as u64,
+            StableMemoryApi::Stable32,
         ) {
-            Ok(()) => {
-                let res = self.stable_memory_mut().stable_grow(additional_pages);
-                match &res {
-                    Err(_) | Ok(-1) => self
-                        .memory_usage
-                        .deallocate_pages(additional_pages as usize),
-                    _ => {}
-                }
-                res
+            Err(err) => Err(err),
+            Ok(StableGrowOutcome::Failure) => Ok(-1),
+            Ok(StableGrowOutcome::Success) => {
+                self.stable_memory_mut().stable_memory_size =
+                    old_size + NumWasmPages::new(additional_pages as usize);
+                // This conversion must succeed due to the checks performed in
+                // `try_grow_stable_memory()`.
+                Ok(old_size.get().try_into().unwrap())
             }
-            Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
-                // Trap instead of returning -1 in order to give the developer
-                // more actionable error message. Otherwise, they cannot
-                // distinguish between out-of-memory and out-of-cycles.
-                Err(err)
-            }
-            Err(_err) => Ok(-1),
         };
         trace_syscall!(self, ic0_stable_grow, result, additional_pages);
         result
@@ -2115,34 +2099,27 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
-        let result = self.stable_memory().stable64_size();
+        let result = self.stable_memory().stable_memory_size.get() as u64;
         trace_syscall!(self, ic0_stable64_size, result);
-        result
+        Ok(result)
     }
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
-        let result = match self.memory_usage.allocate_pages(
-            additional_pages as usize,
-            &self.api_type,
-            &self.sandbox_safe_system_state,
+        let old_size = self.stable_memory().stable_memory_size;
+        let result = match self.try_grow_stable_memory(
+            old_size.get() as u64,
+            additional_pages,
+            StableMemoryApi::Stable64,
         ) {
-            Ok(()) => {
-                let res = self.stable_memory_mut().stable64_grow(additional_pages);
-                match &res {
-                    Err(_) | Ok(-1) => self
-                        .memory_usage
-                        .deallocate_pages(additional_pages as usize),
-                    _ => {}
-                }
-                res
+            Err(err) => Err(err),
+            Ok(StableGrowOutcome::Failure) => Ok(-1),
+            Ok(StableGrowOutcome::Success) => {
+                self.stable_memory_mut().stable_memory_size =
+                    old_size + NumWasmPages::new(additional_pages as usize);
+                // This conversion must succeed due to the checks performed in
+                // `try_grow_stable_memory()`.
+                Ok(old_size.get().try_into().unwrap())
             }
-            Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
-                // Trap instead of returning -1 in order to give the developer
-                // more actionable error message. Otherwise, they cannot
-                // distinguish between out-of-memory and out-of-cycles.
-                Err(err)
-            }
-            Err(_err) => Ok(-1),
         };
         trace_syscall!(self, ic0_stable64_grow, result, additional_pages);
         result
@@ -2326,9 +2303,8 @@ impl SystemApi for SystemApiImpl {
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
-            match self.memory_usage.allocate_memory(
+            match self.memory_usage.allocate_execution_memory(
                 bytes,
-                NumBytes::new(0),
                 &self.api_type,
                 &self.sandbox_safe_system_state,
             ) {

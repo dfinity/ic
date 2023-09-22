@@ -30,7 +30,6 @@ pub(crate) struct HttpHandlerMetrics {
     pub(crate) response_body_size_bytes: HistogramVec,
     pub(crate) connections_total: IntCounter,
     pub(crate) health_status_transitions_total: IntCounterVec,
-    pub(crate) read_state_canister_controller_total: IntCounter,
     connection_setup_duration: HistogramVec,
     connection_duration: HistogramVec,
 }
@@ -80,10 +79,6 @@ impl HttpHandlerMetrics {
                 "replica_http_health_status_state_transitions_total",
                 "Number of health status state transitions",
                 &[LABEL_HEALTH_STATUS_BEFORE,LABEL_HEALTH_STATUS_AFTER]
-            ),
-            read_state_canister_controller_total: metrics_registry.int_counter(
-                "replica_http_read_state_canister_controller_total",
-                "Number of /canister/<canister_id>/controller paths in read state requests"
             ),
             connection_setup_duration: metrics_registry.histogram_vec(
                 "replica_http_connection_setup_duration_seconds",

@@ -49,7 +49,7 @@ fn generate_dealing() -> Result<IDkgDealingInternal, IdkgCreateDealingInternalEr
     rng.fill_bytes(&mut associated_data);
     let num_parties: u32 = rng.gen_range(3..40);
     let curve = EccCurveType::K256;
-    let (_private_keys, public_keys) = gen_private_keys(curve, num_parties as usize)?;
+    let (_private_keys, public_keys) = gen_private_keys(curve, num_parties as usize);
     let threshold = rng.gen_range(1..num_parties / 3 + 1);
     let dealer_index = rng.gen_range(0..num_parties);
     let shares_type = rng.gen_range(0..4);
@@ -92,23 +92,18 @@ fn reshare_of_unmasked_shares(rng: &mut ChaCha20Rng, curve: EccCurveType) -> Sec
     SecretShares::ReshareOfUnmasked(secret)
 }
 
-fn gen_private_keys(
-    curve: EccCurveType,
-    cnt: usize,
-) -> Result<(Vec<MEGaPrivateKey>, Vec<MEGaPublicKey>), ThresholdEcdsaError> {
+fn gen_private_keys(curve: EccCurveType, cnt: usize) -> (Vec<MEGaPrivateKey>, Vec<MEGaPublicKey>) {
     let mut rng = chacha_20_rng();
+    let mut public_keys = Vec::with_capacity(cnt);
     let mut private_keys = Vec::with_capacity(cnt);
 
     for _i in 0..cnt {
-        private_keys.push(MEGaPrivateKey::generate(curve, &mut rng));
+        let sk = MEGaPrivateKey::generate(curve, &mut rng);
+        public_keys.push(sk.public_key());
+        private_keys.push(sk);
     }
 
-    let public_keys = private_keys
-        .iter()
-        .map(|k| k.public_key())
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok((private_keys, public_keys))
+    (private_keys, public_keys)
 }
 
 fn write_to_file(mut path: PathBuf, shares: IDkgDealingInternal, filename: &str) {

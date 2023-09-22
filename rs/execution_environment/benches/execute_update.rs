@@ -9,8 +9,11 @@ use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
-use ic_interfaces::{execution_environment::ExecutionComplexity, messages::CanisterMessageOrTask};
-use ic_types::ingress::{IngressState, IngressStatus};
+use ic_interfaces::execution_environment::ExecutionComplexity;
+use ic_types::{
+    ingress::{IngressState, IngressStatus},
+    messages::CanisterMessageOrTask,
+};
 
 pub fn execute_update_bench(c: &mut Criterion) {
     // List of benchmarks: benchmark id (name), WAT, expected instructions.

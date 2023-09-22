@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,17 +14,19 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:chrono",
     "@crate_index//:clap",
-    "@crate_index//:json5",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "@crate_index//:serde_millis",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
     "@crate_index//:tokio",
     "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities/tmpdir",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -47,4 +49,11 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":backup"],
+)
+
+rust_test(
+    name = "backup_test",
+    crate = ":backup",
+    data = ["test_data/fake_input_config.json.template"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

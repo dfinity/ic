@@ -1486,6 +1486,7 @@ mod sign_share {
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use proptest::array::uniform5;
     use proptest::prelude::{any, Strategy};
+    use rand_chacha::ChaCha20Rng;
     use slog::Level;
     use std::collections::HashSet;
 
@@ -1901,7 +1902,7 @@ mod sign_share {
                 vec(0..=255u8, CHACHA_SEED_LEN),
             ),
             |(signer_state, rng_seed)| {
-                let mut inner_rng = ReproducibleRng::from_seed(
+                let mut inner_rng = ChaCha20Rng::from_seed(
                     rng_seed[..]
                         .try_into()
                         .expect("Failed to convert seed to array"),
@@ -2743,8 +2744,19 @@ mod get_tecdsa_master_public_key {
 
 mod verify_dealing_private {
     use super::*;
+    use ic_crypto::CryptoComponentImpl;
+    use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_test_utils_canister_threshold_sigs::IntoBuilder;
+    use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+    use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
+    use ic_interfaces_registry_mocks::MockRegistryClient;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_registry_keys::make_crypto_node_key;
     use ic_types::crypto::canister_threshold_sig::error::IDkgVerifyDealingPrivateError;
+    use ic_types::crypto::KeyPurpose::IDkgMEGaEncryption;
+    use ic_types::registry::RegistryClientError;
+    use prost::Message;
 
     #[test]
     fn should_verify_dealing_private() {
@@ -2891,6 +2903,45 @@ mod verify_dealing_private {
         assert_matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("failed to deserialize internal dealing"));
     }
 
+    #[test]
+    fn should_panic_on_public_key_registry_error() {
+        let mut rng = reproducible_rng();
+        let registry_client_error = RegistryClientError::PollLockFailed {
+            error: "oh no!".to_string(),
+        };
+        let setup = Setup::new_with_registry_error(registry_client_error.clone(), &mut rng);
+
+        assert_matches!(
+            setup.crypto.verify_dealing_private(&setup.params, &setup.signed_dealing),
+            Err(IDkgVerifyDealingPrivateError::RegistryError(error))
+            if error == registry_client_error
+        );
+    }
+
+    #[test]
+    fn should_fail_on_csp_errors() {
+        let csp_errors = vec![
+            // if mega_keyset_from_sks fails on deserialization of private or public key
+            IDkgVerifyDealingPrivateError::InternalError("deserialization error".to_string()),
+            // if mega_keyset_from_sks fails because the private key cannot be found
+            IDkgVerifyDealingPrivateError::PrivateKeyNotFound,
+            // if privately_verify_dealing fails because the algorithm in the params is not supported
+            IDkgVerifyDealingPrivateError::InvalidArgument("algorithm not supported".to_string()),
+            // if privately_verify returns a ThresholdEcdsaError (only one as a smoke test here)
+            IDkgVerifyDealingPrivateError::InvalidDealing("invalid proof".to_string()),
+        ];
+        let mut rng = reproducible_rng();
+        for csp_error in csp_errors {
+            let setup = Setup::new_with_expected_csp_error(csp_error.clone(), &mut rng);
+
+            assert_matches!(
+                    setup.crypto.verify_dealing_private(&setup.params, &setup.signed_dealing),
+                    Err(error)
+                    if error == csp_error
+            );
+        }
+    }
+
     /// Call both [IDkgProtocol::verify_dealing_public] and [IDkgProtocol::verify_dealing_private]
     /// on the given dealing.
     /// Productive code should only call [IDkgProtocol::verify_dealing_private] if [IDkgProtocol::verify_dealing_public] was successful.
@@ -2909,13 +2960,114 @@ mod verify_dealing_private {
             receiver.verify_dealing_private(params, signed_dealing),
         )
     }
+
+    struct Setup {
+        crypto: CryptoComponentImpl<MockAllCryptoServiceProvider>,
+        params: IDkgTranscriptParams,
+        signed_dealing: SignedIDkgDealing,
+    }
+
+    impl Setup {
+        fn new_with_registry_error(
+            expected_registry_error: RegistryClientError,
+            rng: &mut ReproducibleRng,
+        ) -> Setup {
+            Self::new_with_csp_and_optional_registry_client_error(
+                MockAllCryptoServiceProvider::new(),
+                Some(expected_registry_error),
+                rng,
+            )
+        }
+
+        fn new_with_expected_csp_error(
+            expected_csp_error: IDkgVerifyDealingPrivateError,
+            rng: &mut ReproducibleRng,
+        ) -> Setup {
+            let mut csp = MockAllCryptoServiceProvider::new();
+            csp.expect_idkg_verify_dealing_private()
+                .times(1)
+                .returning(move |_, _, _, _, _, _| Err(expected_csp_error.clone()));
+
+            Self::new_with_csp_and_optional_registry_client_error(csp, None, rng)
+        }
+
+        fn new_with_csp_and_optional_registry_client_error(
+            csp: MockAllCryptoServiceProvider,
+            registry_client_error: Option<RegistryClientError>,
+            rng: &mut ReproducibleRng,
+        ) -> Setup {
+            let subnet_size = rng.gen_range(1..10);
+            let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+            let (dealers, receivers) =
+                env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+            let params = env.params_for_random_sharing(
+                &dealers,
+                &receivers,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                rng,
+            );
+            let dealer = env.nodes.random_dealer(&params, rng);
+            let signed_dealing = dealer.create_dealing_or_panic(&params);
+            let node_id = *receivers
+                .get()
+                .first()
+                .expect("should contain at least one receiver");
+
+            let mut mock_registry = MockRegistryClient::new();
+            match registry_client_error {
+                None => {
+                    let registry_key = make_crypto_node_key(node_id, IDkgMEGaEncryption);
+                    let registry_version = params.registry_version();
+                    let idkg_dealing_encryption_public_key_proto =
+                        valid_idkg_dealing_encryption_public_key();
+                    let mut idkg_dealing_encryption_public_key_bytes = Vec::new();
+                    idkg_dealing_encryption_public_key_proto
+                        .encode(&mut idkg_dealing_encryption_public_key_bytes)
+                        .expect("the public key should encode successfully");
+                    mock_registry
+                        .expect_get_value()
+                        .withf(move |key, version| {
+                            key == registry_key.as_str() && version == &registry_version
+                        })
+                        .return_const(Ok(Some(idkg_dealing_encryption_public_key_bytes)));
+                }
+                Some(registry_client_error) => {
+                    mock_registry
+                        .expect_get_value()
+                        .times(1)
+                        .returning(move |_, _| Err(registry_client_error.clone()));
+                }
+            }
+            let registry_client = Arc::new(mock_registry);
+
+            let logger = no_op_logger();
+            let metrics = MetricsRegistry::new();
+            let crypto_metrics = Arc::new(CryptoMetrics::new(Some(&metrics)));
+            let time_source = None;
+            let crypto = CryptoComponentImpl::new_with_csp_and_fake_node_id(
+                csp,
+                logger,
+                registry_client,
+                node_id,
+                crypto_metrics,
+                time_source,
+            );
+
+            Setup {
+                crypto,
+                params,
+                signed_dealing,
+            }
+        }
+    }
 }
 
 mod verify_dealing_public {
     use super::*;
+    use ic_registry_client_helpers::crypto::CryptoRegistry;
 
     #[test]
-    fn should_run_verify_dealing_public() {
+    fn should_successfully_verify_random_sharing_dealing_with_valid_input() {
         let mut rng = reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
@@ -3035,7 +3187,6 @@ mod verify_dealing_public {
         let other_dealer = env
             .nodes
             .dealers(&params)
-            .into_iter()
             .find(|node| *node != dealer)
             .expect("not enough nodes");
         let signed_dealing = dealer
@@ -3056,6 +3207,53 @@ mod verify_dealing_public {
         assert_matches!(
             result,
             Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason == "InvalidProof"
+        );
+    }
+
+    #[test]
+    fn should_fail_verify_dealing_public_with_wrong_dealer_index() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+        let params = env.params_for_random_sharing(
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let dealer = env.nodes.random_dealer(&params, &mut rng);
+        // We need the signature verification to succeed, so the public key of the valid dealer in
+        // the registry needs to be copied to a non-dealer. The subsequent dealer index check will
+        // fail (which is what we are testing), since the `NodeId` of the non-dealer is not
+        // included in the list of dealers in params.
+        let not_a_dealer_node_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+        copy_node_signing_key_in_registry_from_one_node_to_another(
+            &env,
+            dealer.id(),
+            not_a_dealer_node_id,
+        );
+        let signed_dealing = dealer
+            .create_dealing_or_panic(&params)
+            .into_builder()
+            .build_with_signature(&params, dealer, dealer.id())
+            .into_builder()
+            .with_dealer_id(not_a_dealer_node_id)
+            .build();
+
+        let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+        let verifier = TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&env.registry) as Arc<_>)
+            .with_node_id(verifier_id)
+            .with_rng(rng)
+            .build();
+
+        let result = verifier.verify_dealing_public(&params, &signed_dealing);
+
+        assert_matches!(
+            result,
+            Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason == "No such dealer"
         );
     }
 
@@ -3093,28 +3291,71 @@ mod verify_dealing_public {
             Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason.starts_with("ThresholdEcdsaSerializationError")
         );
     }
+
+    fn copy_node_signing_key_in_registry_from_one_node_to_another(
+        env: &CanisterThresholdSigTestEnvironment,
+        source_node_id: NodeId,
+        destination_node_id: NodeId,
+    ) {
+        let node_signing_public_key = env
+            .registry
+            .get_crypto_key_for_node(
+                source_node_id,
+                ic_types::crypto::KeyPurpose::NodeSigning,
+                env.newest_registry_version,
+            )
+            .expect("registry call should succeed");
+        env.registry_data
+            .add(
+                &ic_registry_keys::make_crypto_node_key(
+                    destination_node_id,
+                    ic_types::crypto::KeyPurpose::NodeSigning,
+                ),
+                env.newest_registry_version,
+                node_signing_public_key,
+            )
+            .expect("should be able to add node signing public key to registry");
+        env.registry.reload();
+    }
 }
 
 mod verify_initial_dealings {
     use super::*;
-    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_base_types::RegistryVersion;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        random_transcript_id, IDkgParticipantsRandom,
+    };
 
     #[test]
-    fn should_successfully_verify_initial_dealing() {
+    fn should_successfully_verify_initial_dealing_from_non_participating_node() {
         let mut rng = reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) = env
-            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
-
-        let (initial_dealings, reshare_of_unmasked_params) =
-            generate_initial_dealings(&env, &dealers, &receivers, false, &mut rng);
-
-        let verifier = env
+        let num_nodes = rng.gen_range(2..10);
+        let num_source_subnet = rng.gen_range(1..num_nodes);
+        let num_destination_subnet = num_nodes - num_source_subnet;
+        assert!(
+            num_destination_subnet >= 1,
+            "number of nodes in destination subnet is less than 1"
+        );
+        let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
+        let external_verifier = Node::new(
+            random_node_id_excluding(&env.nodes.ids(), &mut rng),
+            Arc::clone(&env.registry),
+            &mut rng,
+        );
+        let (source_subnet_nodes, destination_subnet_nodes) = env
             .nodes
-            .random_receiver(reshare_of_unmasked_params.receivers(), &mut rng);
+            .partition(|(index, _node)| *index < num_source_subnet);
+        let (initial_dealings, reshare_of_unmasked_params) = generate_initial_dealings(
+            env.newest_registry_version,
+            source_subnet_nodes,
+            destination_subnet_nodes,
+            false,
+            &mut rng,
+        );
+
         assert_eq!(
-            verifier.verify_initial_dealings(&reshare_of_unmasked_params, &initial_dealings),
+            external_verifier
+                .verify_initial_dealings(&reshare_of_unmasked_params, &initial_dealings),
             Ok(())
         );
     }
@@ -3122,23 +3363,39 @@ mod verify_initial_dealings {
     #[test]
     fn should_fail_on_mismatching_transcript_params() {
         let mut rng = reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) = env
-            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
-
-        let (initial_dealings, reshare_of_unmasked_params) =
-            generate_initial_dealings(&env, &dealers, &receivers, false, &mut rng);
-        let other_params = env.params_for_random_sharing(
-            &dealers,
-            &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+        let num_nodes = rng.gen_range(2..10);
+        let num_source_subnet = rng.gen_range(1..num_nodes);
+        let num_destination_subnet = num_nodes - num_source_subnet;
+        assert!(
+            num_destination_subnet >= 1,
+            "number of nodes in destination subnet is less than 1"
+        );
+        let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
+        let verifier = Node::new(
+            random_node_id_excluding(&env.nodes.ids(), &mut rng),
+            Arc::clone(&env.registry),
             &mut rng,
         );
-
-        let verifier = env
+        let (source_subnet_nodes, destination_subnet_nodes) = env
             .nodes
-            .random_receiver(reshare_of_unmasked_params.receivers(), &mut rng);
+            .partition(|(index, _node)| *index < num_source_subnet);
+        let (initial_dealings, reshare_of_unmasked_params) = generate_initial_dealings(
+            env.newest_registry_version,
+            source_subnet_nodes,
+            destination_subnet_nodes,
+            false,
+            &mut rng,
+        );
+        let other_params = IDkgTranscriptParams::new(
+            random_transcript_id(&mut rng),
+            reshare_of_unmasked_params.dealers().get().clone(),
+            reshare_of_unmasked_params.receivers().get().clone(),
+            env.newest_registry_version,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            IDkgTranscriptOperation::Random,
+        )
+        .expect("failed to create random IDkgTranscriptParams");
+
         assert_matches!(
             verifier.verify_initial_dealings(&other_params, &initial_dealings),
             Err(IDkgVerifyInitialDealingsError::MismatchingTranscriptParams)
@@ -3148,20 +3405,34 @@ mod verify_initial_dealings {
     #[test]
     fn should_fail_if_public_verification_fails() {
         let mut rng = reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) = env
-            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
-
-        let (initial_dealings_with_first_currupted, reshare_of_unmasked_params) =
-            generate_initial_dealings(&env, &dealers, &receivers, true, &mut rng);
-
-        let verifier = env
+        let num_nodes = rng.gen_range(2..10);
+        let num_source_subnet = rng.gen_range(1..num_nodes);
+        let num_destination_subnet = num_nodes - num_source_subnet;
+        assert!(
+            num_destination_subnet >= 1,
+            "number of nodes in destination subnet is less than 1"
+        );
+        let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
+        let verifier = Node::new(
+            random_node_id_excluding(&env.nodes.ids(), &mut rng),
+            Arc::clone(&env.registry),
+            &mut rng,
+        );
+        let (source_subnet_nodes, destination_subnet_nodes) = env
             .nodes
-            .random_receiver(reshare_of_unmasked_params.receivers(), &mut rng);
+            .partition(|(index, _node)| *index < num_source_subnet);
+        let (initial_dealings_with_first_corrupted, reshare_of_unmasked_params) =
+            generate_initial_dealings(
+                env.newest_registry_version,
+                source_subnet_nodes,
+                destination_subnet_nodes,
+                true,
+                &mut rng,
+            );
+
         let result = verifier.verify_initial_dealings(
             &reshare_of_unmasked_params,
-            &initial_dealings_with_first_currupted,
+            &initial_dealings_with_first_corrupted,
         );
         assert_matches!(result, Err(IDkgVerifyInitialDealingsError::PublicVerificationFailure { verify_dealing_public_error, ..})
             if matches!(verify_dealing_public_error, IDkgVerifyDealingPublicError::InvalidSignature { .. })
@@ -3169,55 +3440,68 @@ mod verify_initial_dealings {
     }
 
     fn generate_initial_dealings<R: RngCore + CryptoRng>(
-        env: &CanisterThresholdSigTestEnvironment,
-        dealers: &IDkgDealers,
-        receivers: &IDkgReceivers,
+        registry_version: RegistryVersion,
+        source_subnet_nodes: Nodes,
+        target_subnet_nodes: Nodes,
         corrupt_first_dealing: bool,
         rng: &mut R,
     ) -> (InitialIDkgDealings, IDkgTranscriptParams) {
-        let initial_params = env.params_for_random_sharing(
-            dealers,
-            receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            rng,
-        );
-        let initial_transcript = env
-            .nodes
-            .run_idkg_and_create_and_verify_transcript(&initial_params, rng);
+        let (source_dealers, source_receivers) = source_subnet_nodes
+            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+        let source_key_transcript = {
+            let masked_key_params = IDkgTranscriptParams::new(
+                random_transcript_id(rng),
+                source_dealers.get().clone(),
+                source_receivers.get().clone(),
+                registry_version,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                IDkgTranscriptOperation::Random,
+            )
+            .expect("failed to create random IDkgTranscriptParams");
+            let masked_key_transcript = source_subnet_nodes
+                .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
+            let unmasked_params = build_params_from_previous(
+                masked_key_params,
+                IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+                rng,
+            );
+            source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+        };
 
-        let unmasked_params = build_params_from_previous(
-            initial_params,
-            IDkgTranscriptOperation::ReshareOfMasked(initial_transcript),
-            rng,
-        );
-        let unmasked_transcript = env
-            .nodes
-            .run_idkg_and_create_and_verify_transcript(&unmasked_params, rng);
+        let reshare_params = IDkgTranscriptParams::new(
+            random_transcript_id(rng),
+            source_receivers.get().clone(),
+            target_subnet_nodes.ids(),
+            source_key_transcript.registry_version,
+            source_key_transcript.algorithm_id,
+            IDkgTranscriptOperation::ReshareOfUnmasked(source_key_transcript),
+        )
+        .expect("invalid reshare of unmasked parameters");
 
-        let reshare_of_unmasked_params = build_params_from_previous(
-            unmasked_params,
-            IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
-            rng,
-        );
-        let signed_dealings = env
-            .nodes
-            .load_previous_transcripts_and_create_signed_dealings(&reshare_of_unmasked_params);
-        let mut signed_dealings_vec = signed_dealings.into_values().collect::<Vec<_>>();
-        if corrupt_first_dealing {
-            if let Some(first_signed_dealing) = signed_dealings_vec.first_mut() {
-                let corrupted_sig = {
-                    let mut sig_clone = first_signed_dealing.signature.signature.get_ref().clone();
-                    sig_clone.0.push(0xff);
-                    BasicSigOf::new(sig_clone)
-                };
-                first_signed_dealing.signature.signature = corrupted_sig;
+        let nodes_involved_in_resharing: Nodes = source_subnet_nodes
+            .into_receivers(&source_receivers)
+            .chain(target_subnet_nodes.into_iter())
+            .collect();
+        let initial_dealings = {
+            let signed_dealings = nodes_involved_in_resharing
+                .load_previous_transcripts_and_create_signed_dealings(&reshare_params);
+            let mut signed_dealings_vec = signed_dealings.into_values().collect::<Vec<_>>();
+            if corrupt_first_dealing {
+                if let Some(first_signed_dealing) = signed_dealings_vec.first_mut() {
+                    let corrupted_sig = {
+                        let mut sig_clone =
+                            first_signed_dealing.signature.signature.get_ref().clone();
+                        sig_clone.0.push(0xff);
+                        BasicSigOf::new(sig_clone)
+                    };
+                    first_signed_dealing.signature.signature = corrupted_sig;
+                }
             }
-        }
-        let initial_dealings =
-            InitialIDkgDealings::new(reshare_of_unmasked_params.clone(), signed_dealings_vec)
-                .expect("failed to create initial dealings");
 
-        (initial_dealings, reshare_of_unmasked_params)
+            InitialIDkgDealings::new(reshare_params.clone(), signed_dealings_vec)
+                .expect("should create initial dealings")
+        };
+        (initial_dealings, reshare_params)
     }
 }
 
@@ -3488,13 +3772,305 @@ mod verify_opening {
     }
 }
 
+mod reshare_key_transcript {
+    use super::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        n_random_node_ids, random_transcript_id, IDkgParticipantsRandom,
+    };
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn should_reshare_initial_dealings_to_another_subnet() {
+        let mut rng = reproducible_rng();
+        let even_subnet_size = (1..=10)
+            .map(|n| n * 2)
+            .choose(&mut rng)
+            .expect("non-empty iterator");
+        let env = CanisterThresholdSigTestEnvironment::new(even_subnet_size, &mut rng);
+        let (source_subnet_nodes, target_subnet_nodes) = env
+            .nodes
+            .partition(|(index, _node)| *index < even_subnet_size / 2);
+        assert_eq!(source_subnet_nodes.len(), target_subnet_nodes.len());
+        let (source_dealers, source_receivers) = source_subnet_nodes
+            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
+
+        let source_key_transcript = {
+            let masked_key_params = IDkgTranscriptParams::new(
+                random_transcript_id(&mut rng),
+                source_dealers.get().clone(),
+                source_receivers.get().clone(),
+                env.newest_registry_version,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                IDkgTranscriptOperation::Random,
+            )
+            .expect("failed to create random IDkgTranscriptParams");
+            let masked_key_transcript = source_subnet_nodes
+                .run_idkg_and_create_and_verify_transcript(&masked_key_params, &mut rng);
+            let unmasked_params = build_params_from_previous(
+                masked_key_params,
+                IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+                &mut rng,
+            );
+            source_subnet_nodes
+                .run_idkg_and_create_and_verify_transcript(&unmasked_params, &mut rng)
+        };
+        let source_tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&source_key_transcript).expect("valid public key");
+
+        let reshare_params = IDkgTranscriptParams::new(
+            random_transcript_id(&mut rng),
+            source_receivers.get().clone(),
+            target_subnet_nodes.ids(),
+            source_key_transcript.registry_version,
+            source_key_transcript.algorithm_id,
+            IDkgTranscriptOperation::ReshareOfUnmasked(source_key_transcript),
+        )
+        .expect("invalid reshare of unmasked parameters");
+
+        let nodes_involved_in_resharing: Nodes = source_subnet_nodes
+            .into_receivers(&source_receivers)
+            .chain(target_subnet_nodes.into_iter())
+            .collect();
+        let initial_dealings = {
+            let signed_dealings = nodes_involved_in_resharing
+                .load_previous_transcripts_and_create_signed_dealings(&reshare_params);
+            let initial_dealings = InitialIDkgDealings::new(
+                reshare_params.clone(),
+                signed_dealings.into_values().collect::<Vec<_>>(),
+            )
+            .expect("should create initial dealings");
+            assert_eq!(
+                nodes_involved_in_resharing
+                    .random_receiver(&reshare_params, &mut rng)
+                    .verify_initial_dealings(&reshare_params, &initial_dealings),
+                Ok(())
+            );
+            initial_dealings
+        };
+        let reshared_key_transcript = {
+            let dealings = initial_dealings
+                .dealings()
+                .iter()
+                .map(|signed_dealing| {
+                    nodes_involved_in_resharing
+                        .support_dealing_from_all_receivers(signed_dealing.clone(), &reshare_params)
+                })
+                .collect();
+            nodes_involved_in_resharing
+                .random_receiver(&reshare_params, &mut rng)
+                .create_transcript_or_panic(&reshare_params, &dealings)
+        };
+        let target_tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+
+        assert_eq!(
+            source_tecdsa_master_public_key,
+            target_tecdsa_master_public_key
+        );
+    }
+
+    #[test]
+    fn should_reshare_key_transcript_to_another_subnet() {
+        let mut rng = reproducible_rng();
+        let even_subnet_size = (1..=10)
+            .map(|n| n * 2)
+            .choose(&mut rng)
+            .expect("non-empty iterator");
+        let env = CanisterThresholdSigTestEnvironment::new(even_subnet_size, &mut rng);
+        let (source_subnet_nodes, target_subnet_nodes) = env
+            .nodes
+            .partition(|(index, _node)| *index < even_subnet_size / 2);
+        assert_eq!(source_subnet_nodes.len(), target_subnet_nodes.len());
+        let (source_dealers, source_receivers) = source_subnet_nodes
+            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
+
+        let source_key_transcript = {
+            let masked_key_params = IDkgTranscriptParams::new(
+                random_transcript_id(&mut rng),
+                source_dealers.get().clone(),
+                source_receivers.get().clone(),
+                env.newest_registry_version,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                IDkgTranscriptOperation::Random,
+            )
+            .expect("failed to create random IDkgTranscriptParams");
+            let masked_key_transcript = source_subnet_nodes
+                .run_idkg_and_create_and_verify_transcript(&masked_key_params, &mut rng);
+            let unmasked_params = build_params_from_previous(
+                masked_key_params,
+                IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+                &mut rng,
+            );
+            source_subnet_nodes
+                .run_idkg_and_create_and_verify_transcript(&unmasked_params, &mut rng)
+        };
+        let source_tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&source_key_transcript).expect("valid public key");
+
+        let reshare_params = IDkgTranscriptParams::new(
+            random_transcript_id(&mut rng),
+            source_receivers.get().clone(),
+            target_subnet_nodes.ids(),
+            source_key_transcript.registry_version,
+            source_key_transcript.algorithm_id,
+            IDkgTranscriptOperation::ReshareOfUnmasked(source_key_transcript),
+        )
+        .expect("invalid reshare of unmasked parameters");
+
+        let nodes_involved_in_resharing: Nodes = source_subnet_nodes
+            .into_receivers(&source_receivers)
+            .chain(target_subnet_nodes.into_iter())
+            .collect();
+        let reshared_key_transcript = nodes_involved_in_resharing
+            .run_idkg_and_create_and_verify_transcript(&reshare_params, &mut rng);
+        let target_tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+
+        assert_eq!(
+            source_tecdsa_master_public_key,
+            target_tecdsa_master_public_key
+        );
+    }
+
+    #[test]
+    fn should_reshare_key_transcript_from_dealers_to_receivers_and_back() {
+        let mut rng = ReproducibleRng::new();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
+        let (dealers, receivers) = env
+            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&key_transcript).expect("valid public key");
+
+        let new_dealers = receivers.get().clone();
+        let new_receivers = dealers.get().clone();
+        let reshare_params = IDkgTranscriptParams::new(
+            random_transcript_id(&mut rng),
+            new_dealers,
+            new_receivers,
+            key_transcript.registry_version,
+            key_transcript.algorithm_id,
+            IDkgTranscriptOperation::ReshareOfUnmasked(key_transcript),
+        )
+        .expect("invalid reshare of unmasked parameters");
+        let reshared_key_transcript = env
+            .nodes
+            .run_idkg_and_create_and_verify_transcript(&reshare_params, &mut rng);
+        let reshared_tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+
+        assert_eq!(tecdsa_master_public_key, reshared_tecdsa_master_public_key);
+    }
+
+    #[test]
+    fn should_reshare_key_transcript_when_new_nodes_added() {
+        let mut rng = ReproducibleRng::new();
+        let subnet_size = rng.gen_range(1..10);
+        let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
+        let (dealers, receivers) = env
+            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&key_transcript).expect("valid public key");
+
+        let receivers_with_new_node_ids: BTreeSet<_> = {
+            let mut new_receivers = receivers.get().clone();
+            let num_new_nodes = rng.gen_range(1..10);
+            let new_random_node_ids = n_random_node_ids(num_new_nodes, &mut rng);
+            for new_node_id in new_random_node_ids.iter() {
+                env.add_node(Node::new(*new_node_id, Arc::clone(&env.registry), &mut rng));
+                assert!(new_receivers.insert(*new_node_id));
+            }
+            env.registry.reload();
+            new_receivers
+        };
+
+        let reshare_params = IDkgTranscriptParams::new(
+            random_transcript_id(&mut rng),
+            receivers.get().clone(),
+            receivers_with_new_node_ids,
+            key_transcript.registry_version,
+            key_transcript.algorithm_id,
+            IDkgTranscriptOperation::ReshareOfUnmasked(key_transcript),
+        )
+        .expect("invalid reshare of unmasked parameters");
+        let reshared_key_transcript = env
+            .nodes
+            .run_idkg_and_create_and_verify_transcript(&reshare_params, &mut rng);
+        let reshared_tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+
+        assert_eq!(tecdsa_master_public_key, reshared_tecdsa_master_public_key);
+    }
+
+    #[test]
+    fn should_reshare_key_transcript_when_receivers_removed() {
+        let mut rng = ReproducibleRng::new();
+        let subnet_size = rng.gen_range(2..10); //at least 2 receivers to be able to remove 1
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
+        let (dealers, receivers) = env
+            .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, &mut rng);
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&key_transcript).expect("valid public key");
+
+        let receivers_without_removed_receiver = {
+            let num_receivers_to_remove = rng.gen_range(1..=receivers.get().len() - 1);
+            let removed_receivers = env
+                .nodes
+                .receivers(&receivers)
+                .choose_multiple(&mut rng, num_receivers_to_remove);
+            let mut new_receivers = receivers.get().clone();
+            for removed_receiver in removed_receivers.iter() {
+                assert!(new_receivers.remove(&removed_receiver.id()));
+            }
+            new_receivers
+        };
+        let reshare_params = IDkgTranscriptParams::new(
+            random_transcript_id(&mut rng),
+            receivers.get().clone(),
+            receivers_without_removed_receiver,
+            key_transcript.registry_version,
+            key_transcript.algorithm_id,
+            IDkgTranscriptOperation::ReshareOfUnmasked(key_transcript),
+        )
+        .expect("invalid reshare of unmasked parameters");
+        let reshared_key_transcript = env
+            .nodes
+            .run_idkg_and_create_and_verify_transcript(&reshare_params, &mut rng);
+        let reshared_tecdsa_master_public_key =
+            get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+
+        assert_eq!(tecdsa_master_public_key, reshared_tecdsa_master_public_key);
+    }
+}
+
 /// Corrupts the dealing by modifying the ciphertext intended for the specified receiver.
 fn corrupt_signed_dealing_for_one_receiver(
     dealing_index_to_corrupt: NodeIndex,
     dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     receiver_index: NodeIndex,
 ) {
-    let mut signed_dealing = dealings
+    let signed_dealing = dealings
         .get_mut(&dealing_index_to_corrupt)
         .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
     let invalidated_internal_dealing_raw = {

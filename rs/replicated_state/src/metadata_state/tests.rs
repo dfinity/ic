@@ -1,5 +1,8 @@
 use super::*;
-use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+use crate::metadata_state::subnet_call_context_manager::{
+    InstallCodeCall, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
+};
+use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{EcdsaCurve, IC_00};
@@ -8,8 +11,8 @@ use ic_test_utilities::{
     mock_time,
     types::{
         ids::{
-            canister_test_id, message_test_id, subnet_test_id, user_test_id, SUBNET_0, SUBNET_1,
-            SUBNET_2,
+            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
+            SUBNET_0, SUBNET_1, SUBNET_2,
         },
         messages::{RequestBuilder, ResponseBuilder},
         xnet::{StreamHeaderBuilder, StreamSliceBuilder},
@@ -19,10 +22,11 @@ use ic_types::{canister_http::Transform, time::current_time};
 use ic_types::{
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
-    messages::{CallbackId, Payload},
+    messages::{CallbackId, CanisterCall, Payload},
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use std::sync::Arc;
 
 lazy_static! {
     static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
@@ -425,6 +429,14 @@ fn roundtrip_encoding() {
     };
     system_metadata.network_topology = network_topology;
 
+    use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
+    use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
+    let pk_der =
+        public_key_to_der(PublicKeyBytes::try_from(&valid_node_signing_public_key()).unwrap());
+    system_metadata.node_public_keys = btreemap! {
+        node_test_id(1) => pk_der,
+    };
+
     // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
     let mut proto = pb::SystemMetadata::from(&system_metadata);
     proto.canister_allocation_ranges = None;
@@ -511,7 +523,7 @@ fn system_metadata_split() {
     };
 
     // Split off subnet A', phase 1.
-    let metadata_a_phase_1 = system_metadata.clone().split(SUBNET_A);
+    let metadata_a_phase_1 = system_metadata.clone().split(SUBNET_A, None).unwrap();
 
     // Metadata should be identical, plus a split marker pointing to subnet A.
     let mut expected = system_metadata.clone();
@@ -533,12 +545,14 @@ fn system_metadata_split() {
     assert_eq!(expected, metadata_a_phase_2);
 
     // Split off subnet B, phase 1.
-    let metadata_b_phase_1 = system_metadata.clone().split(SUBNET_B);
+    let metadata_b_phase_1 = system_metadata.clone().split(SUBNET_B, None).unwrap();
 
-    // Should only retain ingress history; plus a split marker pointing to subnet A.
+    // Should only retain ingress history and batch time; and a split marker
+    // pointing back to subnet A.
     let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::VerifiedApplication);
     expected.ingress_history = system_metadata.ingress_history;
     expected.split_from = Some(SUBNET_A);
+    expected.batch_time = system_metadata.batch_time;
     assert_eq!(expected, metadata_b_phase_1);
 
     // Split off subnet B, phase 2.
@@ -557,14 +571,69 @@ fn system_metadata_split() {
 }
 
 #[test]
+fn system_metadata_split_with_batch_time() {
+    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    const SUBNET_A: SubnetId = SUBNET_0;
+    const SUBNET_B: SubnetId = SUBNET_1;
+
+    let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::Application);
+    system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
+    system_metadata.batch_time = current_time();
+    system_metadata.subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: 2197.into(),
+        ..Default::default()
+    };
+
+    // Try splitting off subnet A' with an explicit batch time. It should fail, even
+    // though it is the exact same batch time.
+    assert_matches!(
+        system_metadata
+            .clone()
+            .split(SUBNET_A, Some(system_metadata.batch_time)),
+        Err(_)
+    );
+
+    let assert_valid_subnet_b_split = |batch_time: Time| {
+        let split_metadata = system_metadata
+            .clone()
+            .split(SUBNET_B, Some(batch_time))
+            .unwrap();
+
+        let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::Application);
+        expected.split_from = Some(SUBNET_A);
+        expected.batch_time = batch_time;
+        assert_eq!(expected, split_metadata);
+    };
+
+    // Providing an equal batch time when splitting `SUBNET_B` should work.
+    assert_valid_subnet_b_split(system_metadata.batch_time);
+    // As should a later batch time.
+    assert_valid_subnet_b_split(Time::from_nanos_since_unix_epoch(
+        system_metadata.batch_time.as_nanos_since_unix_epoch() + 1,
+    ));
+    // But an earlier batch time should fail.
+    assert_matches!(
+        system_metadata.clone().split(
+            SUBNET_B,
+            Some(Time::from_nanos_since_unix_epoch(
+                system_metadata.batch_time.as_nanos_since_unix_epoch() - 1,
+            ))
+        ),
+        Err(_)
+    );
+}
+
+#[test]
 fn subnet_call_contexts_deserialization() {
     let url = "https://".to_string();
     let transform = Transform {
         method_name: "transform".to_string(),
         context: vec![0, 1, 2],
     };
-    let mut system_call_context_manager = SubnetCallContextManager::default();
+    let mut system_call_context_manager: SubnetCallContextManager =
+        SubnetCallContextManager::default();
 
+    // Define HTTP request.
     let canister_http_request = CanisterHttpRequestContext {
         request: RequestBuilder::default()
             .sender(canister_test_id(1))
@@ -578,20 +647,48 @@ fn subnet_call_contexts_deserialization() {
         transform: Some(transform.clone()),
         time: mock_time(),
     };
-    system_call_context_manager.push_http_request(canister_http_request);
+    system_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
+        canister_http_request,
+    ));
 
+    // Define install code request.
+    let request = RequestBuilder::default()
+        .sender(canister_test_id(1))
+        .receiver(canister_test_id(2))
+        .build();
+    let install_code_call = InstallCodeCall {
+        call: CanisterCall::Request(Arc::new(request)),
+        effective_canister_id: canister_test_id(3),
+        time: mock_time(),
+    };
+    let call_id = system_call_context_manager.push_install_code_call(install_code_call.clone());
+
+    // Define stop canister request.
+    let request = RequestBuilder::default()
+        .sender(canister_test_id(1))
+        .receiver(canister_test_id(2))
+        .build();
+    let stop_canister_call = StopCanisterCall {
+        call: CanisterCall::Request(Arc::new(request)),
+        effective_canister_id: canister_test_id(3),
+        time: mock_time(),
+    };
+    let stop_canister_call_id =
+        system_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
+
+    // Encode and decode.
     let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
-    let deserialized_system_call_context_manager: SubnetCallContextManager =
+    let mut deserialized_system_call_context_manager: SubnetCallContextManager =
         SubnetCallContextManager::try_from((mock_time(), system_call_context_manager_proto))
             .unwrap();
 
+    // Check HTTP request deserialization.
     assert_eq!(
         deserialized_system_call_context_manager
             .canister_http_request_contexts
             .len(),
         1
     );
-
     let deserialized_http_request_context = deserialized_system_call_context_manager
         .canister_http_request_contexts
         .get(&CallbackId::from(0))
@@ -602,6 +699,26 @@ fn subnet_call_contexts_deserialization() {
         CanisterHttpMethod::GET
     );
     assert_eq!(deserialized_http_request_context.transform, Some(transform));
+
+    // Check install code call deserialization.
+    assert_eq!(
+        deserialized_system_call_context_manager.install_code_calls_len(),
+        1
+    );
+    let deserialized_install_code_call = deserialized_system_call_context_manager
+        .remove_install_code_call(call_id)
+        .expect("Did not find the install code call.");
+    assert_eq!(deserialized_install_code_call, install_code_call);
+
+    // Check stop canister request deserialization.
+    assert_eq!(
+        deserialized_system_call_context_manager.stop_canister_calls_len(),
+        1
+    );
+    let deserialized_stop_canister_call = deserialized_system_call_context_manager
+        .remove_stop_canister_call(stop_canister_call_id)
+        .expect("Did not find the stop canister call.");
+    assert_eq!(deserialized_stop_canister_call, stop_canister_call);
 }
 
 #[test]

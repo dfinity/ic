@@ -131,13 +131,13 @@ impl SystemStateChanges {
             msg.method_name,
             err
         );
-        let reject_context = RejectContext {
-            code: RejectCode::DestinationInvalid,
-            message: format!(
+        let reject_context = RejectContext::new(
+            RejectCode::DestinationInvalid,
+            format!(
                 "Unable to route management canister request {}: {:?}",
                 msg.method_name, err
             ),
-        };
+        );
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -159,10 +159,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext {
-            code: RejectCode::CanisterError,
-            message: err.to_string(),
-        };
+        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -268,10 +265,7 @@ impl SystemStateChanges {
     ) -> HypervisorResult<()> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
-        let consumed_cycles = self.apply_balance_changes(system_state);
-
-        // Observe consumed cycles.
-        system_state.observe_consumed_cycles(consumed_cycles);
+        self.apply_balance_changes(system_state);
 
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance
@@ -425,43 +419,44 @@ impl SystemStateChanges {
         Ok(())
     }
 
-    /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(&self, state: &mut SystemState) -> Cycles {
-        let balance_before = state.balance();
-        let mut removed_consumed_cycles = Cycles::new(0);
-        for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
-            state.remove_cycles(*amount, *use_case);
-            removed_consumed_cycles += *amount;
+    /// Returns `self.cycles_balance_change` without cycles that are accounted
+    /// for in `self.consumed_cycles_by_use_case`.
+    fn cycles_balance_change_without_consumed_cycles_by_use_case(&self) -> CyclesBalanceChange {
+        // `self.cycles_balance_change` consists of:
+        // - CyclesBalanceChange::added(cycles_accepted_from_the_call_context)
+        // - CyclesBalanceChange::remove(cycles_sent_via_outgoing_calls)
+        // - CyclesBalanceChange::remove(cycles_consumed_by_various_fees)
+        // This loop removes the last part from `self.cycles_balance_change`.
+        let mut result = self.cycles_balance_change;
+        for (_use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            result = result + CyclesBalanceChange::added(*amount)
         }
+        result
+    }
 
-        // The final balance of the canister should reflect `cycles_balance_change`.
-        // Since we removed `removed_consumed_cycles` above, we need to add it back
-        // to the `cycles_balance_change` to make sure the final balance of the canister is correct.
-        match self.cycles_balance_change {
+    /// Applies the balance change to the given state.
+    pub fn apply_balance_changes(&self, state: &mut SystemState) {
+        let initial_balance = state.balance();
+        let non_consumed_cycles_change =
+            self.cycles_balance_change_without_consumed_cycles_by_use_case();
+        match non_consumed_cycles_change {
             CyclesBalanceChange::Added(added) => {
-                // When 'cycles_balance_change' is positive we should add 'removed_consumed_cycles'.
-                state.add_cycles(added + removed_consumed_cycles, CyclesUseCase::NonConsumed);
-                debug_assert_eq!(balance_before + added, state.balance());
+                state.add_cycles(added, CyclesUseCase::NonConsumed)
             }
             CyclesBalanceChange::Removed(removed) => {
-                // When 'cycles_balance_change' is negative we are adding 'removed_consumed_cycles'
-                // but additionaly we should take care about the sign of the sum, which will
-                // determine whether we are adding or removing cycles from the balance.
-                if removed_consumed_cycles > removed {
-                    state.add_cycles(
-                        removed_consumed_cycles - removed,
-                        CyclesUseCase::NonConsumed,
-                    );
-                } else {
-                    state.remove_cycles(
-                        removed - removed_consumed_cycles,
-                        CyclesUseCase::NonConsumed,
-                    );
-                }
-                debug_assert_eq!(balance_before - removed, state.balance());
+                state.remove_cycles(removed, CyclesUseCase::NonConsumed)
             }
         }
-        removed_consumed_cycles
+        for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            state.remove_cycles(*amount, *use_case);
+        }
+        // All changes applied above should be equivalent to simply applying
+        // `self.cycles_balance_change` to the initial balance.
+        let expected_balance = match self.cycles_balance_change {
+            CyclesBalanceChange::Added(added) => initial_balance + added,
+            CyclesBalanceChange::Removed(removed) => initial_balance - removed,
+        };
+        assert_eq!(state.balance(), expected_balance);
     }
 
     fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
@@ -503,6 +498,7 @@ pub struct SandboxSafeSystemState {
     memory_allocation: MemoryAllocation,
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
+    reserved_balance: Cycles,
     call_context_balances: BTreeMap<CallContextId, Cycles>,
     cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
@@ -528,6 +524,7 @@ impl SandboxSafeSystemState {
         memory_allocation: MemoryAllocation,
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
+        reserved_balance: Cycles,
         call_context_balances: BTreeMap<CallContextId, Cycles>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
@@ -551,6 +548,7 @@ impl SandboxSafeSystemState {
             compute_allocation,
             system_state_changes: SystemStateChanges::default(),
             initial_cycles_balance,
+            reserved_balance,
             call_context_balances,
             cycles_account_manager,
             next_callback_id,
@@ -609,6 +607,7 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             compute_allocation,
             system_state.balance(),
+            system_state.reserved_balance(),
             call_context_balances,
             cycles_account_manager,
             system_state
@@ -804,6 +803,7 @@ impl SandboxSafeSystemState {
                 &mut new_balance,
                 amount,
                 self.subnet_size,
+                self.reserved_balance,
             )
             .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
@@ -830,6 +830,7 @@ impl SandboxSafeSystemState {
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
             self.subnet_size,
+            self.reserved_balance,
         ) {
             Ok(consumed_cycles) => consumed_cycles,
             Err(_) => return Err(msg),
@@ -910,6 +911,7 @@ impl SandboxSafeSystemState {
                     new_memory_usage,
                     self.compute_allocation,
                     self.subnet_size,
+                    self.reserved_balance,
                 );
                 if self.cycles_balance() >= threshold {
                     Ok(())

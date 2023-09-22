@@ -1,27 +1,27 @@
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
+use rand::{CryptoRng, Rng};
 
-fn create_random_dealing(
+fn create_random_dealing<R: CryptoRng + Rng>(
     threshold: u32,
     recipients: usize,
+    rng: &mut R,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
     let associated_data = vec![1, 2, 3];
     let dealer_index = 0;
 
+    let mut public_keys = Vec::with_capacity(recipients);
     let mut private_keys = Vec::with_capacity(recipients);
 
     for _i in 0..recipients {
-        private_keys.push(MEGaPrivateKey::generate(curve, &mut rng));
+        let sk = MEGaPrivateKey::generate(curve, rng);
+        public_keys.push(sk.public_key());
+        private_keys.push(sk);
     }
-
-    let public_keys = private_keys
-        .iter()
-        .map(|k| k.public_key())
-        .collect::<Result<Vec<_>, _>>()?;
 
     let shares = SecretShares::Random;
 
@@ -32,17 +32,19 @@ fn create_random_dealing(
         NumberOfNodes::from(threshold),
         &public_keys,
         &shares,
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
     )
 }
 
 fn dealings(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
     c.bench_function("create_dealing(Random, 3/5)", |b| {
-        b.iter(|| create_random_dealing(3, 5))
+        b.iter(|| create_random_dealing(3, 5, rng))
     });
 
     c.bench_function("create_dealing(Random, 5/9)", |b| {
-        b.iter(|| create_random_dealing(5, 9))
+        b.iter(|| create_random_dealing(5, 9, rng))
     });
 }
 

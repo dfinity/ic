@@ -515,10 +515,10 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 }
 
 /// Creates and installs the ledger canister.
-pub async fn set_up_ledger_canister<'runtime, 'a>(
-    runtime: &'runtime Runtime,
+pub async fn set_up_ledger_canister(
+    runtime: &Runtime,
     args: LedgerCanisterInitPayload,
-) -> Canister<'runtime> {
+) -> Canister {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister
@@ -719,7 +719,7 @@ pub async fn upgrade_root_canister_by_proposal(
     wasm: Wasm,
 ) {
     let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
+    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
 
     let proposal_id = submit_external_update_proposal_binary(
         governance,
@@ -778,7 +778,7 @@ async fn change_nns_canister_by_proposal(
     arg: Option<Vec<u8>>,
 ) {
     let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
+    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
 
     let status: CanisterStatusResult = root
         .update_(

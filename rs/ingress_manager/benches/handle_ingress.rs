@@ -132,7 +132,7 @@ impl SimulatedIngressHistory {
     fn set_history(&self, messages: BTreeMap<Time, MessageId>) {
         let mut rng = rand::thread_rng();
         let start_time = self.time_source.get_relative_time();
-        let end_time = *messages.keys().rev().next().unwrap();
+        let end_time = *messages.keys().next_back().unwrap();
         let mut histories = vec![];
         let mut time = start_time + Duration::from_secs(2);
         let set_limit = MAX_INGRESS_COUNT_PER_PAYLOAD * (MAX_INGRESS_TTL.as_secs() as usize) / 2;

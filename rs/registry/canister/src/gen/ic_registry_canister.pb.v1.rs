@@ -105,3 +105,16 @@ pub struct NodeProvidersMonthlyXdrRewards {
     #[prost(map = "string, uint64", tag = "1")]
     pub rewards: ::std::collections::HashMap<::prost::alloc::string::String, u64>,
 }
+/// Maps the supplied PrincipalId (of a canister) to the subnet to which the canister is assigned to.
+/// There is no guarantee that the canister exists, even if a subnet ID is returned.
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct GetSubnetForCanisterRequest {
+    #[prost(message, optional, tag = "1")]
+    pub principal: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+/// Response if the supplied PrincipalId is assigned to a subnet.
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct GetSubnetForCanisterResponse {
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}

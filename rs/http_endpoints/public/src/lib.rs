@@ -280,7 +280,12 @@ pub fn start_server(
         subnet_id,
         time_source,
         Arc::clone(&registry_client),
-        ValidatorExecutor::new(ingress_verifier.clone(), &malicious_flags, log.clone()),
+        ValidatorExecutor::new(
+            Arc::clone(&registry_client),
+            ingress_verifier.clone(),
+            &malicious_flags,
+            log.clone(),
+        ),
         ingress_filter,
         ingress_throttler,
         ingress_tx,
@@ -291,7 +296,12 @@ pub fn start_server(
         metrics.clone(),
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
-        ValidatorExecutor::new(ingress_verifier.clone(), &malicious_flags, log.clone()),
+        ValidatorExecutor::new(
+            Arc::clone(&registry_client),
+            ingress_verifier.clone(),
+            &malicious_flags,
+            log.clone(),
+        ),
         Arc::clone(&registry_client),
         query_execution_service,
     );
@@ -302,7 +312,12 @@ pub fn start_server(
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
         state_reader_executor.clone(),
-        ValidatorExecutor::new(ingress_verifier.clone(), &malicious_flags, log.clone()),
+        ValidatorExecutor::new(
+            Arc::clone(&registry_client),
+            ingress_verifier.clone(),
+            &malicious_flags,
+            log.clone(),
+        ),
         Arc::clone(&registry_client),
     );
     let status_service = StatusService::new_service(

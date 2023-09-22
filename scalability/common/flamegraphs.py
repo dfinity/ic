@@ -99,7 +99,7 @@ class Flamegraph(metrics.Metric):
                 f"sudo mkdir {TARGET_DIR}; "
                 f"sudo chmod 0777 {TARGET_DIR}; "
                 f"cp -f flamegraph {TARGET_DIR}; cd {TARGET_DIR}; "
-                f"sudo perf record -F {FREQUENCY} -p $(pidof ic-https-outcalls-adapter ic-btc-adapter ic-crypto-csp ic-onchain-observability-adapter orchestrator replica sandbox_launcher canister_sandbox | sed 's/ /,/g') --call-graph dwarf,16384 -g -o {TARGET_DIR}/perf.data"
+                f"sudo perf record -F {FREQUENCY} -p $(pidof ic-https-outcalls-adapter ic-btc-adapter ic-crypto-csp orchestrator replica sandbox_launcher canister_sandbox | sed 's/ /,/g') --call-graph dwarf,16384 -g -o {TARGET_DIR}/perf.data"
             ),
             os.path.join(outdir, "perf-{}.stdout.log".format(self.target)),
             os.path.join(outdir, "perf-{}.stderr.log".format(self.target)),

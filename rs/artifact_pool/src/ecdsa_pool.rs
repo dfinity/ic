@@ -21,7 +21,6 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
-use ic_types::consensus::BlockPayload;
 use ic_types::consensus::{
     ecdsa::{
         ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
@@ -339,8 +338,8 @@ impl EcdsaPoolImpl {
         let block = catch_up_package.content.block.get_value().clone();
         let mut initial_dealings = None;
         if block.payload.is_summary() {
-            let block_payload = BlockPayload::from(block.payload);
-            if let Some(ecdsa_summary) = block_payload.into_summary().ecdsa {
+            let block_payload = block.payload.as_ref();
+            if let Some(ecdsa_summary) = &block_payload.as_summary().ecdsa {
                 initial_dealings = ecdsa_summary.initial_dkg_dealings();
             }
         }

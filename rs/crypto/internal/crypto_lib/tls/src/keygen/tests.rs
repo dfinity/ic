@@ -2,10 +2,11 @@
 
 use super::*;
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use openssl::pkey::{Id, Public};
 use openssl::x509::X509VerifyResult;
 use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 const VALIDITY_SECS: i64 = 1000;
 const NOT_BEFORE_SECS: i64 = 123;
@@ -253,7 +254,7 @@ fn should_redact_tls_ed25519_secret_key_der_bytes_debug() {
 
 #[test]
 fn should_have_stable_representation_of_private_key() {
-    let mut rng = ReproducibleRng::from_seed([0x42u8; 32]);
+    let mut rng = ChaCha20Rng::from_seed([0x42u8; 32]);
 
     let (_cert, sk) =
         generate_tls_key_pair_der(&mut rng, "common name", &not_before(), &not_after())

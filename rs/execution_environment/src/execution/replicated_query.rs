@@ -9,11 +9,11 @@ use crate::execution::common::{
 };
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::messages::CanisterCallOrTask;
-use ic_interfaces::{execution_environment::HypervisorError, messages::CanisterCall};
-use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_types::{CanisterId, NumBytes, NumInstructions, Time};
+use ic_types::{
+    messages::{CanisterCall, CanisterCallOrTask},
+    NumBytes, NumInstructions, Time,
+};
 
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -131,8 +131,7 @@ pub fn execute_replicated_query(
 
     let result = output.wasm_result;
     let log = round.log;
-    let result =
-        result.map_err(|err| log_and_transform_to_user_error(log, err, &canister.canister_id()));
+    let result = result.map_err(|err| err.into_user_error(&canister.canister_id()));
     let response =
         wasm_result_to_query_response(result, &canister, time, call_origin, log, req.take_cycles());
 
@@ -158,17 +157,4 @@ pub fn execute_replicated_query(
         instructions_used,
         heap_delta: NumBytes::from(0),
     }
-}
-
-fn log_and_transform_to_user_error(
-    log: &ReplicaLogger,
-    hypervisor_err: HypervisorError,
-    canister_id: &CanisterId,
-) -> UserError {
-    let user_error = hypervisor_err.into_user_error(canister_id);
-    info!(
-        log,
-        "Executing message on {} failed with {:?}", canister_id, user_error
-    );
-    user_error
 }

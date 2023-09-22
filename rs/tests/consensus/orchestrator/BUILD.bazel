@@ -7,7 +7,8 @@ MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
 
 SUBNET_RECOVERY_RUNTIME_DEPS = [
     "//rs/tests:recovery/binaries",
-    "//ic-os/guestos/envs/prod:hash_and_upload_update-img",
+    "//ic-os/guestos/envs/prod:update-img.tar.zst.sha256",
+    "//ic-os/guestos/envs/prod:upload_update-img",
 ]
 
 ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = ["//rs/tests:src/orchestrator/orchestrator_universal_vm_activation.sh"]
@@ -57,6 +58,7 @@ system_test(
     ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -69,6 +71,7 @@ system_test(
     ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -83,6 +86,7 @@ system_test(
     ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -96,6 +100,7 @@ system_test(
     name = "sr_app_failover_nodes_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -107,6 +112,7 @@ system_test(
     name = "sr_app_failover_nodes_enable_tecdsa_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -120,6 +126,7 @@ system_test(
     name = "sr_app_failover_nodes_with_tecdsa_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -133,6 +140,7 @@ system_test(
     name = "sr_app_no_upgrade_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -144,6 +152,7 @@ system_test(
     name = "sr_app_no_upgrade_enable_tecdsa_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -157,6 +166,7 @@ system_test(
     name = "sr_app_no_upgrade_with_tecdsa_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -171,6 +181,7 @@ system_test(
     ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -183,6 +194,7 @@ system_test(
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

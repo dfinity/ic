@@ -4,16 +4,17 @@ use crate::artifact::StateSyncMessage;
 use crate::canister_http::{
     CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
-use crate::consensus::certification::CertificationMessage;
-use crate::consensus::dkg as consensus_dkg;
 use crate::consensus::{
-    certification::{Certification, CertificationContent, CertificationShare},
+    certification::{
+        Certification, CertificationContent, CertificationMessage, CertificationShare,
+    },
+    dkg as consensus_dkg,
     ecdsa::{
         EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
     },
-    Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpShareContent,
-    ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent, RandomBeaconContent,
-    RandomTapeContent,
+    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
+    CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent,
+    RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, SignedIDkgDealing,
@@ -24,7 +25,7 @@ use crate::signature::{
     BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
 };
-use ic_crypto_sha::{DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use std::hash::Hash;
 
 #[cfg(test)]
@@ -44,7 +45,9 @@ const DOMAIN_FINALIZATION: &str = "finalization_domain";
 const DOMAIN_FINALIZATION_SHARE: &str = "finalization_share_domain";
 
 pub(crate) const DOMAIN_BLOCK: &str = "block_domain";
-const DOMAIN_BLOCK_PROPOSAL: &str = "block_proposal_domain";
+const _DOMAIN_BLOCK_PROPOSAL: &str = "block_proposal_domain";
+pub(crate) const DOMAIN_BLOCK_METADATA: &str = "block_metadata_domain";
+const DOMAIN_BLOCK_METADATA_PROPOSAL: &str = "block_metadata_proposal_domain";
 
 const DOMAIN_INMEMORY_PAYLOAD: &str = "inmemory_payload_domain";
 
@@ -66,8 +69,8 @@ const DOMAIN_SIGNED_REQUEST_BYTES: &str = "signed_request_bytes_domain";
 
 const DOMAIN_MESSAGEID: &str = "messageid_domain";
 
-pub(crate) const DOMAIN_IC_ONCHAIN_OBSERVABILITY_REPORT: &str =
-    "ic-onchain-observability-report-domain";
+// TODO: remove once NET-1501 is done
+const _DOMAIN_IC_ONCHAIN_OBSERVABILITY_REPORT: &str = "ic-onchain-observability-report-domain";
 
 pub(crate) const DOMAIN_RANDOM_TAPE_CONTENT: &str = "random_tape_content_domain";
 const DOMAIN_RANDOM_TAPE: &str = "random_tape_domain";
@@ -112,10 +115,6 @@ pub trait CryptoHashDomain: private::CryptoHashDomainSeal {
     fn domain(&self) -> String;
 }
 mod private {
-
-    use crate::canister_http::CanisterHttpResponseShare;
-    use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
-
     use super::*;
 
     pub trait CryptoHashDomainSeal {}
@@ -135,7 +134,7 @@ mod private {
     }
 
     impl CryptoHashDomainSeal for Block {}
-    impl CryptoHashDomainSeal for Signed<HashedBlock, BasicSignature<Block>> {}
+    impl CryptoHashDomainSeal for Signed<HashedBlock, BasicSignature<BlockMetadata>> {}
 
     impl CryptoHashDomainSeal for BlockPayload {}
 
@@ -278,9 +277,9 @@ impl CryptoHashDomain for Block {
     }
 }
 
-impl CryptoHashDomain for Signed<HashedBlock, BasicSignature<Block>> {
+impl CryptoHashDomain for Signed<HashedBlock, BasicSignature<BlockMetadata>> {
     fn domain(&self) -> String {
-        DOMAIN_BLOCK_PROPOSAL.to_string()
+        DOMAIN_BLOCK_METADATA_PROPOSAL.to_string()
     }
 }
 

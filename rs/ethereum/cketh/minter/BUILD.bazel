@@ -1,7 +1,22 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
+
+sol_binary(
+    name = "minter_contract",
+    srcs = ["minter.sol"],
+)
+
+# Export the compiled bytecode and ABI files as artifacts
+filegroup(
+    name = "contract_artifacts",
+    srcs = [
+        ":minter_contract",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 rust_library(
     name = "minter",
@@ -15,20 +30,47 @@ rust_library(
     ],
     version = "0.1.0",
     deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
+        "//rs/crypto/sha3",
+        "//rs/phantom_newtype",
+        "//rs/types/ic00_types",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ethabi",
         "@crate_index//:ethnum",
+        "@crate_index//:futures",
         "@crate_index//:hex",
+        "@crate_index//:hex-literal",
+        "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:num-bigint",
+        "@crate_index//:num-traits",
+        "@crate_index//:rlp",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
-        "@crate_index//:tiny-keccak",
     ],
 )
 
 rust_test(
-    name = "lib_test",
+    name = "lib_tests",
     crate = ":minter",
+    deps = [
+        ":minter",
+        "@crate_index//:assert_matches",
+        "@crate_index//:ethers-core",
+        "@crate_index//:proptest",
+    ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":_wasm_cketh_minter",
+    data = [":cketh_minter.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+    },
 )
 
 rust_canister(
@@ -41,9 +83,27 @@ rust_canister(
     service_file = "cketh_minter.did",
     deps = [
         ":minter",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
+        "//rs/rosetta-api/icrc1/client/cdk",
+        "//rs/rust_canisters/http_types",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:ethabi",
+        "@crate_index//:hex",
+        "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:serde_json",
+    ],
+)
+
+rust_binary(
+    name = "principal_to_hex",
+    srcs = ["bin/principal_to_hex.rs"],
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:hex",
     ],
 )

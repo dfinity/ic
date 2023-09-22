@@ -175,3 +175,16 @@ wait_for_nns_canister_has_file_contents() {
     print_red "Canister $CANISTER_NAME upgrade failed"
     return 1
 }
+
+reset_nns_canister_version_to_mainnet() {
+    local NNS_URL=$1
+    local NEURON_ID=$2
+    local PEM=$3
+    local CANISTER_NAME=$4
+    local ENCODED_ARGS_FILE=${5:-}
+
+    VERSION=$(nns_canister_git_version "ic" "${CANISTER_NAME}")
+    propose_upgrade_canister_to_version_pem "${NNS_URL}" "${NEURON_ID}" "${PEM}" "${CANISTER_NAME}" "${VERSION}" "${ENCODED_ARGS_FILE}"
+
+    wait_for_nns_canister_has_version "${NNS_URL}" "${CANISTER_NAME}" "${VERSION}"
+}

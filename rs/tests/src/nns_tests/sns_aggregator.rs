@@ -302,7 +302,8 @@ impl AggregatorClient {
                 "Validating aggregator canister's installation via public endpoint {}",
                 app_node.get_public_url().as_str(),
             );
-            let p = env.get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm");
+            let p =
+                env.get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm.gz");
             let p = std::fs::canonicalize(p.clone())
                 .unwrap_or_else(|e| panic!("cannot obtain canonical path from {p:?}: {e:?}"));
             let canister_bytes = env.load_wasm(p);
@@ -464,7 +465,7 @@ pub fn workload_via_aggregator(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
@@ -512,7 +513,7 @@ pub fn workload_direct(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
@@ -570,7 +571,7 @@ pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---

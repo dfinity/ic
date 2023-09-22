@@ -242,7 +242,7 @@ pub fn test_threshold_scheme_with_basic_keygen<R, S, C, P>(
     P: PublicKeyStore + 'static,
 {
     let mut rng = seed.into_rng();
-    let threshold = NumberOfNodes::from(rng.gen_range(0..10));
+    let threshold = NumberOfNodes::from(rng.gen_range(1..10));
     let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
     println!(
         "--- threshold: {}, number_of_signers: {}",

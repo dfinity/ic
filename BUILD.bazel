@@ -32,6 +32,11 @@ alias(
 )
 
 alias(
+    name = "protobuf-format",
+    actual = "//pre-commit:protobuf-format",
+)
+
+alias(
     name = "bazelifier",
     actual = "//rs/bazelifier",
 )

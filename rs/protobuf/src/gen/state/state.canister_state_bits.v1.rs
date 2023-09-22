@@ -240,6 +240,8 @@ pub mod stop_canister_context {
         pub sender: ::core::option::Option<super::super::super::super::types::v1::UserId>,
         #[prost(bytes = "vec", tag = "2")]
         pub message_id: ::prost::alloc::vec::Vec<u8>,
+        #[prost(uint64, optional, tag = "5")]
+        pub call_id: ::core::option::Option<u64>,
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -252,6 +254,8 @@ pub mod stop_canister_context {
         pub funds: ::core::option::Option<super::super::super::queues::v1::Funds>,
         #[prost(message, optional, tag = "4")]
         pub cycles: ::core::option::Option<super::super::super::queues::v1::Cycles>,
+        #[prost(uint64, optional, tag = "5")]
+        pub call_id: ::core::option::Option<u64>,
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -321,6 +325,8 @@ pub mod execution_task {
         #[prost(message, optional, tag = "3")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
+        #[prost(uint64, optional, tag = "4")]
+        pub call_id: ::core::option::Option<u64>,
         #[prost(oneof = "aborted_install_code::Message", tags = "1, 2")]
         pub message: ::core::option::Option<aborted_install_code::Message>,
     }
@@ -523,6 +529,9 @@ pub struct CanisterStateBits {
         ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
+    /// Resource reservation cycles.
+    #[prost(message, optional, tag = "38")]
+    pub reserved_balance: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

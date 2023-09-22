@@ -43,7 +43,7 @@ impl ProtocolSetup {
 
         for _i in 0..receivers {
             let k = MEGaPrivateKey::generate(curve, &mut rng);
-            pk.push(k.public_key()?);
+            pk.push(k.public_key());
             sk.push(k);
         }
 
@@ -320,7 +320,7 @@ impl ProtocolRound {
 
                 let coefficients = LagrangeCoefficients::at_zero(curve_type, &indexes)?;
                 let dlog = coefficients.interpolate_scalar(&g_openings)?;
-                let pt = EccPoint::mul_by_g(&dlog)?;
+                let pt = EccPoint::mul_by_g(&dlog);
                 assert_eq!(pt, constant_term);
             }
 
@@ -765,7 +765,7 @@ impl SignatureProtocolExecution {
         random_beacon: Randomness,
         derivation_path: DerivationPath,
     ) -> Self {
-        let hashed_message = ic_crypto_sha::Sha256::hash(&signed_message).to_vec();
+        let hashed_message = ic_crypto_sha2::Sha256::hash(&signed_message).to_vec();
 
         Self {
             setup,

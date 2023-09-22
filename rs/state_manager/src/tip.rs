@@ -49,6 +49,13 @@ enum TipState {
     Serialized(Height),
 }
 
+/// A single pagemap to truncate and/or flush.
+pub struct PageMapToFlush {
+    pub page_map_type: PageMapType,
+    pub truncate: bool,
+    pub page_map: Option<PageMap>,
+}
+
 /// Request for the Tip directory handling thread.
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
@@ -64,18 +71,11 @@ pub(crate) enum TipRequest {
         height: Height,
         ids: BTreeSet<CanisterId>,
     },
-    /// Truncate PageMaps's path.
-    /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
-    TruncatePageMapsPath {
-        height: Height,
-        page_map_type: PageMapType,
-    },
     /// Flush PageMaps's unflushed delta on disc.
     /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
     FlushPageMapDelta {
         height: Height,
-        page_map: PageMap,
-        page_map_type: PageMapType,
+        pagemaps: Vec<PageMapToFlush>,
     },
     /// Reset tip folder to the checkpoint with given height.
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
@@ -103,7 +103,10 @@ pub(crate) enum TipRequest {
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
-    Wait { sender: Sender<()> },
+    Wait {
+        sender: Sender<()>,
+    },
+    Noop,
 }
 
 fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
@@ -214,27 +217,8 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 });
                         }
-                        TipRequest::TruncatePageMapsPath {
-                            height,
-                            page_map_type,
-                        } => {
-                            #[cfg(debug_assert)]
-                            match tip_state {
-                                TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
-                                _ => panic!("Unexpected tip state: {:?}", tip_state),
-                            }
-                            tip_state = TipState::ReadyForPageDeltas(height);
-                            let _timer = request_timer(&metrics, "truncate_page_maps_path");
-                            let path =
-                                page_map_path(&log, &mut tip_handler, height, &page_map_type);
-                            truncate_path(&log, &path);
-                        }
 
-                        TipRequest::FlushPageMapDelta {
-                            height,
-                            page_map,
-                            page_map_type,
-                        } => {
+                        TipRequest::FlushPageMapDelta { height, pagemaps } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             #[cfg(debug_assert)]
                             match tip_state {
@@ -242,15 +226,47 @@ pub(crate) fn spawn_tip_thread(
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
                             }
                             tip_state = TipState::ReadyForPageDeltas(height);
-                            let path =
-                                page_map_path(&log, &mut tip_handler, height, &page_map_type);
-                            if !page_map.unflushed_delta_is_empty() {
-                                page_map
-                                    .persist_unflushed_delta(&path)
-                                    .unwrap_or_else(|err| {
-                                        fatal!(log, "Failed to persist unflushed delta: {}", err);
-                                    });
-                            }
+                            parallel_map(
+                                &mut thread_pool,
+                                pagemaps.into_iter().map(
+                                    |PageMapToFlush {
+                                         page_map_type,
+                                         truncate,
+                                         page_map,
+                                     }| {
+                                        (
+                                            truncate,
+                                            page_map,
+                                            page_map_path(
+                                                &log,
+                                                &mut tip_handler,
+                                                height,
+                                                &page_map_type,
+                                            ),
+                                        )
+                                    },
+                                ),
+                                |(truncate, page_map, path)| {
+                                    if *truncate {
+                                        truncate_path(&log, path);
+                                    }
+                                    if page_map.is_some()
+                                        && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
+                                    {
+                                        page_map
+                                            .as_ref()
+                                            .unwrap()
+                                            .persist_unflushed_delta(path)
+                                            .unwrap_or_else(|err| {
+                                                fatal!(
+                                                    log,
+                                                    "Failed to persist unflushed delta: {}",
+                                                    err
+                                                );
+                                            });
+                                    }
+                                },
+                            );
                         }
                         TipRequest::SerializeToTip {
                             height,
@@ -343,6 +359,7 @@ pub(crate) fn spawn_tip_thread(
                             );
                             have_latest_manifest = true;
                         }
+                        TipRequest::Noop => {}
                     }
                 }
             })
@@ -471,6 +488,7 @@ fn serialize_canister_to_tip(
             freeze_threshold: canister_state.system_state.freeze_threshold,
             cycles_balance: canister_state.system_state.balance(),
             cycles_debit: canister_state.system_state.ingress_induction_cycles_debit(),
+            reserved_balance: canister_state.system_state.reserved_balance(),
             execution_state_bits,
             status: canister_state.system_state.status.clone(),
             scheduled_as_first: canister_state

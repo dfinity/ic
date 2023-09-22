@@ -8,8 +8,8 @@ use crate::driver::{
     test_setup::GroupSetup,
 };
 use anyhow::Result;
-use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_regedit;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
@@ -42,8 +42,10 @@ pub struct InternetComputer {
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
-    pub onchain_observability_overrides: Option<OnchainObservabilityOverrides>,
     use_specified_ids_allocation_range: bool,
+    /// Indicates whether this `InternetComputer` instance should be installed with
+    /// GuestOS disk images of the latest-deployed mainnet version.
+    pub with_mainnet_config: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -56,15 +58,12 @@ pub enum VmAllocationStrategy {
     DistributeAcrossDcs,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct OnchainObservabilityOverrides {
-    pub report_length_sec: u64,
-    pub sampling_interval_sec: u64,
-}
-
 impl InternetComputer {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            with_mainnet_config: false,
+            ..Self::default()
+        }
     }
 
     /// Set the VM resources (like number of virtual CPUs and memory) of all
@@ -167,11 +166,8 @@ impl InternetComputer {
         self
     }
 
-    pub fn with_onchain_observability_overrides(
-        mut self,
-        overrides: OnchainObservabilityOverrides,
-    ) -> Self {
-        self.onchain_observability_overrides = Some(overrides);
+    pub fn with_mainnet_config(mut self) -> Self {
+        self.with_mainnet_config = true;
         self
     }
 
@@ -335,6 +331,7 @@ pub struct Subnet {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub ecdsa_config: Option<EcdsaConfig>,
+    pub running_state: SubnetRunningState,
 }
 
 impl Subnet {
@@ -362,6 +359,7 @@ impl Subnet {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            running_state: SubnetRunningState::Active,
         }
     }
 
@@ -510,6 +508,11 @@ impl Subnet {
         self
     }
 
+    pub fn halted(mut self) -> Self {
+        self.running_state = SubnetRunningState::Halted;
+        self
+    }
+
     pub fn add_malicious_nodes(
         mut self,
         no_of_nodes: usize,
@@ -558,6 +561,7 @@ impl Default for Subnet {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            running_state: SubnetRunningState::Active,
         }
     }
 }

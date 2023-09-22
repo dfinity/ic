@@ -1,10 +1,7 @@
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
-use axum_server::{
-    accept::Accept,
-    tls_rustls::{RustlsAcceptor, RustlsConfig},
-};
+use axum_server::{accept::Accept, tls_rustls::RustlsAcceptor};
 use futures_util::future::BoxFuture;
 use mockall::automock;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
@@ -358,7 +355,6 @@ mod test {
     use anyhow::{bail, Error};
     use mockall::predicate;
     use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, DnValue};
-    use x509_parser::time::ASN1Time;
 
     use crate::tls::{
         extract_cert_validity, LoadError, MockLoad, MockProvision, MockStore, Provision, WithLoad,

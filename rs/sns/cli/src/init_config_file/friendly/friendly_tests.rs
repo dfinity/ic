@@ -5,33 +5,11 @@ use pretty_assertions::assert_eq;
 
 const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * SECONDS_PER_DAY + SECONDS_PER_DAY / 4;
 
-struct SaveAndRestoreCurrentDirectoryOnExit {
-    original: PathBuf,
-}
-
-impl SaveAndRestoreCurrentDirectoryOnExit {
-    fn new() -> Self {
-        let original = std::env::current_dir().unwrap();
-        println!("Saving original working dir: {}", original.display());
-        Self { original }
-    }
-}
-
-impl Drop for SaveAndRestoreCurrentDirectoryOnExit {
-    fn drop(&mut self) {
-        std::env::set_current_dir(self.original.clone());
-        println!(
-            "Restored original dir: {}",
-            std::env::current_dir().unwrap().display()
-        );
-    }
-}
-
 #[test]
 fn test_parse() {
     let input_path = {
         let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        result.push("example_sns_init_v2.yaml");
+        result.push("test_sns_init_v2.yaml");
         result
     };
 
@@ -43,7 +21,7 @@ fn test_parse() {
         name: "Daniel".to_string(),
         description: "The best software engineer you ever did saw.\n".to_string(),
         logo: PathBuf::from("test.png"),
-        url: "https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string(),
+        url: "https://some-link-to-a-project.org".to_string(),
 
         principals: vec![
             PrincipalAlias {
@@ -78,6 +56,7 @@ fn test_parse() {
             name: "Batman".to_string(),
             symbol: "BTM".to_string(),
             transaction_fee: nervous_system_pb::Tokens { e8s: Some(10_000) },
+            logo: PathBuf::from("test.png"),
         },
 
         proposals: Proposals {
@@ -91,7 +70,7 @@ fn test_parse() {
         },
 
         neurons: Neurons {
-            minimum_creation_stake: nervous_system_pb::Tokens { e8s: Some(10 * E8) },
+            minimum_creation_stake: nervous_system_pb::Tokens::from_e8s(61800),
         },
 
         voting: Voting {
@@ -171,17 +150,17 @@ fn test_parse() {
         },
 
         swap: Swap {
-            minimum_participants: 57,
+            minimum_participants: 50,
 
-            minimum_icp: parse_tokens("232_714 tokens").unwrap(),
-            maximum_icp: parse_tokens("557_054 tokens").unwrap(),
+            minimum_icp: nervous_system_pb::Tokens::from_e8s(12_300_000_000),
+            maximum_icp: nervous_system_pb::Tokens::from_tokens(65000),
 
-            minimum_participant_icp: parse_tokens("5 tokens").unwrap(),
-            maximum_participant_icp: parse_tokens("100 tokens").unwrap(),
+            minimum_participant_icp: nervous_system_pb::Tokens::from_tokens(650),
+            maximum_participant_icp: nervous_system_pb::Tokens::from_tokens(6500),
 
             confirmation_text: Some("Hello, world?".to_string()),
 
-            restricted_countries: vec!["US".to_string(), "CH".to_string()],
+            restricted_countries: Some(vec!["US".to_string(), "CH".to_string()]),
 
             vesting_schedule: VestingSchedule {
                 events: 83,
@@ -192,6 +171,14 @@ fn test_parse() {
             duration: nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             },
+            neurons_fund_investment_icp: nervous_system_pb::Tokens {
+                e8s: Some(1000 * E8),
+            },
+        },
+        nns_proposal: NnsProposal {
+            title: "Proposal to Create an SNS named Daniel".to_string(),
+            summary: "This is just a short summary, but I think it's pretty good.".to_string(),
+            url: Some("https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string()),
         },
     };
 
@@ -202,18 +189,64 @@ fn test_parse() {
 }
 
 #[test]
+fn test_parse_no_start_time() {
+    let input_path = {
+        let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        result.push("test_sns_init_v2.yaml");
+        result
+    };
+
+    let contents = std::fs::read_to_string(input_path).unwrap();
+    // Remove lines containing "start_time"
+    let contents = contents
+        .lines()
+        .filter(|line| !line.contains("start_time"))
+        .collect::<Vec<&str>>()
+        .join("\n");
+
+    let observed_sns_configuration_file =
+        serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
+
+    assert_eq!(observed_sns_configuration_file.swap.start_time, None);
+}
+
+#[test]
+fn test_parse_no_restricted_countries() {
+    let input_path = {
+        let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        result.push("test_sns_init_v2.yaml");
+        result
+    };
+
+    let contents = std::fs::read_to_string(input_path).unwrap();
+    // Remove lines containing "restricted_countries"
+    let contents = contents
+        .lines()
+        .filter(|line| !line.contains("restricted_countries"))
+        .collect::<Vec<&str>>()
+        .join("\n");
+
+    let observed_sns_configuration_file =
+        serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
+
+    assert_eq!(
+        observed_sns_configuration_file.swap.restricted_countries,
+        None
+    );
+}
+
+#[test]
 fn test_convert_to_create_service_nervous_system() {
     // Step 1: Prepare the world.
-    let save_and_restore_current_directory_on_exit = SaveAndRestoreCurrentDirectoryOnExit::new();
-    let test_root_dir = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    std::env::set_current_dir(test_root_dir);
+    let test_root_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let test_root_dir = Path::new(&test_root_dir);
 
-    let contents = std::fs::read_to_string("example_sns_init_v2.yaml").unwrap();
+    let contents = std::fs::read_to_string(test_root_dir.join("test_sns_init_v2.yaml")).unwrap();
     let sns_configuration_file = serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
 
     // Step 2: Call code under test.
     let observed_create_service_nervous_system = sns_configuration_file
-        .try_convert_to_create_service_nervous_system()
+        .try_convert_to_create_service_nervous_system(test_root_dir)
         .unwrap();
 
     // Step 3: Inspect results.
@@ -232,7 +265,7 @@ fn test_convert_to_create_service_nervous_system() {
         CreateServiceNervousSystem {
             name: Some("Daniel".to_string()),
             description: Some("The best software engineer you ever did saw.\n".to_string()),
-            url: Some("https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string()),
+            url: Some("https://some-link-to-a-project.org".to_string()),
 
             fallback_controller_principal_ids: vec![PrincipalId::from_str(
                 "5zxxw-63ouu-faaaa-aaaap-4ai"
@@ -273,7 +306,7 @@ fn test_convert_to_create_service_nervous_system() {
             .unwrap(),
     )
     .unwrap();
-    let expected_logo_content = std::fs::read("test.png").unwrap();
+    let expected_logo_content = std::fs::read(test_root_dir.join("test.png")).unwrap();
     assert!(
         // == is used instead of the usual assert_eq!, because when the observed
         // value is not as expected, assert_eq! would produce a ton of spam, due
@@ -321,15 +354,43 @@ fn test_convert_to_create_service_nervous_system() {
     );
 
     assert_eq!(
-        observed_create_service_nervous_system
-            .ledger_parameters
-            .unwrap(),
+        nns_governance_pb::LedgerParameters {
+            // We'll observe this field next
+            token_logo: None,
+            ..observed_create_service_nervous_system
+                .ledger_parameters
+                .clone()
+                .unwrap()
+        },
         nns_governance_pb::LedgerParameters {
             transaction_fee: Some(parse_tokens("10_000 e8s").unwrap()),
             token_name: Some("Batman".to_string()),
             token_symbol: Some("BTM".to_string()),
             token_logo: None,
         },
+    );
+
+    let observed_token_logo = observed_create_service_nervous_system
+        .ledger_parameters
+        .unwrap()
+        .token_logo
+        .unwrap()
+        .base64_encoding
+        .unwrap();
+    let decoded_observed_token_logo = base64::decode(
+        observed_token_logo
+            .strip_prefix("data:image/png;base64,")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        // == is used instead of the usual assert_eq!, because when the observed
+        // value is not as expected, assert_eq! would produce a ton of spam, due
+        // to this being a large blob.
+        decoded_observed_token_logo == expected_logo_content,
+        "len(observed) == {} vs. len(expected) == {}",
+        decoded_observed_token_logo.len(),
+        expected_logo_content.len(),
     );
 
     assert_eq!(
@@ -345,7 +406,7 @@ fn test_convert_to_create_service_nervous_system() {
 
             // Neuron Parameters
             // -----------------
-            neuron_minimum_stake: Some(parse_tokens("10 tokens").unwrap()),
+            neuron_minimum_stake: Some(nervous_system_pb::Tokens::from_e8s(61800)),
 
             neuron_minimum_dissolve_delay_to_vote: Some(parse_duration("26 weeks").unwrap()),
             neuron_maximum_dissolve_delay: Some(parse_duration("8 years").unwrap()),
@@ -369,13 +430,13 @@ fn test_convert_to_create_service_nervous_system() {
             .swap_parameters
             .unwrap(),
         nns_governance_pb::SwapParameters {
-            minimum_participants: Some(57),
+            minimum_participants: Some(50),
 
-            minimum_icp: Some(parse_tokens("232_714 tokens").unwrap()),
-            maximum_icp: Some(parse_tokens("557_054 tokens").unwrap()),
+            minimum_icp: Some(parse_tokens("123 tokens").unwrap()),
+            maximum_icp: Some(parse_tokens("65000 tokens").unwrap()),
 
-            minimum_participant_icp: Some(parse_tokens("5 tokens").unwrap()),
-            maximum_participant_icp: Some(parse_tokens("100 tokens").unwrap()),
+            minimum_participant_icp: Some(parse_tokens("650 tokens").unwrap()),
+            maximum_participant_icp: Some(parse_tokens("6500 tokens").unwrap()),
 
             confirmation_text: Some("Hello, world?".to_string()),
 
@@ -393,6 +454,9 @@ fn test_convert_to_create_service_nervous_system() {
             start_time: nervous_system_pb::GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
             duration: Some(nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
+            }),
+            neurons_fund_investment_icp: Some(nervous_system_pb::Tokens {
+                e8s: Some(1000 * E8)
             }),
         }
     );

@@ -160,7 +160,7 @@ pub fn initial_ni_dkg_transcript_from_registry_record(
         .iter()
         .map(|n| {
             PrincipalId::try_from(&n[..])
-                .map(|principal_id| NodeId::from(principal_id))
+                .map(NodeId::from)
                 .map_err(|err| DecodeError {
                     error: format!("invalid principal ID: {}", err),
                 })
@@ -202,14 +202,13 @@ pub mod root_of_trust {
 
     /// Implementation of [`RootOfTrustProvider`] that uses the registry to
     /// obtain the root of trust.
+    #[derive(Clone)]
     pub struct RegistryRootOfTrustProvider {
         registry_client: Arc<dyn RegistryClient>,
         registry_version: RegistryVersion,
     }
 
     impl RegistryRootOfTrustProvider {
-        #[allow(dead_code)]
-        //TODO CRP-2046: use this to instantiate provider
         pub fn new(
             registry_client: Arc<dyn RegistryClient>,
             registry_version: RegistryVersion,

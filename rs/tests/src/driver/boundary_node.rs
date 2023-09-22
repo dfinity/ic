@@ -58,6 +58,21 @@ const BN_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event"
 fn mk_compressed_img_path() -> std::string::String {
     format!("{}.gz", CONF_IMG_FNAME)
 }
+
+#[derive(Clone)]
+pub struct BoundaryNodeCustomDomainsConfig {
+    pub orchestrator_uri: String,
+    pub orchestrator_canister_id: String,
+    pub delegation_domain: String,
+    pub name_servers: Vec<String>,
+    pub name_servers_port: u16,
+    pub acme_provider_url: String,
+    pub cloudflare_api_url: String,
+    pub cloudflare_api_key: String,
+    pub issuer_identity: String,
+    pub issuer_encryption_key: String,
+}
+
 /// A builder for the initial configuration of an IC boundary node.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BoundaryNode {
@@ -74,13 +89,15 @@ pub struct BoundaryNode {
 pub struct BoundaryNodeWithVm {
     pub name: String,
     pub allocated_vm: VMCreateResponse,
+    pub ipv4_nameservers: Vec<String>,
+    pub ipv6_nameservers: Vec<String>,
     pub use_real_certs_and_dns: bool,
     pub use_ipv6_certs: bool,
     pub nns_node_urls: Vec<Url>,
     pub nns_public_key: Option<PathBuf>,
-    pub registry_local_store: Option<PathBuf>,
     pub replica_ipv6_rule: String,
     pub has_ipv4: bool,
+    pub custom_domains_config: Option<BoundaryNodeCustomDomainsConfig>,
 }
 
 impl BoundaryNodeWithVm {
@@ -132,8 +149,21 @@ impl BoundaryNodeWithVm {
         self
     }
 
-    pub fn with_registry_local_store(mut self, registry_local_store: PathBuf) -> Self {
-        self.registry_local_store = Some(registry_local_store);
+    pub fn with_ipv4_nameservers(mut self, nameservers: Vec<String>) -> Self {
+        self.ipv4_nameservers = nameservers;
+        self
+    }
+
+    pub fn with_ipv6_nameservers(mut self, nameservers: Vec<String>) -> Self {
+        self.ipv6_nameservers = nameservers;
+        self
+    }
+
+    pub fn with_custom_domains(
+        mut self,
+        custom_domains_config: BoundaryNodeCustomDomainsConfig,
+    ) -> Self {
+        self.custom_domains_config = Some(custom_domains_config);
         self
     }
 
@@ -407,13 +437,15 @@ impl BoundaryNode {
         Ok(BoundaryNodeWithVm {
             name: self.name,
             allocated_vm,
+            ipv4_nameservers: Default::default(),
+            ipv6_nameservers: Default::default(),
             nns_node_urls: Default::default(),
             nns_public_key: Default::default(),
-            registry_local_store: Default::default(),
             replica_ipv6_rule: Default::default(),
             use_real_certs_and_dns: false,
             use_ipv6_certs: false,
             has_ipv4: self.has_ipv4,
+            custom_domains_config: Default::default(),
         })
     }
 
@@ -468,9 +500,21 @@ fn create_and_upload_config_disk_image(
         .arg("--ipv6_monitoring_ips")
         .arg("::/0")
         .arg("--elasticsearch_url")
-        .arg("https://elasticsearch.testnet.dfinity.systems")
-        .arg("--name_servers")
-        .arg("2606:4700:4700::1111 2606:4700:4700::1001");
+        .arg("https://elasticsearch.testnet.dfinity.systems");
+
+    // add custom nameservers
+    cmd.arg("--ipv6_name_servers");
+    if !boundary_node.ipv6_nameservers.is_empty() {
+        cmd.arg(boundary_node.ipv6_nameservers.join(" "));
+    } else {
+        // Cloudflare DNS servers
+        cmd.arg("2606:4700:4700::1111 2606:4700:4700::1001");
+    }
+
+    if !boundary_node.ipv4_nameservers.is_empty() {
+        cmd.arg("--ipv4_name_servers");
+        cmd.arg(boundary_node.ipv6_nameservers.join(" "));
+    }
 
     if !boundary_node.nns_node_urls.is_empty() {
         cmd.arg("--nns_url").arg({
@@ -506,9 +550,35 @@ fn create_and_upload_config_disk_image(
             .arg(cert_dir);
     }
 
-    if let Some(ic_registry_local_store) = boundary_node.registry_local_store.clone() {
-        cmd.arg("--ic_registry_local_store")
-            .arg(ic_registry_local_store);
+    if let Some(cfg) = boundary_node.custom_domains_config.to_owned() {
+        // Issuer Identity
+        let identity_file = boundary_node_dir.join("certificate_issuer_identity.pem");
+        fs::write(&identity_file, cfg.issuer_identity)?;
+
+        // Issuer Encrpytion-Key
+        let key_file = boundary_node_dir.join("certificate_issuer_enc_key.pem");
+        fs::write(&key_file, cfg.issuer_encryption_key)?;
+
+        cmd.arg("--certificate_orchestrator_uri")
+            .arg(cfg.orchestrator_uri)
+            .arg("--certificate_orchestrator_canister_id")
+            .arg(cfg.orchestrator_canister_id)
+            .arg("--certificate_issuer_delegation_domain")
+            .arg(cfg.delegation_domain)
+            .arg("--certificate_issuer_name_servers")
+            .arg(cfg.name_servers.join(","))
+            .arg("--certificate_issuer_name_servers_port")
+            .arg(cfg.name_servers_port.to_string())
+            .arg("--certificate_issuer_acme_provider_url")
+            .arg(cfg.acme_provider_url)
+            .arg("--certificate_issuer_cloudflare_api_url")
+            .arg(cfg.cloudflare_api_url)
+            .arg("--certificate_issuer_cloudflare_api_key")
+            .arg(cfg.cloudflare_api_key)
+            .arg("--certificate_issuer_identity")
+            .arg(identity_file)
+            .arg("--certificate_issuer_encryption_key")
+            .arg(key_file);
     }
 
     let key = "PATH";

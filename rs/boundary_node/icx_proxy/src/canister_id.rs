@@ -2,6 +2,8 @@ use anyhow::Context;
 use async_trait::async_trait;
 use axum::extract::FromRequestParts;
 use hyper::{header::HOST, http::request::Parts};
+#[cfg(feature = "dev_proxy")]
+use hyper::{header::REFERER, Uri};
 use ic_agent::export::Principal;
 use itertools::iproduct;
 use tracing::error;
@@ -13,7 +15,6 @@ use crate::{
 
 pub struct ResolverState {
     pub dns: DnsCanisterConfig,
-    pub check_params: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -31,21 +32,30 @@ impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for QueryP
     }
 }
 
+#[cfg(not(feature = "dev_proxy"))]
+#[async_trait]
+impl FromRequestParts<ResolverState> for QueryParam {
+    type Rejection = &'static str;
+
+    async fn from_request_parts(
+        _parts: &mut Parts,
+        _state: &ResolverState,
+    ) -> Result<Self, Self::Rejection> {
+        Err("Not supported")
+    }
+}
+
+#[cfg(feature = "dev_proxy")]
 #[async_trait]
 impl FromRequestParts<ResolverState> for QueryParam {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
-        state: &ResolverState,
+        _state: &ResolverState,
     ) -> Result<Self, Self::Rejection> {
-        const DISABLED: &str = "'canisterId' query parameter disabled by server";
         const NO_PARAM: &str = "'canisterId' query parameter not found";
         const BAD_PARAM: &str = "'canisterId' failed to parse: Invalid Principal";
-
-        if !state.check_params {
-            return Err(DISABLED);
-        }
 
         let (_, canister_id) =
             form_urlencoded::parse(parts.uri.query().ok_or(NO_PARAM)?.as_bytes())
@@ -134,6 +144,112 @@ impl FromRequestParts<ResolverState> for HostHeader {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct RefererHeaderHost(pub Principal);
+
+#[async_trait]
+impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for RefererHeaderHost {
+    type Rejection = &'static str;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState<V, C>,
+    ) -> Result<Self, Self::Rejection> {
+        FromRequestParts::from_request_parts(parts, state.resolver()).await
+    }
+}
+
+#[cfg(not(feature = "dev_proxy"))]
+#[async_trait]
+impl FromRequestParts<ResolverState> for RefererHeaderHost {
+    type Rejection = &'static str;
+
+    async fn from_request_parts(
+        _parts: &mut Parts,
+        _state: &ResolverState,
+    ) -> Result<Self, Self::Rejection> {
+        Err("Not supported")
+    }
+}
+#[cfg(feature = "dev_proxy")]
+#[async_trait]
+impl FromRequestParts<ResolverState> for RefererHeaderHost {
+    type Rejection = &'static str;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &ResolverState,
+    ) -> Result<Self, Self::Rejection> {
+        const NO_REFERER: &str = "No referer in headers";
+        const BAD_REFERER: &str = "Referer header did not contain a canister id or alias";
+
+        let referer = parts.headers.get(REFERER).ok_or(NO_REFERER)?;
+        let referer = referer.to_str().map_err(|_| BAD_REFERER)?;
+        let referer: Uri = referer.parse().map_err(|_| BAD_REFERER)?;
+        let referer = referer.authority().ok_or(BAD_REFERER)?;
+        state
+            .dns
+            .resolve_canister_id(referer.host())
+            .map(RefererHeaderHost)
+            .ok_or(BAD_REFERER)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct RefererHeaderQueryParam(pub Principal);
+
+#[async_trait]
+impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for RefererHeaderQueryParam {
+    type Rejection = &'static str;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState<V, C>,
+    ) -> Result<Self, Self::Rejection> {
+        FromRequestParts::from_request_parts(parts, state.resolver()).await
+    }
+}
+
+#[cfg(not(feature = "dev_proxy"))]
+#[async_trait]
+impl FromRequestParts<ResolverState> for RefererHeaderQueryParam {
+    type Rejection = &'static str;
+
+    async fn from_request_parts(
+        _parts: &mut Parts,
+        _state: &ResolverState,
+    ) -> Result<Self, Self::Rejection> {
+        Err("Not supported")
+    }
+}
+
+#[cfg(feature = "dev_proxy")]
+#[async_trait]
+impl FromRequestParts<ResolverState> for RefererHeaderQueryParam {
+    type Rejection = &'static str;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &ResolverState,
+    ) -> Result<Self, Self::Rejection> {
+        const NO_REFERER: &str = "No referer in headers";
+        const BAD_REFERER: &str = "Referer header did not contain a canister id or alias";
+        const NO_PARAM: &str = "'canisterId' query parameter not found";
+        const BAD_PARAM: &str = "'canisterId' failed to parse: Invalid Principal";
+
+        let referer = parts.headers.get(REFERER).ok_or(NO_REFERER)?;
+        let referer = referer.to_str().map_err(|_| BAD_REFERER)?;
+        let referer: Uri = referer.parse().map_err(|_| BAD_REFERER)?;
+        let (_, canister_id) = form_urlencoded::parse(referer.query().ok_or(NO_PARAM)?.as_bytes())
+            .find(|(name, _)| name == "canisterId")
+            .ok_or(NO_PARAM)?;
+
+        Principal::from_text(canister_id.as_ref())
+            .map(RefererHeaderQueryParam)
+            .map_err(|_| BAD_PARAM)
+    }
+}
+
 /// The options for the canister resolver
 pub struct CanisterIdOpts {
     /// A list of mappings from canister names to canister principals.
@@ -141,16 +257,12 @@ pub struct CanisterIdOpts {
 
     /// A list of domains that can be served. These are used for canister resolution.
     pub domain: Vec<String>,
-
-    /// Whether or not to ignore `canisterId=` when locating the canister.
-    pub ignore_url_canister_param: bool,
 }
 
 pub fn setup(opts: CanisterIdOpts) -> Result<ResolverState, anyhow::Error> {
     let CanisterIdOpts {
         canister_alias,
         domain,
-        ignore_url_canister_param,
     } = opts;
 
     let dns_suffixes = domain
@@ -169,10 +281,7 @@ pub fn setup(opts: CanisterIdOpts) -> Result<ResolverState, anyhow::Error> {
     let dns = DnsCanisterConfig::new(dns_aliases, dns_suffixes)
         .context("Failed to configure canister resolver DNS")
         .inspect_err(|e| error!("{e}"))?;
-    Ok(ResolverState {
-        dns,
-        check_params: !ignore_url_canister_param,
-    })
+    Ok(ResolverState { dns })
 }
 
 #[cfg(test)]
@@ -193,10 +302,7 @@ mod tests {
             vec!["little.domain.name"],
         );
 
-        let resolver = ResolverState {
-            dns,
-            check_params: false,
-        };
+        let resolver = ResolverState { dns };
 
         let mut req = build_req(
             Some("happy.little.domain.name"),
@@ -230,6 +336,7 @@ mod tests {
             .is_err());
     }
 
+    #[cfg(not(feature = "dev_proxy"))]
     #[test]
     fn prod() {
         let rt = Runtime::new().unwrap();
@@ -247,10 +354,7 @@ mod tests {
             vec!["raw.ic0.app", "ic0.app"],
         );
 
-        let resolver = ResolverState {
-            dns,
-            check_params: false,
-        };
+        let resolver = ResolverState { dns };
 
         let mut req = build_req(Some("nns.ic0.app"), "/about");
         assert_eq!(
@@ -356,15 +460,13 @@ mod tests {
             .is_err());
     }
 
+    #[cfg(feature = "dev_proxy")]
     #[test]
     fn dfx() {
         let rt = Runtime::new().unwrap();
         let dns = parse_config(vec![], vec!["localhost"]);
 
-        let resolver = ResolverState {
-            dns,
-            check_params: true,
-        };
+        let resolver = ResolverState { dns };
 
         let mut req = build_req(Some("rrkah-fqaaa-aaaaa-aaaaq-cai.localhost"), "/about");
         assert_eq!(

@@ -62,7 +62,10 @@ use registry_canister::{
         prepare_canister_migration::PrepareCanisterMigrationPayload,
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
-    pb::v1::{NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage},
+    pb::v1::{
+        GetSubnetForCanisterRequest, GetSubnetForCanisterResponse, NodeProvidersMonthlyXdrRewards,
+        RegistryCanisterStableStorage,
+    },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
     registry_lifecycle,
@@ -383,9 +386,11 @@ fn bless_replica_version() {
 }
 
 #[candid_method(update, rename = "bless_replica_version")]
-fn bless_replica_version_(payload: BlessReplicaVersionPayload) {
-    registry_mut().do_bless_replica_version(payload);
-    recertify_registry();
+fn bless_replica_version_(_payload: BlessReplicaVersionPayload) {
+    panic!(
+        "{}bless_replica_version is deprecated and should no longer be used!",
+        LOG_PREFIX
+    );
 }
 
 #[export_name = "canister_update retire_replica_version"]
@@ -397,9 +402,11 @@ fn retire_replica_version() {
 }
 
 #[candid_method(update, rename = "retire_replica_version")]
-fn retire_replica_version_(payload: RetireReplicaVersionPayload) {
-    registry_mut().do_retire_replica_version(payload);
-    recertify_registry();
+fn retire_replica_version_(_payload: RetireReplicaVersionPayload) {
+    panic!(
+        "{}retire_replica_version is deprecated and should no longer be used!",
+        LOG_PREFIX
+    );
 }
 
 #[export_name = "canister_update update_elected_replica_versions"]
@@ -823,6 +830,29 @@ fn get_node_operators_and_dcs_of_node_provider_(
     node_provider: PrincipalId,
 ) -> Result<Vec<(DataCenterRecord, NodeOperatorRecord)>, String> {
     registry().get_node_operators_and_dcs_of_node_provider(node_provider)
+}
+
+#[export_name = "canister_query get_subnet_for_canister"]
+fn get_subnet_for_canister() {
+    over(
+        candid_one,
+        |arg: GetSubnetForCanisterRequest| -> Result<GetSubnetForCanisterResponse, String> {
+            get_subnet_for_canister_(arg)
+        },
+    )
+}
+
+#[candid_method(query, rename = "get_subnet_for_canister")]
+fn get_subnet_for_canister_(
+    arg: GetSubnetForCanisterRequest,
+) -> Result<GetSubnetForCanisterResponse, String> {
+    let Some(principal) = arg.principal else {
+        return Err("No principal supplied".to_string());
+    };
+
+    registry()
+        .get_subnet_for_canister(&principal)
+        .map_err(|e| e.to_string())
 }
 
 #[export_name = "canister_update add_node"]

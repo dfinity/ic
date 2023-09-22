@@ -90,6 +90,9 @@ pub struct SystemMetadata {
 
     pub own_subnet_features: SubnetFeatures,
 
+    /// DER-encoded public keys of the subnet's nodes.
+    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
+
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
     /// `None` otherwise.
@@ -498,6 +501,14 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     },
                 )
                 .collect(),
+            node_public_keys: item
+                .node_public_keys
+                .iter()
+                .map(|(node_id, public_key)| pb_metadata::NodePublicKeyEntry {
+                    node_id: Some(node_id_into_protobuf(*node_id)),
+                    public_key: public_key.clone(),
+                })
+                .collect(),
         }
     }
 }
@@ -551,6 +562,12 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
         }
 
         let batch_time = Time::from_nanos_since_unix_epoch(item.batch_time_nanos);
+
+        let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
+        for entry in item.node_public_keys {
+            node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
+        }
+
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -561,6 +578,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+            node_public_keys,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
@@ -616,6 +634,7 @@ impl SystemMetadata {
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            node_public_keys: Default::default(),
             split_from: None,
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -761,9 +780,11 @@ impl SystemMetadata {
         self.canister_allocation_ranges.total_count() as u64 - generated_canister_ids
     }
 
-    /// Splits the `MetadataState` as part of subnet splitting phase 1: produces a
-    /// new `MetadataState` for the split subnet (B); retains the old one unmodified
-    /// for the subnet that retains the original subnet's ID (A').
+    /// Splits the `MetadataState` as part of subnet splitting phase 1:
+    ///  * for the split subnet (B), produces a new `MetadataState`, with the given
+    ///    batch time (if `Some`) or the original subnet's batch time (if `None`);
+    ///  * for the subnet that retains the original subnet's ID (A'), returns it
+    ///    unmodified (apart from setting the split marker).
     ///
     /// A subnet split starts with a subnet A and results in two subnets, A' and B.
     /// For the sake of clarity, comments refer to the two resulting subnets as
@@ -778,20 +799,28 @@ impl SystemMetadata {
     ///
     /// In phase 2 (see [`Self::after_split()`]) the ingress history is pruned and
     /// the split marker is reset.
-    pub fn split(mut self, new_subnet_id: SubnetId) -> Self {
+    pub fn split(
+        mut self,
+        subnet_id: SubnetId,
+        new_subnet_batch_time: Option<Time>,
+    ) -> Result<Self, String> {
         assert_eq!(0, self.heap_delta_estimate.get());
         assert!(self.expected_compiled_wasms.is_empty());
 
         // No-op for subnet A'.
-        if self.own_subnet_id == new_subnet_id {
+        if self.own_subnet_id == subnet_id {
+            if new_subnet_batch_time.is_some() {
+                return Err("Cannot apply a new batch time to the original subnet".into());
+            }
+
             // Set the split marker to the original subnet ID.
             self.split_from = Some(self.own_subnet_id);
 
-            return self;
+            return Ok(self);
         }
 
-        // This is subnet B: use `new_subnet_id` as its subnet ID.
-        let mut res = SystemMetadata::new(new_subnet_id, self.own_subnet_type);
+        // This is subnet B: use `subnet_id` as its subnet ID.
+        let mut res = SystemMetadata::new(subnet_id, self.own_subnet_type);
 
         // Set the split marker to the original subnet ID (that of subnet A).
         res.split_from = Some(self.own_subnet_id);
@@ -799,8 +828,23 @@ impl SystemMetadata {
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
 
+        // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
+        // if specified and not smaller than `self.batch_time`; else, default to
+        // `self.batch_time`.
+        res.batch_time = if let Some(batch_time) = new_subnet_batch_time {
+            if batch_time < self.batch_time {
+                return Err(format!(
+                    "Provided batch_time ({}) is before original subnet batch time ({})",
+                    batch_time, self.batch_time
+                ));
+            }
+            batch_time
+        } else {
+            self.batch_time
+        };
+
         // All other fields have been reset to default.
-        res
+        Ok(res)
     }
 
     /// Adjusts the `MetadataState` as part of the second phase of subnet splitting,
@@ -854,6 +898,8 @@ impl SystemMetadata {
             own_subnet_type,
             // Overwritten as soon as the round begins, no explicit action needed.
             own_subnet_features,
+            // Overwritten as soon as the round begins, no explicit action needed.
+            node_public_keys,
             split_from,
             subnet_call_context_manager,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
@@ -890,6 +936,7 @@ impl SystemMetadata {
             own_subnet_id,
             own_subnet_type,
             own_subnet_features,
+            node_public_keys,
             // Split complete, reset split marker.
             split_from: None,
             subnet_call_context_manager,

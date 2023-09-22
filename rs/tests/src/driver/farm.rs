@@ -11,7 +11,7 @@ use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute}
 use crate::driver::test_env_api::HasIcDependencies;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

@@ -12,6 +12,11 @@ export enum HTTPHeaders {
 
 export const cacheHeaders = [HTTPHeaders.CacheControl.toString()];
 
+export const responseVerificationFailedResponse = Object.freeze({
+  status: 500,
+  statusText: 'Response verification failed',
+});
+
 export enum HTTPRequestMethod {
   Get = 'GET',
 }

@@ -15,8 +15,6 @@ use ic_types::crypto::{AlgorithmId, CryptoError, UserPublicKey};
 use std::convert::TryFrom;
 use std::fmt;
 
-pub mod dkg_id_to_key_id;
-
 use ic_crypto_internal_multi_sig_bls12381::types::conversions::protobuf::PopBytesFromProtoError;
 
 #[cfg(test)]

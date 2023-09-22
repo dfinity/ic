@@ -1,5 +1,5 @@
 use super::*;
-use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use std::collections::VecDeque;
 
 #[cfg(test)]
@@ -11,7 +11,7 @@ mod tests;
 /// * the `CspPublicCoefficients` for a particular DKG instance,
 /// * the `NodeIndex`es of the nodes participating in a DKG instance,
 /// * the `CspThresholdPublicKey`s of the nodes participating in a DKG instance,
-/// where the DKG instance is identified by a `DkgId`.
+/// where the DKG instance is identified by a `NiDkgId`.
 pub trait ThresholdSigDataStore {
     /// Inserts both public coefficients and indices for a given `dkg_id` into
     /// the store.
@@ -22,7 +22,7 @@ pub trait ThresholdSigDataStore {
     /// before.
     fn insert_transcript_data(
         &mut self,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     );
@@ -34,19 +34,19 @@ pub trait ThresholdSigDataStore {
     /// with the given `dkg_id`, this key will be overwritten.
     fn insert_individual_public_key(
         &mut self,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         node_id: NodeId,
         individual_public_key: CspThresholdSigPublicKey,
     );
 
     /// Returns the transcript data for the node_id if it has been loaded.
-    fn transcript_data(&self, dkg_id: DkgId) -> Option<&TranscriptData>;
+    fn transcript_data(&self, dkg_id: NiDkgId) -> Option<&TranscriptData>;
 
     /// Returns a reference to the individual public key of the node with ID
     /// `node_id` for the given `dkg_id`.
     fn individual_public_key(
         &self,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         node_id: NodeId,
     ) -> Option<&CspThresholdSigPublicKey>;
 }
@@ -78,10 +78,10 @@ impl TranscriptData {
 /// data was inserted _first_ is removed, that is, DKG IDs are purged in
 /// insertion order.
 pub struct ThresholdSigDataStoreImpl {
-    store: BTreeMap<DkgId, ThresholdSigData>,
+    store: BTreeMap<NiDkgId, ThresholdSigData>,
     max_num_of_dkg_ids: usize,
     // VecDeque used as queue: `push_back` to add, `pop_front` to remove
-    dkg_id_insertion_order: VecDeque<DkgId>,
+    dkg_id_insertion_order: VecDeque<NiDkgId>,
 }
 
 #[derive(Default)]
@@ -122,7 +122,7 @@ impl ThresholdSigDataStoreImpl {
     }
 
     #[allow(clippy::map_entry)]
-    fn entry_for(&mut self, dkg_id: DkgId) -> &mut ThresholdSigData {
+    fn entry_for(&mut self, dkg_id: NiDkgId) -> &mut ThresholdSigData {
         if !self.store.contains_key(&dkg_id) {
             self.store.insert(dkg_id, ThresholdSigData::default());
             self.dkg_id_insertion_order.push_back(dkg_id);
@@ -155,11 +155,11 @@ impl ThresholdSigDataStoreImpl {
 impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
     fn insert_transcript_data(
         &mut self,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     ) {
-        let mut data = self.entry_for(dkg_id);
+        let data = self.entry_for(dkg_id);
         data.transcript_data = Some(TranscriptData {
             public_coeffs: public_coefficients,
             indices,
@@ -171,7 +171,7 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
 
     fn insert_individual_public_key(
         &mut self,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         node_id: NodeId,
         public_key: CspThresholdSigPublicKey,
     ) {
@@ -184,7 +184,7 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
         self.assert_length_invariant();
     }
 
-    fn transcript_data(&self, dkg_id: DkgId) -> Option<&TranscriptData> {
+    fn transcript_data(&self, dkg_id: NiDkgId) -> Option<&TranscriptData> {
         self.store
             .get(&dkg_id)
             .and_then(|data| data.transcript_data.as_ref())
@@ -192,7 +192,7 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
 
     fn individual_public_key(
         &self,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         node_id: NodeId,
     ) -> Option<&CspThresholdSigPublicKey> {
         self.store.get(&dkg_id).and_then(|data| {

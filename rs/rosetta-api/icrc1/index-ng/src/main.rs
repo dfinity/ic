@@ -1,18 +1,20 @@
-use candid::{candid_method, Nat, Principal};
-use ic_canister_profiler::{measure_span, SpanStats};
+use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
+use ic_canister_log::{export as export_logs, log};
+use ic_canister_profiler::{measure_span, SpanName, SpanStats};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::trap;
 use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, IndexArg, ListSubaccountsArgs, Status, TransactionWithId,
-    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    GetAccountTransactionsResult, IndexArg, ListSubaccountsArgs, Log, LogEntry, Status,
+    TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::storable::Blob;
 use ic_stable_structures::{
@@ -33,10 +35,15 @@ use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::Range;
 use std::time::Duration;
+
+pub mod logs;
+
+use crate::logs::{P0, P1};
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -46,6 +53,12 @@ const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
 const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
+
+#[cfg(not(feature = "u256-tokens"))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -58,7 +71,7 @@ type AccountBlockIdsMap = StableBTreeMap<AccountBlockIdsMapKey, (), VM>;
 // The second element of this tuple is the account represented
 // as principal of type Blob<29> and the effective subaccount
 type AccountDataMapKey = (AccountDataType, (Blob<29>, [u8; 32]));
-type AccountDataMap = StableBTreeMap<AccountDataMapKey, u64, VM>;
+type AccountDataMap = StableBTreeMap<AccountDataMapKey, Tokens, VM>;
 
 thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
@@ -218,23 +231,27 @@ fn with_account_data<R>(f: impl FnOnce(&mut AccountDataMap) -> R) -> R {
 /// This function can trap if the index at the given block cannot be decoded
 /// because all blocks stored in the transaction log should be decodable
 /// (see [append_blocks]). If not then something is wrong with the log.
-fn get_decoded_block(block_index: BlockIndex64) -> Option<Block> {
+fn get_decoded_block(block_index: BlockIndex64) -> Option<Block<Tokens>> {
     with_blocks(|blocks| blocks.get(block_index))
         .map(EncodedBlock::from)
         .map(|block| decode_encoded_block_or_trap(block_index, block))
 }
 
 /// A helper function to access the balance of an account.
-fn get_balance(account: Account) -> u64 {
-    with_account_data(|account_data| account_data.get(&balance_key(account)).unwrap_or(0))
+fn get_balance(account: Account) -> Tokens {
+    with_account_data(|account_data| {
+        account_data
+            .get(&balance_key(account))
+            .unwrap_or_else(|| Tokens::zero())
+    })
 }
 
 /// A helper function to change the balance of an account.
 /// It removes an account balance if the balance is 0.
-fn change_balance(account: Account, f: impl FnOnce(u64) -> u64) {
+fn change_balance(account: Account, f: impl FnOnce(Tokens) -> Tokens) {
     let key = balance_key(account);
     let new_balance = f(get_balance(account));
-    if new_balance == 0 {
+    if Tokens::is_zero(&new_balance) {
         with_account_data(|account_data| account_data.remove(&key));
     } else {
         with_account_data(|account_data| account_data.insert(key, new_balance));
@@ -272,38 +289,81 @@ fn post_upgrade() {
     set_build_index_timer(Duration::from_secs(0));
 }
 
-async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, String> {
+async fn measured_call<I, O>(
+    encode_span_name: SpanName,
+    decode_span_name: SpanName,
+    id: Principal,
+    method: &str,
+    i: &I,
+) -> Result<O, String>
+where
+    I: CandidType + Debug,
+    O: CandidType + Debug + for<'a> Deserialize<'a>,
+{
+    let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
+        .map_err(|err| format!("failed to candid encode the input {:?}: {}", i, err))?;
+    let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
+        .await
+        .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+    measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
+        .map_err(|err| format!("failed to candid decode the output: {}", err))
+}
+
+async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = GetBlocksRequest {
         start: Nat::from(start),
         length: Nat::from(length),
     };
-    let (res,): (GetBlocksResponse,) = ic_cdk::call(ledger_id, "get_blocks", (req,))
-        .await
-        .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
-    Ok(res)
+    log!(P1, "[get_blocks_from_ledger]: making the call...");
+    let res = measured_call(
+        "build_index.get_blocks_from_ledger.encode",
+        "build_index.get_blocks_from_ledger.decode",
+        ledger_id,
+        "get_blocks",
+        &req,
+    )
+    .await;
+    match res {
+        Ok(res) => Some(res),
+        Err(err) => {
+            log!(P0, "[get_blocks_from_ledger] failed to get blocks: {}", err);
+            None
+        }
+    }
 }
 
 async fn get_blocks_from_archive(
     archived: &ArchivedRange<QueryBlockArchiveFn>,
-) -> Result<BlockRange, String> {
+) -> Option<BlockRange> {
     let req = GetBlocksRequest {
         start: archived.start.clone(),
         length: archived.length.clone(),
     };
-    let (res,): (BlockRange,) = ic_cdk::call(
+    let res = measured_call(
+        "build_index.get_blocks_from_archive.encode",
+        "build_index.get_blocks_from_archive.decode",
         archived.callback.canister_id,
         &archived.callback.method,
-        (req,),
+        &req,
     )
-    .await
-    .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
-    Ok(res)
+    .await;
+    match res {
+        Ok(res) => Some(res),
+        Err(err) => {
+            log!(
+                P0,
+                "[get_blocks_from_archive] failed to get blocks: {}",
+                err
+            );
+            None
+        }
+    }
 }
 
-pub async fn build_index() -> Result<(), String> {
+pub async fn build_index() -> Option<()> {
     if with_state(|state| state.is_build_index_running) {
-        return Err("build_index already running".to_string());
+        return None;
     }
     mutate_state(|state| {
         state.is_build_index_running = true;
@@ -338,11 +398,16 @@ pub async fn build_index() -> Result<(), String> {
     tx_indexed_count += res.blocks.len();
     append_blocks(res.blocks);
     let wait_time = compute_wait_time(tx_indexed_count);
-    ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
-    mutate_state(|mut state| state.last_wait_time = wait_time);
+    log!(
+        P1,
+        "Indexed: {} waiting : {:?}",
+        tx_indexed_count,
+        wait_time
+    );
+    mutate_state(|state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);
-    Ok(())
+    Some(())
 }
 
 fn set_build_index_timer(after: Duration) -> TimerId {
@@ -403,7 +468,7 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) {
     }
 }
 
-fn index_fee_collector(block_index: BlockIndex64, block: &Block) {
+fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
     if let Some(fee_collector) = get_fee_collector(block_index, block) {
         mutate_state(|s| {
             s.fee_collectors
@@ -430,7 +495,7 @@ fn push_block(block_ranges: &mut Vec<Range<BlockIndex64>>, block_index: BlockInd
     }
 }
 
-fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
+fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
     measure_span(
         &PROFILING_DATA,
         "append_blocks.process_balance_changes",
@@ -450,7 +515,15 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
                         block_index
                     ))
                 });
-                debit(block_index, from, amount + fee);
+                debit(
+                    block_index,
+                    from,
+                    amount.checked_add(&fee).unwrap_or_else(|| {
+                        ic_cdk::trap(&format!(
+                            "token amount overflow while indexing block {block_index}"
+                        ))
+                    }),
+                );
                 credit(block_index, to, amount);
                 if let Some(fee_collector) = get_fee_collector(block_index, block) {
                     credit(block_index, fee_collector, fee);
@@ -469,23 +542,21 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
     );
 }
 
-fn debit(block_index: BlockIndex64, account: Account, amount: u64) {
+fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
-        if balance < amount {
+        balance.checked_sub(&amount).unwrap_or_else(|| {
             ic_cdk::trap(&format!("Block {} caused an underflow for account {} when calculating balance {} - amount {}",
                 block_index, account, balance, amount));
-        }
-        balance - amount
+        })
     })
 }
 
-fn credit(block_index: BlockIndex64, account: Account, amount: u64) {
+fn credit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
-        if u64::MAX - balance < amount {
+        balance.checked_add(&amount).unwrap_or_else(|| {
             ic_cdk::trap(&format!("Block {} caused an overflow for account {} when calculating balance {} + amount {}",
-                block_index, account, balance, amount));
-        }
-        balance + amount
+                block_index, account, balance, amount))
+        })
     });
 }
 
@@ -501,8 +572,8 @@ fn generic_block_to_encoded_block_or_trap(
     })
 }
 
-fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block {
-    Block::decode(block).unwrap_or_else(|e| {
+fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block<Tokens> {
+    Block::<Tokens>::decode(block).unwrap_or_else(|e| {
         trap(&format!(
             "Unable to decode encoded block at index {}. Error: {}",
             block_index, e
@@ -510,7 +581,7 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
-fn get_accounts(block: &Block) -> Vec<Account> {
+fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
@@ -519,7 +590,7 @@ fn get_accounts(block: &Block) -> Vec<Account> {
     }
 }
 
-fn get_fee_collector(block_index: BlockIndex64, block: &Block) -> Option<Account> {
+fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option<Account> {
     if block.fee_collector.is_some() {
         block.fee_collector
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
@@ -602,7 +673,8 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
         account_block_ids
             .range(key..)
             // old txs of the requested account and skip the start index
-            .filter(|(k, _)| k.0 == key.0 && k.1 .0 != start)
+            .take_while(|(k, _)| k.0 == key.0)
+            .filter(|(k, _)| k.1 .0 < start)
             .take(length)
             .map(|(k, _)| k.1 .0)
             .collect::<Vec<BlockIndex64>>()
@@ -636,7 +708,7 @@ fn encoded_block_bytes_to_flat_transaction(
     block_index: BlockIndex64,
     block: Vec<u8>,
 ) -> Transaction {
-    let block = Block::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
+    let block = Block::<Tokens>::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
         trap(&format!(
             "Unable to decode encoded block at index {}. Error: {}",
             block_index, e
@@ -699,7 +771,7 @@ fn encoded_block_bytes_to_flat_transaction(
                 from,
                 spender,
                 amount: amount.into(),
-                expected_allowance: expected_allowance.map(|ea| Nat::from(ea.get_e8s())),
+                expected_allowance: expected_allowance.map(Into::into),
                 expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
                 fee: fee.map(|fee| fee.into()),
                 created_at_time,
@@ -784,6 +856,21 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     .build()
             }
         }
+    } else if req.path() == "/logs" {
+        use serde_json;
+        let mut entries: Log = Default::default();
+        for entry in export_logs(&P0) {
+            entries.entries.push(LogEntry {
+                timestamp: entry.timestamp,
+                file: entry.file.to_string(),
+                line: entry.line,
+                message: entry.message,
+            });
+        }
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "application/json; charset=utf-8")
+            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
+            .build()
     } else {
         HttpResponseBuilder::not_found().build()
     }

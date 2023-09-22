@@ -21,7 +21,7 @@ impl From<(&Parts, Vec<u8>)> for HttpRequest {
             .iter()
             .filter_map(|(name, value)| Some((name.as_str().into(), value.to_str().ok()?.into())))
             .inspect(|(name, value)| {
-                trace!("<< {}: {}", name, value);
+                trace!("<< {name}: {value}");
             })
             .collect::<Vec<(String, String)>>();
 
@@ -40,6 +40,7 @@ impl From<&HttpRequest> for Request {
             url: http_request.uri.to_string(),
             method: http_request.method.clone(),
             headers: http_request.headers.clone(),
+            body: http_request.body.clone(),
         }
     }
 }

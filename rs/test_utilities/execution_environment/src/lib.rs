@@ -6,11 +6,8 @@ use ic_test_utilities::{
 
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::{
-    embedders::Config as EmbeddersConfig,
-    execution_environment::{BitcoinConfig, Config},
-    flag_status::FlagStatus,
-    subnet_config::SchedulerConfig,
-    subnet_config::SubnetConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
+    subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -18,7 +15,7 @@ use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, util::process_stopping_canisters, CompilationCostHandling,
+    execute_canister, init_query_stats, util::process_stopping_canisters, CompilationCostHandling,
     ExecuteMessageResult, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
     InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
@@ -27,12 +24,9 @@ use ic_ic00_types::{
     CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
-use ic_interfaces::{
-    execution_environment::{
-        ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
-        RegistryExecutionSettings, SubnetAvailableMemory,
-    },
-    messages::{CanisterCall, CanisterMessage, CanisterTask},
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
+    RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -55,8 +49,8 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
+        RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     CanisterId, Cycles, Height, NumInstructions, NumPages, Time, UserId,
 };
@@ -64,6 +58,7 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
 
+use ic_config::embedders::MeteringType;
 use maplit::{btreemap, btreeset};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
@@ -184,10 +179,12 @@ pub struct ExecutionTest {
     user_id: UserId,
 
     // Read-only fields.
+    dirty_heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
     instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
+    ingress_memory_capacity: NumBytes,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
@@ -213,6 +210,10 @@ impl ExecutionTest {
 
     pub fn execution_environment(&self) -> &ExecutionEnvironment {
         &self.exec_env
+    }
+
+    pub fn dirty_heap_page_overhead(&self) -> u64 {
+        self.dirty_heap_page_overhead
     }
 
     pub fn user_id(&self) -> UserId {
@@ -274,6 +275,10 @@ impl ExecutionTest {
         self.executed_instructions.values().sum()
     }
 
+    pub fn ingress_memory_capacity(&self) -> NumBytes {
+        self.ingress_memory_capacity
+    }
+
     pub fn canister_executed_instructions(&self, canister_id: CanisterId) -> NumInstructions {
         *self
             .executed_instructions
@@ -325,6 +330,7 @@ impl ExecutionTest {
             memory_usage,
             compute_allocation,
             self.subnet_size(),
+            canister.system_state.reserved_balance(),
         )
     }
 
@@ -503,6 +509,21 @@ impl ExecutionTest {
         self.subnet_message(Method::UpdateSettings, payload)
     }
 
+    /// Updates the controller of the given canister.
+    pub fn canister_update_controller(
+        &mut self,
+        canister_id: CanisterId,
+        controllers: Vec<PrincipalId>,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
     /// Sends an `install_code` message to the IC management canister.
     /// Consider using higher-level helpers like `canister_from_wat()`.
     pub fn install_code(&mut self, args: InstallCodeArgs) -> Result<WasmResult, UserError> {
@@ -543,8 +564,12 @@ impl ExecutionTest {
     pub fn process_stopping_canisters(&mut self) {
         let state = self.state.take().unwrap();
         let own_subnet_id = state.metadata.own_subnet_id;
-        let state =
-            process_stopping_canisters(state, self.ingress_history_writer.as_ref(), own_subnet_id);
+        let state = process_stopping_canisters(
+            state,
+            self.ingress_history_writer.as_ref(),
+            own_subnet_id,
+            &no_op_logger(),
+        );
         self.state = Some(state);
     }
 
@@ -1402,6 +1427,7 @@ impl ExecutionTest {
 
 /// A builder for `ExecutionTest`.
 pub struct ExecutionTestBuilder {
+    execution_config: Config,
     nns_subnet_id: SubnetId,
     own_subnet_id: SubnetId,
     caller_subnet_id: Option<SubnetId>,
@@ -1416,25 +1442,10 @@ pub struct ExecutionTestBuilder {
     install_code_slice_instruction_limit: NumInstructions,
     instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
-    subnet_execution_memory: i64,
-    subnet_message_memory: i64,
-    subnet_wasm_custom_sections_memory: i64,
-    subnet_memory_reservation: i64,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
-    rate_limiting_of_instructions: bool,
-    deterministic_time_slicing: bool,
-    canister_sandboxing: bool,
-    composite_queries: bool,
-    query_caching: bool,
-    query_cache_capacity: u64,
-    allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
-    bitcoin_privileged_access: Vec<CanisterId>,
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
-    cost_to_compile_wasm_instruction: u64,
-    max_query_call_graph_instructions: NumInstructions,
-    stable_memory_dirty_page_limit: NumPages,
     time: Time,
 }
 
@@ -1442,21 +1453,18 @@ impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
         let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
-        let subnet_execution_memory = ic_config::execution_environment::Config::default()
-            .subnet_memory_capacity
-            .get() as i64;
-        let subnet_message_memory = ic_config::execution_environment::Config::default()
-            .subnet_message_memory_capacity
-            .get() as i64;
-        let subnet_wasm_custom_sections_memory = ic_config::execution_environment::Config::default()
-            .subnet_wasm_custom_sections_memory_capacity
-            .get() as i64;
-        let subnet_memory_reservation = ic_config::execution_environment::Config::default()
-            .subnet_memory_reservation
-            .get() as i64;
-        let max_instructions_per_composite_query_call =
-            ic_config::execution_environment::Config::default().max_query_call_graph_instructions;
+
         Self {
+            execution_config: Config {
+                rate_limiting_of_instructions: FlagStatus::Disabled,
+                deterministic_time_slicing: FlagStatus::Disabled,
+                canister_sandboxing_flag: FlagStatus::Enabled,
+                composite_queries: FlagStatus::Disabled,
+                query_caching: FlagStatus::Disabled,
+                query_cache_capacity: NumBytes::new(100_000_000), // 100MB
+                allocatable_compute_capacity_in_percent: 100,
+                ..Config::default()
+            },
             nns_subnet_id: subnet_test_id(2),
             own_subnet_id: subnet_test_id(1),
             caller_subnet_id: None,
@@ -1473,28 +1481,10 @@ impl Default for ExecutionTestBuilder {
             instruction_limit_without_dts: scheduler_config
                 .max_instructions_per_message_without_dts,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
-            subnet_execution_memory,
-            subnet_message_memory,
-            subnet_wasm_custom_sections_memory,
-            subnet_memory_reservation,
             registry_settings: test_registry_settings(),
             manual_execution: false,
-            rate_limiting_of_instructions: false,
-            deterministic_time_slicing: false,
-            canister_sandboxing: true,
-            composite_queries: false,
-            query_caching: false,
-            query_cache_capacity: 100_000_000, // 100MB
-            allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
-            bitcoin_privileged_access: Vec::default(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
-            cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
-                .cost_to_compile_wasm_instruction
-                .get(),
-            max_query_call_graph_instructions: max_instructions_per_composite_query_call,
-            stable_memory_dirty_page_limit: ic_config::execution_environment::Config::default()
-                .stable_memory_dirty_page_limit,
             time: mock_time(),
         }
     }
@@ -1537,13 +1527,11 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_max_query_call_graph_instructions(
-        self,
+        mut self,
         max_query_call_graph_instructions: NumInstructions,
     ) -> Self {
-        Self {
-            max_query_call_graph_instructions,
-            ..self
-        }
+        self.execution_config.max_query_call_graph_instructions = max_query_call_graph_instructions;
+        self
     }
 
     pub fn with_log(self, log: ReplicaLogger) -> Self {
@@ -1606,35 +1594,32 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_execution_memory(self, subnet_execution_memory: i64) -> Self {
-        Self {
-            subnet_execution_memory,
-            ..self
-        }
+    pub fn with_subnet_execution_memory(mut self, subnet_execution_memory: i64) -> Self {
+        self.execution_config.subnet_memory_capacity =
+            NumBytes::from(subnet_execution_memory as u64);
+        self
     }
 
-    pub fn with_subnet_memory_reservation(self, subnet_memory_reservation: i64) -> Self {
-        Self {
-            subnet_memory_reservation,
-            ..self
-        }
+    pub fn with_subnet_memory_reservation(mut self, subnet_memory_reservation: i64) -> Self {
+        self.execution_config.subnet_memory_reservation =
+            NumBytes::from(subnet_memory_reservation as u64);
+        self
     }
 
-    pub fn with_subnet_message_memory(self, subnet_message_memory: i64) -> Self {
-        Self {
-            subnet_message_memory,
-            ..self
-        }
+    pub fn with_subnet_message_memory(mut self, subnet_message_memory: i64) -> Self {
+        self.execution_config.subnet_message_memory_capacity =
+            NumBytes::from(subnet_message_memory as u64);
+        self
     }
 
     pub fn with_subnet_wasm_custom_sections_memory(
-        self,
+        mut self,
         subnet_wasm_custom_sections_memory: i64,
     ) -> Self {
-        Self {
-            subnet_wasm_custom_sections_memory,
-            ..self
-        }
+        self.execution_config
+            .subnet_wasm_custom_sections_memory_capacity =
+            NumBytes::from(subnet_wasm_custom_sections_memory as u64);
+        self
     }
 
     pub fn with_subnet_features(self, subnet_features: &str) -> Self {
@@ -1661,56 +1646,43 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_rate_limiting_of_instructions(self) -> Self {
-        Self {
-            rate_limiting_of_instructions: true,
-            ..self
-        }
+    pub fn with_rate_limiting_of_instructions(mut self) -> Self {
+        self.execution_config.rate_limiting_of_instructions = FlagStatus::Enabled;
+        self
     }
 
-    pub fn with_deterministic_time_slicing(self) -> Self {
-        Self {
-            deterministic_time_slicing: true,
-            ..self
-        }
+    pub fn with_deterministic_time_slicing(mut self) -> Self {
+        self.execution_config.deterministic_time_slicing = FlagStatus::Enabled;
+        self
     }
 
-    pub fn with_canister_sandboxing_disabled(self) -> Self {
-        Self {
-            canister_sandboxing: false,
-            ..self
-        }
+    pub fn with_canister_sandboxing_disabled(mut self) -> Self {
+        self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
+        self
     }
 
-    pub fn with_composite_queries(self) -> Self {
-        Self {
-            composite_queries: true,
-            ..self
-        }
+    pub fn with_composite_queries(mut self) -> Self {
+        self.execution_config.composite_queries = FlagStatus::Enabled;
+        self
     }
 
-    pub fn with_query_caching(self) -> Self {
-        Self {
-            query_caching: true,
-            ..self
-        }
+    pub fn with_query_caching(mut self) -> Self {
+        self.execution_config.query_caching = FlagStatus::Enabled;
+        self
     }
 
-    pub fn with_query_cache_capacity(self, capacity_bytes: u64) -> Self {
-        Self {
-            query_cache_capacity: capacity_bytes,
-            ..self
-        }
+    pub fn with_query_cache_capacity(mut self, capacity_bytes: u64) -> Self {
+        self.execution_config.query_cache_capacity = capacity_bytes.into();
+        self
     }
 
     pub fn with_allocatable_compute_capacity_in_percent(
-        self,
+        mut self,
         allocatable_compute_capacity_in_percent: usize,
     ) -> Self {
-        Self {
-            allocatable_compute_capacity_in_percent,
-            ..self
-        }
+        self.execution_config
+            .allocatable_compute_capacity_in_percent = allocatable_compute_capacity_in_percent;
+        self
     }
 
     pub fn with_provisional_whitelist_all(mut self) -> Self {
@@ -1719,7 +1691,10 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_bitcoin_privileged_access(mut self, canister: CanisterId) -> Self {
-        self.bitcoin_privileged_access.push(canister);
+        self.execution_config
+            .bitcoin
+            .privileged_access
+            .push(canister);
         self
     }
 
@@ -1734,7 +1709,9 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_cost_to_compile_wasm_instruction(mut self, cost: u64) -> Self {
-        self.cost_to_compile_wasm_instruction = cost;
+        self.execution_config
+            .embedders_config
+            .cost_to_compile_wasm_instruction = cost.into();
         self
     }
 
@@ -1748,7 +1725,14 @@ impl ExecutionTestBuilder {
         mut self,
         stable_memory_dirty_page_limit: NumPages,
     ) -> Self {
-        self.stable_memory_dirty_page_limit = stable_memory_dirty_page_limit;
+        self.execution_config
+            .embedders_config
+            .stable_memory_dirty_page_limit = stable_memory_dirty_page_limit;
+        self
+    }
+
+    pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
+        self.execution_config.embedders_config.metering_type = metering_type;
         self
     }
 
@@ -1840,50 +1824,19 @@ impl ExecutionTestBuilder {
             self.own_subnet_id,
             config,
         ));
-        let rate_limiting_of_instructions = if self.rate_limiting_of_instructions {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
+        let config = self.execution_config.clone();
+
+        let dirty_page_overhead = match self.subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet().dirty_page_overhead,
+            SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
+            SubnetType::VerifiedApplication => {
+                SchedulerConfig::verified_application_subnet().dirty_page_overhead
+            }
         };
-        let deterministic_time_slicing = if self.deterministic_time_slicing {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
-        let canister_sandboxing_flag = if self.canister_sandboxing {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
-        let composite_queries = if self.composite_queries {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
-        let query_caching = if self.query_caching {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
-        let config = Config {
-            rate_limiting_of_instructions,
-            deterministic_time_slicing,
-            canister_sandboxing_flag,
-            composite_queries,
-            query_caching,
-            query_cache_capacity: self.query_cache_capacity.into(),
-            allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
-            subnet_memory_capacity: NumBytes::from(self.subnet_execution_memory as u64),
-            subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
-            subnet_memory_reservation: NumBytes::from(self.subnet_memory_reservation as u64),
-            bitcoin: BitcoinConfig {
-                privileged_access: self.bitcoin_privileged_access,
-                ..Default::default()
-            },
-            cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
-            max_query_call_graph_instructions: self.max_query_call_graph_instructions,
-            stable_memory_dirty_page_limit: self.stable_memory_dirty_page_limit,
-            ..Config::default()
+
+        let dirty_heap_page_overhead = match config.embedders_config.metering_type {
+            MeteringType::New => dirty_page_overhead.get(),
+            _ => 0,
         };
 
         let hypervisor = Hypervisor::new(
@@ -1893,15 +1846,7 @@ impl ExecutionTestBuilder {
             self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
-            match self.subnet_type {
-                SubnetType::Application => {
-                    SchedulerConfig::application_subnet().dirty_page_overhead
-                }
-                SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
-                SubnetType::VerifiedApplication => {
-                    SchedulerConfig::verified_application_subnet().dirty_page_overhead
-                }
-            },
+            dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let hypervisor = Arc::new(hypervisor);
@@ -1922,14 +1867,17 @@ impl ExecutionTestBuilder {
             config.clone(),
             Arc::clone(&cycles_account_manager),
         );
+        let (query_stats_collector, _) = init_query_stats(self.log.clone());
+
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
             self.subnet_type,
-            config,
+            config.clone(),
             &metrics_registry,
             self.instruction_limit_without_dts,
             Arc::clone(&cycles_account_manager),
+            query_stats_collector,
         );
         ExecutionTest {
             state: Some(state),
@@ -1939,21 +1887,26 @@ impl ExecutionTestBuilder {
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory: SubnetAvailableMemory::new(
-                self.subnet_execution_memory - self.subnet_memory_reservation,
-                self.subnet_message_memory,
-                self.subnet_wasm_custom_sections_memory,
+                self.execution_config.subnet_memory_capacity.get() as i64
+                    - self.execution_config.subnet_memory_reservation.get() as i64,
+                self.execution_config.subnet_message_memory_capacity.get() as i64,
+                self.execution_config
+                    .subnet_wasm_custom_sections_memory_capacity
+                    .get() as i64,
             ),
             time: self.time,
+            dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
-                deterministic_time_slicing,
+                self.execution_config.deterministic_time_slicing,
                 self.instruction_limit,
                 self.slice_instruction_limit,
             ),
             install_code_instruction_limits: InstructionLimits::new(
-                deterministic_time_slicing,
+                self.execution_config.deterministic_time_slicing,
                 self.install_code_instruction_limit,
                 self.install_code_slice_instruction_limit,
             ),
+            ingress_memory_capacity: config.ingress_history_memory_capacity,
             instruction_limit_without_dts: self.instruction_limit_without_dts,
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,

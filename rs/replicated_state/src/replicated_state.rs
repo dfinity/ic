@@ -10,14 +10,16 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
-use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::{execution_environment::CanisterOutOfCyclesError, messages::CanisterMessage};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::messages::Ingress;
 use ic_types::{
-    ingress::IngressStatus,
-    messages::{CallbackId, MessageId, RequestOrResponse, Response},
+    ingress::{IngressState, IngressStatus},
+    messages::{
+        CallbackId, CanisterCall, CanisterMessage, Ingress, MessageId, Payload, RejectContext,
+        RequestOrResponse, Response,
+    },
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
@@ -41,20 +43,15 @@ pub enum InputQueueType {
 }
 
 /// Next input queue: round-robin across local subnet; ingress; or remote subnet.
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
 pub enum NextInputQueue {
     /// Local subnet input messages.
+    #[default]
     LocalSubnet,
     /// Ingress messages.
     Ingress,
     /// Remote subnet input messages.
     RemoteSubnet,
-}
-
-impl Default for NextInputQueue {
-    fn default() -> Self {
-        NextInputQueue::LocalSubnet
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
@@ -775,12 +772,13 @@ impl ReplicatedState {
         crate::bitcoin::push_response(self, response)
     }
 
-    /// Times out all requests with expired deadlines (given `current_time`) in all
-    /// canister (but not subnet) `OutputQueues`. Returns the number of timed out
-    /// requests.
+    /// Times out all requests with expired deadlines (given the state time) in
+    /// all canister (but not subnet) `OutputQueues`. Returns the number of timed
+    /// out requests.
     ///
     /// See `CanisterQueues::time_out_requests` for further details.
-    pub fn time_out_requests(&mut self, current_time: Time) -> u64 {
+    pub fn time_out_requests(&mut self) -> u64 {
+        let current_time = self.metadata.time();
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_requests()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first
@@ -812,15 +810,15 @@ impl ReplicatedState {
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
-    /// only the canisters of `new_subnet_id` (as determined by the provided routing
+    /// only the canisters of `subnet_id` (as determined by the provided routing
     /// table).
     ///
     /// A subnet split starts with a subnet A and results in two subnets, A' and B.
     /// For the sake of clarity, comments refer to the two resulting subnets as
     /// *subnet A'* and *subnet B*; and to the original subnet as *subnet A*.
     /// Because subnet A' retains the subnet ID of subnet A, it is identified by
-    /// having `new_subnet_id == self.own_subnet_id`. Conversely, subnet B has
-    /// `new_subnet_id != self.own_subnet_id`.
+    /// having `subnet_id == self.own_subnet_id`. Conversely, subnet B has
+    /// `subnet_id != self.own_subnet_id`.
     ///
     /// This first phase only consists of:
     ///  * Splitting the canisters hosted by A among A' and B, as determined by the
@@ -835,7 +833,12 @@ impl ReplicatedState {
     ///
     /// Internal adjustments to the various parts of the state happen in a second
     /// phase, during subnet startup (see [`Self::after_split()`]).
-    pub fn split(self, new_subnet_id: SubnetId, routing_table: &RoutingTable) -> Self {
+    pub fn split(
+        self,
+        subnet_id: SubnetId,
+        routing_table: &RoutingTable,
+        new_subnet_batch_time: Option<Time>,
+    ) -> Result<Self, String> {
         // Take apart `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever new fields are added.
         let Self {
@@ -852,7 +855,7 @@ impl ReplicatedState {
         //
         // TODO: Validate that canisters are split across no more than 2 subnets.
         canister_states
-            .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(new_subnet_id));
+            .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
@@ -863,21 +866,21 @@ impl ReplicatedState {
         //  * Some requests (ingress or canister) will fail if the target canister has
         //    been migrated away, but the alternative would require unpacking and acting
         //    on the contents of arbitrary methods' payloads.
-        if metadata.own_subnet_id != new_subnet_id {
+        if metadata.own_subnet_id != subnet_id {
             // On subnet B, start with empty subnet queues.
             subnet_queues = CanisterQueues::default();
         }
 
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
         // setting the split marker).
-        let metadata = metadata.split(new_subnet_id);
+        let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
 
-        Self {
+        Ok(Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue,
-        }
+        })
     }
 
     /// Makes adjustments to the replicated state, in the second phase of a subnet
@@ -924,6 +927,97 @@ impl ReplicatedState {
         };
         res.update_stream_responses_size_bytes();
         res
+    }
+
+    /// Removes and rejects all in-progress subnet messages whose target canisters
+    /// are no longer on this subnet, in the second phase of a subnet split.
+    ///
+    /// On the other subnet (which must be *subnet B*), the execution of these same
+    /// messages, now without matching subnet call contexts, will be silently
+    /// aborted / rolled back (without producing a response). This is the only way
+    /// to ensure consistency for a message that must execute on one subnet, but for
+    /// which a response may only be produced by another subnet.
+    pub fn reject_in_progress_management_calls<F>(
+        &mut self,
+        is_local_canister: F,
+        ingress_memory_capacity: NumBytes,
+    ) where
+        F: Fn(CanisterId) -> bool,
+    {
+        for install_code_call in self
+            .metadata
+            .subnet_call_context_manager
+            .remove_non_local_install_code_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                install_code_call.call,
+                install_code_call.effective_canister_id,
+                ingress_memory_capacity,
+            );
+        }
+
+        for stop_canister_call in self
+            .metadata
+            .subnet_call_context_manager
+            .remove_non_local_stop_canister_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                stop_canister_call.call,
+                stop_canister_call.effective_canister_id,
+                ingress_memory_capacity,
+            );
+        }
+    }
+
+    /// Rejects the given subnet call, targeting the given `canister_id`, which has
+    /// migrated to a new subnet following a subnet split, producing:
+    ///
+    ///  * a reject response, if the call originated from a canister; or
+    ///  * a failed ingress state, if the call originated from an ingress message.
+    fn reject_management_call_after_split(
+        &mut self,
+        call: CanisterCall,
+        canister_id: CanisterId,
+        ingress_memory_capacity: NumBytes,
+    ) {
+        match call {
+            CanisterCall::Request(request) => {
+                // Rejecting a request from a canister.
+                let response = Response {
+                    originator: request.sender(),
+                    respondent: request.receiver,
+                    originator_reply_callback: request.sender_reply_callback,
+                    refund: request.payment,
+                    response_payload: Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+                self.push_subnet_output_response(response.into());
+            }
+            CanisterCall::Ingress(ingress) => {
+                let status = IngressStatus::Known {
+                    receiver: ingress.receiver.get(),
+                    user_id: ingress.source,
+                    time: self.time(),
+                    state: IngressState::Failed(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+
+                let current_status = self.get_ingress_status(&ingress.message_id);
+                assert!(
+                    current_status.is_valid_state_transition(&status),
+                    "Invalid ingress status transition."
+                );
+                self.set_ingress_status(
+                    ingress.message_id.clone(),
+                    status,
+                    ingress_memory_capacity,
+                );
+            }
+        }
     }
 }
 

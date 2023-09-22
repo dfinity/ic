@@ -352,6 +352,48 @@ async fn blocks_test() {
     );
     assert_eq!(resp.transactions.last().unwrap().block_identifier.index, 51);
     assert_eq!(resp.next_offset, Some(50));
+
+    for block in scribe.blockchain.clone() {
+        let partial_block_id = PartialBlockIdentifier {
+            index: Some(block.index as i64),
+            hash: None,
+        };
+        let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
+        let resp = req_handler.block(msg).await.unwrap();
+        let transactions = vec![ic_rosetta_api::convert::block_to_transaction(
+            &block,
+            ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
+        )
+        .unwrap()];
+        assert_eq!(resp.clone().block.unwrap().transactions, transactions);
+        let transaction = resp.block.unwrap().transactions[0].clone();
+        let block_id = BlockIdentifier {
+            index: block.index as i64,
+            hash: from_hash(&block.hash),
+        };
+        let msg = BlockTransactionRequest::new(
+            req_handler.network_id(),
+            block_id.clone(),
+            transaction.transaction_identifier.clone(),
+        );
+        let resp = req_handler.block_transaction(msg).await.unwrap();
+        assert_eq!(resp.transaction, transactions[0]);
+        let resp = req_handler
+            .search_transactions(SearchTransactionsRequest::new(
+                req_handler.network_id(),
+                Some(transaction.transaction_identifier),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.transactions
+                .into_iter()
+                .map(|t| t.transaction)
+                .collect::<Vec<ic_rosetta_api::models::Transaction>>()[0],
+            transactions[0]
+        );
+    }
 }
 
 #[actix_rt::test]
@@ -507,27 +549,20 @@ async fn verify_account_search(
             icp_ledger::Operation::Mint { to, .. } => {
                 index(to, hb.index);
             }
-            icp_ledger::Operation::Transfer { from, to, .. } => {
-                index(from, hb.index);
-                if from != to {
-                    index(to, hb.index);
-                }
-            }
-            icp_ledger::Operation::Approve { from, spender, .. } => {
-                assert_ne!(from, spender);
-                index(from, hb.index);
-                index(spender, hb.index);
-            }
-            icp_ledger::Operation::TransferFrom {
+            icp_ledger::Operation::Transfer {
                 from, to, spender, ..
             } => {
                 index(from, hb.index);
                 if from != to {
                     index(to, hb.index);
                 }
-                if spender != from && spender != to {
-                    index(spender, hb.index);
+                if spender.is_some() && spender.unwrap() != from && spender.unwrap() != to {
+                    index(spender.unwrap(), hb.index);
                 }
+            }
+            icp_ledger::Operation::Approve { from, spender, .. } => {
+                assert_ne!(from, spender);
+                index(from, hb.index);
             }
         }
     }

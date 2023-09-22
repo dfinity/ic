@@ -6,7 +6,6 @@ use super::{
 use crate::{CanisterState, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_interfaces::messages::CanisterMessage;
 use ic_test_utilities::{
     mock_time,
     state::arb_num_receivers,
@@ -16,7 +15,10 @@ use ic_test_utilities::{
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     },
 };
-use ic_types::{messages::CallbackId, time::expiry_time_from_now};
+use ic_types::{
+    messages::{CallbackId, CanisterMessage},
+    time::expiry_time_from_now,
+};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryInto;
@@ -1440,10 +1442,7 @@ fn test_reject_subnet_output_request() {
         .sender(this)
         .receiver(IC_00)
         .build();
-    let reject_context = RejectContext {
-        code: ic_error_types::RejectCode::DestinationInvalid,
-        message: "".into(),
-    };
+    let reject_context = RejectContext::new(ic_error_types::RejectCode::DestinationInvalid, "");
 
     let mut queues = CanisterQueues::default();
 
@@ -1809,6 +1808,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     payment: Cycles::from(cycles as u64),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
+                    metadata: None,
                 }),
                 deadline,
             )
@@ -1862,7 +1862,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                 refund: Cycles::from(7_u64),
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
                     RejectCode::SysTransient,
-                    "Request timed out.".to_string(),
+                    "Request timed out.",
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
                 ))
             }),

@@ -16,7 +16,6 @@ DEPENDENCIES = [
     "@crate_index//:bincode",
     "@crate_index//:byteorder",
     "@crate_index//:clap",
-    "@crate_index//:lazy_static",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
     "@crate_index//:prost",

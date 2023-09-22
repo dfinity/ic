@@ -3,11 +3,11 @@
 
 use crate::address::BitcoinAddress;
 use crate::signature::EncodedSignature;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
 
-pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
+pub use ic_btc_interface::{OutPoint, Satoshi};
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
@@ -35,11 +35,31 @@ mod ops {
     pub const CHECKSIG: u8 = 0xac;
 }
 
+pub struct DisplayTxid<'a>(pub &'a [u8]);
+
+impl fmt::Display for DisplayTxid<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // In Bitcoin, you display hash bytes in reverse order.
+        //
+        // > Due to historical accident, the tx and block hashes that bitcoin core
+        // > uses are byte-reversed. I’m not entirely sure why. Maybe something
+        // > like using openssl bignum to store hashes or something like that,
+        // > then printing them as a number.
+        // > -- Wladimir van der Laan
+        //
+        // Source: https://learnmeabitcoin.com/technical/txid
+        for b in self.0.iter().rev() {
+            write!(fmt, "{:02x}", *b)?
+        }
+        Ok(())
+    }
+}
+
 pub struct DisplayOutpoint<'a>(pub &'a OutPoint);
 
 impl fmt::Display for DisplayOutpoint<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "{}:{}", &self.0.txid, self.0.vout)
+        write!(fmt, "{}:{}", DisplayTxid(&self.0.txid), self.0.vout)
     }
 }
 
@@ -348,8 +368,8 @@ pub struct UnsignedTransaction {
 }
 
 impl UnsignedTransaction {
-    pub fn txid(&self) -> Txid {
-        Sha256::hash(&encode_into(self, Sha256::new())).into()
+    pub fn txid(&self) -> [u8; 32] {
+        Sha256::hash(&encode_into(self, Sha256::new()))
     }
 
     pub fn serialized_len(&self) -> usize {
@@ -465,7 +485,7 @@ impl<T: Encode> Encode for [T] {
 
 impl Encode for OutPoint {
     fn encode(&self, buf: &mut impl Buffer) {
-        buf.write(self.txid.as_ref());
+        buf.write(&self.txid);
         self.vout.encode(buf)
     }
 }

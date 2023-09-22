@@ -13,7 +13,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
@@ -230,16 +230,13 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
 
     let node_record = {
         let ip_addr = format!("128.0.{mutation_id}.1");
-        let protocol = Protocol::Http1 as i32;
         let xnet_connection_endpoint = ConnectionEndpoint {
             ip_addr: ip_addr.clone(),
             port: 1234,
-            protocol,
         };
         let http_connection_endpoint = ConnectionEndpoint {
             ip_addr,
             port: 4321,
-            protocol,
         };
         NodeRecord {
             node_operator_id: node_operator_pid.get().to_vec(),
@@ -384,12 +381,10 @@ fn make_node_record(node_operator_record: &NodeOperatorRecord) -> NodeRecord {
     let xnet_connection_endpoint = ConnectionEndpoint {
         ip_addr: format!("128.0.{id}.1"),
         port: 1234,
-        protocol: Protocol::Http1 as i32,
     };
     let http_connection_endpoint = ConnectionEndpoint {
         ip_addr: format!("128.0.{id}.1"),
         port: 4321,
-        protocol: Protocol::Http1 as i32,
     };
     NodeRecord {
         node_operator_id: node_operator_record.node_operator_principal_id.clone(),
@@ -700,8 +695,8 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
         xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
         http_endpoint: format!("128.0.{mutation_id}.1:4321"),
-        p2p_flow_endpoints: vec![format!("123,128.0.{mutation_id}.1:10000")],
-        prometheus_metrics_endpoint: format!("128.0.{mutation_id}.1:5555"),
+        p2p_flow_endpoints: vec![],
+        prometheus_metrics_endpoint: "".to_string(),
     };
 
     (payload, node_public_keys)

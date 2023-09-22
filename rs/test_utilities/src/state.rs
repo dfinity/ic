@@ -20,7 +20,7 @@ use ic_replicated_state::{
         testing::new_canister_queues_for_test,
     },
     metadata_state::subnet_call_context_manager::{
-        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
+        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
     },
     metadata_state::Stream,
     page_map::PageMap,
@@ -120,26 +120,24 @@ impl ReplicatedStateBuilder {
         for request in self.bitcoin_adapter_requests.into_iter() {
             match request {
                 BitcoinAdapterRequestWrapper::GetSuccessorsRequest(payload) => {
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
                             request: RequestBuilder::default().build(),
                             payload,
                             time: mock_time(),
-                        });
+                        }),
+                    );
                 }
                 BitcoinAdapterRequestWrapper::SendTransactionRequest(payload) => {
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .push_bitcoin_send_transaction_internal_request(
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::BitcoinSendTransactionInternal(
                             BitcoinSendTransactionInternalContext {
                                 request: RequestBuilder::default().build(),
                                 payload,
                                 time: mock_time(),
                             },
-                        );
+                        ),
+                    );
                 }
             }
         }
@@ -786,12 +784,15 @@ prop_compose! {
     /// reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, sig_min_size: usize, sig_max_size: usize)(
         msg_start in 0..10000u64,
-        reqs in prop::collection::vec(arbitrary::request(), min_size..=max_size),
+        msgs in prop::collection::vec(
+            arbitrary::request_or_response(),
+            min_size..=max_size
+        ),
         (signals_end, reject_signals) in arb_reject_signals(sig_min_size, sig_max_size),
     ) -> Stream {
         let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(msg_start));
-        for r in reqs {
-            messages.push(r.into())
+        for m in msgs {
+            messages.push(m)
         }
 
         Stream::with_signals(messages, signals_end, reject_signals)

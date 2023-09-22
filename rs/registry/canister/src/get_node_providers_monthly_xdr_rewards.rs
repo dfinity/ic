@@ -221,7 +221,7 @@ mod tests {
             node_operator_principal_id: Some(*TEST_USER1_PRINCIPAL),
             node_allowance: 5,
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
-            dc_id: "NY1".into(),
+            dc_id: "ny1".into(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
         };
@@ -276,7 +276,7 @@ mod tests {
             .unwrap_err();
         assert!(err.contains(&format!(
             "has data center ID '{}' not found in the Registry",
-            dc_id
+            dc_id.to_lowercase()
         )));
 
         // Add Data Centers

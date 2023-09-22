@@ -129,8 +129,7 @@
 //! behavior.
 
 pub mod encoding;
-pub mod hash_tree;
-pub mod lazy_tree;
+pub mod lazy_tree_conversion;
 pub mod size_limit_visitor;
 pub mod subtree_visitor;
 mod traversal;
@@ -147,6 +146,6 @@ mod test_visitors;
 /// Label applied to tree edges in the Canonical State.
 pub type Label = Vec<u8>;
 
-pub use lazy_tree::conversion::LabelLike;
+pub use lazy_tree_conversion::LabelLike;
 pub use traversal::traverse;
 pub use visitor::{Control, Visitor};

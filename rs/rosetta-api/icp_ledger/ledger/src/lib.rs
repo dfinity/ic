@@ -11,8 +11,8 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{
-    AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
-    Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, ApprovalKey, Block, FeatureFlags, LedgerBalances, Memo, Operation,
+    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -102,6 +102,9 @@ pub struct Ledger {
     /// Token name
     #[serde(default = "unknown_token")]
     pub token_name: String,
+
+    #[serde(default)]
+    pub feature_flags: FeatureFlags,
 }
 
 impl LedgerContext for Ledger {
@@ -219,6 +222,7 @@ impl Default for Ledger {
             transfer_fee: DEFAULT_TRANSFER_FEE,
             token_symbol: unknown_token(),
             token_name: unknown_token(),
+            feature_flags: FeatureFlags::default(),
         }
     }
 }
@@ -256,7 +260,6 @@ impl Ledger {
             Operation::Mint { .. } => Tokens::from_e8s(0),
             Operation::Burn { .. } => Tokens::from_e8s(0),
             Operation::Approve { .. } => self.transfer_fee,
-            Operation::TransferFrom { .. } => self.transfer_fee,
         };
         core_ledger::apply_transaction(
             self,
@@ -321,6 +324,9 @@ impl Ledger {
         transfer_fee: Option<Tokens>,
         token_symbol: Option<String>,
         token_name: Option<String>,
+        feature_flags: Option<FeatureFlags>,
+        maximum_number_of_accounts: Option<usize>,
+        accounts_overflow_trim_quantity: Option<usize>,
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
@@ -344,6 +350,15 @@ impl Ledger {
         self.send_whitelist = send_whitelist;
         if let Some(transfer_fee) = transfer_fee {
             self.transfer_fee = transfer_fee;
+        }
+        if let Some(feature_flags) = feature_flags {
+            self.feature_flags = feature_flags;
+        }
+        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
+            self.maximum_number_of_accounts = maximum_number_of_accounts;
+        }
+        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
+            self.accounts_overflow_trim_quantity = accounts_overflow_trim_quantity;
         }
     }
 
@@ -426,6 +441,9 @@ impl Ledger {
                 );
             }
             self.icrc1_minting_account = Some(icrc1_minting_account);
+        }
+        if let Some(feature_flags) = args.feature_flags {
+            self.feature_flags = feature_flags;
         }
     }
 }

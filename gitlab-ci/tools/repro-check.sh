@@ -1,29 +1,133 @@
 #!/usr/bin/env bash
 
+# This script verifies a specific commit hash or a proposal for reproducibility.
+# if it's a proposal we need to make sure that proposal_hash == CDN_hash == build_hash
+# otherwise we only need to make sure that CDN_hash == build_hash.
+
 set -euo pipefail
+
+pushd() {
+    command pushd "$@" >/dev/null
+}
+
+popd() {
+    command popd "$@" >/dev/null
+}
+
+print_red() {
+    echo -e "\033[0;31m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m" 1>&2
+}
+
+print_green() {
+    echo -e "\033[0;32m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m"
+}
+
+print_yellow() {
+    echo -e "\033[0;33m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m"
+}
+
+print_blue() {
+    echo -e "\033[0;34m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m"
+}
+
+print_purple() {
+    echo -e "\033[0;35m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m"
+}
+
+log() {
+    print_blue "[+] $*"
+}
+
+log_success() {
+    print_green "[+] $*"
+}
+
+log_warning() {
+    print_yellow "[!] Warning - $*"
+}
+
+log_stderr() {
+    print_red "[-] $*"
+}
+
+log_debug() {
+    if [ -n "${DEBUG:-}" ]; then
+        print_purple "[_] $*"
+    fi
+}
+
+error() {
+    print_red "[-] $1"
+    exit 1
+}
 
 print_usage() {
     cat >&2 <<-USAGE
     This script builds and diffs the update image between CI and build-ic
-    options:
-    -h	this help message
-    -n	dry run mode, do not build local dev image
-    -c	git revision to use, defaults to the current commit
-    -p  proposal id to check
+    Pick one of the following options:
+    -h	    this help message
+    -p      proposal id to check - the proposal has to be for an update-img
+    -c	    git revision/commit to use - the commit has to exist on master branch of
+            the IC repository on GitHub
+    <empty> no option - uses the commit at the tip of the branch this is run on
 USAGE
 }
 
-build_dev=1
+extract_field_json() {
+    jq_field="$1"
+    input="$2"
+
+    out=$(cat "$input" | jq --raw-output "$jq_field")
+    status="$?"
+
+    if [[ "$status" != 0 ]] || [[ "$out" == "null" ]]; then
+        error "Field $jq_field does not exist in $input"
+    fi
+
+    echo "$out"
+}
+
+check_git_repo() {
+    log_debug "Check we are inside a Git repository"
+    if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then
+        error "Please run this script inside of a git repository"
+    else
+        log_debug "Inside git repository"
+    fi
+}
+
+check_ic_repo() {
+    git_remote="$(git config --get remote.origin.url)"
+
+    log_debug "Check the repository is an IC repository"
+    # Possible values of `git_remote` are listed below
+    # git@gitlab.com:dfinity-lab/public/ic.git
+    # git@github.com:dfinity/ic.git
+    # https://github.com/dfinity/ic.git
+    if [[ "$git_remote" == */ic.git ]] || [[ "$git_remote" == */ic ]]; then
+        log_debug "Inside IC repository"
+    else
+        error "When not specifying any option please run this script inside an IC git repository"
+    fi
+
+}
+
+#################### Set-up
+if [ "${DEBUG:-}" == "2" ]; then
+    set -x
+fi
+
 proposal_id=""
-while getopts 'nhc:p:' flag; do
+git_commit=""
+no_option=""
+SECONDS=0
+pwd="$(pwd)"
+
+# Parse arguments
+while getopts ':i:h:c:p:d:' flag; do
     case "${flag}" in
-        c) git_hash="${OPTARG}" ;;
-        n) build_dev=0 ;;
+        c) git_commit="${OPTARG}" ;;
         p) proposal_id="${OPTARG}" ;;
-        h)
-            print_usage
-            exit 1
-            ;;
         *)
             print_usage
             exit 1
@@ -31,136 +135,215 @@ while getopts 'nhc:p:' flag; do
     esac
 done
 
-if [ -n "${proposal_id}" ]; then
-    PROPOSAL_URL="https://ic-api.internetcomputer.org/api/v3/proposals/${proposal_id}"
-    PROPOSAL_BODY=$(curl --silent --retry 5 --retry-delay 10 "${PROPOSAL_URL}")
+log "Check the environment"
+# either of those files should exist
+source /usr/lib/os-release 2>/dev/null
+source /etc/os-release 2>/dev/null
 
-    release_package_url=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.release_package_urls.[0]')
-    case "${release_package_url}" in
-        */guest-os/update-img/update-img.*)
-            UPDATE_IMG_FILE="${release_package_url##*/guest-os/update-img/}"
-            release_package_sha256_hex=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.release_package_sha256_hex')
-            ;;
-        *)
-            echo "The proposal ${PROPOSAL_URL} does not exist, does not contain payload.release_package_url or release package is not guest-os update-img package."
-            echo "Only guest-os update-img proposals are supported."
-            exit 1
-            ;;
-    esac
-
-    git_hash=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.replica_version_id')
+if [ "$(uname -m)" == "x86_64" ]; then
+    log_success "x86_64 architecture detected"
+else
+    error "Please run this script on x86_64 architecture"
 fi
 
-git_hash=${git_hash:-$(git rev-parse HEAD)}
-
-OUT="$HOME/disk-images/$git_hash"
-CI_OUT="$OUT/ci-img"
-DEV_OUT="$OUT/dev-img"
-PROPOSAL_OUT="$OUT/proposal-img"
-
-mkdir -p "$CI_OUT"
-mkdir -p "$DEV_OUT"
-
-if ! which rclone; then
-    echo "Please install rclone: sudo apt install rclone"
-    read -p "Should I do this for you [yn]?" yn
-    case $yn in
-        [Yy]*)
-            sudo apt install rclone
-            break
-            ;;
-        [Nn]*) exit 1 ;;
-        *) echo "Please answer yes or no." ;;
-    esac
+if [ "${NAME:-}" == "Ubuntu" ]; then
+    log_success "Ubuntu OS detected"
+else
+    log_warning "Please run this script on Ubuntu OS"
 fi
 
-if ! which diffoscope; then
-    echo "Please install diffoscope: sudo apt install diffoscope"
-    read -p "Should I do this for you [yn]?" yn
-    case $yn in
-        [Yy]*)
-            sudo apt install diffoscope
-            break
-            ;;
-        [Nn]*) exit 1 ;;
-        *) echo "Please answer yes or no." ;;
-    esac
+if [[ $(echo "${VERSION_ID:-} > 22.03" | bc) == 1 ]]; then
+    log_success "Version >22.04 detected"
+else
+    log_warning "Please run this script on Ubuntu version 22.04 or higher"
 fi
 
-pushd "$(git rev-parse --show-toplevel)"
-if ! ./gitlab-ci/src/artifacts/rclone_download.py --git-rev=$git_hash --out="$CI_OUT" --remote-path guest-os/update-img; then
-    echo "please either create *DRAFT* merge request pipeline for this commit sha:$git_hash or make sure that GitLab is running a pipeline against this commit SHA"
-    echo "Note that this script does not work on older branches which use build id instead of the git commit sha"
-    echo "e.g. any commits before eab9be79c53a88627881258b399ac9967aae7a60"
-    read -p "Confirm OK to continue [yn]" yn
-    case $yn in
-        [Yy]*) break ;;
-        [Nn]*) exit 1 ;;
-        *) echo "Please answer yes or no." ;;
-    esac
+if [[ "$(cat /proc/meminfo | grep MemTotal | awk '{ print int($2/1024**2) }')" -ge 15 ]]; then
+    log_success "More than 16GB of RAM detected"
+else
+    log_warning "You need at least 16GB of RAM on this machine"
 fi
 
-if [ -n "${UPDATE_IMG_FILE:-}" ]; then
-    case "${UPDATE_IMG_FILE}" in
-        */* | *..*)
-            echo "The proposal ${PROPOSAL_URL} contains payload.release_package_url with illegal characters"
-            exit 1
-            ;;
-    esac
-    CI_PACKAGE_SHA256=$(awk "/${UPDATE_IMG_FILE}\$/ {print \$1}" "${CI_OUT}/SHA256SUMS")
-    if [ "${release_package_sha256_hex}" != "${CI_PACKAGE_SHA256}" ]; then
-        echo "The sha256 sum from the proposal does not match the one from the s3 storage for $UPDATE_IMG_FILE."
-        echo "The sha256 sum from the proposal:   ${release_package_sha256_hex}."
-        echo "The sha256 sum from the s3 storage: ${CI_PACKAGE_SHA256}."
-        exit 1
+if [[ $(("$(df . --output=avail | tail -n 1)" / 1000000)) -ge 100 ]]; then
+    log_success "More than 100GB of free disk space detected"
+else
+    log_warning "You need at least 100GB of free disk space on this machine"
+fi
+
+log "Update package registry"
+sudo apt-get update -y
+log "Install needed dependencies"
+sudo apt-get install git curl jq podman -y
+
+# if no options have been choosen we assume to check the latest commit of the
+# branch we are on.
+if [ "$OPTIND" -eq 1 ]; then
+    check_git_repo
+    check_ic_repo
+
+    no_option="true"
+fi
+
+# set the `git_hash` from the `proposal_id` or from the environment
+if [ -n "$proposal_id" ]; then
+
+    # format the proposal
+    proposal_url="https://ic-api.internetcomputer.org/api/v3/proposals/$proposal_id"
+    proposal_body="proposal-body.json"
+
+    log_debug "Fetch the proposal json body"
+    proposal_body_status=$(curl --silent --show-error -w %{http_code} --location --retry 5 --retry-delay 10 "$proposal_url" -o "$proposal_body")
+
+    # check for error
+    if ! [[ "$proposal_body_status" =~ ^2 ]]; then
+        error "Could not fetch $proposal_id, please make sure you have a valid internet connection or that the proposal #$proposal_id exists"
     fi
-    mkdir -p "$PROPOSAL_OUT"
-    pushd "${PROPOSAL_OUT}"
-    curl --retry 5 --retry-delay 10 --output "${UPDATE_IMG_FILE}" "${release_package_url}"
-    echo "${release_package_sha256_hex} *${UPDATE_IMG_FILE}" >SHA256SUMS
-    sha256sum --check SHA256SUMS
+    log_debug "Extract the package_url"
+    proposal_package_url=$(extract_field_json ".payload.release_package_urls[0]" "$proposal_body")
+
+    log_debug "Extract the sha256 sums hex for the artifacts from the proposal"
+    proposal_package_sha256_hex=$(extract_field_json ".payload.release_package_sha256_hex" "$proposal_body")
+
+    log_debug "Extract git_hash out of the proposal"
+    git_hash=$(extract_field_json ".payload.replica_version_to_elect" "$proposal_body")
+
+else
+
+    log_debug "Extract git_hash from CLI arguments or directory's HEAD"
+    git_hash=${git_commit:-$(git rev-parse HEAD)}
+fi
+
+tmpdir="$(mktemp -d)"
+log "Set our working directory to a temporary one - $tmpdir"
+
+# if we are in debug mode we keep the directories to debug any issues
+if [ -z "${DEBUG:-}" ]; then
+    trap 'rm -rf "$tmpdir"' EXIT
+fi
+
+pushd "$tmpdir"
+
+log "Set and create output directories for the different images"
+out="$tmpdir/disk-images/$git_hash"
+log "Images will be saved in $out"
+
+ci_out="$out/ci-img"
+dev_out="$out/dev-img"
+proposal_out="$out/proposal-img"
+
+mkdir -p "$ci_out"
+mkdir -p "$dev_out"
+mkdir -p "$proposal_out"
+
+#################### Check Proposal Hash
+# download and check the hash matches
+if [ -n "$proposal_id" ]; then
+
+    log "Check the proposal url is correctly formatted"
+    expected_url="https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.gz"
+    if [ "$proposal_package_url" != "$expected_url" ]; then
+        error "The artifact's URL is wrongly formatted, please report this to DFINITY\n\t\tcurrent  = $proposal_package_url\n\t\texpected = $expected_url"
+    fi
+
+    log "Download the proposal artifacts"
+    curl --silent --show-error --location --retry 5 --retry-delay 10 \
+        --remote-name --output-dir "$proposal_out" "$proposal_package_url"
+
+    pushd "$proposal_out"
+
+    log "Check the hash of the artifacts is the correct one"
+    echo "$proposal_package_sha256_hex  update-img.tar.gz" | shasum -a256 -c- >/dev/null
+
+    log_success "The proposal's artefacts and hash match"
     popd
 fi
 
-echo "images will be saved in $OUT"
+#################### Check CI Hash
+log "Downloads the image version built and pushed by CI system"
+curl --silent --show-error --location --retry 5 --retry-delay 10 --remote-name --output-dir "$ci_out" "https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.gz"
+curl --silent --show-error --location --retry 5 --retry-delay 10 --remote-name --output-dir "$ci_out" "https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/SHA256SUMS"
 
-cwd=$(pwd)
-# fetch the commit from upstream here while in the users IC directory
-# otherwise we would have to configure git remotes in the temp dir.
+log "Check the hash upload matches with the image uploaded"
+pushd "$ci_out"
+grep "update-img.tar.gz" SHA256SUMS | shasum -a256 -c- >/dev/null || error "The hash $git_hash does not have an associated published artifact"
+log_success "The CI's artefacts and hash match"
+
+# extract the hash from the SHA256SUMS file
+ci_package_sha256_hex="$(grep update-img.tar.gz SHA256SUMS | cut -d' ' -f 1)"
+
+# check the hash exists
+
+popd
+
+#################### Verify Proposal Image == CI Image
+log "Check the shasum that was set in the proposal matches the one we download from CDN"
+if [ -n "$proposal_id" ]; then
+    if [ "$proposal_package_sha256_hex" != "$ci_package_sha256_hex" ]; then
+        error "The sha256 sum from the proposal does not match the one from the CDN storage for udpate-img.tar.gz. The sha256 sum from the proposal: $proposal_package_sha256_hex The sha256 sum from the CDN storage: $ci_package_sha256_hex."
+    else
+        log_success "The shasum from the proposal and CDN match"
+    fi
+fi
+
+################### Verify CI Image == Dev Image
+pushd "$tmpdir"
+# Copy if we are in CI, if there wasn't an option specified or if it was `git_commit`
+if [ -n "${CI:-}" ] || [ -n "$no_option" ]; then
+    log "Copy IC repository from $pwd to temporary directory"
+    git clone "$pwd" ic
+else
+    log "Clone IC repository"
+    git clone https://github.com/dfinity/ic
+fi
+
+pushd ic
+
+# Check `git_commit` exists on the master branch of the IC repository on GitHub
+if [ -n "$git_commit" ]; then
+    check_git_repo
+    check_ic_repo
+
+    if ! git cat-file -e "$git_commit^{commit}"; then
+        error "When specifying the -c option please specify a git hash which exists as a commit on a branch of the IC repository"
+    fi
+fi
+
+log "Check out $git_hash commit"
 git fetch --quiet origin "$git_hash"
-
-tmp=$(mktemp -d)
-trap "rm -fr $tmp" EXIT
-
-pushd "$tmp"
-git clone --quiet "$cwd" .
 git checkout --quiet "$git_hash"
 
-if [ "$build_dev" -eq "1" ]; then
-    ./gitlab-ci/container/build-ic.sh -i
-    mv artifacts/icos/update-img.tar.gz "$DEV_OUT"
+log "Build IC-OS"
+./gitlab-ci/container/build-ic.sh --icos >/dev/null
+log_success "Built IC-OS successfully"
+
+mv artifacts/icos/guestos/update-img.tar.gz "$dev_out"
+
+log "Check hash of locally built artifact matches the one fetched from the proposal/CDN"
+pushd "$dev_out"
+dev_package_sha256_hex="$(shasum -a 256 "update-img.tar.gz" | cut -d' ' -f1)"
+
+if [ "$dev_package_sha256_hex" != "$ci_package_sha256_hex" ]; then
+    log_stderr "The sha256 sum from the proposal/CDN does not match the one from we just built. \n\tThe sha256 sum we just built:\t\t$dev_package_sha256_hex\n\tThe sha256 sum from the CDN: $ci_package_sha256_hex."
+
+    if [ -n "${INVESTIGATE:-}" ]; then
+
+        log "Start investigation of build build non-reproducibility"
+        sudo apt-get install diffoscope -y
+
+        log "Extract images"
+        tar xzf "$ci_out/update-img.tar.gz" -C "$ci_out"
+        tar xzf "$dev_out/update-img.tar.gz" -C "$dev_out"
+
+        log "Run diffoscope"
+        sudo diffoscope "$ci_out/boot.img" "$dev_out/boot.img" || true
+        sudo diffoscope "$ci_out/root.img" "$dev_out/root.img" || true
+
+        log "Disk images saved to $out"
+    else
+        exit 1
+    fi
+else
+    log_success "The shasum from the artifact built locally and the one fetched from the proposal/CDN match.\n\t\t\t\t\t\tLocal = $dev_package_sha256_hex\n\t\t\t\t\t\tCDN   = $ci_package_sha256_hex"
+    log_success "Verification successful - total time: $(($SECONDS / 3600))h $((($SECONDS / 60) % 60))m $(($SECONDS % 60))s"
+
 fi
-
-if [ ! -f "$CI_OUT/update-img.tar.gz" ]; then
-    ./gitlab-ci/src/artifacts/rclone_download.py --git-rev="$git_hash" --out="$CI_OUT" --remote-path guest-os/update-img
-fi
-
-tar -xzf "$CI_OUT/update-img.tar.gz" -C "$CI_OUT"
-tar -xzf "$DEV_OUT/update-img.tar.gz" -C "$DEV_OUT"
-
-echo ""
-echo "sh256sum of CI contents"
-find $CI_OUT -name *.img -type f -exec sha256sum {} \;
-
-echo ""
-echo "sh256sum of Dev contents"
-find $DEV_OUT -name *.img -type f -exec sha256sum {} \;
-
-echo ""
-echo "diffoscope"
-sudo diffoscope "$CI_OUT/boot.img" "$DEV_OUT/boot.img" || true
-
-echo ""
-sudo diffoscope "$CI_OUT/root.img" "$DEV_OUT/root.img" || true
-
-echo "disk images saved to $OUT"

@@ -20,7 +20,7 @@ ic-base-types = { path = "../types/base_types"}
 ic-canister-client = { path = "../canister_client" }
 ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }

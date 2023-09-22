@@ -57,6 +57,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
+use std::time::Duration;
 
 use crate::{
     as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
@@ -528,8 +529,12 @@ impl SchedulerTest {
     }
 
     pub fn charge_for_resource_allocations(&mut self) {
+        let subnet_size = self.subnet_size();
         self.scheduler
-            .charge_canisters_for_resource_allocation_and_usage(self.state.as_mut().unwrap(), 1)
+            .charge_canisters_for_resource_allocation_and_usage(
+                self.state.as_mut().unwrap(),
+                subnet_size,
+            )
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {
@@ -578,6 +583,12 @@ impl SchedulerTest {
             response_size_limit,
             self.subnet_size(),
         )
+    }
+
+    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
+        self.scheduler
+            .cycles_account_manager
+            .memory_cost(bytes, duration, self.subnet_size())
     }
 }
 
@@ -777,7 +788,7 @@ impl SchedulerTestBuilder {
             Arc::clone(&cycles_account_manager),
             Arc::<TestWasmExecutor>::clone(&wasm_executor),
             deterministic_time_slicing,
-            config.cost_to_compile_wasm_instruction,
+            config.embedders_config.cost_to_compile_wasm_instruction,
             SchedulerConfig::application_subnet().dirty_page_overhead,
         );
         let hypervisor = Arc::new(hypervisor);
@@ -996,7 +1007,6 @@ impl WasmExecutor for TestWasmExecutor {
         _canister_root: PathBuf,
         canister_id: CanisterId,
         _compilation_cache: Arc<CompilationCache>,
-        _logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let mut guard = self.core.lock().unwrap();
         guard.create_execution_state(canister_module, canister_id)
@@ -1101,6 +1111,10 @@ impl TestWasmExecutorCore {
             dirty_pages: message.dirty_pages,
             read_before_write_count: message.dirty_pages,
             direct_write_count: 0,
+            sigsegv_count: 0,
+            mmap_count: 0,
+            mprotect_count: 0,
+            copy_page_count: 0,
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,
@@ -1214,6 +1228,7 @@ impl TestWasmExecutorCore {
             payment: Cycles::zero(),
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
+            metadata: None,
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,

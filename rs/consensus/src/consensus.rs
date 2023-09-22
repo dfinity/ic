@@ -61,7 +61,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
-    consensus::{BlockPayload, ConsensusMessageAttribute, ConsensusMessageHashable},
+    consensus::{ConsensusMessageAttribute, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
@@ -154,6 +154,7 @@ impl ConsensusImpl {
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -173,6 +174,7 @@ impl ConsensusImpl {
             xnet_payload_builder,
             self_validating_payload_builder,
             canister_http_payload_builder,
+            query_stats_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -363,8 +365,8 @@ impl ConsensusImpl {
     /// Checks, whether DKG transcripts for this replica are available
     fn dkgs_available(&self, pool_reader: &PoolReader) -> bool {
         // Get last summary
-        let block_payload =
-            BlockPayload::from(pool_reader.get_highest_summary_block().payload).into_summary();
+        let summary_block = pool_reader.get_highest_summary_block();
+        let block_payload = summary_block.payload.as_ref().as_summary();
 
         // Get transcripts from summary
         let transcripts = block_payload.dkg.current_transcripts();
@@ -638,6 +640,7 @@ pub fn setup(
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -671,6 +674,7 @@ pub fn setup(
             xnet_payload_builder,
             self_validating_payload_builder,
             canister_http_payload_builder,
+            query_stats_payload_builder,
             dkg_pool,
             ecdsa_pool,
             dkg_key_manager,
@@ -699,6 +703,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
+        consensus::batch::MockBatchPayloadBuilder,
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -708,7 +713,7 @@ mod tests {
     };
     use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
     use ic_types::{crypto::CryptoHash, CryptoHashOfState, SubnetId};
-    use std::{borrow::Borrow, sync::Arc, time::Duration};
+    use std::{sync::Arc, time::Duration};
 
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
@@ -758,6 +763,7 @@ mod tests {
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
             ecdsa_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(
@@ -835,27 +841,27 @@ mod tests {
             registry_time_source
                 .set_time(consensus_impl.time_source.get_relative_time())
                 .unwrap();
-            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
+            assert!(!consensus_impl.on_state_change(&pool).is_empty());
 
             // advance the consensus time such that it's `HALT_AFTER_REGISTRY_UNREACHABLE`
             // ahead of the registry time. Consensus should not be halted yet.
             let new_time =
                 consensus_time_source.get_relative_time() + HALT_AFTER_REGISTRY_UNREACHABLE;
             consensus_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
+            assert!(!consensus_impl.on_state_change(&pool).is_empty());
 
             // advance the consensus time another second, such that it's more than
             // `HALT_AFTER_REGISTRY_UNREACHABLE` ahead of the registry time. Consensus
             // should now be stalled.
             let new_time = consensus_time_source.get_relative_time() + Duration::from_secs(1);
             consensus_time_source.set_time(new_time).unwrap();
-            assert!(consensus_impl.on_state_change(pool.borrow()).is_empty());
+            assert!(consensus_impl.on_state_change(&pool).is_empty());
 
             // if we advance the registry time such that it's <=
             // `HALT_AFTER_REGISTRY_UNREACHABLE` behind the consensus time,
             // consensus should no longer be halted.
             registry_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
+            assert!(!consensus_impl.on_state_change(&pool).is_empty());
         })
     }
 
@@ -893,7 +899,7 @@ mod tests {
                 + HALT_AFTER_REGISTRY_UNREACHABLE
                 + Duration::from_secs(1);
             consensus_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
+            assert!(!consensus_impl.on_state_change(&pool).is_empty());
         })
     }
 }

@@ -4,9 +4,10 @@ use crate::ECDSAPublicKey;
 use bech32::Variant;
 use ic_btc_interface::Network;
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::fmt;
 
 // See https://en.bitcoin.it/wiki/List_of_address_prefixes.
@@ -88,12 +89,12 @@ impl BitcoinAddress {
 
 /// Returns the derivation path that should be used to sign a message from a
 /// specified account.
-pub fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
+pub fn derivation_path(account: &Account) -> Vec<ByteBuf> {
     const SCHEMA_V1: u8 = 1;
     vec![
-        vec![SCHEMA_V1],
-        account.owner.as_slice().to_vec(),
-        account.effective_subaccount().to_vec(),
+        ByteBuf::from(vec![SCHEMA_V1]),
+        ByteBuf::from(account.owner.as_slice().to_vec()),
+        ByteBuf::from(account.effective_subaccount().to_vec()),
     ]
 }
 
@@ -105,7 +106,7 @@ pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -
     } = DerivationPath::new(
         derivation_path(account)
             .into_iter()
-            .map(DerivationIndex)
+            .map(|x| DerivationIndex(x.into_vec()))
             .collect(),
     )
     .public_key_derivation(&ecdsa_public_key.public_key, &ecdsa_public_key.chain_code)

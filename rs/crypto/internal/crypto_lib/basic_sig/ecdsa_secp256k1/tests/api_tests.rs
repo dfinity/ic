@@ -126,7 +126,7 @@ mod sign {
 mod verify {
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ecdsa_secp256k1::{types::*, *};
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
 
@@ -268,6 +268,23 @@ mod verify {
              if algorithm == AlgorithmId::EcdsaSecp256k1
              && key_bytes == Some(invalid_pk.0)
         );
+    }
+
+    #[test]
+    fn should_have_correct_error_for_invalid_sig() {
+        let (sk, pk) = crate::new_keypair(&mut reproducible_rng());
+
+        let msg = vec![0x42; 32];
+        let signature = sign(&msg, &sk).unwrap();
+
+        let mut invalid_signature = signature;
+        invalid_signature.0[2] ^= 1;
+
+        let result = verify(&invalid_signature, &msg, &pk);
+        assert_matches!(result, Err(CryptoError::SignatureVerification{algorithm, public_key_bytes, sig_bytes, internal_error: _})
+                        if algorithm == AlgorithmId::EcdsaSecp256k1 &&
+                        public_key_bytes == pk.0 &&
+                        sig_bytes == invalid_signature.0);
     }
 
     #[test]

@@ -47,7 +47,7 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
         algorithm_identifier(),
         Some(expected_pk_len),
     )?;
-    types::PublicKeyBytes::try_from(&pk_bytes)
+    types::PublicKeyBytes::try_from(pk_bytes)
 }
 
 /// Encodes the given `key` as DER-encoded Ed25519 public key according to

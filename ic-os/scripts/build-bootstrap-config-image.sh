@@ -107,11 +107,6 @@ options may be specified:
     The URL of the socks proxy to use. To be used in
     systems tests only.
 
-  --onchain_observability_overrides overrides
-    The overrides struct (report length, sampling interval) for the onchain observability config. To be used by system tests
-
-    Be sure to properly quote the string.
-
   --get_sev_certs
     If on an SEV-SNP enabled machine, include the ark, ask, and vcek
     certificates in the config image.  Note: this requires that this
@@ -135,7 +130,6 @@ function build_ic_bootstrap_tar() {
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
     local BITCOIND_ADDR
-    local ONCHAIN_OBSERVABILITY_OVERRIDES
     local GET_SEV_CERTS=false
 
     while true; do
@@ -197,9 +191,6 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
-            --onchain_observability_overrides)
-                ONCHAIN_OBSERVABILITY_OVERRIDES="$2"
-                ;;
             --get_sev_certs)
                 GET_SEV_CERTS=true
                 shift 1
@@ -255,9 +246,6 @@ EOF
     fi
     if [ "${SOCKS_PROXY}" != "" ]; then
         echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
-    fi
-    if [ "${ONCHAIN_OBSERVABILITY_OVERRIDES}" != "" ]; then
-        echo ${ONCHAIN_OBSERVABILITY_OVERRIDES} >"${BOOTSTRAP_TMPDIR}/onchain_observability_overrides.json"
     fi
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"

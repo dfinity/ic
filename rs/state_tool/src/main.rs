@@ -7,10 +7,9 @@
 use clap::Parser;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::PrincipalId;
+use ic_state_tool::commands;
+use ic_types::{PrincipalId, Time};
 use std::path::PathBuf;
-
-mod commands;
 
 /// Supported `state_tool` commands and their arguments.
 #[derive(Parser, Debug)]
@@ -59,50 +58,6 @@ enum Opt {
         /// Path to a manifest.
         #[clap(long = "file")]
         file: PathBuf,
-    },
-
-    /// Computes a hash of a canister that is independent
-    /// of its position in the file table.
-    #[clap(name = "canister_hash")]
-    CanisterHash {
-        /// Path to a manifest.
-        #[clap(long = "file")]
-        file: PathBuf,
-        /// The canister to match for. The tool filters the files using a simple
-        /// `relative_path.contains(&format!{"canister_states/{}/", canister)`
-        /// on the relative file paths as given in the manifest's file entries.
-        ///
-        /// Say we have a manifest corresponding to a state thats
-        /// structured as follows:
-        ///
-        /// ```text
-        /// 0000000000001c20/
-        /// ├── bitcoin
-        /// │   └── ...
-        /// ├── canister_states
-        /// │   ├── 00000000000000000101
-        /// │   │   ├── ...
-        /// .   .
-        /// .   .
-        /// │   ├── 00000000000000070101
-        /// │   │   ├── canister.pbuf
-        /// │   │   ├── queues.pbuf
-        /// │   │   ├── software.wasm
-        /// │   │   ├── stable_memory.bin
-        /// │   │   └── vmemory_0.bin
-        /// .   .
-        /// .   .
-        /// ```
-        ///
-        /// Then calling the tool with `--canister 00000000000000070101`, for example,
-        /// would select all files with `canister_states/00000000000000070101/` in
-        /// their path.
-        ///
-        /// To make sure that accidentally passing something that matches
-        /// unwanted file paths, the list of processed files is explicitly
-        /// printed.
-        #[clap(long = "canister")]
-        canister: String,
     },
 
     /// Enumerates persisted states.
@@ -163,6 +118,11 @@ enum Opt {
         /// Canister ID ranges to drop (assigned to other subnet in the routing table).
         #[clap(long, multiple_values(true))]
         drop: Vec<CanisterIdRange>,
+        /// New subnet's batch time (original subnet always retains its batch time).
+        ///
+        /// If not specified, the new subnet uses the batch time of the original subnet.
+        #[clap(long)]
+        batch_time_nanos: Option<u64>,
     },
 
     /// Splits a manifest, to verify the manifests resulting from a subnet split.
@@ -180,6 +140,9 @@ enum Opt {
         /// Type of the original subnet (to also be applied to `to_subnet`).
         #[clap(long, required = true)]
         subnet_type: SubnetType,
+        /// Batch time to apply to the state of `to_subnet` (the new subnet).
+        #[clap(long, required = true)]
+        batch_time_nanos: u64,
         /// Canister ID ranges migrated to the new subnet.
         #[clap(long, required = true, multiple_values(true))]
         migrated_ranges: Vec<CanisterIdRange>,
@@ -198,9 +161,6 @@ fn main() {
         } => commands::import_state::do_import(state, config, height),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
         Opt::VerifyManifest { file } => commands::verify_manifest::do_verify_manifest(&file),
-        Opt::CanisterHash { file, canister } => {
-            commands::verify_manifest::do_canister_hash(&file, &canister)
-        }
         Opt::ListStates { config } => commands::list::do_list(config),
         Opt::Decode { file } => commands::decode::do_decode(file),
         Opt::CanisterIdToHex { canister_id } => {
@@ -217,18 +177,27 @@ fn main() {
             subnet_id,
             retain,
             drop,
-        } => commands::split::do_split(root, subnet_id, retain, drop),
+            batch_time_nanos,
+        } => commands::split::do_split(
+            root,
+            subnet_id,
+            retain,
+            drop,
+            batch_time_nanos.map(Time::from_nanos_since_unix_epoch),
+        ),
         Opt::SplitManifest {
             path,
             from_subnet,
             to_subnet,
             subnet_type,
+            batch_time_nanos,
             migrated_ranges,
         } => commands::split_manifest::do_split_manifest(
             path,
             from_subnet.into(),
             to_subnet.into(),
             subnet_type,
+            Time::from_nanos_since_unix_epoch(batch_time_nanos),
             migrated_ranges,
         ),
     };

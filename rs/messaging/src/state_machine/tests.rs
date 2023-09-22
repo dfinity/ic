@@ -1,4 +1,5 @@
 use super::*;
+use crate::message_routing::CRITICAL_ERROR_BATCH_TIME_REGRESSION;
 use crate::{
     routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
     state_machine::StateMachineImpl,
@@ -16,9 +17,11 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterEcdsaPublicKey};
-use ic_types::{Height, PrincipalId, SubnetId};
+use ic_types::{Height, PrincipalId, SubnetId, Time};
+use maplit::btreemap;
 use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -45,6 +48,7 @@ struct StateMachineTestFixture {
     initial_state: ReplicatedState,
     network_topology: NetworkTopology,
     metrics: Arc<MessageRoutingMetrics>,
+    metrics_registry: MetricsRegistry,
 }
 
 /// Returns a test fixture for state machine tests with Mocks for Demux,
@@ -125,6 +129,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         initial_state,
         network_topology,
         metrics,
+        metrics_registry,
     }
 }
 
@@ -161,6 +166,7 @@ fn state_machine_populates_network_topology() {
             provided_batch,
             Default::default(),
             &test_registry_settings(),
+            Default::default(),
         );
 
         assert_eq!(state.metadata.network_topology, fixture.network_topology);
@@ -188,6 +194,7 @@ fn test_delivered_batch(provided_batch: Batch) {
             provided_batch,
             Default::default(),
             &test_registry_settings(),
+            Default::default(),
         );
     });
 }
@@ -218,4 +225,63 @@ fn test_delivered_batch_interface() {
     for i in 0..2 {
         param_batch_test(Height::from(27), i);
     }
+}
+
+#[test]
+fn test_batch_time_regression() {
+    // Batch with a batch_time of 1.
+    let provided_batch = BatchBuilder::new()
+        .batch_number(Height::new(1))
+        .time(Time::from_nanos_since_unix_epoch(1))
+        .build();
+
+    // Fixture wrapping a state with a batch_time 2 (ahead of the batch).
+    let mut fixture = test_fixture(&provided_batch);
+    fixture.initial_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(2);
+
+    with_test_replica_logger(|log| {
+        let _ = &fixture;
+        let state_machine = StateMachineImpl::new(
+            fixture.scheduler,
+            fixture.demux,
+            fixture.stream_builder,
+            log,
+            fixture.metrics,
+        );
+
+        assert_eq!(
+            Some(0),
+            fetch_critical_error_batch_time_regression_count(&fixture.metrics_registry)
+        );
+        assert_eq!(
+            Time::from_nanos_since_unix_epoch(2),
+            fixture.initial_state.metadata.batch_time,
+        );
+
+        let state = state_machine.execute_round(
+            fixture.initial_state,
+            fixture.network_topology.clone(),
+            provided_batch,
+            Default::default(),
+            &test_registry_settings(),
+            Default::default(),
+        );
+
+        assert_eq!(
+            Some(1),
+            fetch_critical_error_batch_time_regression_count(&fixture.metrics_registry)
+        );
+        assert_eq!(
+            Time::from_nanos_since_unix_epoch(2),
+            state.metadata.batch_time,
+        );
+    });
+}
+
+fn fetch_critical_error_batch_time_regression_count(
+    metrics_registry: &MetricsRegistry,
+) -> Option<u64> {
+    fetch_int_counter_vec(metrics_registry, "critical_errors")
+        .get(&btreemap! { "error".to_string() => CRITICAL_ERROR_BATCH_TIME_REGRESSION.to_string() })
+        .cloned()
 }

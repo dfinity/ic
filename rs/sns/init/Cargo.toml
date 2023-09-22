@@ -7,12 +7,11 @@ edition = "2021"
 path = "src/lib.rs"
 
 [dependencies]
-anyhow = "1.0.57"
-base64 = "0.13.0"
+base64 = "0.11.0"
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-index = { path = "../../rosetta-api/icrc1/index" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
@@ -41,6 +40,7 @@ assert_approx_eq = "1.1.0"
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-sns-init-protobuf-generator = { path = "protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+num-traits = "0.2"
 tempfile = "3.1.0"
 
 [features]

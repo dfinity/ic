@@ -19,7 +19,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
-ic-crypto-sha = {path = "../../crypto/sha"}
+ic-crypto-sha2 = {path = "../../crypto/sha2" }
 ic-ic00-types = { path = "../../types/ic00_types"}
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -39,6 +39,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-governance = { path = "../../sns/governance" }
+ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }

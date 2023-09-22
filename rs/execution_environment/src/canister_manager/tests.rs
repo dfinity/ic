@@ -17,18 +17,15 @@ use ic_config::{
     execution_environment::Config, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterSettingsArgsBuilder, CanisterStatusType, CreateCanisterArgs,
     EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
-use ic_interfaces::{
-    execution_environment::{
-        ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
-    },
-    messages::CanisterCall,
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -64,7 +61,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, StopCanisterContext},
+    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, QueryAllocation, SubnetId, Time, UserId,
@@ -113,8 +110,7 @@ lazy_static! {
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
-        subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
-        subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+        subnet_memory_saturation: ResourceSaturation::default(),
     };
 }
 
@@ -1517,7 +1513,10 @@ fn install_puts_canister_back_after_invalid_wasm() {
             (res.0, res.1),
             (
                 MAX_NUM_INSTRUCTIONS
-                    - Config::default().cost_to_compile_wasm_instruction * wasm_len as u64,
+                    - Config::default()
+                        .embedders_config
+                        .cost_to_compile_wasm_instruction
+                        * wasm_len as u64,
                 Err(CanisterManagerError::Hypervisor(
                     canister_id,
                     HypervisorError::InvalidWasm(WasmValidationError::InvalidImportSection(
@@ -1661,6 +1660,7 @@ fn stop_a_running_canister() {
         let stop_context = StopCanisterContext::Canister {
             sender,
             reply_callback: CallbackId::new(0),
+            call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::zero(),
         };
         assert_eq!(
@@ -1707,6 +1707,7 @@ fn stop_a_stopped_canister() {
         let stop_context = StopCanisterContext::Ingress {
             sender,
             message_id: message_test_id(0),
+            call_id: Some(StopCanisterCallId::new(0)),
         };
         assert_eq!(
             canister_manager.stop_canister(canister_id, stop_context, &mut state),
@@ -1741,6 +1742,7 @@ fn stop_a_stopped_canister_from_another_canister() {
         let stop_context = StopCanisterContext::Canister {
             sender: controller,
             reply_callback: CallbackId::from(0),
+            call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::from(cycles),
         };
         assert_eq!(
@@ -1795,6 +1797,7 @@ fn stop_a_canister_with_incorrect_controller() {
         let stop_context = StopCanisterContext::Ingress {
             sender: other_sender,
             message_id: msg_id,
+            call_id: Some(StopCanisterCallId::new(0)),
         };
 
         assert_eq!(
@@ -1822,6 +1825,7 @@ fn stop_a_non_existing_canister() {
                 StopCanisterContext::Ingress {
                     sender: user_test_id(1),
                     message_id: message_test_id(0),
+                    call_id: Some(StopCanisterCallId::new(0)),
                 },
                 &mut state
             ),
@@ -1967,6 +1971,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
         let stop_context = StopCanisterContext::Ingress {
             sender: user_test_id(1),
             message_id: message_test_id(0),
+            call_id: Some(StopCanisterCallId::new(0)),
         };
         canister.system_state.add_stop_context(stop_context.clone());
 

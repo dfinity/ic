@@ -33,7 +33,7 @@ impl From<ProcessError> for State {
             ProcessError::AwaitingAcmeOrderCreation => State::PendingOrder,
             ProcessError::AwaitingDnsPropagation => State::PendingChallengeResponse,
             ProcessError::AwaitingAcmeOrderReady => State::PendingAcmeApproval,
-            ProcessError::FailedUserConfigurationCheck => State::PendingAcmeApproval,
+            ProcessError::FailedUserConfigurationCheck => State::PendingOrder,
             ProcessError::UnexpectedError(_) => State::Failed(e.to_string()),
         }
     }

@@ -3,6 +3,7 @@ use crate::{
     checkpoint::make_checkpoint, tip::spawn_tip_thread, ManifestMetrics, StateManagerMetrics,
     NUMBER_OF_CHECKPOINT_THREADS,
 };
+use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
@@ -33,7 +34,7 @@ use ic_types::{
     state_sync::{FileInfo, Manifest, CURRENT_STATE_SYNC_VERSION},
     Cycles, Height,
 };
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 use tempfile::TempDir;
 
 /// ID of original subnet A. And of subnet A' after the split.
@@ -111,7 +112,7 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 fn read_write_roundtrip() {
     with_test_replica_logger(|log| {
         // Create a new state layout.
-        let tmp = new_state_layout(log.clone());
+        let (tmp, _) = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
         let metrics_registry = MetricsRegistry::new();
         let layout = StateLayout::try_new(log.clone(), root, &metrics_registry).unwrap();
@@ -162,7 +163,7 @@ fn read_write_roundtrip() {
 fn split_subnet_a_prime() {
     with_test_replica_logger(|log| {
         // Create a new state layout.
-        let tmp = new_state_layout(log.clone());
+        let (tmp, _) = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
 
         let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
@@ -172,6 +173,7 @@ fn split_subnet_a_prime() {
             root.clone(),
             SUBNET_A.get(),
             Vec::from(SUBNET_A_RANGES).try_into().unwrap(),
+            None,
             &MetricsRegistry::new(),
             log.clone(),
         )
@@ -201,14 +203,42 @@ fn split_subnet_a_prime() {
     })
 }
 
-/// Tests splitting subnet B (to host canisters 2 and 4; different subnet ID)
-/// from subnet A (hosting canisters 1, 2, and 3; no canister 4).
+/// Tests splitting subnet A' while providing an explicit `batch_time`.
 #[test]
-fn split_subnet_b() {
+fn split_subnet_a_prime_with_batch_time() {
     with_test_replica_logger(|log| {
         // Create a new state layout.
-        let tmp = new_state_layout(log.clone());
+        let (tmp, batch_time) = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
+
+        let res = split(
+            root,
+            SUBNET_A.get(),
+            Vec::from(SUBNET_A_RANGES).try_into().unwrap(),
+            Some(batch_time),
+            &MetricsRegistry::new(),
+            log,
+        );
+
+        assert_matches!(res, Err(_));
+    })
+}
+
+/// Common logic for splitting subnet B with or without a provided `batch_time`.
+/// Tests splitting subnet B (to host canisters 2 and 4; different subnet ID)
+/// from subnet A (hosting canisters 1, 2, and 3; no canister 4).
+///
+/// `new_subnet_batch_time_delta` is a `Duration` to be added to the
+/// `batch_time` of the last checkpoint to produce a `new_subnet_batch_time` to
+/// pass to the `split()` function. If `None`, then `None` is previded as the
+/// `new_subnet_batch_time`.
+fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
+    with_test_replica_logger(|log| {
+        // Create a new state layout.
+        let (tmp, batch_time) = new_state_layout(log.clone());
+        let root = tmp.path().to_path_buf();
+
+        let new_subnet_batch_time = new_subnet_batch_time_delta.map(|delta| batch_time + delta);
 
         let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
         assert_eq!(SUBNET_A_FILES, manifest_files(&manifest_a).as_slice());
@@ -217,6 +247,7 @@ fn split_subnet_b() {
             root.clone(),
             SUBNET_B.get(),
             Vec::from(SUBNET_B_RANGES).try_into().unwrap(),
+            new_subnet_batch_time,
             &MetricsRegistry::new(),
             log.clone(),
         )
@@ -242,7 +273,10 @@ fn split_subnet_b() {
             if file == SPLIT_MARKER_FILE {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_b));
             } else if file == SYSTEM_METADATA_FILE {
-                let expected = SystemMetadata::new(SUBNET_B, SubnetType::Application);
+                let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::Application);
+                // `batch_time` should be the provided `new_subnet_batch_time` (if `Some`); or
+                // else the original subnet's `batch_time`.
+                expected.batch_time = new_subnet_batch_time.unwrap_or(batch_time);
                 assert_eq!(expected, deserialize_system_metadata(&root, height_b))
             } else {
                 // All other files should be unmodified (`subnet_queues.pbuf` was never
@@ -253,9 +287,30 @@ fn split_subnet_b() {
     })
 }
 
+/// Test splitting subnet B without an explicit `new_subnet_batch_delta`.
+#[test]
+fn split_subnet_b() {
+    split_subnet_b_helper(None);
+}
+
+/// Test splitting subnet B with `new_subnet_batch_delta == batch_delta`.
+#[test]
+fn split_subnet_b_with_equal_batch_delta() {
+    split_subnet_b_helper(Some(Duration::from_nanos(0)));
+}
+
+/// Test splitting subnet B with `new_subnet_batch_delta > batch_delta`.
+#[test]
+fn split_subnet_b_with_greater_batch_delta() {
+    split_subnet_b_helper(Some(Duration::from_nanos(13)));
+}
+
 /// Creates a state layout under a temporary directory, with 3 canisters:
 /// `CANISTER_1`, `CANISTER_2` and `CANISTER_3`.
-fn new_state_layout(log: ReplicaLogger) -> TempDir {
+///
+/// Returns a handle to the `TempDir` holding the state layoutl; and the batch
+/// time of the last (and only) checkpoint within.
+fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let tmp = tmpdir("checkpoint");
     let root = tmp.path().to_path_buf();
     let metrics_registry = MetricsRegistry::new();
@@ -303,6 +358,7 @@ fn new_state_layout(log: ReplicaLogger) -> TempDir {
         mock_time(),
         (1u64 << 30).into(),
     );
+    state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();
 
     // Make subnet_queues non-empty
     state
@@ -357,7 +413,7 @@ fn new_state_layout(log: ReplicaLogger) -> TempDir {
         );
     }
 
-    tmp
+    (tmp, state.metadata.batch_time)
 }
 
 #[test]

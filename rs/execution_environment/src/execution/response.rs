@@ -14,13 +14,14 @@ use ic_embedders::wasm_executor::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterMessage, CanisterMessageOrTask};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{CallContextId, CallbackId, Payload, Response};
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, Response,
+};
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
@@ -211,6 +212,12 @@ impl ResponseHelper {
     /// DTS relies on the invariant that once this validation succeeds, it will
     /// also continue to succeed later on for the same canister while DTS
     /// execution is in progress.
+    //
+    // The concern about large `Err` variants is about propagation of large
+    // errors through the `?` operator, see https://rust-lang.github.io/rust-clippy/master/index.html#/result_large_err.
+    // In this case, the result is local to this module, so we allow the warning
+    // as keeping the `Result` is more readable than using a custom enum.
+    #[allow(clippy::result_large_err)]
     fn validate(
         self,
         call_context: &CallContext,
@@ -829,6 +836,7 @@ pub fn execute_response(
         clean_canister.memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
+        clean_canister.system_state.reserved_balance(),
     );
 
     let original = OriginalContext {
@@ -876,6 +884,7 @@ pub fn execute_response(
     let api_type = match &response.response_payload {
         Payload::Data(payload) => ApiType::reply_callback(
             time,
+            original.call_origin.get_principal(),
             payload.to_vec(),
             helper.refund_for_sent_cycles(),
             call_context_id,
@@ -884,6 +893,7 @@ pub fn execute_response(
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,
+            original.call_origin.get_principal(),
             context.clone(),
             helper.refund_for_sent_cycles(),
             call_context_id,
@@ -958,6 +968,7 @@ fn execute_response_cleanup(
     };
     let result = round.hypervisor.execute_dts(
         ApiType::Cleanup {
+            caller: original.call_origin.get_principal(),
             time: original.time,
         },
         helper.canister().execution_state.as_ref().unwrap(),

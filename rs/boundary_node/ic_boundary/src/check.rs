@@ -1,6 +1,7 @@
 use std::{
     fmt,
     num::Wrapping,
+    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -12,17 +13,19 @@ use async_trait::async_trait;
 use bytes::Buf;
 use candid::Principal;
 use dashmap::DashMap;
+use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use opentelemetry::{baggage::BaggageExt, trace::FutureExt, Context as TlmContext, KeyValue};
 use simple_moving_average::{SingleSumSMA, SMA};
-use tracing::{error, info, warn};
+use url::Url;
 
 use crate::{
+    core::{Run, WithRetryLimited},
+    http::HttpClient,
     persist::Persist,
     snapshot::RoutingTable,
     snapshot::{Node, Subnet},
-    Run, WithRetryLimited,
 };
 
 struct NodeState {
@@ -54,11 +57,11 @@ pub enum CheckError {
 impl CheckError {
     pub fn short(&self) -> &str {
         match self {
-            Self::Generic(e) => "generic",
-            Self::Network(e) => "network",
-            Self::Http(code) => "http",
-            Self::ReadBody(e) => "read_body",
-            Self::Cbor(e) => "cbor",
+            Self::Generic(_) => "generic",
+            Self::Network(_) => "network",
+            Self::Http(_) => "http",
+            Self::ReadBody(_) => "read_body",
+            Self::Cbor(_) => "cbor",
             Self::Health => "health",
         }
     }
@@ -77,8 +80,8 @@ impl fmt::Display for CheckError {
     }
 }
 
-pub struct Runner<'a, P: Persist, C: Check> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+pub struct Runner<P: Persist, C: Check> {
+    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
     node_states: Arc<DashMap<Principal, NodeState>>,
     last_check_id: Wrapping<u64>,
     min_ok_count: u8,
@@ -99,7 +102,7 @@ fn nodes_sort_by_score(mut nodes: Vec<NodeCheckResult>) -> Vec<Node> {
     let latency_max = latencies.into_iter().reduce(f32::max).unwrap_or(0.0);
 
     // Normalize latency to 0..1 range
-    nodes.iter_mut().for_each(|mut x| {
+    nodes.iter_mut().for_each(|x| {
         x.average_latency = (x.average_latency - latency_min) / (latency_max - latency_min)
     });
 
@@ -110,9 +113,9 @@ fn nodes_sort_by_score(mut nodes: Vec<NodeCheckResult>) -> Vec<Node> {
     nodes.into_iter().map(|x| x.node).collect()
 }
 
-impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
+impl<P: Persist, C: Check> Runner<P, C> {
     pub fn new(
-        published_routing_table: &'a ArcSwapOption<RoutingTable>,
+        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
         min_ok_count: u8,
         max_height_lag: u64,
         persist: P,
@@ -252,7 +255,7 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
         };
 
         // Filter out nodes that fail the predicates
-        let mut nodes = nodes
+        let nodes = nodes
             .into_iter()
             .filter(|x| x.height >= min_height) // Filter below min_height
             .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
@@ -264,7 +267,7 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
 }
 
 #[async_trait]
-impl<'a, P: Persist, C: Check> Run for Runner<'a, P, C> {
+impl<P: Persist, C: Check> Run for Runner<P, C> {
     async fn run(&mut self) -> Result<(), Error> {
         // Clone the the latest routing table from the registry if there's one
         let routing_table = self
@@ -319,33 +322,33 @@ pub trait Check: Send + Sync {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError>;
 }
 
-pub struct Checker<'a> {
-    http_client: &'a reqwest::Client,
+pub struct Checker {
+    http_client: Arc<dyn HttpClient>,
 }
 
-impl<'a> Checker<'a> {
-    pub fn new(http_client: &'a reqwest::Client) -> Self {
+impl Checker {
+    pub fn new(http_client: Arc<dyn HttpClient>) -> Self {
         Self { http_client }
     }
 }
 
 #[async_trait]
-impl<'a> Check for Checker<'a> {
+impl Check for Checker {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
-        let request = match self
-            .http_client
-            .get(format!("https://{}:{}/api/v2/status", node.id, node.port))
-            .build()
-        {
-            Ok(v) => v,
-            Err(e) => return Err(CheckError::Generic(e.to_string())),
-        };
+        // Create request
+        let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
+            .map_err(|err| CheckError::Generic(err.to_string()))?;
 
+        let request = reqwest::Request::new(Method::GET, u);
+
+        // Execute request
         let start_time = Instant::now();
-        let response = match self.http_client.execute(request).await {
-            Ok(v) => v,
-            Err(e) => return Err(CheckError::Network(e.to_string())),
-        };
+
+        let response = self
+            .http_client
+            .execute(request)
+            .await
+            .map_err(|err| CheckError::Network(err.to_string()))?;
 
         let latency = start_time.elapsed();
 

@@ -436,8 +436,11 @@ pub mod test {
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
         let (stream_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        // Try to connect to a non routable IP address to force a timeout to happen.
-        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 0)), 80);
+        // Try to connect to a non routable IP address to force a timeout to happen. If a routable IP is used,
+        // then the connection either succeeds or other errors are generated.
+        // https://stackoverflow.com/questions/100841/artificially-create-a-connection-timeout-error
+        // The chosen ephemeral port is random and should not affect the test.
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 0)), 55535);
 
         let stream_config = StreamConfig {
             address,

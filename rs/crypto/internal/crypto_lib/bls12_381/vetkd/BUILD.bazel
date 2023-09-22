@@ -44,6 +44,7 @@ rust_bench(
     srcs = ["benches/vetkd.rs"],
     deps = [
         ":vetkd",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
         "@crate_index//:rand_0_8_4",
     ],

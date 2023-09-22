@@ -65,6 +65,7 @@ fn test_transfer_requests_to_operations() {
             &[Request::Transfer(LedgerOperation::Transfer {
                 from: test_account(1),
                 to: test_account(2),
+                spender: None,
                 amount: Tokens::from_e8s(100),
                 fee: Tokens::from_e8s(10),
             })],
@@ -95,6 +96,7 @@ fn test_transfer_and_stake_requests_to_operations() {
                 Request::Transfer(LedgerOperation::Transfer {
                     from: test_account(1),
                     to: test_account(2),
+                    spender: None,
                     amount: Tokens::from_e8s(100),
                     fee: Tokens::from_e8s(10),
                 }),
@@ -134,12 +136,14 @@ fn test_can_handle_multiple_transfers() {
                 Request::Transfer(LedgerOperation::Transfer {
                     from: test_account(1),
                     to: test_account(2),
+                    spender: None,
                     amount: Tokens::from_e8s(100),
                     fee: Tokens::from_e8s(10),
                 }),
                 Request::Transfer(LedgerOperation::Transfer {
                     from: test_account(3),
                     to: test_account(4),
+                    spender: None,
                     amount: Tokens::from_e8s(200),
                     fee: Tokens::from_e8s(20),
                 }),

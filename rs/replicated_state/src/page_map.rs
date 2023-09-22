@@ -16,11 +16,10 @@ pub use page_allocator::{
 // operation. This allows us to simplify canister state management: we can
 // simply have a copy of the whole PageMap in every canister snapshot.
 use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
-use int_map::IntMap;
+use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
@@ -28,12 +27,8 @@ use std::os::unix::io::RawFd;
 use std::path::Path;
 use std::sync::Arc;
 
-// When persisting PageDeltas, the maximum gap between dirty pages
-// that can be combined into a single vectorized write
-const MAXIMUM_GAP: u64 = 200;
-// When persisting PageDeltas, the maximum write amplification
-// (written pages/dirty pages)
-const MAXIMUM_WRITE_AMPLIFICATION: f64 = 5.0;
+// When persisting data we expand dirty pages to an aligned bucket of given size.
+const WRITE_BUCKET_PAGES: u64 = 16;
 
 struct WriteBuffer<'a> {
     content: Vec<&'a [u8]>,
@@ -87,10 +82,13 @@ impl PageDelta {
         self.0.get(page_index.get())
     }
 
-    /// Gets an inclusive range of pages that contains the given page.
-    fn bounds(&self, page_index: PageIndex) -> (Option<PageIndex>, Option<PageIndex>) {
+    /// Returns (lower, upper), where:
+    /// - lower is the largest index/page smaller or equal to the given page index.
+    /// - upper is the smallest index/page larger or equal to the given page index.
+    fn bounds(&self, page_index: PageIndex) -> Bounds<PageIndex, Page> {
         let (lower, upper) = self.0.bounds(page_index.get());
-        (lower.map(PageIndex::new), upper.map(PageIndex::new))
+        let map_index = |(k, v)| (PageIndex::new(k), v);
+        (lower.map(map_index), upper.map(map_index))
     }
 
     /// Modifies this delta in-place by applying all the entries in `rhs` to it.
@@ -101,58 +99,6 @@ impl PageDelta {
     /// Enumerates all the pages in this delta.
     fn iter(&self) -> impl Iterator<Item = (PageIndex, &'_ Page)> {
         self.0.iter().map(|(idx, page)| (PageIndex::new(idx), page))
-    }
-
-    /// When persisting PageDelta to disk, it is beneficial to reduce
-    /// the number of write syscalls due to file fragmentation. We
-    /// achieve this by grouping neighboring dirty pages, as well as
-    /// re-writing small gaps between pages. This function determines
-    /// the maximum gap size to re-write, in order to keep write
-    /// amplification (ratio of writes to dirty pages) below the
-    /// target.
-    /// Note that the file system internally would also group
-    /// neighbouring write calls as long as there is no fsync between
-    /// them. As such, the main benefit comes from rewriting small
-    /// gaps, as opposed to the vectored writes.
-    fn write_amplification_to_gap(
-        &self,
-        maximum_gap: u64,
-        maximum_write_amplification: f64,
-    ) -> u64 {
-        if self.is_empty() || maximum_write_amplification <= 1.0 {
-            return 0;
-        }
-
-        // Histogram of gaps and number of dirty pages
-        let (gaps, dirty_pages) = {
-            let mut gaps: BTreeMap<u64, u64> = BTreeMap::default();
-            assert!(!self.is_empty());
-            let mut last_index = self.iter().next().unwrap().0;
-            let mut count: u64 = 0;
-            for (index, _) in self.iter().skip(1) {
-                assert!(index.get() > last_index.get());
-                let gap = index.get() - last_index.get() - 1;
-                if gap > 0 && gap <= maximum_gap {
-                    *gaps.entry(gap).or_default() += 1;
-                }
-                last_index = index;
-                count += 1;
-            }
-            (gaps, count)
-        };
-
-        let mut amplified: u64 = 0;
-        for (gap, count) in gaps {
-            if (amplified + gap * count) as f64
-                > dirty_pages as f64 * (maximum_write_amplification - 1.0)
-            {
-                assert!(gap > 0);
-                return gap - 1;
-            }
-            amplified += gap * count;
-        }
-
-        maximum_gap
     }
 
     /// Returns true if the page delta contains no pages.
@@ -259,18 +205,30 @@ pub struct FileDescriptor {
 /// to simplify arithmetic operations.
 pub type FileOffset = off_t;
 
-/// The result of the `get_memory_region(page_index)` function. It specifies the
-/// largest contiguous page range that contains the given page such that all
-/// pages share the same backing store. There are three possible cases:
-/// - The page is not in the current `PageMap` and it is zero initialized.
-/// - The page maps to the checkpoint file.
-/// - The page is in the page delta of the current `PageMap`. In this case the
-///   range is a singleton and its contents need to be copied out.
+/// The result of the get_memory_instructions() function.
+/// Contains sequence of `instructions` for either a range that can be memory mapped, or a data
+/// that can be copied. The total range covered is given by `range`.
+/// The ranges in `instructions` can overlap. To correctly apply the instructions they have to be applied
+/// in order.
+/// The vector can be empty, in which case nothing needs to be done.
+/// Note: For an entry in `instructions` of the form `(range, Data(bytes))`, the lengths of range and bytes
+/// will be consistent. For an entry of the form `(range, MemoryMap(fd, offset))` the length
+/// of the memory map can be inferred from `range`.
 #[derive(Debug, PartialEq)]
-pub enum MemoryRegion<'a> {
-    Zeros(Range<PageIndex>),
-    BackedByFile(Range<PageIndex>, FileDescriptor),
-    BackedByPage(&'a PageBytes),
+pub struct MemoryInstructions<'a> {
+    pub range: Range<PageIndex>,
+    pub instructions: Vec<MemoryInstruction<'a>>,
+}
+
+/// A single memory instruction for a range, see `MemoryInstructions`.
+pub type MemoryInstruction<'a> = (Range<PageIndex>, MemoryMapOrData<'a>);
+
+/// Description of range of pages.
+/// See also `MemoryInstructions`.
+#[derive(Debug, PartialEq)]
+pub enum MemoryMapOrData<'a> {
+    MemoryMap(FileDescriptor, usize),
+    Data(&'a [u8]),
 }
 
 /// PageMap is a data structure that represents an image of a canister virtual
@@ -449,6 +407,13 @@ impl PageMap {
         })
     }
 
+    /// Returns the iterator over delta pages in this `PageMap`
+    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> + '_ {
+        self.page_delta
+            .iter()
+            .map(|(index, page)| (index, page.contents()))
+    }
+
     /// Returns the page with the specified `page_index`.
     pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
         match self.page_delta.get_page(page_index) {
@@ -457,42 +422,148 @@ impl PageMap {
         }
     }
 
-    /// Returns the largest contiguous range of pages that contains the given
-    /// page such that all pages share the same backing store.
-    pub fn get_memory_region(&self, page_index: PageIndex) -> MemoryRegion {
-        match self.page_delta.get_page(page_index) {
-            Some(page) => MemoryRegion::BackedByPage(page),
-            None => {
-                let (start, end) = self.page_delta.bounds(page_index);
-                let start = match start {
-                    None => PageIndex::new(0),
-                    Some(start) => {
-                        // Here `start` is a page in `page_delta`. We need to skip that page to
-                        // get to the start of the checkpoint region that contains `page_index`.
-                        PageIndex::new(start.get() + 1)
+    /// Returns a sequence of instructions on how to prepare a memory region. It always returns instructions for at least `min_range`,
+    /// but the range can be as large as `max_range`, as long as there are no more than `target_complexity` instructions.
+    /// Note that `target_complexity` is only a guide. The result can have more instructions if they are contained in `min_range`, or more
+    /// if there are not enough instructions to fill `max_range`.
+    /// Assumptions:
+    ///       * `min_range` ⊆ `max_range`
+    ///       * The entire memory has already been initialized according to `get_base_memory_instructions`
+    ///       * MemoryInstructions are applied in the correct order, see description of `MemoryInstructions`
+    /// Guarantees:
+    ///       * `min_range` ⊆ result.range ⊆ `max_range`
+    ///       * For any page in result.range, reading that page from the memory region is equal to calling
+    ///         `get_page(page)`.
+    pub fn get_memory_instructions(
+        &self,
+        min_range: Range<PageIndex>,
+        max_range: Range<PageIndex>,
+        target_complexity: usize,
+    ) -> MemoryInstructions {
+        debug_assert!(min_range.start >= max_range.start && min_range.end <= max_range.end);
+
+        let mut instructions = Vec::new();
+
+        // Grow result_range to the right.
+        // If `include` is false, stop just short of the next delta page, otherwise include it into instructions.
+        fn grow_right<'a>(
+            page_delta: &'a PageDelta,
+            instructions: &mut Vec<MemoryInstruction<'a>>,
+            result_range: &mut Range<PageIndex>,
+            max_range: &Range<PageIndex>,
+            include: bool,
+        ) {
+            debug_assert!(result_range.end <= max_range.end);
+            if result_range.end < max_range.end {
+                let (_, upper_bound) = page_delta.bounds(result_range.end);
+                match upper_bound {
+                    Some((key, page)) if key < max_range.end => {
+                        if include {
+                            let end = PageIndex::new(key.get() + 1);
+                            instructions.push((key..end, MemoryMapOrData::Data(page.contents())));
+                            result_range.end = end;
+                        } else {
+                            result_range.end = key;
+                        }
                     }
-                };
-                let end = match end {
-                    None => PageIndex::new(u64::MAX),
-                    Some(end) => {
-                        // Here `end` is a page in `page_delta`. Since we will use it as the end of
-                        // half-open `Range`, so we can take it as is without decrementing.
-                        end
-                    }
-                };
-                let range = Range { start, end };
-                assert!(range.contains(&page_index));
-                self.checkpoint.get_memory_region(page_index, range)
+                    _ => result_range.end = max_range.end,
+                }
             }
+        }
+
+        // Grow result_range to the left.
+        // If `include` is false, stop just short of the next delta page, otherwise include it into instructions.
+        // Never grows past `max_range`.
+        fn grow_left<'a>(
+            page_delta: &'a PageDelta,
+            instructions: &mut Vec<MemoryInstruction<'a>>,
+            result_range: &mut Range<PageIndex>,
+            max_range: &Range<PageIndex>,
+            include: bool,
+        ) {
+            debug_assert!(result_range.start >= max_range.start);
+            if result_range.start > max_range.start {
+                debug_assert!(result_range.start.get() > 0);
+                let (lower_bound, _) =
+                    page_delta.bounds(PageIndex::new(result_range.start.get() - 1));
+                match lower_bound {
+                    Some((key, page)) if key >= max_range.start => {
+                        let end = PageIndex::new(key.get() + 1);
+                        if include {
+                            instructions.push((key..end, MemoryMapOrData::Data(page.contents())));
+                            result_range.start = key;
+                        } else {
+                            result_range.start = end;
+                        }
+                    }
+                    _ => result_range.start = max_range.start,
+                }
+            }
+        }
+
+        let mut result_range = min_range.start..min_range.start;
+
+        // Find all deltas in min_range
+        while result_range != min_range {
+            grow_right(
+                &self.page_delta,
+                &mut instructions,
+                &mut result_range,
+                &min_range, // Only grow to min_range in the first step
+                true,
+            );
+        }
+
+        // Extend range up to max_range by growing right first
+        while instructions.len() < target_complexity && result_range.end < max_range.end {
+            grow_right(
+                &self.page_delta,
+                &mut instructions,
+                &mut result_range,
+                &max_range,
+                true,
+            );
+        }
+
+        // Extend by growing left
+        while instructions.len() < target_complexity && result_range.start > max_range.start {
+            grow_left(
+                &self.page_delta,
+                &mut instructions,
+                &mut result_range,
+                &max_range,
+                true,
+            );
+        }
+
+        // Grow result_range to the edge of the next deltas, but do not include them
+        grow_left(
+            &self.page_delta,
+            &mut instructions,
+            &mut result_range,
+            &max_range,
+            false,
+        );
+        grow_right(
+            &self.page_delta,
+            &mut instructions,
+            &mut result_range,
+            &max_range,
+            false,
+        );
+
+        MemoryInstructions {
+            range: result_range,
+            instructions,
         }
     }
 
-    /// Returns the whole checkpoint memory region.
-    pub fn get_checkpoint_memory_region(&self) -> MemoryRegion {
-        let start = PageIndex::new(0);
-        let end = PageIndex::new(u64::MAX);
-        self.checkpoint
-            .get_memory_region(start, Range { start, end })
+    /// Returns how to memory map the base layer of this PageMap
+    /// These instructions are generally cheap and are supposed to be used to initialize a memory region.
+    /// The intention is that the instructions from this function are applied first and only once. The more expensive
+    /// instructions from `get_memory_instructions(range)` are then applied on top.
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+        self.checkpoint.get_memory_instructions()
     }
 
     /// Removes the page delta from this page map.
@@ -598,37 +669,36 @@ impl PageMap {
         page_delta: &PageDelta,
         path: &Path,
     ) -> Result<(), PersistenceError> {
-        let mut opt_buffer: Option<WriteBuffer> = None;
-        let maximum_gap =
-            page_delta.write_amplification_to_gap(MAXIMUM_GAP, MAXIMUM_WRITE_AMPLIFICATION);
+        // Empty delta
+        if page_delta.max_page_index().is_none() {
+            return Ok(());
+        }
 
-        for (index, page) in page_delta.iter() {
-            if let Some(buffer) = &mut opt_buffer {
-                let next_index = buffer.start_index.get() + buffer.content.len() as u64;
-                if index.get() <= next_index + maximum_gap {
-                    // TODO(MR-233) Consider using get_memory_region
-                    for copy_index in next_index..index.get() {
-                        let content = self.get_page(copy_index.into());
-                        buffer.content.push(content);
-                    }
+        let mut last_applied_index: Option<PageIndex> = None;
+        let num_host_pages = self.num_host_pages() as u64;
+        for (index, _) in page_delta.iter() {
+            debug_assert!(self.page_delta.0.get(index.get()).is_some());
+            assert!(index < num_host_pages.into());
 
-                    buffer.content.push(page.contents());
-                    continue;
+            if last_applied_index.is_some() && last_applied_index.unwrap() >= index {
+                continue;
+            }
+
+            let bucket_start_index =
+                PageIndex::from((index.get() / WRITE_BUCKET_PAGES) * WRITE_BUCKET_PAGES);
+            let mut buffer = WriteBuffer {
+                content: vec![],
+                start_index: bucket_start_index,
+            };
+            for i in 0..WRITE_BUCKET_PAGES {
+                let index_to_apply = PageIndex::from(bucket_start_index.get() + i);
+                // We don't expand past the end of file to make bucketing transparent.
+                if index_to_apply.get() < num_host_pages {
+                    let content = self.get_page(index_to_apply);
+                    buffer.content.push(content);
+                    last_applied_index = Some(index_to_apply);
                 }
             }
-
-            if let Some(buffer) = &mut opt_buffer {
-                buffer.apply_to_file(file, path)?;
-            }
-
-            let content = page.contents();
-
-            opt_buffer = Some(WriteBuffer {
-                content: vec![content],
-                start_index: index,
-            });
-        }
-        if let Some(buffer) = &mut opt_buffer {
             buffer.apply_to_file(file, path)?;
         }
 

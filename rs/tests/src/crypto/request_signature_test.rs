@@ -509,7 +509,7 @@ impl Identity for EcdsaIdentity {
     }
 
     fn sign(&self, msg: &[u8]) -> Result<Signature, String> {
-        use ic_crypto_sha::Sha256;
+        use ic_crypto_sha2::Sha256;
         let msg = Sha256::hash(msg).to_vec();
         Ok(Signature {
             signature: Some(

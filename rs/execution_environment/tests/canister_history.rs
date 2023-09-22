@@ -1,5 +1,5 @@
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_ic00_types::{

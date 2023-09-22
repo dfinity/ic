@@ -1,44 +1,66 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/sha2",
+    "//rs/protobuf",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:thiserror",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tree_hash/test_utils",
+    "@crate_index//:assert_matches",
+    "@crate_index//:criterion",
+    "@crate_index//:maplit",
+    "@crate_index//:proptest",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:serde_cbor",
+]
 
 rust_library(
     name = "tree_hash",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_tree_hash",
     version = "0.8.0",
-    deps = [
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/sha",
-        "//rs/protobuf",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "tree_hash_test",
     crate = ":tree_hash",
-    deps = [
-        "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:assert_matches",
-        "@crate_index//:maplit",
-        "@crate_index//:proptest",
-        "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:serde_cbor",
-    ],
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "tree_hash_integration",
+    srcs = glob(["tests/**"]),
+    edition = "2021",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
 )
 
 rust_doc_test(
     name = "tree_hash_doc_test",
     crate = ":tree_hash",
-    deps = [
-        "@crate_index//:maplit",
-        "@crate_index//:proptest",
-        "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:serde_cbor",
-    ],
+    deps = DEV_DEPENDENCIES + ["@crate_index//:rand_chacha_0_3_1"],
+)
+
+rust_bench(
+    name = "tree_hash_bench",
+    testonly = True,
+    srcs = ["benches/tree_hash.rs"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
+)
+
+rust_bench(
+    name = "flat_map_bench",
+    testonly = True,
+    srcs = ["benches/flat_map.rs"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
 )

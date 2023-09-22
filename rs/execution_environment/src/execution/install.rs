@@ -13,11 +13,13 @@ use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
-use ic_interfaces::messages::CanisterCall;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_replicated_state::{CanisterState, SystemState};
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
+};
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
+use ic_types::messages::CanisterCall;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 /// Installs a new code in canister. The algorithm consists of five stages:
@@ -191,13 +193,14 @@ fn install_stage_2a_process_start_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
 
     info!(
         round.log,
         "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left(),
     );
 
@@ -294,12 +297,13 @@ fn install_stage_3_process_init_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
     info!(
         round.log,
         "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left();
     );
     if let Err(err) = result {
@@ -389,7 +393,10 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_init) execution of canister {}.", self.original.canister_id
@@ -397,6 +404,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         self.paused_wasm_execution.abort();
         (
             self.original.message,
+            self.original.call_id,
             self.original.prepaid_execution_cycles,
         )
     }
@@ -485,7 +493,10 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id,
@@ -493,6 +504,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         self.paused_wasm_execution.abort();
         (
             self.original.message,
+            self.original.call_id,
             self.original.prepaid_execution_cycles,
         )
     }

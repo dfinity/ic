@@ -1,5 +1,6 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
+use ic_utils::str::StrEllipsize;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum_macros::EnumIter;
@@ -15,7 +16,7 @@ pub enum TryFromError {
 /// of user-facing errors.
 ///
 /// See <https://sdk.dfinity.org/docs/interface-spec/index.html#reject-codes>
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 pub enum RejectCode {
     SysFatal = 1,
     SysTransient = 2,
@@ -222,6 +223,9 @@ impl TryFrom<u64> for ErrorCode {
     }
 }
 
+/// Maximum allowed length for UserError description.
+const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
+
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
@@ -247,6 +251,21 @@ impl fmt::Display for UserError {
 
 impl UserError {
     pub fn new<S: ToString>(code: ErrorCode, description: S) -> Self {
+        Self {
+            code,
+            description: description
+                .to_string()
+                .ellipsize(MAX_USER_ERROR_DESCRIPTION_LEN_BYTES, 50),
+        }
+    }
+
+    /// Constructs a `UserError` retaining the original description without truncation.
+    /// This ensures backward compatibility with ingress history.
+    ///
+    /// # Safety
+    ///
+    /// This constructor is specifically intended for state-loading. Avoid usage in other contexts.
+    pub fn from_proto<S: ToString>(code: ErrorCode, description: S) -> Self {
         Self {
             code,
             description: description.to_string(),

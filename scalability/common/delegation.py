@@ -22,8 +22,16 @@ def install_ii_canister(hostname: str):
 
     Write the canister ID to a file, which can re-read on next try for re-use.
     """
-    args = ["dfx", "deploy", "--network", hostname, "--no-wallet", "--yes"]
+    dfx_path = os.getenv("DFX_PATH", default="dfx")
+
+    args = [f"{dfx_path}", "deploy", "--network", hostname, "--no-wallet", "--yes"]
     logging.info("II: Installing canister: " + " ".join(args))
+
+    # Delete folder .dfx to make sure we don't reuse previous installations of II
+    dfx_dir = os.path.join(ii_path, "/.dfx")
+    if os.path.exists(dfx_dir):
+        logging.info("Deleting old .dfx folder ..")
+        subprocess.run(["rm", "-rf", dfx_dir])
 
     output = subprocess.run(
         args,
@@ -78,7 +86,8 @@ def get_ii_canister_id(host_url):
 
         identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
         logging.info("Initializing salt ..")
-        identityCanister.init_salt()
+
+        retry_call(identityCanister.init_salt)
 
     return ii_canister_id
 

@@ -1,18 +1,18 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    ListSubaccountsArgs, Log, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{
-    ChangeFeeCollector, InitArgs as LedgerInitArgs, LedgerArgument,
+    ChangeFeeCollector, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
     UpgradeArgs as LedgerUpgradeArgs,
 };
 use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
@@ -91,25 +91,26 @@ fn install_ledger(
     archive_options: ArchiveOptions,
     fee_collector_account: Option<Account>,
 ) -> CanisterId {
-    let args = LedgerArgument::Init(LedgerInitArgs {
-        minting_account: MINTER,
-        initial_balances,
-        transfer_fee: FEE,
-        token_name: TOKEN_NAME.to_string(),
-        token_symbol: TOKEN_SYMBOL.to_string(),
-        metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
-        ],
-        archive_options,
-        fee_collector_account,
-        max_memo_length: None,
-        feature_flags: None,
-    });
-    env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
+    let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+        .with_minting_account(MINTER)
+        .with_transfer_fee(FEE)
+        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
+        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
+        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
+        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
+        .with_archive_options(archive_options);
+    if let Some(fee_collector_account) = fee_collector_account {
+        builder = builder.with_fee_collector_account(fee_collector_account);
+    }
+    for (account, amount) in initial_balances {
+        builder = builder.with_initial_balance(account, amount);
+    }
+    env.install_canister(
+        ledger_wasm(),
+        Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
+        None,
+    )
+    .unwrap()
 }
 
 fn upgrade_ledger(
@@ -127,6 +128,8 @@ fn upgrade_ledger(
         change_fee_collector,
         max_memo_length: None,
         feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
     }));
     env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
         .unwrap()
@@ -163,6 +166,33 @@ fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     Decode!(&res, Status).expect("Failed to decode status response")
 }
 
+fn assert_reply(result: WasmResult) -> Vec<u8> {
+    match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(reject) => {
+            panic!("Expected a successful reply, got a reject: {}", reject)
+        }
+    }
+}
+
+fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
+    let request = HttpRequest {
+        method: "".to_string(),
+        url: "/logs".to_string(),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::new(),
+    };
+    let response = Decode!(
+        &assert_reply(
+            env.execute_ingress(index_id, "http_request", Encode!(&request).unwrap(),)
+                .expect("failed to get index-ng info")
+        ),
+        HttpResponse
+    )
+    .unwrap();
+    serde_json::from_slice(&response.body).expect("failed to parse index-ng log")
+}
+
 // Helper function that calls tick on env until either
 // the index canister has synced all the blocks up to the
 // last one in the ledger or enough attempts passed and therefore
@@ -180,7 +210,15 @@ fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger
             return;
         }
     }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+    let log = get_logs(env, index_id);
+    let mut log_lines = String::new();
+    for entry in log.entries {
+        log_lines.push_str(&format!(
+            "{} {}:{} {}\n",
+            entry.timestamp, entry.file, entry.line, entry.message
+        ));
+    }
+    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}.\nLogs:\n{}", num_blocks_synced, chain_length, log_lines);
 }
 
 fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
@@ -1094,6 +1132,57 @@ fn test_get_account_transactions_vs_old_index() {
                 }
                 wait_until_sync_is_completed(env, index_ng_id, ledger_id);
 
+                for account in transactions
+                    .iter()
+                    .flat_map(|tx| tx.accounts())
+                    .collect::<HashSet<Account>>()
+                {
+                    assert_eq!(
+                        old_get_account_transactions(env, index_id, account, None, u64::MAX),
+                        old_get_account_transactions(env, index_ng_id, account, None, u64::MAX),
+                    );
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn test_upgrade_index_to_index_ng() {
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    runner
+        .run(
+            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            |(transactions,)| {
+                let env = &StateMachine::new();
+                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                let index_ng_id = install_index_ng(env, ledger_id);
+                let index_id = install_index(env, ledger_id);
+
+                for CallerTransferArg {
+                    caller,
+                    transfer_arg,
+                } in &transactions
+                {
+                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                }
+
+                env.tick();
+                wait_until_sync_is_completed(env, index_ng_id, ledger_id);
+
+                // upgrade the index canister to the index-ng
+                let arg = IndexArg::Init(IndexInitArg {
+                    ledger_id: ledger_id.into(),
+                });
+                let arg = Encode!(&arg).unwrap();
+                env.upgrade_canister(index_id, index_ng_wasm(), arg)
+                    .unwrap();
+
+                wait_until_sync_is_completed(env, index_id, ledger_id);
+
+                // check that the old get_account_transactions still works and return
+                // the right data
                 for account in transactions
                     .iter()
                     .flat_map(|tx| tx.accounts())

@@ -17,6 +17,12 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 
+#[cfg(not(feature = "u256-tokens"))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
+
 const WASM_PAGE_SIZE: u64 = 65536;
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -118,7 +124,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 }
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
-    Block::decode(EncodedBlock::from(bytes))
+    Block::<Tokens>::decode(EncodedBlock::from(bytes))
         .unwrap_or_else(|e| ic_cdk::api::trap(&format!("failed to decode block {}: {}", txid, e)))
         .into()
 }

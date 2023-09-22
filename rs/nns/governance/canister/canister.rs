@@ -79,6 +79,48 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 // functions, which are defined immediately after.
 static mut GOVERNANCE: Option<Governance> = None;
 
+/*
+Recommendations for Using `unsafe` in the Governance canister:
+
+The state of governance is captured in a mutable static global variable to allow for
+concurrent mutable access and modification of state in the NNS Governance canister. Due
+to safety checks in Rust, accessing the static variable must be done in an unsafe block.
+While this is generally an unsafe practice in normal Rust code, due to the message model of
+the Internet Computer, only one instance of the state is ever accessed at once. The following
+are best practices for making use of the unsafe block:
+
+1. Initialization First:
+    - Always ensure the global state (e.g., `GOVERNANCE`) has been initialized before access.
+      Typically, this initialization occurs in `canister_init` or `canister_post_upgrade`.
+
+2. Understanding
+    - Lifetimes in Runtime Context: When working with asynchronous functions that use mutable
+      references to Governance pay close attention to the different runtimes the code may run in:
+        - In unit tests, all futures are immediately ready. Mutating a `'static` ref is still
+          valid since futures resolve instantly, but is an abuse of the rules in Rust.
+        - In mainnet, "self" refers to the `GOVERNANCE` static variable, which is initialized
+          once in functions like `canister_init` or `canister_post_upgrade`.
+
+3. Lifetime Assurances:
+    - In a `Drop` implementation that takes mutable references of `self`, the scope of any
+      `Governance` method ensures `&self` remains alive since Governance is always
+      initialized immediately after an upgrade in the post upgrade hook. Additionally,
+      since upgrades cannot happen during an asynchronous call (the upgrade waits for
+      all open-call-contexts to be closed), Governance will never be un-initialized
+      when an async method returns. De-referencing is acceptable in this context. For
+      instance, it's always safe when a `LedgerUpdateLock` goes out of scope,
+      but requires an `unsafe` block.
+
+4. Safety Checks Inside Unsafe:
+    - Although a block is marked `unsafe`, internal verifications are still essential. For
+      instance, `unlock_neuron` within the `Drop` implementation of `LedgerUpdateLock`
+      confirms the lock's existence despite being inside an unsafe context.
+
+5. Modifying references across and await:
+    - Since the CDK will put local variables on the stack, accessing a reference across an
+      await is not advised. It is best practice to reacquire a reference to the state after
+      an async call.
+*/
 /// Returns an immutable reference to the global state.
 ///
 /// This should only be called once the global state has been initialized, which
@@ -286,7 +328,8 @@ fn canister_pre_upgrade() {
     UPGRADES_MEMORY.with(|um| {
         let memory = um.borrow();
 
-        store_protobuf(memory.deref(), &governance().proto)
+        let governance_proto = governance_mut().take_heap_proto();
+        store_protobuf(memory.deref(), &governance_proto)
             .expect("Failed to encode protobuf pre_upgrade");
     });
 }
@@ -328,10 +371,6 @@ fn canister_post_upgrade() {
     };
 
     canister_init_(proto);
-
-    // TODO: remove this after the incident is fully resolved.
-    // Reset aging timestamps for https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26
-    governance_mut().maybe_reset_aging_timestamps()
 }
 
 #[cfg(feature = "test")]
@@ -722,7 +761,7 @@ fn get_neuron_ids_() -> Vec<NeuronId> {
     let votable = governance().get_neuron_ids_by_principal(&caller());
 
     governance()
-        .get_managed_neuron_ids_for(&votable)
+        .get_managed_neuron_ids_for(votable)
         .into_iter()
         .map(NeuronId)
         .collect()
@@ -739,7 +778,7 @@ fn get_network_economics_parameters() {
 #[candid_method(query, rename = "get_network_economics_parameters")]
 fn get_network_economics_parameters_() -> NetworkEconomics {
     governance()
-        .proto
+        .heap_data
         .economics
         .as_ref()
         .expect("Governance must have network economics.")
@@ -845,7 +884,7 @@ fn get_most_recent_monthly_node_provider_rewards() {
 fn get_most_recent_monthly_node_provider_rewards_() -> Option<MostRecentMonthlyNodeProviderRewards>
 {
     governance()
-        .proto
+        .heap_data
         .most_recent_monthly_node_provider_rewards
         .clone()
 }
