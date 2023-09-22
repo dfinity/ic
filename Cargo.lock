@@ -16324,6 +16324,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "ic-nervous-system-common",
+ "ic-nervous-system-proto",
  "ic-nns-governance",
  "ic-sns-swap",
  "rust_decimal",
