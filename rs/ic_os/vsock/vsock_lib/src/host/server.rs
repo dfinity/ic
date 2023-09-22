@@ -1,7 +1,7 @@
 use crate::host::agent::dispatch;
 use crate::protocol::{parse_request, Request, Response};
 use std::io::{Error, ErrorKind, Read, Result, Write};
-use vsock::{VsockAddr, VsockListener, VsockStream, VMADDR_CID_HOST};
+use vsock::{VsockAddr, VsockListener, VsockStream, VMADDR_CID_ANY};
 
 const DEFAULT_PORT: u32 = 19090;
 
@@ -28,7 +28,7 @@ pub fn run_server() -> Result<()> {
 }
 
 fn create_vsock_listener() -> Result<VsockListener> {
-    let addr = VsockAddr::new(VMADDR_CID_HOST, DEFAULT_PORT);
+    let addr = VsockAddr::new(VMADDR_CID_ANY, DEFAULT_PORT);
     VsockListener::bind(&addr)
 }
 
