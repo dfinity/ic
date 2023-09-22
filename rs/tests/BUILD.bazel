@@ -99,8 +99,8 @@ filegroup(
 )
 
 sh_binary(
-    name = "create_universal_vm_config_image_sh",
-    srcs = ["create-universal-vm-config-image.sh"],
+    name = "create_universal_vm_config_image_ci_sh",
+    srcs = ["create-universal-vm-config-image-ci.sh"],
 )
 
 sh_binary(

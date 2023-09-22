@@ -4,6 +4,7 @@ Rules for system-tests.
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:defs.bzl", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -212,7 +213,7 @@ def system_test(
     )
 
 def _uvm_config_image_impl(ctx):
-    out = ctx.actions.declare_file(ctx.label.name + ".zst")
+    out = ctx.actions.declare_file(ctx.label.name)
 
     input_tar = ctx.attr.input_tar[DefaultInfo].files.to_list()[0]
 
@@ -242,21 +243,47 @@ uvm_config_image_impl = rule(
         "_create_universal_vm_config_image": attr.label(
             executable = True,
             cfg = "exec",
-            default = ":create_universal_vm_config_image_sh",
+            default = ":create_universal_vm_config_image_ci_sh",
         ),
     },
 )
 
-def uvm_config_image(name, **kws):
+def uvm_config_image(name, tags = None, visibility = None, **kwargs):
+    """This macro creates bazel targets for uvm config images.
+
+    Args:
+        name: This name will be used for the target.
+        tags: Controls execution of targets. "manual" excludes a target from wildcard targets like (..., :*, :all). See: https://bazel.build/reference/test-encyclopedia#tag-conventions
+        visibility: Target visibility controls who may depend on a target.
+        **kwargs: Keyworded arguments for pkg_tar.
+    """
     tar = name + "_tar"
 
     pkg_tar(
         name = tar,
-        **kws
+        tags = ["manual"],
+        visibility = ["//visibility:private"],
+        **kwargs
     )
 
     uvm_config_image_impl(
-        name = name,
+        name = name + "_uncompressed",
         input_tar = ":" + tar,
         tags = ["manual"],
+        visibility = ["//visibility:private"],
+    )
+
+    zstd_compress(
+        name = name + ".zst",
+        srcs = [":" + name + "_uncompressed"],
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = tags,
+        visibility = ["//visibility:private"],
+    )
+
+    native.alias(
+        name = name,
+        actual = name + ".zst",
+        tags = tags,
+        visibility = visibility,
     )
