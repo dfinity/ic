@@ -24,21 +24,19 @@ function purge_partitions() {
     echo "* Purging partitions..."
 
     # Destroy master boot record and partition table
-    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
+    large_drives=($(get_large_drives))
 
-    if [ ! -z "${large_drives}" ]; then
-        for drive in $(echo ${large_drives[@]}); do
-            wipefs --all --force "/dev/${drive}"
-            log_and_reboot_on_error "${?}" "Unable to purge partitions on drive: /dev/${drive}"
-        done
-    fi
+    for drive in $(echo ${large_drives[@]}); do
+        wipefs --all --force "/dev/${drive}"
+        log_and_reboot_on_error "${?}" "Unable to purge partitions on drive: /dev/${drive}"
+    done
 }
 
 function setup_storage() {
     system_drive=$(find_first_drive)
 
     # Create PVs on each additional drive
-    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
+    large_drives=($(get_large_drives))
     for drive in $(echo ${large_drives[@]}); do
         # Avoid creating PV on system drive
         if [ "/dev/${drive}" == "/dev/${system_drive}" ]; then

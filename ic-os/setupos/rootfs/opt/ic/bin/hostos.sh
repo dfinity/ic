@@ -76,14 +76,14 @@ function resize_partition() {
     log_and_reboot_on_error "${?}" "Unable scan logical volumes."
 
     # Add additional PVs to VG
-    count=0
+    count=1
     large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
     for drive in $(echo ${large_drives[@]}); do
-        count=$((count + 1))
         # Avoid adding PV of main disk
         if [ "/dev/${drive}" == "/dev/${target_drive}" ]; then
             continue
         fi
+        count=$((count + 1))
 
         vgextend hostlvm "/dev/${drive}"
         log_and_reboot_on_error "${?}" "Unable to include PV '/dev/${drive}' in VG."
