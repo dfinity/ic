@@ -23,7 +23,7 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 itertools = "0.10.3"
 prometheus = { version = "0.12.0", features = ["process"] }
-prost = "0.11.0"
+prost = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 slog = "2.7.0"

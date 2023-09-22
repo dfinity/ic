@@ -18,7 +18,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 prometheus = { version = "0.12.0", features = ["process"] }
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
-prost = "0.11.0"
+prost = { workspace = true }
 rocksdb = { version = "0.21.0", optional = true }
 serde = { version = "1.0.99", features = ["derive"] }
 serde_json = "1.0.40"
