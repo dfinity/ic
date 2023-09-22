@@ -22,7 +22,7 @@ ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 lazy_static = "1.4.0"
 num-traits = "0.2.12"
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.11.0"
+prost = { workspace = true }
 prost-derive = "0.11"
 serde = "1.0"
 serde_bytes = "0.11"
