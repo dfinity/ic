@@ -1,4 +1,4 @@
-use clap::{Arg, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use ic_canister_sandbox_backend_lib::{
     canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
@@ -165,7 +165,8 @@ fn get_arg_matches() -> ArgMatches {
         .arg(
             Arg::new(USE_OLD_METERING)
                 .long(USE_OLD_METERING)
-                .help("Enable the old metering in the local canister execution environment."),
+                .help("Enable the old metering in the local canister execution environment.")
+                .action(ArgAction::SetTrue),
         )
         .get_matches()
 }
