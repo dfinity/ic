@@ -50,6 +50,7 @@ use scheduler_metrics::*;
 mod round_schedule;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
+use util::debug_assert_or_critical_error;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -69,34 +70,6 @@ const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
 pub(crate) mod test_utilities;
 #[cfg(test)]
 pub(crate) mod tests;
-
-/// Debug assert a condition, increase an error counter, and log the error.
-///
-/// Example usage:
-///
-/// ```ignore
-/// debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
-/// ```
-///
-/// Which is equivalent to:
-///
-/// ```ignore
-/// if !(a > b) {
-///     debug_assert!(a > b);
-///     metric.inc();
-///     error!(logger, "{} > {}", a, b)
-/// }
-/// ```
-macro_rules! debug_assert_or_critical_error {
-    // debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
-    ($cond:expr, $metric:expr, $($arg:tt)*) => {{
-        if !($cond) {
-            debug_assert!($cond);
-            $metric.inc();
-            error!($($arg)*);
-        }
-    }};
-}
 
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation

@@ -285,7 +285,7 @@ impl fmt::Display for DtsInstallCodeStatus {
                 "ResumingPausedOrAbortedExecution"
             }
         };
-        write!(f, "{}", status)
+        write!(f, "{status}")
     }
 }
 
@@ -2165,12 +2165,12 @@ impl ExecutionEnvironment {
                     .subnet_call_context_manager
                     .remove_install_code_call(call_id);
                 if install_code_call.is_none() {
-                    info!(
-                                    self.log,
-                                    "Could not remove call id {} for canister {} after execution of install_code",
-                                    call_id,
-                                    canister_id
-                                    );
+                    self.metrics
+                        .observe_call_id_without_install_code_call_error_counter(
+                            &self.log,
+                            call_id,
+                            canister_id,
+                        );
                 }
                 let state =
                     self.finish_subnet_message_execution(state, message, result, refund, timer);
