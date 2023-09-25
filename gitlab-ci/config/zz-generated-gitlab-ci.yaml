@@ -3931,44 +3931,6 @@ host-os-upgrade-test:
     GIT_STRATEGY: fetch
     HOST_OS_TEST_TIMEOUT: 2400
     SHELL_WRAPPER: "/usr/bin/time"
-ingress-manager-proptests-nightly:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - "$CI_JOB_STAGE/$CI_JOB_NAME"
-    when: always
-  dependencies: []
-  extends:
-    - ".prod-test"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:fdc330a6869cc5cb41a17a290106d6e78a2c9cd643d8943b3229474353384c79
-  rules:
-    - allow_failure: true
-      if: "$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/ && $CI_COMMIT_MESSAGE =~ /hotfix/i"
-      when: manual
-    - allow_failure: true
-      if: "$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\\[rc\\]/"
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" && $CD_ENV != "BENCHMARK_SUITE"
-      when: manual
-    - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
-      when: always
-  script:
-    - |
-      cd "${CI_PROJECT_DIR}/rs"
-      $SHELL_WRAPPER cargo test --release -p ic-ingress-manager proptest
-  tags:
-    - dfinity-ic
-  timeout: 70 minutes
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
-    SHELL_WRAPPER: "/usr/bin/time"
-    cd_target_env: NIGHTLY
 large-response-downloading-nightly:
   artifacts:
     expire_in: 3 days
