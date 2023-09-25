@@ -144,6 +144,7 @@ pub enum OpOut {
     CanisterId(CanisterId),
     IcUserErr(UserError),
     Cycles(u128),
+    Bytes(Vec<u8>),
 }
 
 impl From<Result<WasmResult, UserError>> for OpOut {
@@ -176,6 +177,7 @@ impl std::fmt::Debug for OpOut {
             OpOut::WasmResult(WasmResult::Reply(bytes)) => {
                 write!(f, "Reply({})", base64::encode(bytes))
             }
+            OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
         }
     }
 }

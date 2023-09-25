@@ -1,5 +1,5 @@
 use candid::{encode_one, Principal};
-use pocket_ic::{PocketIc, WasmResult};
+use pocket_ic::{common::blob::BlobCompression, PocketIc, WasmResult};
 use std::io::Read;
 
 // tests in one file may run concurrently
@@ -68,12 +68,8 @@ fn test_set_and_get_stable_memory_not_compressed() {
     pic.install_canister(canister_id, counter_wasm, vec![], None);
 
     let data = "deadbeef".as_bytes().to_vec();
-    pic.set_stable_memory(
-        canister_id,
-        data.clone(),
-        pocket_ic::common::BlobCompression::NoCompression,
-    )
-    .unwrap();
+    pic.set_stable_memory(canister_id, data.clone(), BlobCompression::NoCompression)
+        .unwrap();
 
     let read_data = pic.get_stable_memory(canister_id);
     assert_eq!(data, read_data[..8]);
@@ -93,12 +89,8 @@ fn test_set_and_get_stable_memory_compressed() {
     let mut gz = flate2::read::GzEncoder::new(&data[..], flate2::Compression::default());
     gz.read_to_end(&mut compressed_data).unwrap();
 
-    pic.set_stable_memory(
-        canister_id,
-        compressed_data.clone(),
-        pocket_ic::common::BlobCompression::Gzip,
-    )
-    .unwrap();
+    pic.set_stable_memory(canister_id, compressed_data.clone(), BlobCompression::Gzip)
+        .unwrap();
 
     let read_data = pic.get_stable_memory(canister_id);
     assert_eq!(data, read_data[..8]);

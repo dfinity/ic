@@ -1,5 +1,7 @@
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::{decode_args, encode_args, Principal};
+use common::blob::{BlobCompression, BlobId};
+use common::rest::Checkpoint;
 use ic_cdk::api::management_canister::main::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgument,
     InstallCodeArgument,
@@ -15,7 +17,6 @@ use std::time::{Duration, Instant, SystemTime};
 pub mod common;
 pub mod pocket_ic_v2;
 
-use crate::common::{rest::Checkpoint, BlobCompression, BlobId};
 pub use pocket_ic_v2::PocketIcV2;
 
 const LOCALHOST: &str = "127.0.0.1";

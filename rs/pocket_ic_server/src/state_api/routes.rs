@@ -1,11 +1,19 @@
+/// This module contains the route handlers for the PocketIc server.
+///
+/// A handler may receive a representation of a PocketIc Operation in the request
+/// body. This has to be canonicalized into a PocketIc Operation before we can
+/// deterministically update the PocketIc state machine.
+///
 use super::state::{InstanceState, PocketIcApiState, UpdateReply};
-use crate::pocket_ic::{ExecuteIngressMessage, GetTime, Query, SetTime};
+use crate::pocket_ic::{
+    ExecuteIngressMessage, GetStableMemory, GetTime, Query, SetStableMemory, SetTime,
+};
 use crate::{
     copy_dir,
     pocket_ic::{create_state_machine, PocketIc},
     InstanceId,
 };
-use crate::{BindOperation, Operation};
+use crate::{BindOperation, BlobStore, Operation};
 use axum::{
     extract::{self, Path, State},
     http::StatusCode,
@@ -13,13 +21,9 @@ use axum::{
     Json, Router,
 };
 use ic_state_machine_tests::StateMachine;
-use pocket_ic::common::{rest, BlobStore};
-/// This module contains the route handlers for the PocketIc server.
-///
-/// A handler may receive a representation of a PocketIc Operation in the request
-/// body. This has to be canonicalized into a PocketIc Operation before we can
-/// deterministically update the PocketIc state machine.
-///
+use ic_types::CanisterId;
+use pocket_ic::common::rest::{self, RawCanisterCall, RawSetStableMemory};
+use pocket_ic::RawCanisterId;
 use std::sync::atomic::AtomicU64;
 use std::{collections::HashMap, sync::Arc};
 use tempfile::TempDir;
@@ -135,7 +139,7 @@ async fn run_operation(
 pub async fn handler_query(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
-    extract::Json(raw_canister_call): extract::Json<super::rest_types::RawCanisterCall>,
+    extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
 ) -> (StatusCode, String) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Err(_) => (StatusCode::BAD_REQUEST, "Badly formatted Query".to_string()),
@@ -163,11 +167,17 @@ pub async fn handler_get_cycles(
 }
 
 pub async fn handler_get_stable_memory(
-    State(AppState { .. }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(()): extract::Json<()>,
-) -> (StatusCode, ()) {
-    (StatusCode::NOT_FOUND, ())
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_canister_id): axum::extract::Json<RawCanisterId>,
+) -> (StatusCode, String) {
+    match CanisterId::try_from(raw_canister_id.canister_id) {
+        Ok(canister_id) => {
+            let get_op = GetStableMemory { canister_id };
+            run_operation(api_state, instance_id, get_op).await
+        }
+        Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+    }
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //
@@ -176,7 +186,7 @@ pub async fn handler_get_stable_memory(
 pub async fn handler_execute_ingress_message(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
-    extract::Json(raw_canister_call): extract::Json<super::rest_types::RawCanisterCall>,
+    extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
 ) -> (StatusCode, String) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Err(_) => (
@@ -221,16 +231,19 @@ pub async fn handler_set_stable_memory(
     State(AppState {
         instance_map: _,
         instances_sequence_counter: _,
-        api_state: _,
+        api_state,
         checkpoints: _,
         last_request: _,
         runtime: _,
-        blob_store: _,
+        blob_store,
     }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(()): extract::Json<()>,
-) -> (StatusCode, ()) {
-    (StatusCode::NOT_FOUND, ())
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw): axum::extract::Json<RawSetStableMemory>,
+) -> (StatusCode, String) {
+    match SetStableMemory::from_store(raw, blob_store).await {
+        Ok(set_op) => run_operation(api_state, instance_id, set_op).await,
+        Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+    }
 }
 
 pub async fn handler_install_canister_as_controller(

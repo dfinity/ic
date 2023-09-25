@@ -18,15 +18,15 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
 use itertools::Itertools;
 use pocket_ic::{
-    common::{rest::Checkpoint, BinaryBlob, BlobCompression, BlobId, BlobStore},
+    common::{blob::BinaryBlob, blob::BlobCompression, blob::BlobId, rest::Checkpoint},
     CanisterCall, RawCanisterId, Request,
 };
-use pocket_ic_server::pocket_ic::create_state_machine;
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState},
     state::PocketIcApiStateBuilder,
 };
 use pocket_ic_server::{copy_dir, InstanceId};
+use pocket_ic_server::{pocket_ic::create_state_machine, BlobStore};
 use serde::Serialize;
 use std::io::Read;
 use std::io::Write;

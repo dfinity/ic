@@ -23,7 +23,7 @@ TEST_DEPENDENCIES = [
 
 rust_library(
     name = "pocket-ic",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["src/**"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.0",
     deps = DEPENDENCIES,
