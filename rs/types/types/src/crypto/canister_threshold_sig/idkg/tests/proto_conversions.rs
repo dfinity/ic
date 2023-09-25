@@ -15,6 +15,7 @@ use crate::signature::BasicSignature;
 use assert_matches::assert_matches;
 use ic_base_types::SubnetId;
 use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgComplaint as IDkgComplaintProto;
@@ -22,7 +23,7 @@ use ic_protobuf::registry::subnet::v1::IDkgOpening as IDkgOpeningProto;
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use rand::distributions::Standard;
-use rand::{Rng, RngCore};
+use rand::{CryptoRng, Rng};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 
@@ -48,7 +49,8 @@ fn should_correctly_serialize_and_deserialize_idkg_complaint() {
 
 #[test]
 fn should_correctly_serialize_and_deserialize_initial_dealings() {
-    let initial_dealings = initial_dealings();
+    let rng = &mut reproducible_rng();
+    let initial_dealings = initial_dealings(rng);
     let proto = InitialIDkgDealingsProto::from(&initial_dealings);
     let parsing_result = InitialIDkgDealings::try_from(&proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
@@ -58,7 +60,8 @@ fn should_correctly_serialize_and_deserialize_initial_dealings() {
 
 #[test]
 fn should_correctly_serialize_and_deserialize_extended_derivation_path() {
-    let derivation_path = dummy_extended_derivation_path();
+    let rng = &mut reproducible_rng();
+    let derivation_path = dummy_extended_derivation_path(rng);
     let proto = ExtendedDerivationPathProto::from(derivation_path.clone());
     let parsing_result = ExtendedDerivationPath::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
@@ -68,7 +71,8 @@ fn should_correctly_serialize_and_deserialize_extended_derivation_path() {
 
 #[test]
 fn should_fail_parsing_extended_derivation_path_proto_without_caller() {
-    let derivation_path = dummy_extended_derivation_path();
+    let rng = &mut reproducible_rng();
+    let derivation_path = dummy_extended_derivation_path(rng);
     let mut proto = ExtendedDerivationPathProto::from(derivation_path);
     proto.caller = None;
     let parsing_result = ExtendedDerivationPath::try_from(proto);
@@ -78,17 +82,23 @@ fn should_fail_parsing_extended_derivation_path_proto_without_caller() {
 
 #[test]
 fn should_fail_parsing_extended_derivation_path_proto_with_malformed_caller() {
-    let derivation_path = dummy_extended_derivation_path();
+    let rng = &mut reproducible_rng();
+    let derivation_path = dummy_extended_derivation_path(rng);
     let mut proto = ExtendedDerivationPathProto::from(derivation_path);
     proto.caller = Some(PrincipalIdProto { raw: vec![42; 42] });
     let parsing_result = ExtendedDerivationPath::try_from(proto);
     assert_matches!(parsing_result, Err(ProxyDecodeError::InvalidPrincipalId(_)));
 }
 
-fn initial_dealings_without_empty_or_default_data() -> InitialIDkgDealings {
+fn initial_dealings_without_empty_or_default_data<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> InitialIDkgDealings {
     let previous_receivers = set_of_nodes(&[35, 36, 37, 38]);
-    let previous_transcript =
-        mock_transcript(Some(previous_receivers), mock_unmasked_transcript_type());
+    let previous_transcript = mock_transcript(
+        Some(previous_receivers),
+        mock_unmasked_transcript_type(rng),
+        rng,
+    );
     let dealers = set_of_nodes(&[35, 36, 38]);
     let receivers = set_of_nodes(&[39, 40, 41]);
 
@@ -99,6 +109,7 @@ fn initial_dealings_without_empty_or_default_data() -> InitialIDkgDealings {
         &dealers,
         &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
+        rng,
     );
     let dealings = mock_signed_dealings(params.transcript_id(), &dealers);
 
@@ -106,8 +117,7 @@ fn initial_dealings_without_empty_or_default_data() -> InitialIDkgDealings {
         .expect("Failed creating IDkgInitialDealings for testing")
 }
 
-fn dummy_extended_derivation_path() -> ExtendedDerivationPath {
-    let rng = &mut rand::thread_rng();
+fn dummy_extended_derivation_path<R: Rng + CryptoRng>(rng: &mut R) -> ExtendedDerivationPath {
     let path_len = rng.next_u32() % 10;
     let user_id = rng.next_u64();
     let mut derivation_path = vec![];
@@ -120,8 +130,8 @@ fn dummy_extended_derivation_path() -> ExtendedDerivationPath {
         derivation_path,
     }
 }
-fn initial_dealings() -> InitialIDkgDealings {
-    initial_dealings_without_empty_or_default_data()
+fn initial_dealings<R: Rng + CryptoRng>(rng: &mut R) -> InitialIDkgDealings {
+    initial_dealings_without_empty_or_default_data(rng)
 }
 
 fn idkg_opening() -> IDkgOpening {

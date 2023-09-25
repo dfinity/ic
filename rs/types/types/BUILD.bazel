@@ -35,6 +35,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
     "@crate_index//:hex-literal",
     "@crate_index//:pretty_assertions",
