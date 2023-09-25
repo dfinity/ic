@@ -1,6 +1,7 @@
 use candid::{decode_args, encode_args, Principal};
 use ic_cdk::api::management_canister::main::{CanisterIdRecord, CreateCanisterArgument};
-use pocket_ic::{CallError, CanisterCall, Checkpoint, RawCanisterId, Request, WasmResult};
+use pocket_ic::common::rest::Checkpoint;
+use pocket_ic::{CallError, CanisterCall, RawCanisterId, Request, WasmResult};
 use reqwest::{StatusCode, Url};
 use std::collections::HashMap;
 use std::path::PathBuf;

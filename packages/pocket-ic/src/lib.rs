@@ -15,7 +15,7 @@ use std::time::{Duration, Instant, SystemTime};
 pub mod common;
 pub mod pocket_ic_v2;
 
-use crate::common::{BlobCompression, BlobId};
+use crate::common::{rest::Checkpoint, BlobCompression, BlobId};
 pub use pocket_ic_v2::PocketIcV2;
 
 const LOCALHOST: &str = "127.0.0.1";
@@ -513,11 +513,6 @@ pub struct CanisterCall {
     pub method: String,
     #[serde(with = "base64")]
     pub arg: Vec<u8>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Checkpoint {
-    pub checkpoint_name: String,
 }
 
 /// Call a canister candid query method, anonymous.
