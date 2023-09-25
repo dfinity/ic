@@ -18,10 +18,7 @@ pub fn run_server() -> Result<()> {
 
         println!("\n\nReceived incoming connection. Spawning new thread...");
 
-        let thread_result =
-            std::thread::spawn(move || -> Result<()> { process_connection(&mut stream) });
-
-        handle_thread_result(thread_result);
+        std::thread::spawn(move || -> Result<()> { process_connection(&mut stream) });
     }
 
     Ok(())
@@ -94,22 +91,4 @@ fn send_response(stream: &mut VsockStream, response: &Response) -> Result<()> {
     stream.write_all(json_response.as_bytes())?;
 
     Ok(())
-}
-
-fn handle_thread_result(thread_result: std::thread::JoinHandle<Result<()>>) {
-    match thread_result.join() {
-        Ok(result) => match result {
-            Ok(_) => println!("Thread completed successfully"),
-            Err(e) => println!("Thread completed with error: {}", e),
-        },
-        Err(e) => {
-            if let Some(s) = e.downcast_ref::<&'static str>() {
-                println!("Thread panicked with error: {}", s);
-            } else if let Some(s) = e.downcast_ref::<String>() {
-                println!("Thread panicked with error: {}", s);
-            } else {
-                println!("Thread panicked with an unknown error");
-            }
-        }
-    }
 }
