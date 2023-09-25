@@ -3,8 +3,11 @@ use ic_cycles_account_manager::{
 };
 use ic_error_types::ErrorCode;
 use ic_ic00_types as ic00;
+use ic_logger::{error, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets;
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use ic_types::CanisterId;
 use prometheus::{HistogramVec, IntCounter};
 use std::str::FromStr;
 
@@ -13,17 +16,21 @@ pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
 pub const ERROR_OUTCOME_LABEL: &str = "error";
 pub const SUCCESS_STATUS_LABEL: &str = "success";
 
+pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
+    "execution_environment_call_id_without_install_code_call";
+
 /// Metrics used to monitor the performance of the execution environment.
 pub(crate) struct ExecutionEnvironmentMetrics {
     subnet_messages: HistogramVec,
+    pub executions_aborted: IntCounter,
 
     /// Critical error for responses above the maximum allowed size.
     response_cycles_refund_error: IntCounter,
     /// Critical error for executions above the maximum allowed size.
     execution_cycles_refund_error: IntCounter,
-    pub executions_aborted: IntCounter,
+    /// Critical error for call ID and no matching install code call.
+    call_id_without_install_code_call: IntCounter,
 }
-
 impl ExecutionEnvironmentMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
@@ -37,12 +44,14 @@ impl ExecutionEnvironmentMetrics {
                 // The `outcome` label is deprecated and should be replaced by `status` eventually.
                 &["method_name", "outcome", "status"],
             ),
+            executions_aborted: metrics_registry
+                .int_counter("executions_aborted", "Total number of aborted executios"),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
             execution_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_EXECUTION_CYCLES_REFUND),
-            executions_aborted: metrics_registry
-                .int_counter("executions_aborted", "Total number of aborted executios"),
+            call_id_without_install_code_call: metrics_registry
+                .error_counter(CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL),
         }
     }
 
@@ -110,5 +119,20 @@ impl ExecutionEnvironmentMetrics {
 
     pub fn execution_cycles_refund_error_counter(&self) -> &IntCounter {
         &self.execution_cycles_refund_error
+    }
+
+    pub fn observe_call_id_without_install_code_call_error_counter(
+        &self,
+        log: &ReplicaLogger,
+        call_id: InstallCodeCallId,
+        canister_id: CanisterId,
+    ) {
+        self.call_id_without_install_code_call.inc();
+        error!(
+            log,
+            "[EXC-BUG] Could not find any install code call for the specified call ID {} for canister {} after the execution of install code",
+            call_id,
+            canister_id,
+        );
     }
 }

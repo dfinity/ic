@@ -13,6 +13,35 @@ use std::{mem, sync::Arc};
 
 pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 
+/// Debug assert a condition, increase an error counter, and log the error.
+///
+/// Example usage:
+///
+/// ```ignore
+/// debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
+/// ```
+///
+/// Which is equivalent to:
+///
+/// ```ignore
+/// if !(a > b) {
+///     debug_assert!(a > b);
+///     metric.inc();
+///     error!(logger, "{} > {}", a, b)
+/// }
+/// ```
+macro_rules! debug_assert_or_critical_error {
+    // debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
+    ($cond:expr, $metric:expr, $($arg:tt)*) => {{
+        if !($cond) {
+            debug_assert!($cond);
+            $metric.inc();
+            error!($($arg)*);
+        }
+    }};
+}
+pub(crate) use debug_assert_or_critical_error;
+
 /// Sends responses to their callers.
 ///
 /// * Ingress responses are written to ingress history.
