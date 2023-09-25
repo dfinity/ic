@@ -125,10 +125,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.1",
             ),
             "async-stream": crate.spec(
-                version = "^0.3.2",
+                version = "^0.3.5",
             ),
             "async-trait": crate.spec(
-                version = "^0.1.31",
+                version = "^0.1.73",
             ),
             "axum": crate.spec(
                 version = "^0.6.1",
@@ -408,7 +408,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.1",
             ),
             "http": crate.spec(
-                version = "^0.2.6",
+                version = "^0.2.9",
             ),
             "http-body": crate.spec(
                 version = "^0.4",
@@ -429,7 +429,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0",
             ),
             "hyper": crate.spec(
-                version = "^0.14.18",
+                version = "^0.14.27",
                 features = [
                     "client",
                     "full",

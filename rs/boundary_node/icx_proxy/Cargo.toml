@@ -21,7 +21,7 @@ anyhow = "1"
 async-trait = "0.1"
 axum = "0.6.1"
 base64 = "0.11"
-bytes = "1.5.0"
+bytes = { workspace = true }
 candid = { workspace = true, features = ["mute_warnings"] }
 clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
