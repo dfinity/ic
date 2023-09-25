@@ -48,6 +48,7 @@ rust_library(
         "@crate_index//:hex-literal",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
@@ -56,6 +57,7 @@ rust_library(
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
         "@crate_index//:strum",
+        "@crate_index//:thiserror",
         "@crate_index//:thousands",
     ],
 )

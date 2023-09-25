@@ -208,10 +208,10 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for (source,error) in rejected_deposits %}
+                    {% for (source, error) in rejected_deposits %}
                     <tr>
-                        <td>{% call etherscan_tx_link(source.txhash().to_string()) %}</td>
-                        <td class="numeric">{{ source.log_index() }}</td>
+                        <td>{% call etherscan_tx_link(source.transaction_hash.to_string()) %}</td>
+                        <td class="numeric">{{ source.log_index }}</td>
                         <td>{{ error }}</td>
                     </tr>
                     {% endfor %}

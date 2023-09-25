@@ -1,12 +1,12 @@
-use crate::eth_logs::ReceivedEthEvent;
+use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::Hash;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
-use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, LogIndex};
+use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
 use crate::transactions::EthWithdrawalRequest;
 use crate::tx::SignedEip1559TransactionRequest;
 use minicbor::{Decode, Encode};
 
-/// The event descibing the ckETH minter state transition.
+/// The event describing the ckETH minter state transition.
 #[derive(Clone, Debug, Encode, Decode)]
 pub enum EventType {
     /// The minter initialization event.
@@ -22,30 +22,24 @@ pub enum EventType {
     /// The minter discovered an invalid ckETH deposit in the helper contract logs.
     #[n(4)]
     InvalidDeposit {
-        /// The transaction hash of the deposit.
+        /// The unique identifier of the deposit on the Ethereum network.
         #[n(0)]
-        txhash: Hash,
-        /// The log index of the event within the block.
-        #[cbor(n(1))]
-        log_index: LogIndex,
+        event_source: EventSource,
         /// The reason why minter considers the deposit invalid.
-        #[n(2)]
+        #[n(1)]
         reason: String,
     },
     /// The minter minted ckETH in response to a deposit.
     #[n(5)]
     MintedCkEth {
-        /// The transaction hash of the deposit event.
+        /// The unique identifier of the deposit on the Ethereum network.
         #[n(0)]
-        txhash: Hash,
-        /// The log index of the deposit event.
-        #[cbor(n(1))]
-        log_index: LogIndex,
+        event_source: EventSource,
         /// The transaction index on the ckETH ledger.
-        #[cbor(n(2), with = "crate::cbor::id")]
+        #[cbor(n(1), with = "crate::cbor::id")]
         mint_block_index: LedgerMintIndex,
     },
-    /// The minter processed the helper smart contract logs up to the specified hight.
+    /// The minter processed the helper smart contract logs up to the specified height.
     #[n(6)]
     SyncedToBlock {
         /// The last processed block number (inclusive).
@@ -87,10 +81,10 @@ pub enum EventType {
 
 #[derive(Encode, Decode)]
 pub struct Event {
-    /// The caniter time at which the minter generated this event.
+    /// The canister time at which the minter generated this event.
     #[n(0)]
     pub timestamp: u64,
     /// The event type.
     #[n(1)]
-    pub event_type: EventType,
+    pub payload: EventType,
 }
