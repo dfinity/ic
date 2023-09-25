@@ -11,7 +11,6 @@ futures = { workspace = true }
 futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }
 ic-types = { path = "../types/types" }
-prometheus = { version = "0.12.0", features = ["process"] }
 slog = "2.5.2"
 tokio = { version = "1.32.0", features = ["full"] }
 tonic = { workspace = true }
