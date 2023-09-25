@@ -1,3 +1,4 @@
+use super::state::PocketIcApiState;
 /// This module contains the route handlers for the PocketIc server.
 ///
 /// A handler may receive a representation of a PocketIc Operation in the request
@@ -5,7 +6,6 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{InstanceState, UpdateReply};
-use super::{rest_types::Checkpoint, state::PocketIcApiState};
 use crate::pocket_ic::{ExecuteIngressMessage, Query};
 use crate::{
     copy_dir,
@@ -14,13 +14,13 @@ use crate::{
 };
 use crate::{BindOperation, Operation};
 use axum::{
-    extract::{Path, State},
+    extract::{self, Path, State},
     http::StatusCode,
     routing::{delete, get, post},
-    Router,
+    Json, Router,
 };
 use ic_state_machine_tests::StateMachine;
-use pocket_ic::BlobStore;
+use pocket_ic::common::{rest, BlobStore};
 use std::sync::atomic::AtomicU64;
 use std::{collections::HashMap, sync::Arc};
 use tempfile::TempDir;
@@ -46,7 +46,7 @@ pub struct AppState {
 pub fn instance_read_routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    AppState: axum::extract::FromRef<S>,
+    AppState: extract::FromRef<S>,
 {
     Router::new()
         // .route("root_key", get(handler_root_key))
@@ -59,7 +59,7 @@ where
 pub fn instance_update_routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    AppState: axum::extract::FromRef<S>,
+    AppState: extract::FromRef<S>,
 {
     Router::new()
         .route(
@@ -78,7 +78,7 @@ where
 pub fn instances_routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
-    AppState: axum::extract::FromRef<S>,
+    AppState: extract::FromRef<S>,
 {
     Router::new()
         //
@@ -120,7 +120,7 @@ pub async fn handler_query(
         ..
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
-    axum::extract::Json(raw_canister_call): axum::extract::Json<super::rest_types::RawCanisterCall>,
+    extract::Json(raw_canister_call): extract::Json<super::rest_types::RawCanisterCall>,
 ) -> (StatusCode, String) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Err(_) => (StatusCode::BAD_REQUEST, "Badly formatted Query".to_string()),
@@ -155,7 +155,7 @@ pub async fn handler_query(
 pub async fn handler_get_time(
     State(AppState { .. }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(()): axum::extract::Json<()>,
+    extract::Json(()): extract::Json<()>,
 ) -> (StatusCode, ()) {
     (StatusCode::NOT_FOUND, ())
 }
@@ -163,7 +163,7 @@ pub async fn handler_get_time(
 pub async fn handler_get_cycles(
     State(AppState { .. }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(()): axum::extract::Json<()>,
+    extract::Json(()): extract::Json<()>,
 ) -> (StatusCode, ()) {
     (StatusCode::NOT_FOUND, ())
 }
@@ -171,7 +171,7 @@ pub async fn handler_get_cycles(
 pub async fn handler_get_stable_memory(
     State(AppState { .. }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(()): axum::extract::Json<()>,
+    extract::Json(()): extract::Json<()>,
 ) -> (StatusCode, ()) {
     (StatusCode::NOT_FOUND, ())
 }
@@ -187,7 +187,7 @@ pub async fn handler_execute_ingress_message(
         ..
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
-    axum::extract::Json(raw_canister_call): axum::extract::Json<super::rest_types::RawCanisterCall>,
+    extract::Json(raw_canister_call): extract::Json<super::rest_types::RawCanisterCall>,
 ) -> (StatusCode, String) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Err(_) => (
@@ -233,7 +233,7 @@ pub async fn handler_set_time(
         blob_store: _,
     }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(()): axum::extract::Json<()>,
+    extract::Json(()): extract::Json<()>,
 ) -> (StatusCode, ()) {
     (StatusCode::NOT_FOUND, ())
 }
@@ -249,7 +249,7 @@ pub async fn handler_add_cycles(
         blob_store: _,
     }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(()): axum::extract::Json<()>,
+    extract::Json(()): extract::Json<()>,
 ) -> (StatusCode, ()) {
     (StatusCode::NOT_FOUND, ())
 }
@@ -265,7 +265,7 @@ pub async fn handler_set_stable_memory(
         blob_store: _,
     }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(()): axum::extract::Json<()>,
+    extract::Json(()): extract::Json<()>,
 ) -> (StatusCode, ()) {
     (StatusCode::NOT_FOUND, ())
 }
@@ -281,7 +281,7 @@ pub async fn handler_install_canister_as_controller(
         blob_store: _,
     }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(()): axum::extract::Json<()>,
+    extract::Json(()): extract::Json<()>,
 ) -> (StatusCode, ()) {
     (StatusCode::NOT_FOUND, ())
 }
@@ -305,8 +305,8 @@ pub async fn create_instance(
         runtime,
         blob_store: _,
     }): State<AppState>,
-    body: Option<axum::extract::Json<Checkpoint>>,
-) -> (StatusCode, String) {
+    body: Option<extract::Json<rest::Checkpoint>>,
+) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let sm = match body {
         None => tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
             .await
@@ -316,7 +316,9 @@ pub async fn create_instance(
             if !checkpoints.contains_key(&body.checkpoint_name) {
                 return (
                     StatusCode::BAD_REQUEST,
-                    format!("Checkpoint '{}' does not exist.", body.checkpoint_name),
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: format!("Checkpoint '{}' does not exist.", body.checkpoint_name),
+                    }),
                 );
             }
             let proto_dir = checkpoints.get(&body.checkpoint_name).unwrap();
@@ -334,7 +336,7 @@ pub async fn create_instance(
     let instance_id = api_state.add_instance(pocket_ic).await;
     (
         StatusCode::CREATED,
-        serde_json::to_string(&super::rest_types::InstanceId { instance_id }).unwrap(),
+        Json(rest::CreateInstanceResponse::Created { instance_id }),
     )
 }
 
@@ -392,7 +394,7 @@ pub async fn list_checkpoints(
 //         runtime: _,
 //     }): State<AppState>,
 //     Path(id): Path<InstanceId>,
-//     axum::extract::Json(request): axum::extract::Json<Request>,
+//     extract::Json(request): extract::Json<Request>,
 // ) -> (StatusCode, String) {
 //     let guard_map = todo!();
 // let guard_map = inst_map.read().await;
@@ -419,7 +421,7 @@ pub async fn tick_and_create_checkpoint(
         blob_store: _,
     }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    axum::extract::Json(Checkpoint { checkpoint_name: _ }): axum::extract::Json<Checkpoint>,
+    extract::Json(rest::Checkpoint { checkpoint_name: _ }): extract::Json<rest::Checkpoint>,
 ) -> (StatusCode, ()) {
     // Needs an Operation type
     (StatusCode::NOT_FOUND, ())

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -23,15 +23,15 @@ TEST_DEPENDENCIES = [
 
 rust_library(
     name = "pocket-ic",
-    srcs = ["src/lib.rs"],
+    srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.0",
     deps = DEPENDENCIES,
 )
 
-rust_test(
+rust_test_suite(
     name = "test",
-    srcs = ["tests/tests.rs"],
+    srcs = glob(["tests/**/*.rs"]),
     data = [
         "tests/counter.wasm",
         "//rs/pocket_ic_server:pocket-ic-server",

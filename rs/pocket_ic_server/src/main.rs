@@ -18,11 +18,11 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
 use itertools::Itertools;
 use pocket_ic::{
-    BinaryBlob, BlobCompression, BlobId, BlobStore, CanisterCall, RawCanisterId, Request,
+    common::{rest::Checkpoint, BinaryBlob, BlobCompression, BlobId, BlobStore},
+    CanisterCall, RawCanisterId, Request,
 };
 use pocket_ic_server::pocket_ic::create_state_machine;
 use pocket_ic_server::state_api::{
-    rest_types::Checkpoint,
     routes::{instances_routes, status, AppState},
     state::PocketIcApiStateBuilder,
 };

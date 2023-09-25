@@ -71,7 +71,7 @@ fn test_set_and_get_stable_memory_not_compressed() {
     pic.set_stable_memory(
         canister_id,
         data.clone(),
-        pocket_ic::BlobCompression::NoCompression,
+        pocket_ic::common::BlobCompression::NoCompression,
     )
     .unwrap();
 
@@ -96,7 +96,7 @@ fn test_set_and_get_stable_memory_compressed() {
     pic.set_stable_memory(
         canister_id,
         compressed_data.clone(),
-        pocket_ic::BlobCompression::Gzip,
+        pocket_ic::common::BlobCompression::Gzip,
     )
     .unwrap();
 
