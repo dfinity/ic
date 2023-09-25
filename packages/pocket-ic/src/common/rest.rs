@@ -20,3 +20,8 @@ pub enum CreateInstanceResponse {
     Created { instance_id: InstanceId },
     Error { message: String },
 }
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct RawTime {
+    pub nanos_since_epoch: u64,
+}

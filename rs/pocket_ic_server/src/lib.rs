@@ -47,7 +47,7 @@ pub trait Operation {
     type TargetType: Send + Sync;
 
     /// Consumes self and executes computation.
-    fn compute(self, _mocket_ic: &mut Self::TargetType) -> OpOut;
+    fn compute(self, _pocket_ic: &mut Self::TargetType) -> OpOut;
 
     fn id(&self) -> OpId;
 }
@@ -276,7 +276,7 @@ mod tests {
         println!("result is: {:?}", res);
         println!("{api_state:?}");
 
-        let (state_label, op_id) = res.get_busy().unwrap();
+        let (state_label, op_id) = res.get_in_progress().unwrap();
         loop {
             if let Some((_new_state_label, result)) = api_state.read_result(&state_label, &op_id) {
                 println!("Result: {:?}", result);

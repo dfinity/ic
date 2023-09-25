@@ -1,12 +1,5 @@
-use super::state::PocketIcApiState;
-/// This module contains the route handlers for the PocketIc server.
-///
-/// A handler may receive a representation of a PocketIc Operation in the request
-/// body. This has to be canonicalized into a PocketIc Operation before we can
-/// deterministically update the PocketIc state machine.
-///
-use super::state::{InstanceState, UpdateReply};
-use crate::pocket_ic::{ExecuteIngressMessage, Query};
+use super::state::{InstanceState, PocketIcApiState, UpdateReply};
+use crate::pocket_ic::{ExecuteIngressMessage, GetTime, Query, SetTime};
 use crate::{
     copy_dir,
     pocket_ic::{create_state_machine, PocketIc},
@@ -21,6 +14,12 @@ use axum::{
 };
 use ic_state_machine_tests::StateMachine;
 use pocket_ic::common::{rest, BlobStore};
+/// This module contains the route handlers for the PocketIc server.
+///
+/// A handler may receive a representation of a PocketIc Operation in the request
+/// body. This has to be canonicalized into a PocketIc Operation before we can
+/// deterministically update the PocketIc state machine.
+///
 use std::sync::atomic::AtomicU64;
 use std::{collections::HashMap, sync::Arc};
 use tempfile::TempDir;
@@ -109,16 +108,32 @@ where
     // .nest("/:id/read", instances_read_routes::<S>())
 }
 
+async fn run_operation(
+    api_state: ApiState,
+    instance_id: InstanceId,
+    op: impl Operation<TargetType = PocketIc> + Send + Sync + 'static,
+) -> (StatusCode, String) {
+    match api_state.update(op.on_instance(instance_id)).await {
+        Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+        Ok(update_reply) => match update_reply {
+            // If the op_id of the ongoing operation is the requested one, we return code 201.
+            started @ UpdateReply::Started { .. } => {
+                (StatusCode::CREATED, format!("{:?}", started))
+            }
+            // Otherwise, the instance is busy with a different computation, so we return 409.
+            busy @ UpdateReply::Busy { .. } => (StatusCode::CONFLICT, format!("{:?}", busy)),
+            UpdateReply::Output(op_out) => {
+                (StatusCode::OK, serde_json::to_string(&op_out).unwrap())
+            }
+        },
+    }
+}
+
 // ----------------------------------------------------------------------------------------------------------------- //
 // Read handlers
 
 pub async fn handler_query(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state,
-        ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     extract::Json(raw_canister_call): extract::Json<super::rest_types::RawCanisterCall>,
 ) -> (StatusCode, String) {
@@ -126,38 +141,17 @@ pub async fn handler_query(
         Err(_) => (StatusCode::BAD_REQUEST, "Badly formatted Query".to_string()),
         Ok(canister_call) => {
             let query_op = Query(canister_call);
-            let desired_op_id = query_op.id();
-            match api_state.update(query_op.on_instance(instance_id)).await {
-                Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
-                Ok(update_reply) => match update_reply {
-                    // If the op_id of the ongoing operation is the requested one, we return code 201.
-                    // Otherwise, the instance is busy with a different computation, so we return 409.
-                    UpdateReply::Busy { state_label, op_id } => {
-                        let code = if op_id == desired_op_id {
-                            StatusCode::CREATED
-                        } else {
-                            StatusCode::CONFLICT
-                        };
-                        (
-                            code,
-                            format!("{:?}", UpdateReply::Busy { state_label, op_id }),
-                        )
-                    }
-                    UpdateReply::Output(op_out) => {
-                        (StatusCode::OK, serde_json::to_string(&op_out).unwrap())
-                    }
-                },
-            }
+            run_operation(api_state, instance_id, query_op).await
         }
     }
 }
 
 pub async fn handler_get_time(
-    State(AppState { .. }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(()): extract::Json<()>,
-) -> (StatusCode, ()) {
-    (StatusCode::NOT_FOUND, ())
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+) -> (StatusCode, String) {
+    let time_op = GetTime {};
+    run_operation(api_state, instance_id, time_op).await
 }
 
 pub async fn handler_get_cycles(
@@ -180,12 +174,7 @@ pub async fn handler_get_stable_memory(
 // Update handlers
 
 pub async fn handler_execute_ingress_message(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state,
-        ..
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     extract::Json(raw_canister_call): extract::Json<super::rest_types::RawCanisterCall>,
 ) -> (StatusCode, String) {
@@ -196,46 +185,20 @@ pub async fn handler_execute_ingress_message(
         ),
         Ok(canister_call) => {
             let ingress_op = ExecuteIngressMessage(canister_call);
-            let desired_op_id = ingress_op.id();
-            match api_state.update(ingress_op.on_instance(instance_id)).await {
-                Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
-                Ok(update_reply) => match update_reply {
-                    // If the op_id of the ongoing operation is the requested one, we return code 201.
-                    // Otherwise, the instance is busy with a different computation, so we return 409.
-                    UpdateReply::Busy { state_label, op_id } => {
-                        let code = if op_id == desired_op_id {
-                            StatusCode::CREATED
-                        } else {
-                            StatusCode::CONFLICT
-                        };
-                        (
-                            code,
-                            format!("{:?}", UpdateReply::Busy { state_label, op_id }),
-                        )
-                    }
-                    UpdateReply::Output(op_out) => {
-                        (StatusCode::OK, serde_json::to_string(&op_out).unwrap())
-                    }
-                },
-            }
+            run_operation(api_state, instance_id, ingress_op).await
         }
     }
 }
 
 pub async fn handler_set_time(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state: _,
-        checkpoints: _,
-        last_request: _,
-        runtime: _,
-        blob_store: _,
-    }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(()): extract::Json<()>,
-) -> (StatusCode, ()) {
-    (StatusCode::NOT_FOUND, ())
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(time): axum::extract::Json<rest::RawTime>,
+) -> (StatusCode, String) {
+    let op = SetTime {
+        time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
+    };
+    run_operation(api_state, instance_id, op).await
 }
 
 pub async fn handler_add_cycles(

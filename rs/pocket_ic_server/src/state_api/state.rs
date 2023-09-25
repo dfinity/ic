@@ -211,12 +211,15 @@ pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
 /// returned directly.
 /// If the computation can be run and takes longer, a Busy variant is returned, containing the
 /// requested op and the initial state.
-/// TODO: The description implies three variants; two are currently represented as busy. We may
-/// distinguish them with an additional HTTP response code, or maybe better as a third variant.
 #[derive(Debug, PartialEq, Eq)]
 pub enum UpdateReply {
-    /// The requested instance is busy executing this op on this state.
+    /// The requested instance is busy executing another update.
     Busy {
+        state_label: StateLabel,
+        op_id: OpId,
+    },
+    /// The requested instance is busy executing this current update.
+    Started {
         state_label: StateLabel,
         op_id: OpId,
     },
@@ -226,9 +229,10 @@ pub enum UpdateReply {
 }
 
 impl UpdateReply {
-    pub fn get_busy(&self) -> Option<(StateLabel, OpId)> {
+    pub fn get_in_progress(&self) -> Option<(StateLabel, OpId)> {
         match self {
             Self::Busy { state_label, op_id } => Some((state_label.clone(), op_id.clone())),
+            Self::Started { state_label, op_id } => Some((state_label.clone(), op_id.clone())),
             _ => None,
         }
     }
@@ -338,14 +342,14 @@ where
                             op_id: op_id.clone(),
                         });
                     }
-                    InstanceState::Available(mocket_ic) => {
-                        let state_label = mocket_ic.get_state_label();
+                    InstanceState::Available(pocket_ic) => {
+                        let state_label = pocket_ic.get_state_label();
                         let op_id = computation.op.id();
                         let busy = InstanceState::Busy {
                             state_label: state_label.clone(),
                             op_id: op_id.clone(),
                         };
-                        let InstanceState::Available(mut mocket_ic) =
+                        let InstanceState::Available(mut pocket_ic) =
                             std::mem::replace(&mut instances[computation.instance_id], busy)
                         else {
                             unreachable!()
@@ -369,8 +373,8 @@ where
                             let st = self.inner.clone();
                             move || {
                                 debug!("Starting computation");
-                                let result = op.compute(&mut mocket_ic);
-                                let new_state_label = mocket_ic.get_state_label();
+                                let result = op.compute(&mut pocket_ic);
+                                let new_state_label = pocket_ic.get_state_label();
                                 debug!("Finished computation. Writing to graph.");
                                 // add result to graph
                                 let mut instances = st.instances.blocking_write();
@@ -378,7 +382,7 @@ where
 
                                 let _ = std::mem::replace(
                                     &mut instances[instance_id],
-                                    InstanceState::Available(mocket_ic),
+                                    InstanceState::Available(pocket_ic),
                                 );
                                 let cached_computations =
                                     guard.entry(state_label.clone()).or_insert(HashMap::new());
@@ -390,7 +394,7 @@ where
                         });
 
                         // cache miss: replace pocket_ic instance in the vector with Busy
-                        (bg_task, UpdateReply::Busy { state_label, op_id })
+                        (bg_task, UpdateReply::Started { state_label, op_id })
                     }
                 }
             } else {
