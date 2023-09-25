@@ -1,5 +1,5 @@
 use crate::address::Address;
-use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
+use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::BlockTag;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use strum_macros::EnumIter;
+
+pub mod audit;
+pub mod event;
 
 #[cfg(test)]
 mod tests;
@@ -45,9 +48,9 @@ pub struct State {
     pub ethereum_block_height: BlockTag,
     pub last_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
-    pub events_to_mint: BTreeSet<ReceivedEthEvent>,
+    pub events_to_mint: BTreeMap<EventSource, ReceivedEthEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
-    pub invalid_events: BTreeMap<EventSource, EventSourceError>,
+    pub invalid_events: BTreeMap<EventSource, String>,
     pub eth_transactions: EthTransactions,
     pub next_transaction_nonce: TransactionNonce,
 
@@ -111,23 +114,21 @@ impl State {
         Some(Address::from_pubkey(&pubkey))
     }
 
-    pub fn record_event_to_mint(&mut self, event: ReceivedEthEvent) {
-        debug_assert!(
-            self.events_to_mint
-                .iter()
-                .all(|e| e == &event || e.source() != event.source()),
+    fn record_event_to_mint(&mut self, event: ReceivedEthEvent) {
+        let event_source = event.source();
+        assert!(
+            !self.events_to_mint.contains_key(&event_source),
             "there must be no two different events with the same source"
         );
+        assert!(!self.minted_events.contains_key(&event_source));
+        assert!(!self.invalid_events.contains_key(&event_source));
 
-        debug_assert!(!self.minted_events.contains_key(&event.source()));
-        debug_assert!(!self.invalid_events.contains_key(&event.source()));
-
-        self.events_to_mint.insert(event);
+        self.events_to_mint.insert(event_source, event);
     }
 
-    pub fn record_invalid_deposit(&mut self, source: EventSource, error: EventSourceError) -> bool {
-        debug_assert!(
-            self.events_to_mint.iter().all(|e| e.source() != source),
+    fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
+        assert!(
+            !self.events_to_mint.contains_key(&source),
             "attempted to mark an accepted event as invalid"
         );
         assert!(
@@ -144,21 +145,26 @@ impl State {
         }
     }
 
-    pub fn record_successful_mint(&mut self, minted_event: MintedEvent) {
-        debug_assert!(
-            !self.invalid_events.contains_key(&minted_event.source()),
-            "attempted to mint an event previously marked as invalid {minted_event:?}"
-        );
-
+    fn record_successful_mint(&mut self, source: EventSource, mint_block_index: LedgerMintIndex) {
         assert!(
-            self.events_to_mint.remove(&minted_event.deposit_event),
-            "attempted to mint ckETH for an unknown event {minted_event:?}"
+            !self.invalid_events.contains_key(&source),
+            "attempted to mint an event previously marked as invalid {source:?}"
         );
+        let deposit_event = match self.events_to_mint.remove(&source) {
+            Some(event) => event,
+            None => panic!("attempted to mint ckETH for an unknown event {source:?}"),
+        };
+
         assert_eq!(
-            self.minted_events
-                .insert(minted_event.source(), minted_event.clone()),
+            self.minted_events.insert(
+                source,
+                MintedEvent {
+                    deposit_event,
+                    mint_block_index
+                }
+            ),
             None,
-            "attempted to mint ckETH twice for the same event {minted_event:?}"
+            "attempted to mint ckETH twice for the same event {source:?}"
         );
     }
 
@@ -193,7 +199,7 @@ impl State {
         self.ethereum_block_height
     }
 
-    pub fn upgrade(&mut self, upgrade_args: UpgradeArg) -> Result<(), InvalidStateError> {
+    fn upgrade(&mut self, upgrade_args: UpgradeArg) -> Result<(), InvalidStateError> {
         use std::str::FromStr;
 
         let UpgradeArg {

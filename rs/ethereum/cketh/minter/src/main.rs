@@ -1,13 +1,12 @@
 use candid::{candid_method, Nat};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::api::stable::StableWriter;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, Address};
 use ic_cketh_minter::endpoints::{
     Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
-use ic_cketh_minter::eth_logs::report_transaction_error;
+use ic_cketh_minter::eth_logs::{report_transaction_error, ReceivedEthEventError};
 use ic_cketh_minter::eth_rpc::FeeHistory;
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
@@ -15,9 +14,11 @@ use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, Wei};
+use ic_cketh_minter::state::audit::{process_event, EventType};
 use ic_cketh_minter::state::{
-    lazy_call_ecdsa_public_key, mutate_state, read_state, MintedEvent, State, TaskType, STATE,
+    lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
 };
+use ic_cketh_minter::storage;
 use ic_cketh_minter::transactions::EthWithdrawalRequest;
 use ic_cketh_minter::tx::{
     estimate_transaction_price, AccessList, ConfirmedEip1559Transaction, Eip1559TransactionRequest,
@@ -42,6 +43,7 @@ fn init(arg: MinterArg) {
         MinterArg::InitArg(init_arg) => {
             log!(INFO, "[init]: initialized minter with arg: {:?}", init_arg);
             STATE.with(|cell| {
+                storage::record_event(EventType::Init(init_arg.clone()));
                 *cell.borrow_mut() =
                     Some(State::try_from(init_arg).expect("BUG: failed to initialize minter"))
             });
@@ -60,6 +62,8 @@ fn setup_timers() {
             let _ = lazy_call_ecdsa_public_key().await;
         })
     });
+    // Start scraping logs immediately after the install, then repeat with the interval.
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrap_eth_logs()));
     ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {
         ic_cdk::spawn(scrap_eth_logs())
     });
@@ -131,13 +135,24 @@ async fn scrap_eth_logs_between(
                     event.value,
                     event.principal
                 );
-                mutate_state(|s| s.record_event_to_mint(event));
+                mutate_state(|s| process_event(s, EventType::AcceptedDeposit(event)));
             }
             if has_new_events {
                 ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint_cketh()));
             }
             for error in errors {
-                mutate_state(|s| report_transaction_error(s, error));
+                if let ReceivedEthEventError::InvalidEventSource { source, error } = &error {
+                    mutate_state(|s| {
+                        process_event(
+                            s,
+                            EventType::InvalidDeposit {
+                                event_source: *source,
+                                reason: error.to_string(),
+                            },
+                        )
+                    });
+                }
+                report_transaction_error(error);
             }
             mutate_state(|s| s.last_scraped_block_number = last_scraped_block_number);
             last_scraped_block_number
@@ -186,7 +201,7 @@ async fn mint_cketh() {
 
     let mut error_count = 0;
 
-    for event in events {
+    for (event_source, event) in events {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
@@ -214,10 +229,13 @@ async fn mint_cketh() {
             }
         };
         mutate_state(|s| {
-            s.record_successful_mint(MintedEvent {
-                deposit_event: event.clone(),
-                mint_block_index: LedgerMintIndex::new(block_index),
-            })
+            process_event(
+                s,
+                EventType::MintedCkEth {
+                    event_source,
+                    mint_block_index: LedgerMintIndex::new(block_index),
+                },
+            )
         });
         log!(
             INFO,
@@ -400,8 +418,12 @@ async fn confirm_transaction() -> Result<(), String> {
 
 #[pre_upgrade]
 fn pre_upgrade() {
-    read_state(|s| ciborium::ser::into_writer(s, StableWriter::default()))
-        .expect("failed to encode ledger state");
+    read_state(|s| {
+        storage::encode_state(s);
+        storage::record_event(EventType::SyncedToBlock {
+            block_number: s.last_scraped_block_number,
+        });
+    });
 }
 
 #[update]

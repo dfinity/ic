@@ -2,7 +2,7 @@ use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::RetrieveEthStatus;
-use ic_cketh_minter::eth_logs::{EventSource, EventSourceError, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
@@ -39,7 +39,7 @@ pub struct DashboardTemplate {
     pub ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
     pub events_to_mint: Vec<ReceivedEthEvent>,
-    pub rejected_deposits: BTreeMap<EventSource, EventSourceError>,
+    pub rejected_deposits: BTreeMap<EventSource, String>,
     pub withdrawal_requests: Vec<EthWithdrawalRequest>,
     pub pending_transaction: Option<DashboardPendingTransaction>,
     pub confirmed_transactions: Vec<DashboardConfirmedTransaction>,
@@ -49,7 +49,7 @@ impl DashboardTemplate {
     pub fn from_state(state: &State) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| Reverse(event.mint_block_index));
-        let mut events_to_mint: Vec<_> = state.events_to_mint.iter().cloned().collect();
+        let mut events_to_mint: Vec<_> = state.events_to_mint.values().cloned().collect();
         events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
 
         let mut withdrawal_requests: Vec<_> = state

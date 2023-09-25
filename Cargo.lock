@@ -5648,6 +5648,7 @@ dependencies = [
  "ic-icrc1-client-cdk",
  "ic-icrc1-ledger",
  "ic-metrics-encoder",
+ "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
@@ -5663,6 +5664,7 @@ dependencies = [
  "serde_json",
  "strum 0.23.0",
  "strum_macros 0.23.1",
+ "thiserror",
  "thousands",
 ]
 

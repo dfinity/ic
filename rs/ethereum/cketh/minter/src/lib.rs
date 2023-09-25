@@ -8,7 +8,6 @@ pub mod eth_logs;
 pub mod eth_rpc;
 pub mod eth_rpc_client;
 pub mod eth_rpc_error;
-pub mod eventlog;
 pub mod guard;
 pub mod lifecycle;
 pub mod logs;
@@ -17,6 +16,7 @@ pub mod map;
 pub mod numeric;
 mod serde_data;
 pub mod state;
+pub mod storage;
 pub mod transactions;
 pub mod tx;
 

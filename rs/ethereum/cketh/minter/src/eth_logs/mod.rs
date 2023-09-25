@@ -6,13 +6,14 @@ use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LogIndex, Wei};
-use crate::state::{read_state, State};
+use crate::state::read_state;
 use candid::Principal;
 use hex_literal::hex;
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use thiserror::Error;
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
@@ -48,28 +49,28 @@ impl fmt::Debug for ReceivedEthEvent {
 
 /// A unique identifier of the event source: the source transaction hash and the log
 /// entry index.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct EventSource(Hash, LogIndex);
-
-impl EventSource {
-    pub fn txhash(&self) -> &Hash {
-        &self.0
-    }
-
-    pub fn log_index(&self) -> LogIndex {
-        self.1
-    }
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
+)]
+pub struct EventSource {
+    #[n(0)]
+    pub transaction_hash: Hash,
+    #[n(1)]
+    pub log_index: LogIndex,
 }
 
 impl fmt::Display for EventSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}:{}", self.0, self.1)
+        write!(f, "0x{}:{}", self.transaction_hash, self.log_index)
     }
 }
 
 impl ReceivedEthEvent {
     pub fn source(&self) -> EventSource {
-        EventSource(self.transaction_hash, self.log_index)
+        EventSource {
+            transaction_hash: self.transaction_hash,
+            log_index: self.log_index,
+        }
     }
 }
 
@@ -106,7 +107,7 @@ pub async fn last_received_eth_events(
     (valid_transactions, errors)
 }
 
-pub fn report_transaction_error(state: &mut State, error: ReceivedEthEventError) {
+pub fn report_transaction_error(error: ReceivedEthEventError) {
     match error {
         ReceivedEthEventError::PendingLogEntry => {
             log!(
@@ -115,17 +116,10 @@ pub fn report_transaction_error(state: &mut State, error: ReceivedEthEventError)
             );
         }
         ReceivedEthEventError::InvalidEventSource { source, error } => {
-            if state.record_invalid_deposit(source, error.clone()) {
-                log!(
-                    INFO,
-                    "[report_transaction_error]: cannot process {source} due to {error}",
-                );
-            } else {
-                log!(
-                    DEBUG,
-                    "[report_transaction_error]: Ignoring invalid event {source} with error {error} since it was already reported",
-                );
-            }
+            log!(
+                INFO,
+                "[report_transaction_error]: cannot process {source} due to {error}",
+            );
         }
     }
 }
@@ -139,21 +133,12 @@ pub enum ReceivedEthEventError {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Error, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventSourceError {
+    #[error("failed to decode principal from bytes {invalid_principal}")]
     InvalidPrincipal { invalid_principal: FixedSizeData },
+    #[error("invalid ReceivedEthEvent: {0}")]
     InvalidEvent(String),
-}
-
-impl fmt::Display for EventSourceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EventSourceError::InvalidPrincipal { invalid_principal } => {
-                write!(f, "invalid principal: {}", invalid_principal)
-            }
-            EventSourceError::InvalidEvent(msg) => write!(f, "Invalid event: {}", msg),
-        }
-    }
 }
 
 impl TryFrom<LogEntry> for ReceivedEthEvent {
@@ -175,7 +160,10 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
         let log_index = entry
             .log_index
             .ok_or(ReceivedEthEventError::PendingLogEntry)?;
-        let event_source = EventSource(transaction_hash, log_index);
+        let event_source = EventSource {
+            transaction_hash,
+            log_index,
+        };
 
         if entry.topics.len() != 3 {
             return Err(ReceivedEthEventError::InvalidEventSource {
