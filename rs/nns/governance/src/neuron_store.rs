@@ -240,13 +240,46 @@ impl NeuronStore {
 
     /// Insert or update a Neuron
     pub fn upsert(&mut self, neuron: Neuron) {
-        self.heap_neurons
-            .insert(neuron.id.expect("Neuron must have an id").id, neuron);
+        let neuron_id = neuron.id.expect("Neuron must have an id");
+
+        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, neuron_id) {
+            if let Err(error) =
+                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().add_neuron(&neuron))
+            {
+                println!(
+                    "{}WARNING: issues found when adding neuron to indexes, possibly because of \
+                     neuron indexes are out-of-sync with neurons: {}",
+                    LOG_PREFIX, error
+                );
+            }
+        }
+
+        self.heap_neurons.insert(neuron_id.id, neuron);
     }
 
     /// Remove a Neuron by id
     pub fn remove(&mut self, neuron_id: &NeuronId) {
-        self.heap_neurons.remove(&neuron_id.id);
+        let removed_neuron = self.heap_neurons.remove(&neuron_id.id);
+
+        let removed_neuron = match removed_neuron {
+            Some(removed_neuron) => removed_neuron,
+            None => {
+                println!("WARNING: trying to remove a neuron that does not exist");
+                return;
+            }
+        };
+
+        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, *neuron_id) {
+            if let Err(error) =
+                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().remove_neuron(&removed_neuron))
+            {
+                println!(
+                    "{}WARNING: issues found when adding neuron to indexes, possibly because of \
+                     neuron indexes are out-of-sync with neurons: {}",
+                    LOG_PREFIX, error
+                );
+            }
+        }
     }
 
     /// Get NeuronId for a particular subaccount.
@@ -370,23 +403,58 @@ impl NeuronStore {
         is_neuron_inactive: impl Fn(&Neuron) -> bool,
         f: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
-        let neuron = self
+        let old_neuron = self
             .heap_neurons
             .get_mut(&neuron_id.id)
             .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
 
+        // Clone and call f() to possibly modify the neuron.
+        let mut new_neuron = old_neuron.clone();
+
         // TODO(NNS1-2584): let was_inactive_before = is_neuron_inactive(neuron);
         // TODO(NNS1-2582): let original_neuron = neuron.clone()
 
-        let result = Ok(f(neuron));
+        let result = Ok(f(&mut new_neuron));
 
         // Update STABLE_NEURON_STORE. For now, this functionality is disabled by default. It is
         // enabled when building tests, and when feature = "test" is enabled.
         if is_copy_inactive_neurons_to_stable_memory_enabled() {
-            write_through_to_stable_neuron_store(is_neuron_inactive, neuron);
+            write_through_to_stable_neuron_store(is_neuron_inactive, &new_neuron);
         }
 
+        // Update indexes by passing in both old and new versions of neuron.
+        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, *neuron_id) {
+            if let Err(error) = NEURON_INDEXES
+                .with(|indexes| indexes.borrow_mut().update_neuron(old_neuron, &new_neuron))
+            {
+                println!(
+                    "{}WARNING: issues found when updating neuron indexes, possibly because of \
+                 neuron indexes are out-of-sync with neurons: {}",
+                    LOG_PREFIX, error
+                );
+            }
+        }
+
+        *old_neuron = new_neuron;
+
         result
+    }
+
+    fn is_indexes_migrated_for_neuron(indexes_migration: &Migration, neuron_id: NeuronId) -> bool {
+        match indexes_migration.migration_status() {
+            MigrationStatus::Unspecified => false,
+            MigrationStatus::InProgress => match indexes_migration.progress {
+                Some(Progress::LastNeuronId(last_neuron_id)) => neuron_id <= last_neuron_id,
+                None => {
+                    eprintln!("{}Neuron index migration progress is wrong", LOG_PREFIX);
+                    false
+                }
+            },
+            MigrationStatus::Succeeded => true,
+            // Some intervention is needed when it failed, so although some neurons are migrated, we
+            // do not keep updating the indexes.
+            MigrationStatus::Failed => false,
+        }
     }
 
     /// Execute a function with a reference to a neuron, returning the result of the function,
