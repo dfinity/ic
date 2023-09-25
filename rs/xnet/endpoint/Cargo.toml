@@ -29,7 +29,7 @@ threadpool = "1.8.1"
 url = "2.1.1"
 
 [dev-dependencies]
-bytes = "1.5.0"
+bytes = { workspace = true }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-registry-keys = { path = "../../registry/keys" }

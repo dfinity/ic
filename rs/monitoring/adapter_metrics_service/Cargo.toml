@@ -8,5 +8,5 @@ prost = { workspace = true }
 tonic = { workspace = true }
 
 [build-dependencies]
-prost-build = "0.11.0"
+prost-build = { workspace = true }
 tonic-build = { workspace = true }

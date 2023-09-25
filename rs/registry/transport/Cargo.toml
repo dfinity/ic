@@ -8,7 +8,7 @@ candid = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }
-bytes = "1.5.0"
+bytes = { workspace = true }
 serde = { version = "1.0.99", features = ["derive"] }
 
 [dev-dependencies]

@@ -18,5 +18,5 @@ tonic = { workspace = true }
 tower = { workspace = true }
 
 [dev-dependencies]
-bytes = "1.5.0"
+bytes = { workspace = true }
 rand = "0.8.3"

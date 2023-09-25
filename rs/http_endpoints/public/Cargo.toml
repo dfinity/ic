@@ -57,7 +57,7 @@ url = "2.1.1"
 ic-backtrace = { path = "../../monitoring/backtrace" }
 
 [dev-dependencies]
-bytes = "1.5.0"
+bytes = { workspace = true }
 ic-agent = { workspace = true }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
