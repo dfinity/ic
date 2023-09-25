@@ -217,10 +217,11 @@ where
     <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
 {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
+    let endpoint: &'static str = Artifact::TAG.into();
     let router = Router::new()
-        .route(&format!("/{}/rpc", Artifact::TAG), any(rpc_handler))
+        .route(&format!("/{}/rpc", endpoint), any(rpc_handler))
         .with_state(pool)
-        .route(&format!("/{}/update", Artifact::TAG), any(update_handler))
+        .route(&format!("/{}/update", endpoint), any(update_handler))
         .with_state(update_tx);
 
     (router, update_rx)
@@ -282,7 +283,7 @@ fn build_rpc_handler_request<T: Serialize>(uri_prefix: &str, id: &T) -> Request<
 
 #[allow(unused)]
 
-struct ConsensusManager<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
+pub struct ConsensusManager<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
