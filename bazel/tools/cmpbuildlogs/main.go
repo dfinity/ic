@@ -48,7 +48,7 @@ func loadBuildRecords(fname string) BuildRecords {
 }
 
 func ignoreBuildRecordEntries(k string, v interface{}) bool {
-	return k == "walltime" || k == "remoteCacheHit" || k == "runner"
+	return k == "walltime" || k == "remoteCacheHit" || k == "runner" || k == "digest"
 }
 
 func main() {
