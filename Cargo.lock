@@ -4787,7 +4787,6 @@ dependencies = [
  "futures-util",
  "hyper",
  "ic-types",
- "prometheus 0.12.0",
  "rand 0.8.5",
  "slog",
  "tokio",
