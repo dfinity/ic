@@ -1,7 +1,7 @@
-use crate::state_api::rest_types::RawCanisterCall;
 use crate::state_api::state::HasStateLabel;
 use crate::state_api::state::OpOut;
 use crate::state_api::state::StateLabel;
+use crate::BlobStore;
 use crate::OpId;
 use crate::Operation;
 use ic_config::execution_environment;
@@ -15,6 +15,9 @@ use ic_state_machine_tests::StateMachineBuilder;
 use ic_state_machine_tests::StateMachineConfig;
 use ic_state_machine_tests::Time;
 use ic_types::{CanisterId, CanisterIdBlobParseError, PrincipalId, PrincipalIdBlobParseError};
+use pocket_ic::common::blob::{BinaryBlob, BlobCompression};
+use pocket_ic::common::rest::RawCanisterCall;
+use pocket_ic::common::rest::RawSetStableMemory;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
@@ -216,6 +219,93 @@ impl CanisterCall {
             "call({},{},{},{})",
             self.sender, self.canister_id, self.method, hash
         ))
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SetStableMemory {
+    pub canister_id: CanisterId,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum SetStableMemoryError {
+    BadCanisterId,
+    BadBlobId,
+    DecompressionFailed,
+}
+
+impl SetStableMemory {
+    pub async fn from_store(
+        raw: RawSetStableMemory,
+        store: Arc<dyn BlobStore>,
+    ) -> Result<Self, SetStableMemoryError> {
+        if let Ok(canister_id) = CanisterId::try_from(raw.canister_id) {
+            if let Some(BinaryBlob { data, compression }) = store.fetch(raw.blob_id).await {
+                if let Some(data) = decompress(data, compression) {
+                    Ok(SetStableMemory { canister_id, data })
+                } else {
+                    Err(SetStableMemoryError::DecompressionFailed)
+                }
+            } else {
+                Err(SetStableMemoryError::BadBlobId)
+            }
+        } else {
+            Err(SetStableMemoryError::BadCanisterId)
+        }
+    }
+}
+
+fn decompress(data: Vec<u8>, compression: BlobCompression) -> Option<Vec<u8>> {
+    use std::io::Read;
+    match compression {
+        BlobCompression::Gzip => {
+            let mut decoder = flate2::read::GzDecoder::new(&data[..]);
+            let mut out = Vec::new();
+            let result = decoder.read_to_end(&mut out);
+            if result.is_err() {
+                return None;
+            }
+            Some(out)
+        }
+        BlobCompression::NoCompression => Some(data),
+    }
+}
+
+impl Operation for SetStableMemory {
+    type TargetType = PocketIc;
+    fn compute(self, pocket_ic: &mut Self::TargetType) -> OpOut {
+        pocket_ic
+            .subnet
+            .set_stable_memory(self.canister_id, &self.data);
+        OpOut::NoOutput
+    }
+
+    fn id(&self) -> OpId {
+        // TODO: consider tupling the hash with the data everywhere,
+        // from the sender up to here. so the blobstore can be lazier,
+        // we _can_ check for consistency, but we don't _have to_ re-
+        // calculate it here.
+        let mut hasher = Sha256::new();
+        hasher.write(&self.data);
+        let hash = Digest(hasher.finish());
+        OpId(format!("set_stable_memory({}_{})", self.canister_id, hash))
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct GetStableMemory {
+    pub canister_id: CanisterId,
+}
+
+impl Operation for GetStableMemory {
+    type TargetType = PocketIc;
+    fn compute(self, pocket_ic: &mut Self::TargetType) -> OpOut {
+        OpOut::Bytes(pocket_ic.subnet.stable_memory(self.canister_id))
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("get_stable_memory({})", self.canister_id))
     }
 }
 

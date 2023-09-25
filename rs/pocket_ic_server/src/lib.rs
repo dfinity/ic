@@ -38,6 +38,8 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
+use ::pocket_ic::common::blob::{BinaryBlob, BlobId};
+use axum::async_trait;
 use ic_crypto_sha2::Sha256;
 use ic_types::time::Time;
 use std::time::Duration;
@@ -75,6 +77,12 @@ impl<T: Operation + 'static> BindOperation for T {
             instance_id,
         }
     }
+}
+
+#[async_trait]
+pub trait BlobStore: Send + Sync {
+    async fn store(&self, blob: BinaryBlob) -> BlobId;
+    async fn fetch(&self, blob_id: BlobId) -> Option<BinaryBlob>;
 }
 
 // ================================================================================================================= //

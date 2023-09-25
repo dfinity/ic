@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::blob::BlobId;
+
 pub type InstanceId = usize;
 
 // ================================================================================================================= //
@@ -24,4 +26,21 @@ pub enum CreateInstanceResponse {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct RawCanisterCall {
+    // #[serde(with = "base64")]
+    pub sender: Vec<u8>,
+    // #[serde(with = "base64")]
+    pub canister_id: Vec<u8>,
+    pub method: String,
+    // #[serde(with = "base64")]
+    pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct RawSetStableMemory {
+    pub canister_id: Vec<u8>,
+    pub blob_id: BlobId,
 }
