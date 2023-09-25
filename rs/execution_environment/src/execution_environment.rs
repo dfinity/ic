@@ -1791,7 +1791,7 @@ impl ExecutionEnvironment {
                         originator_reply_callback: reply_callback,
                         refund: cycles,
                         response_payload: Payload::Reject(RejectContext::new(
-                            RejectCode::CanisterReject,
+                            RejectCode::CanisterError,
                             format!("Canister {}'s stop request cancelled", canister_id),
                         )),
                     };
