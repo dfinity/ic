@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::{decode_args, encode_args, Principal};
 use ic_cdk::api::management_canister::main::{
@@ -12,6 +11,12 @@ use std::fmt;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime};
+
+pub mod common;
+pub mod pocket_ic_v2;
+
+use crate::common::{BlobCompression, BlobId};
+pub use pocket_ic_v2::PocketIcV2;
 
 const LOCALHOST: &str = "127.0.0.1";
 type InstanceId = String;
@@ -30,7 +35,7 @@ pub struct PocketIc {
 
 impl PocketIc {
     pub fn new() -> Self {
-        let server_url = Self::start_or_reuse_server();
+        let server_url = start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
         let instance_id = reqwest_client
             .post(server_url.join("instances/").unwrap())
@@ -55,7 +60,7 @@ impl PocketIc {
     pub fn new_from_snapshot<S: AsRef<str> + std::fmt::Display + serde::Serialize + Copy>(
         name: S,
     ) -> Result<Self, String> {
-        let server_url = Self::start_or_reuse_server();
+        let server_url = start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
         let cp = Checkpoint {
             checkpoint_name: name.to_string(),
@@ -93,38 +98,8 @@ impl PocketIc {
         }
     }
 
-    /// Attempt to start a new PocketIC server if it's not already running.
-    fn start_or_reuse_server() -> Url {
-        // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-        let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
-        let parent_pid = std::os::unix::process::parent_id();
-        Command::new(PathBuf::from(bin_path))
-            .arg("--pid")
-            .arg(parent_pid.to_string())
-            .spawn()
-            .expect("Failed to start PocketIC binary");
-
-        let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-        let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
-        let start = Instant::now();
-        loop {
-            match ready_file_path.try_exists() {
-                Ok(true) => {
-                    let port_string = std::fs::read_to_string(port_file_path)
-                        .expect("Failed to read port from port file");
-                    let port: u16 = port_string.parse().expect("Failed to parse port to number");
-                    return Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
-                }
-                _ => std::thread::sleep(Duration::from_millis(20)),
-            }
-            if start.elapsed() > Duration::from_secs(5) {
-                panic!("Failed to start PocketIC service in time");
-            }
-        }
-    }
-
     pub fn list_instances() -> Vec<InstanceId> {
-        let url = Self::start_or_reuse_server().join("instances/").unwrap();
+        let url = start_or_reuse_server().join("instances/").unwrap();
         let response = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -545,27 +520,6 @@ pub struct Checkpoint {
     pub checkpoint_name: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct BlobId(pub [u8; 32]);
-
-#[derive(Clone, Debug)]
-pub struct BinaryBlob {
-    pub data: Vec<u8>,
-    pub compression: BlobCompression,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BlobCompression {
-    Gzip,
-    NoCompression,
-}
-
-#[async_trait]
-pub trait BlobStore: Send + Sync {
-    async fn store(&self, blob: BinaryBlob) -> BlobId;
-    async fn fetch(&self, blob_id: BlobId) -> Option<BinaryBlob>;
-}
-
 /// Call a canister candid query method, anonymous.
 pub fn query_candid<Input, Output>(
     env: &PocketIc,
@@ -763,5 +717,35 @@ pub mod base64 {
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let base64 = String::deserialize(d)?;
         base64::decode(base64.as_bytes()).map_err(|e| serde::de::Error::custom(e))
+    }
+}
+
+/// Attempt to start a new PocketIC server if it's not already running.
+pub fn start_or_reuse_server() -> Url {
+    // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
+    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    let parent_pid = std::os::unix::process::parent_id();
+    Command::new(PathBuf::from(bin_path))
+        .arg("--pid")
+        .arg(parent_pid.to_string())
+        .spawn()
+        .expect("Failed to start PocketIC binary");
+
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
+    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
+    let start = Instant::now();
+    loop {
+        match ready_file_path.try_exists() {
+            Ok(true) => {
+                let port_string = std::fs::read_to_string(port_file_path)
+                    .expect("Failed to read port from port file");
+                let port: u16 = port_string.parse().expect("Failed to parse port to number");
+                return Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+            }
+            _ => std::thread::sleep(Duration::from_millis(20)),
+        }
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Failed to start PocketIC service in time");
+        }
     }
 }

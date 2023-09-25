@@ -10,22 +10,6 @@
 use serde::{Deserialize, Serialize};
 
 // ================================================================================================================= //
-// HTTP JSON Request types
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Checkpoint {
-    pub checkpoint_name: String,
-}
-
-// ================================================================================================================= //
-// HTTP JSON Response types
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct InstanceId {
-    pub instance_id: usize,
-}
-
-// ================================================================================================================= //
 // Intermediate PocketIc Operation types: Needed to define how an Operation type should be serialized
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
