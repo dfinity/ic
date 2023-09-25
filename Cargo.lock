@@ -7377,7 +7377,6 @@ dependencies = [
  "threadpool",
  "tokio",
  "tower",
- "wasmparser 0.100.0",
  "wasmparser 0.109.0",
  "wat",
 ]
@@ -18517,16 +18516,6 @@ name = "wasmparser"
 version = "0.77.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b35c86d22e720a07d954ebbed772d01180501afe7d03d464f413bb5f8914a8d6"
-
-[[package]]
-name = "wasmparser"
-version = "0.100.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64b20236ab624147dfbb62cf12a19aaf66af0e41b8398838b66e997d07d269d4"
-dependencies = [
- "indexmap 1.9.2",
- "url",
-]
 
 [[package]]
 name = "wasmparser"
