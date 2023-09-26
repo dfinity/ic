@@ -70,9 +70,6 @@ def image_deps(mode, malicious = False):
         "dev": {
             "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev:build_container_filesystem_config.txt",
         },
-        "dev-fixed-version": {
-            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-fixed-version:build_container_filesystem_config.txt",
-        },
         "dev-malicious": {
             "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-malicious:build_container_filesystem_config.txt",
         },
