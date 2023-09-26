@@ -500,16 +500,17 @@ EOF
         ],
         outs = ["launch_local_vm_script"],
         cmd = """
-        TEMP="$$(mktemp -d)"
         IMAGE="$(location :disk-img.tar)"
         cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-cp $$IMAGE $$TEMP
-cd $$TEMP
+TEMP=\\$$(mktemp -d)
+CID=\\$$((\\$$RANDOM + 3))
+cp $$IMAGE \\$$TEMP
+cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio
+qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio
 EOF
         """,
         executable = True,
