@@ -55,7 +55,7 @@ struct PageChunk {
 
 const MB: usize = 1024 * 1024;
 const DATA_SEGMENT_LOWER_LIMIT: usize = 2 * MB;
-const DATA_SEGMENT_UPPER_LIMIT: usize = 4 * MB;
+const DATA_SEGMENT_UPPER_LIMIT: usize = 8 * MB;
 
 // TODO: Possibly simplify by overwriting the entire reserved data segment memory range (2MB, 4MB)
 // and only checking the data segment locations.
