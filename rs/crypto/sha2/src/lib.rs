@@ -1,20 +1,10 @@
 //! Hashing utilities.
 //!
-//! The package works both on Wasm and non-Wasm architectures by using
-//! different hasher implementations depending on the architecture:
-//!
-//! * When compiling to Wasm, we use pure Rust implementation.
-//!
-//! * When compiling to native, we use openssl, which relies on OpenSSL.
-//!
-//! At the moment, the complexity introduced by architecture-dependent
-//! code is worth it:
-//!
-//! * OpenSSL is big, complicated and is hard to port to Wasm. So it's not
-//!   really a viable option to use it in canisters.
-//!
-//! * pure Rust is about 20% slower than OpenSSL on StateManager benchmarks.
-//!   Thus it makes sense to use a faster implementation in the replica code.
+//! Currently this crate delegates the hashing to the RustCrypto sha2
+//! crate. That crate supports both a pure Rust implementation
+//! (necessary for Wasm) and additionally supports SHA-NI and ARMv8
+//! SHA hardware extensions which provide excellent performance on
+//! cores which support them (this includes all replica nodes).
 //!
 //! Hashers with fixed algorithms that are guaranteed not to change in the
 //! future or across registry versions.
