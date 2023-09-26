@@ -1,7 +1,6 @@
 use candid::{Nat, Principal};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
-use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -89,7 +88,7 @@ fn operation_strategy<Tokens: TokensType>(
                     spender,
                     amount,
                     expected_allowance: Some(amount),
-                    expires_at: expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                    expires_at,
                     fee
                 }),
         ]
@@ -274,9 +273,7 @@ impl ArgWithCaller {
             LedgerEndpointArg::ApproveArg(approve_arg) => {
                 let operation = Operation::<Tokens>::Approve {
                     amount: Tokens::try_from(approve_arg.amount.clone()).unwrap(),
-                    expires_at: approve_arg
-                        .expires_at
-                        .map(TimeStamp::from_nanos_since_unix_epoch),
+                    expires_at: approve_arg.expires_at,
                     fee: approve_arg
                         .fee
                         .clone()
@@ -626,7 +623,7 @@ pub fn valid_transactions_strategy(
                                 } else {
                                     None
                                 },
-                                expires_at: expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                                expires_at,
                             },
                             created_at_time,
                             memo: memo.clone(),

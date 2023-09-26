@@ -72,7 +72,7 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         expected_allowance: Option<Tokens>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        expires_at: Option<TimeStamp>,
+        expires_at: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
@@ -243,7 +243,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                         from,
                         spender,
                         *amount,
-                        *expires_at,
+                        expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                         now,
                         *expected_allowance,
                     )

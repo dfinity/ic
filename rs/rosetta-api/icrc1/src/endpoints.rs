@@ -220,7 +220,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     spender,
                     amount: amount.into(),
                     expected_allowance: expected_allowance.map(Into::into),
-                    expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
+                    expires_at,
                     fee: fee
                         .map(Into::into)
                         .or_else(|| b.effective_fee.map(Into::into)),

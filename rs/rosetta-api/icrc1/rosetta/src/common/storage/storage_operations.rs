@@ -4,7 +4,6 @@ use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_core::block::EncodedBlock;
-use ic_ledger_core::timestamp::TimeStamp;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use rusqlite::{params, Params};
@@ -123,7 +122,7 @@ pub fn store_blocks(
                 amount,
                 expected_allowance,
                 fee,
-                expires_at.map(|ts| ts.as_nanos_since_unix_epoch()),
+                expires_at,
             ),
         };
 
@@ -409,7 +408,7 @@ where
                     },
                     amount: Tokens::new(amount),
                     expected_allowance: expected_allowance.map(|ea| Tokens::new(ea)),
-                    expires_at: approval_expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                    expires_at: approval_expires_at,
                     fee: fee.map(Tokens::new),
                 },
                 k => bail!("Operation type {} is not supported", k),
