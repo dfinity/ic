@@ -568,7 +568,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 spender: arg.spender,
                 amount,
                 expected_allowance,
-                expires_at: arg.expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                expires_at: arg.expires_at,
                 fee: arg.fee.map(|_| expected_fee_tokens),
             },
             created_at_time: arg.created_at_time,

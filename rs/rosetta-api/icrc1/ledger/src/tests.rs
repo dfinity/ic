@@ -112,7 +112,7 @@ fn test_approvals_are_not_cumulative() {
             spender,
             amount: new_allowance,
             expected_allowance: None,
-            expires_at: Some(expiration),
+            expires_at: Some(expiration.as_nanos_since_unix_epoch()),
             fee: Some(fee),
         },
         created_at_time: None,
@@ -251,7 +251,7 @@ fn test_approval_expiration_override() {
         spender,
         amount: tokens(amount),
         expected_allowance: None,
-        expires_at,
+        expires_at: expires_at.map(|e| e.as_nanos_since_unix_epoch()),
         fee: Some(tokens(10_000)),
     };
     let tr = Transaction {
@@ -340,7 +340,7 @@ fn test_approval_no_fee_on_reject() {
             spender,
             amount: tokens(1_000),
             expected_allowance: None,
-            expires_at: Some(ts(1)),
+            expires_at: Some(1),
             fee: Some(tokens(10_000)),
         },
         created_at_time: Some(1000),
