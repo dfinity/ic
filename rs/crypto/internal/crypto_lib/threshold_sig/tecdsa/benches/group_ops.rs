@@ -371,9 +371,42 @@ fn point_mul(c: &mut Criterion) {
     }
 }
 
+fn point_serialize(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let mut group = c.benchmark_group(format!("crypto_point_serialization_{}", curve_type));
+
+        group.bench_function(BenchmarkId::new("serialize_compressed", 0), |b| {
+            b.iter_with_setup(|| random_point(curve_type, rng), |p| p.serialize())
+        });
+
+        group.bench_function(BenchmarkId::new("serialize_uncompressed", 0), |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng),
+                |p| p.serialize_uncompressed(),
+            )
+        });
+
+        group.bench_function(BenchmarkId::new("deserialize_compressed", 0), |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng).serialize(),
+                |p| EccPoint::deserialize(curve_type, &p),
+            );
+        });
+
+        group.bench_function(BenchmarkId::new("deserialize_uncompressed", 0), |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng).serialize_uncompressed(),
+                |p| EccPoint::deserialize(curve_type, &p),
+            );
+        });
+    }
+}
+
 criterion_group! {
 name = group_ops;
 config = Criterion::default().measurement_time(Duration::from_secs(30));
-targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_mul, point_double_vs_addition
+targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_mul, point_double_vs_addition, point_serialize,
 }
 criterion_main!(group_ops);
