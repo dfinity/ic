@@ -7,7 +7,7 @@ use std::{
 
 use axum::{
     extract::State,
-    http::{Request, Response, StatusCode},
+    http::{Request, StatusCode},
     routing::any,
     Extension, Router,
 };
@@ -38,7 +38,7 @@ use tokio::{
         watch,
     },
     task::{JoinHandle, JoinSet},
-    time::{self, timeout},
+    time,
 };
 
 const ENABLE_ARTIFACT_PUSH: bool = false;
@@ -212,8 +212,9 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
 ) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>)
 where
     Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Clone + Eq + Send + Hash,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send,
+    <Artifact as ArtifactKind>::Id:
+        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
+    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
     <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
 {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
@@ -233,9 +234,10 @@ async fn rpc_handler<Artifact: ArtifactKind>(
 ) -> Result<Bytes, StatusCode>
 where
     Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Clone + Eq + Send + Hash,
+    <Artifact as ArtifactKind>::Id:
+        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
     <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send,
+    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
 {
     let id: Artifact::Id = bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
 
@@ -259,9 +261,9 @@ async fn update_handler<Artifact: ArtifactKind>(
 ) -> Result<(), StatusCode>
 where
     Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a>,
+    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Sync,
     <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a>,
+    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Sync,
 {
     let update: AdvertUpdate<Artifact> =
         bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
@@ -294,7 +296,7 @@ pub struct ConsensusManager<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-    current_priority_fn: Arc<RwLock<PriorityFn<Artifact::Id, Artifact::Attribute>>>,
+    current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
     sender: CrossbeamSender<UnvalidatedArtifact<Artifact::Message>>,
     time_source: Arc<dyn TimeSource>,
     transport: Arc<dyn Transport>,
@@ -305,7 +307,7 @@ pub struct ConsensusManager<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
     active_downloads: HashMap<Artifact::Id, watch::Sender<HashSet<NodeId>>>,
     #[allow(clippy::type_complexity)]
-    artifact_download_tasks: JoinSet<(
+    artifact_processor_tasks: JoinSet<(
         watch::Receiver<HashSet<NodeId>>,
         Artifact::Id,
         Artifact::Attribute,
@@ -319,9 +321,10 @@ impl<Artifact, Pool> ConsensusManager<Artifact, Pool, (AdvertUpdate<Artifact>, N
 where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
     Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Clone + Send + Hash + Eq,
+    <Artifact as ArtifactKind>::Id:
+        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
     <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send,
+    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
 {
     pub fn start_consensus_manager(
         log: ReplicaLogger,
@@ -341,9 +344,9 @@ where
         let metrics = ConsensusManagerMetrics::new::<Artifact>(metrics_registry);
         let slot_manager = SlotManager::new(log.clone(), metrics.clone());
 
-        let current_priority_fn = Arc::new(RwLock::new(
-            priority_fn_producer.get_priority_function(&raw_pool.read().unwrap()),
-        ));
+        let priority_fn = priority_fn_producer.get_priority_function(&raw_pool.read().unwrap());
+        let (current_priority_fn, _) = watch::channel(priority_fn);
+
         let manager = ConsensusManager {
             log,
             metrics,
@@ -362,7 +365,7 @@ where
             slot_manager,
             active_downloads: HashMap::new(),
             slot_table: HashMap::new(),
-            artifact_download_tasks: JoinSet::new(),
+            artifact_processor_tasks: JoinSet::new(),
             topology_watcher,
         };
 
@@ -374,8 +377,10 @@ where
         loop {
             select! {
                 _ = pfn_interval.tick() => {
-                    let mut current_priority_fn_guard = self.current_priority_fn.write().unwrap();
-                    *current_priority_fn_guard = self.priority_fn_producer.get_priority_function(&self.raw_pool.read().unwrap());
+                    let pool = &self.raw_pool.read().unwrap();
+                    let priority_fn = self.priority_fn_producer.get_priority_function(pool);
+
+                    self.current_priority_fn.send_replace(priority_fn);
                 }
                 Some(advert) = self.adverts_to_send.recv() => {
                     self.handle_advert_to_send(advert);
@@ -384,7 +389,7 @@ where
                     self.metrics.adverts_received_total.inc();
                     self.handle_advert_receive(advert_update, peer_id, conn_id);
                 }
-                Some(result) = self.artifact_download_tasks.join_next() => {
+                Some(result) = self.artifact_processor_tasks.join_next() => {
                     let (peer_rx,id,attr) = result.expect("Should not be cancelled or panic");
 
                     // peer advertised after task finished.
@@ -392,13 +397,13 @@ where
 
                         self.metrics.peer_advertising_after_deletion_total.inc();
 
-                        self.artifact_download_tasks.spawn_on(
-                            Self::download_artifact(
+                        self.artifact_processor_tasks.spawn_on(
+                            Self::process_advert(
                                 id,
                                 attr,
                                 None,
                                 peer_rx,
-                                self.current_priority_fn.clone(),
+                                self.current_priority_fn.subscribe(),
                                 self.sender.clone(),
                                 self.time_source.clone(),
                                 self.transport.clone(),
@@ -450,13 +455,126 @@ where
         }
     }
 
+    /// Downloads a given artifact.
+    ///
+    /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
+    ///
+    /// The download fails iff:
+    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadResult::PriorityIsDrop`]
+    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadResult::AllPeersDeletedTheArtifact`]
     async fn download_artifact(
+        id: &Artifact::Id,
+        attr: &Artifact::Attribute,
+        // Only first peer for specific artifact ID is considered for push
+        mut artifact: Option<(Artifact::Message, NodeId)>,
+        mut peer_rx: &mut watch::Receiver<HashSet<NodeId>>,
+        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        transport: Arc<dyn Transport>,
+        metrics: ConsensusManagerMetrics,
+    ) -> DownloadResult<Artifact::Message> {
+        let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
+
+        // Clear the artifact from memory if it was pushed.
+        if let Priority::Stash = priority {
+            artifact.take();
+            metrics.adverts_stashed_total.inc();
+        }
+
+        while let Priority::Stash = priority {
+            select! {
+                _ = priority_fn_watcher.changed() => {
+                    priority = priority_fn_watcher.borrow_and_update()(id, attr);
+                }
+                _ = peer_rx.changed() => {
+                    if peer_rx.borrow().is_empty() {
+                        return DownloadResult::AllPeersDeletedTheArtifact;
+                    }
+                }
+            }
+        }
+
+        if let Priority::Drop = priority {
+            return DownloadResult::PriorityIsDrop;
+        }
+
+        match artifact {
+            // Artifact was pushed by peer.
+            Some((artifact, peer_id)) => DownloadResult::Completed(artifact, peer_id),
+
+            // Fetch artifact
+            None => {
+                let mut result = DownloadResult::AllPeersDeletedTheArtifact;
+                let mut download_attempts = 0;
+
+                let mut rng = SmallRng::from_entropy();
+                while let Some(peer) = {
+                    let peer = peer_rx.borrow().iter().choose(&mut rng).copied();
+                    peer
+                } {
+                    download_attempts += 1;
+
+                    let request = build_rpc_handler_request(Artifact::TAG.into(), &id);
+
+                    let peer_deleted_the_artifact = async {
+                        peer_rx.changed().await;
+                        while peer_rx.borrow().contains(&peer) {
+                            peer_rx.changed().await;
+                        }
+                    };
+
+                    let priority_is_drop = async {
+                        priority_fn_watcher.changed().await;
+                        while Priority::Drop != priority_fn_watcher.borrow()(id, attr) {
+                            priority_fn_watcher.changed().await;
+                        }
+                    };
+
+                    select! {
+                        _ = time::sleep(Duration::from_secs(5)) => {}
+
+                        _ = peer_deleted_the_artifact => {}
+
+                        _ = priority_is_drop => {
+                            result = DownloadResult::PriorityIsDrop;
+                            break;
+                        }
+
+                        rpc_response = transport.rpc(&peer, request) => {
+                            if let Ok(response) = rpc_response {
+                                if let StatusCode::OK = response.status() {
+                                    if let Ok(message) =
+                                        bincode::deserialize::<Artifact::Message>(response.body())
+                                    {
+                                        result = DownloadResult::Completed(message, peer);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // TODO: Add labels based on if it was dropped or not?
+                metrics
+                    .advert_download_attempts
+                    .observe(download_attempts as f64);
+
+                result
+            }
+        }
+    }
+
+    /// Tries to download the given artifact, and insert it into the unvalidated pool.
+    ///
+    /// This future completes waits for all peers that advertise the artifact to delete it.
+    /// The artifact is deleted from the unvalidated pool upon completion.
+    async fn process_advert(
         id: Artifact::Id,
         attr: Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact::Message, NodeId)>,
         mut peer_rx: watch::Receiver<HashSet<NodeId>>,
-        current_priority_fn: Arc<RwLock<PriorityFn<Artifact::Id, Artifact::Attribute>>>,
+        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         sender: CrossbeamSender<UnvalidatedArtifact<Artifact::Message>>,
         time_source: Arc<dyn TimeSource>,
         transport: Arc<dyn Transport>,
@@ -466,100 +584,48 @@ where
         Artifact::Id,
         Artifact::Attribute,
     ) {
-        let mut download_js: JoinSet<Result<Result<Response<Bytes>, _>, _>> = JoinSet::new();
-        let mut stash_eval = time::interval(Duration::from_secs(1));
-        let mut is_stash = false;
+        let download_result = Self::download_artifact(
+            &id,
+            &attr,
+            artifact,
+            &mut peer_rx,
+            priority_fn_watcher,
+            transport,
+            metrics.clone(),
+        )
+        .await;
 
-        // /// Dropped adverts
-        // pub adverts_dropped_total: IntCounter,
-        let mut download_attempts: u16 = 0;
-        loop {
-            select! {
-                _ = stash_eval.tick(), if is_stash => {}
-                Ok(_) = peer_rx.changed() => {}
-                Some(result) = download_js.join_next() => {
-                    match result {
-                        Ok(Ok(Ok(rpc_response))) if rpc_response.status() == StatusCode::OK => {
-                            let peer_id = *rpc_response.extensions().get::<NodeId>().unwrap();
-                            let timestamp = time_source.get_relative_time();
-                            if let Ok(message) = bincode::deserialize::<Artifact::Message>(rpc_response.body()){
-                                sender.send(UnvalidatedArtifact { message, peer_id, timestamp }).expect("Channel should not be closed");
-                                break;
-                            }
-                        },
-                        Err(err) => {
-                            // Cancelling tasks is ok. Panicking tasks are not.
-                            if err.is_panic() {
-                                std::panic::resume_unwind(err.into_panic());
-                            }
-                        },
-                        _ => {},
-                    }
-                }
+        match download_result {
+            DownloadResult::Completed(artifact, peer_id) => {
+                // Send artifact to pool
+                sender
+                    .send(UnvalidatedArtifact {
+                        message: artifact,
+                        peer_id,
+                        timestamp: time_source.get_relative_time(),
+                    })
+                    .expect("Channel should not be closed");
+
+                // wait for deletion from peers
+                peer_rx
+                    .wait_for(|p| p.is_empty())
+                    .await
+                    .expect("Channel should not be closed");
+
+                // TODO: Purge from the unvalidated pool
             }
+            DownloadResult::PriorityIsDrop => {
+                metrics.adverts_dropped_total.inc();
 
-            match current_priority_fn.read().unwrap()(&id, &attr) {
-                Priority::Drop => {
-                    metrics.adverts_dropped_total.inc();
-                    break;
-                }
-                Priority::Stash => {
-                    if !is_stash {
-                        metrics.adverts_stashed_total.inc();
-                    }
-
-                    is_stash = true;
-                    // Ignore pushed artifact
-                    artifact.take();
-                    continue;
-                }
-                Priority::Later | Priority::Fetch | Priority::FetchNow => {
-                    // Artifact was pushed
-                    if let Some((message, peer_id)) = artifact.take() {
-                        let timestamp = time_source.get_relative_time();
-                        sender
-                            .send(UnvalidatedArtifact {
-                                message,
-                                peer_id,
-                                timestamp,
-                            })
-                            .expect("Channel should not be closed");
-                        break;
-                    }
-
-                    // Received advert
-                    if download_js.is_empty() && artifact.is_none() {
-                        download_attempts += 1;
-                        let random_peer = peer_rx
-                            .borrow()
-                            .iter()
-                            .choose(&mut SmallRng::from_entropy())
-                            .copied();
-
-                        if let Some(peer) = random_peer {
-                            let request = build_rpc_handler_request(Artifact::TAG.into(), &id);
-                            let transport = transport.clone();
-                            download_js.spawn(timeout(Duration::from_secs(5), async move {
-                                transport.rpc(&peer, request).await
-                            }));
-                        } else {
-                            break;
-                        }
-                    }
-                }
+                // wait for deletion from peers
+                peer_rx
+                    .wait_for(|p| p.is_empty())
+                    .await
+                    .expect("Channel should not be closed");
             }
+            DownloadResult::AllPeersDeletedTheArtifact => {}
         }
 
-        metrics
-            .advert_download_attempts
-            .observe(download_attempts as f64);
-
-        // Wait till set is empty
-        peer_rx
-            .wait_for(|set| set.is_empty())
-            .await
-            .expect("Should not be dropped");
-        // TODO: Send removal to unvalidated pool
         (peer_rx, id, attr)
     }
 
@@ -620,13 +686,13 @@ where
                     let (tx, rx) = watch::channel(HashSet::new());
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_downloads.insert(id.clone(), tx);
-                    self.artifact_download_tasks.spawn_on(
-                        Self::download_artifact(
+                    self.artifact_processor_tasks.spawn_on(
+                        Self::process_advert(
                             id.clone(),
                             attribute,
                             artifact.map(|a| (a, peer_id)),
                             rx,
-                            self.current_priority_fn.clone(),
+                            self.current_priority_fn.subscribe(),
                             self.sender.clone(),
                             self.time_source.clone(),
                             self.transport.clone(),
@@ -914,3 +980,9 @@ type CommitId = AmountOf<CommitIdTag, u64>;
 struct SlotNumberTag;
 
 type SlotNumber = AmountOf<SlotNumberTag, u64>;
+
+enum DownloadResult<T> {
+    Completed(T, NodeId),
+    AllPeersDeletedTheArtifact,
+    PriorityIsDrop,
+}
