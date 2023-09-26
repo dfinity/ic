@@ -17,15 +17,15 @@ enum ValidationIssue {
     NeuronStoreError(NeuronId, NeuronStoreError),
 }
 
-/// A validator for all neuron indexes. It can be called in heartbeat to perform a small chunk of
-/// the validation, while keeping track of its progress.
-pub struct NeuronIndexesValidator {
+/// A validator for secondary neuron data, such as indexes. It can be called in heartbeat to perform
+/// a small chunk of the validation, while keeping track of its progress.
+pub struct NeuronDataValidator {
     state: State,
     issues: Issues,
 }
 
 // TODO(NNS-2413): add a method to read the status of the in-progress/previous validation result.
-impl NeuronIndexesValidator {
+impl NeuronDataValidator {
     pub fn new(now: u64) -> Self {
         Self {
             state: State::Validating {
@@ -521,7 +521,7 @@ mod tests {
             },
             Migration::default(),
         );
-        let mut validation = NeuronIndexesValidator::new(0);
+        let mut validation = NeuronDataValidator::new(0);
 
         // Each index use 2 rounds and we have 4 indexes.
         for i in 0..10 {
