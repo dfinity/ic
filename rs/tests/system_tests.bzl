@@ -96,7 +96,6 @@ def system_test(
         colocated_test_driver_vm_required_host_features = [],
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
-        ic_os_fixed_version = True,
         env_inherit = [],
         **kwargs):
     """Declares a system-test.
@@ -121,7 +120,6 @@ def system_test(
       For example: [ "performance" ]
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
-      ic_os_fixed_version: the test can work with ic-os that contains synthetic stable ic version.
       env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
@@ -146,9 +144,9 @@ def system_test(
 
     _env_deps = {}
 
-    _guestos = "//ic-os/guestos/envs/dev-fixed-version:" if ic_os_fixed_version else "//ic-os/guestos/envs/dev:"
+    _guestos = "//ic-os/guestos/envs/dev:"
 
-    # Always add version.txt for now as all test use it even that they don't declary they use dev image.
+    # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
 
@@ -165,7 +163,7 @@ def system_test(
         _env_deps[_guestos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256"
 
     if malicious:
-        _guestos_malicous = "//ic-os/guestos/envs/dev-fixed-version-malicious:" if ic_os_fixed_version else "//ic-os/guestos/envs/dev-malicious:"
+        _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
         _env_deps[_guestos_malicous + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos_malicous + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256"

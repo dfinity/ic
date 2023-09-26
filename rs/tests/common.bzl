@@ -159,9 +159,8 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:indoc",
 ]
 
-GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev-fixed-version:version.txt"
+GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
-# TODO(IDX-2538): Delete completely when all tests will properly work with synthetic stable ic version.
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
 ]

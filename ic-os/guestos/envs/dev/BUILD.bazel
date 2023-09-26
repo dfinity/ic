@@ -9,6 +9,7 @@ exports_files(["build_container_filesystem_config.txt"])
 #    or //ic-os/defs.bzl for the full list of targets.
 icos_build(
     name = "dev",
+    ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
     upload_prefix = "guest-os",
     visibility = ["//visibility:public"],

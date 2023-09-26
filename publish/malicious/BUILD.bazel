@@ -6,7 +6,6 @@ malicious_binary(
     name = "replica",
     binary = "//rs/replica",
     visibility = [
-        "//ic-os/guestos/envs/dev-fixed-version-malicious:__pkg__",
         "//ic-os/guestos/envs/dev-malicious:__pkg__",
     ],
 )
