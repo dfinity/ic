@@ -8,8 +8,8 @@ use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
     ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgsV2,
-    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SetControllerArgs,
-    SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SignWithECDSAArgs,
+    UninstallCodeArgs, UpdateSettingsArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -75,17 +75,6 @@ pub(super) fn resolve_destination(
                 .map(|subnet_id| subnet_id.get())
                 .ok_or({
                     ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
-                })
-        }
-        Ok(Ic00Method::SetController) => {
-            let args = SetControllerArgs::decode(payload)?;
-            let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::SetController)
                 })
         }
         Ok(Ic00Method::CanisterStatus)

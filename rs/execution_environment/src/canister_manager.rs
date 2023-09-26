@@ -3,7 +3,7 @@ use crate::execution::install_code::{validate_controller, OriginalContext};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use crate::{
-    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
+    canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
     util::GOVERNANCE_CANISTER_ID,
@@ -347,8 +347,7 @@ impl CanisterManager {
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister) |
             Ok(Ic00Method::UpdateSettings)|
-            Ok(Ic00Method::InstallCode) |
-            Ok(Ic00Method::SetController) => {
+            Ok(Ic00Method::InstallCode) => {
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
@@ -1028,37 +1027,6 @@ impl CanisterManager {
                 .get(),
             canister.system_state.reserved_balance().get(),
         ))
-    }
-
-    /// Sets a new controller for a canister. Only the current controller of
-    /// the canister is able to run this, otherwise an error is returned.
-    pub(crate) fn set_controller(
-        &self,
-        timestamp_nanos: Time,
-        origin: CanisterChangeOrigin,
-        canister_id: CanisterId,
-        new_controller: PrincipalId,
-        state: &mut ReplicatedState,
-        round_limits: &mut RoundLimits,
-        subnet_memory_saturation: ResourceSaturation,
-        subnet_size: usize,
-    ) -> Result<(), CanisterManagerError> {
-        let canister = state
-            .canister_state_mut(&canister_id)
-            .ok_or(CanisterManagerError::CanisterNotFound(canister_id))?;
-
-        let settings = CanisterSettingsBuilder::new()
-            .with_controller(new_controller)
-            .build();
-        self.update_settings(
-            timestamp_nanos,
-            origin,
-            settings,
-            canister,
-            round_limits,
-            subnet_memory_saturation,
-            subnet_size,
-        )
     }
 
     /// Permanently deletes a canister from `ReplicatedState`.

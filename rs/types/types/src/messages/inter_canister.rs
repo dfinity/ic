@@ -4,7 +4,7 @@ use ic_error_types::{RejectCode, TryFromError, UserError};
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInfoRequest, InstallCodeArgsV2, Method, Payload as _,
-    ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs,
+    ProvisionalTopUpCanisterArgs, UpdateSettingsArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -109,10 +109,6 @@ impl Request {
                 Err(_) => None,
             },
             Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(&self.method_payload) {
-                Ok(record) => Some(record.get_canister_id()),
-                Err(_) => None,
-            },
-            Ok(Method::SetController) => match SetControllerArgs::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },

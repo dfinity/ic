@@ -2149,7 +2149,6 @@ fn get_instructions_limits_for_subnet_message(
             | DepositCycles
             | ECDSAPublicKey
             | RawRand
-            | SetController
             | HttpRequest
             | SetupInitialDKG
             | SignWithECDSA

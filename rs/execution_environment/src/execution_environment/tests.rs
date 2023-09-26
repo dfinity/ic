@@ -1463,10 +1463,9 @@ fn setup_initial_dkg_sender_not_on_nns() {
 #[test]
 fn metrics_are_observed_for_subnet_messages() {
     let mut test = ExecutionTestBuilder::new().build();
-    let methods: [ic00::Method; 6] = [
+    let methods: [ic00::Method; 5] = [
         ic00::Method::CreateCanister,
         ic00::Method::InstallCode,
-        ic00::Method::SetController,
         ic00::Method::StartCanister,
         ic00::Method::StopCanister,
         ic00::Method::DeleteCanister,
@@ -1492,14 +1491,6 @@ fn metrics_are_observed_for_subnet_messages() {
             (
                 &[
                     ("method_name", "ic00_install_code"),
-                    ("outcome", "error"),
-                    ("status", "InvalidManagementPayload"),
-                ],
-                1
-            ),
-            (
-                &[
-                    ("method_name", "ic00_set_controller"),
                     ("outcome", "error"),
                     ("status", "InvalidManagementPayload"),
                 ],
