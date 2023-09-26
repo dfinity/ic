@@ -2,15 +2,14 @@
 
 mod bls12_381_sig_cache;
 
-use convert_case::{Case, Casing};
-use core::fmt;
 use ic_metrics::MetricsRegistry;
 use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use std::fmt::{Display, Formatter};
 use std::ops::Add;
 use std::time::Instant;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, IntoStaticStr};
+use strum_macros::EnumIter;
+#[cfg(test)]
+use strum_macros::IntoStaticStr;
 
 /// Provides metrics for the crypto component.
 ///
@@ -302,7 +301,9 @@ impl CryptoMetrics {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyType {
     PublicRegistry,
     PublicLocal,
@@ -310,7 +311,9 @@ pub enum KeyType {
     IdkgDealingEncryptionLocal,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsDomain {
     BasicSignature,
     MultiSignature,
@@ -324,13 +327,17 @@ pub enum MetricsDomain {
     KeyManagement,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsScope {
     Full,
     Local,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsResult {
     Ok,
     Err,
@@ -345,7 +352,9 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyRotationResult {
     KeyRotated,
     LatestLocalRotationTooRecent,
@@ -358,13 +367,17 @@ pub enum KeyRotationResult {
     PublicKeyNotFound,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum ServiceType {
     Client,
     Server,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MessageType {
     Request,
     Response,
@@ -436,29 +449,19 @@ impl Add for KeyCounts {
 
 /// A result for operations returning booleans. Using an enum allows adding errors, and using
 /// macros for deriving the string representation needed for the dashboards.
-#[derive(EnumIter, IntoStaticStr)]
+#[derive(EnumIter, strum_macros::Display)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum BooleanResult {
     True,
     False,
 }
 
-impl Display for BooleanResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-#[derive(EnumIter, IntoStaticStr)]
+#[derive(EnumIter, strum_macros::Display)]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(test, derive(IntoStaticStr))]
 pub enum BooleanOperation {
     LatestLocalIdkgKeyExistsInRegistry,
-}
-
-impl Display for BooleanOperation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
 }
 
 struct Metrics {
@@ -540,55 +543,6 @@ struct Metrics {
 
     /// Counter for iDKG dealing encryption public key too old, but not in registry.
     crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: IntCounter,
-}
-
-impl Display for MetricsDomain {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for MetricsScope {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for MetricsResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for KeyRotationResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for KeyType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for ServiceType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
-}
-
-impl Display for MessageType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value: &'static str = self.into();
-        write!(f, "{}", value.to_case(Case::Snake))
-    }
 }
 
 impl Metrics {
