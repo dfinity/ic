@@ -1401,14 +1401,10 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             quadruples_in_creation.insert(quadruple_id, quadruple);
         }
 
-        let next_unused_transcript_id: IDkgTranscriptId = (&payload.next_unused_transcript_id)
-            .try_into()
-            .map_err(|err| {
-                ProxyDecodeError::Other(format!(
-                    "EcdsaPayload:: Failed to convert next_unused_transcript_id: {:?}",
-                    err
-                ))
-            })?;
+        let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
+            payload.next_unused_transcript_id.as_ref(),
+            "EcdsaPayload::next_unused_transcript_id",
+        )?;
 
         let next_unused_quadruple_id: QuadrupleId = QuadrupleId(payload.next_unused_quadruple_id);
 
