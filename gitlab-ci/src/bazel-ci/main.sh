@@ -26,14 +26,6 @@ if [[ "$CI_COMMIT_REF_NAME" =~ ^hotfix-.+-rc--.+ ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 
-# Many actions seem to be using much more resources than bazel expects.
-# Running too many of them in parallel causes some tests that expect to get some resources within limited time to fail.
-# TODO(IDX-2225): reconsider limit when we will use Remute Execution.
-MAX_CPU=64
-if [ "$(nproc)" -gt "${MAX_CPU}" ]; then
-    BAZEL_EXTRA_ARGS="--jobs=${MAX_CPU} ${BAZEL_EXTRA_ARGS}"
-fi
-
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
