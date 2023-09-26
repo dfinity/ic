@@ -9,8 +9,7 @@ use ic_cycles_account_manager::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CreateCanisterArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
@@ -215,8 +214,6 @@ impl SystemStateChanges {
             Ok(Ic00Method::CreateCanister) => CreateCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UpdateSettings) => UpdateSettingsArgs::decode(payload)
-                .map(|record| record.get_sender_canister_version()),
-            Ok(Ic00Method::SetController) => SetControllerArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UninstallCode) => UninstallCodeArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),

@@ -2159,7 +2159,7 @@ fn get_canister_status_of_stopping_canister() {
 
 #[test]
 fn set_controller_with_incorrect_controller() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
             execution_complexity: ExecutionComplexity::MAX,
@@ -2167,9 +2167,7 @@ fn set_controller_with_incorrect_controller() {
             compute_allocation_used: state.total_compute_allocation(),
         };
         let canister_id = canister_test_id(0);
-        let canister = get_running_canister(canister_id);
-
-        state.put_canister_state(canister);
+        let mut canister = get_running_canister(canister_id);
 
         let wrong_controller = user_test_id(0).get();
         let right_controller = user_test_id(1).get();
@@ -2177,12 +2175,13 @@ fn set_controller_with_incorrect_controller() {
 
         // Set the controller from the wrong controller. Should fail.
         assert_eq!(
-            canister_manager.set_controller(
+            canister_manager.update_settings(
                 Time::from_nanos_since_unix_epoch(777),
                 canister_change_origin_from_principal(&wrong_controller),
-                canister_id,
-                new_controller,
-                &mut state,
+                CanisterSettingsBuilder::new()
+                    .with_controller(new_controller)
+                    .build(),
+                &mut canister,
                 &mut round_limits,
                 ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -2196,11 +2195,7 @@ fn set_controller_with_incorrect_controller() {
 
         // Controller hasn't changed.
         assert_eq!(
-            state
-                .canister_state(&canister_id)
-                .unwrap()
-                .system_state
-                .controllers,
+            canister.system_state.controllers,
             btreeset! {right_controller}
         );
     });
@@ -2208,7 +2203,7 @@ fn set_controller_with_incorrect_controller() {
 
 #[test]
 fn set_controller_with_correct_controller() {
-    with_setup(|canister_manager, mut state, _| {
+    with_setup(|canister_manager, state, _| {
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
             execution_complexity: ExecutionComplexity::MAX,
@@ -2216,20 +2211,20 @@ fn set_controller_with_correct_controller() {
             compute_allocation_used: state.total_compute_allocation(),
         };
         let canister_id = canister_test_id(0);
-        let canister = get_running_canister(canister_id);
-        state.put_canister_state(canister);
+        let mut canister = get_running_canister(canister_id);
 
         let controller = user_test_id(1).get();
         let new_controller = user_test_id(2).get();
 
         // Set the controller from the correct controller. Should succeed.
         assert!(canister_manager
-            .set_controller(
+            .update_settings(
                 Time::from_nanos_since_unix_epoch(777),
                 canister_change_origin_from_principal(&controller),
-                canister_id,
-                new_controller,
-                &mut state,
+                CanisterSettingsBuilder::new()
+                    .with_controller(new_controller)
+                    .build(),
+                &mut canister,
                 &mut round_limits,
                 ResourceSaturation::default(),
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -2238,11 +2233,7 @@ fn set_controller_with_correct_controller() {
 
         // Controller is now the new controller.
         assert_eq!(
-            state
-                .canister_state(&canister_id)
-                .unwrap()
-                .system_state
-                .controllers,
+            canister.system_state.controllers,
             btreeset! {new_controller}
         );
     });

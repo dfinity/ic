@@ -6,7 +6,7 @@ use ic_config::Config;
 use ic_ic00_types::CanisterStatusType::Stopped;
 pub use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::*;

@@ -767,7 +767,7 @@ fn management_message_with_invalid_payload_is_not_inducted() {
     let mut state = ReplicatedStateBuilder::new().build();
     let ingress = SignedIngressBuilder::new()
         .canister_id(IC_00)
-        .method_name("set_controller")
+        .method_name("update_settings")
         .method_payload(vec![1, 2, 3]) // invalid
         .build()
         .into();

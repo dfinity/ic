@@ -57,8 +57,6 @@ pub enum Method {
     ECDSAPublicKey,
     InstallCode,
     RawRand,
-    // SetController is deprecated and should not be used in new code
-    SetController,
     SetupInitialDKG,
     SignWithECDSA,
     StartCanister,
@@ -1616,37 +1614,6 @@ fn test_create_canister_args_decode_controllers_count() {
         }
     }
 }
-
-/// This API is deprecated and should not be used in new code.
-/// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     controller: principal;
-///     sender_canister_version : opt nat64;
-/// })`
-#[derive(CandidType, Deserialize, Debug)]
-pub struct SetControllerArgs {
-    canister_id: PrincipalId,
-    new_controller: PrincipalId,
-    sender_canister_version: Option<u64>,
-}
-
-impl SetControllerArgs {
-    pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
-    }
-
-    pub fn get_new_controller(&self) -> PrincipalId {
-        self.new_controller
-    }
-
-    pub fn get_sender_canister_version(&self) -> Option<u64> {
-        self.sender_canister_version
-    }
-}
-
-impl Payload<'_> for SetControllerArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {

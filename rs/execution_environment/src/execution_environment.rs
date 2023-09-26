@@ -29,8 +29,8 @@ use ic_ic00_types::{
     CanisterInfoResponse, CanisterSettingsArgs, ComputeInitialEcdsaDealingsArgs,
     CreateCanisterArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
     InstallCodeArgsV2, Method as Ic00Method, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetControllerArgs,
-    SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
+    SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -631,28 +631,6 @@ impl ExecutionEnvironment {
                         );
                         result
                     }
-                };
-                Some((res, msg.take_cycles()))
-            }
-
-            // This API is deprecated and should not be used in new code.
-            Ok(Ic00Method::SetController) => {
-                let res = match SetControllerArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self
-                        .canister_manager
-                        .set_controller(
-                            timestamp_nanos,
-                            msg.canister_change_origin(args.get_sender_canister_version()),
-                            args.get_canister_id(),
-                            args.get_new_controller(),
-                            &mut state,
-                            round_limits,
-                            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
-                            registry_settings.subnet_size,
-                        )
-                        .map(|()| EmptyBlob.encode())
-                        .map_err(|err| err.into()),
                 };
                 Some((res, msg.take_cycles()))
             }
