@@ -2,6 +2,7 @@
 curl
 build-essential
 git
+git-lfs
 gnupg
 node-json5
 uuid-dev
