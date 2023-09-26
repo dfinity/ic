@@ -138,6 +138,7 @@ mod migrations;
 mod neuron;
 mod neuron_indexes_validation;
 mod neuron_store;
+mod neurons_fund;
 pub mod pb;
 pub mod proposals;
 mod reward;
