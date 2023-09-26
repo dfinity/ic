@@ -14,10 +14,13 @@ use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::StateMachineBuilder;
 use ic_state_machine_tests::StateMachineConfig;
 use ic_state_machine_tests::Time;
-use ic_types::{CanisterId, CanisterIdBlobParseError, PrincipalId, PrincipalIdBlobParseError};
+use ic_types::{CanisterId, PrincipalId};
 use pocket_ic::common::blob::{BinaryBlob, BlobCompression};
+use pocket_ic::common::rest::RawAddCycles;
 use pocket_ic::common::rest::RawCanisterCall;
 use pocket_ic::common::rest::RawSetStableMemory;
+use serde::Deserialize;
+use serde::Serialize;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
@@ -69,6 +72,12 @@ impl HasStateLabel for PocketIc {
 
 // ---------------------------------------------------------------------------------------- //
 // Operations on PocketIc
+
+// When raw (rest) types are cast to operations, errors can occur.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ConversionError {
+    message: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct SetTime {
@@ -174,22 +183,9 @@ pub struct CanisterCall {
     pub method: String,
     pub payload: Vec<u8>,
 }
-pub struct CanisterCallConversionError;
-
-impl From<PrincipalIdBlobParseError> for CanisterCallConversionError {
-    fn from(_t: PrincipalIdBlobParseError) -> Self {
-        CanisterCallConversionError
-    }
-}
-
-impl From<CanisterIdBlobParseError> for CanisterCallConversionError {
-    fn from(_t: CanisterIdBlobParseError) -> Self {
-        CanisterCallConversionError
-    }
-}
 
 impl TryFrom<RawCanisterCall> for CanisterCall {
-    type Error = CanisterCallConversionError;
+    type Error = ConversionError;
     fn try_from(
         RawCanisterCall {
             sender,
@@ -198,15 +194,22 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             payload,
         }: RawCanisterCall,
     ) -> Result<Self, Self::Error> {
-        let sender = PrincipalId::try_from(sender)?;
-        let pid = PrincipalId::try_from(canister_id)?;
-        let canister_id = CanisterId::new(pid)?;
-        Ok(Self {
-            sender,
-            canister_id,
-            method,
-            payload,
-        })
+        match PrincipalId::try_from(sender) {
+            Ok(sender) => match CanisterId::try_from(canister_id) {
+                Ok(canister_id) => Ok(Self {
+                    sender,
+                    canister_id,
+                    method,
+                    payload,
+                }),
+                Err(_) => Err(ConversionError {
+                    message: "Bad canister id".to_string(),
+                }),
+            },
+            Err(_) => Err(ConversionError {
+                message: "Bad principal id".to_string(),
+            }),
+        }
     }
 }
 
@@ -228,30 +231,29 @@ pub struct SetStableMemory {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug)]
-pub enum SetStableMemoryError {
-    BadCanisterId,
-    BadBlobId,
-    DecompressionFailed,
-}
-
 impl SetStableMemory {
     pub async fn from_store(
         raw: RawSetStableMemory,
         store: Arc<dyn BlobStore>,
-    ) -> Result<Self, SetStableMemoryError> {
+    ) -> Result<Self, ConversionError> {
         if let Ok(canister_id) = CanisterId::try_from(raw.canister_id) {
             if let Some(BinaryBlob { data, compression }) = store.fetch(raw.blob_id).await {
                 if let Some(data) = decompress(data, compression) {
                     Ok(SetStableMemory { canister_id, data })
                 } else {
-                    Err(SetStableMemoryError::DecompressionFailed)
+                    Err(ConversionError {
+                        message: "Decompression failed".to_string(),
+                    })
                 }
             } else {
-                Err(SetStableMemoryError::BadBlobId)
+                Err(ConversionError {
+                    message: "Bad blob id".to_string(),
+                })
             }
         } else {
-            Err(SetStableMemoryError::BadCanisterId)
+            Err(ConversionError {
+                message: "Bad canister id".to_string(),
+            })
         }
     }
 }
@@ -309,36 +311,12 @@ impl Operation for GetStableMemory {
     }
 }
 
-/// A convenience method that installs the given wasm module at the given canister id. The first
-/// controller of the given canister is set as the sender. If the canister has no controller set,
-/// the anynmous user is used.
-pub struct InstallCanisterAsController {
-    pub canister_id: CanisterId,
-    pub mode: CanisterInstallMode,
-    pub module: Vec<u8>,
-    pub payload: Vec<u8>,
-}
-
-impl Operation for InstallCanisterAsController {
-    type TargetType = PocketIc;
-
-    fn compute(self, pic: &mut PocketIc) -> OpOut {
-        pic.subnet
-            .install_wasm_in_mode(self.canister_id, self.mode, self.module, self.payload)
-            .into()
-    }
-
-    fn id(&self) -> OpId {
-        OpId("".into())
-    }
-}
-
 #[derive(Clone, Debug)]
-pub struct CyclesBalance {
-    canister_id: CanisterId,
+pub struct GetCyclesBalance {
+    pub canister_id: CanisterId,
 }
 
-impl Operation for CyclesBalance {
+impl Operation for GetCyclesBalance {
     type TargetType = PocketIc;
     fn compute(self, pic: &mut PocketIc) -> OpOut {
         let result = pic.subnet.cycle_balance(self.canister_id);
@@ -346,7 +324,7 @@ impl Operation for CyclesBalance {
     }
 
     fn id(&self) -> OpId {
-        OpId(format!("cycles_balance({})", self.canister_id))
+        OpId(format!("get_cycles_balance({})", self.canister_id))
     }
 }
 
@@ -359,6 +337,26 @@ impl Operation for CyclesBalance {
 pub struct AddCycles {
     canister_id: CanisterId,
     amount: u128,
+}
+
+impl TryFrom<RawAddCycles> for AddCycles {
+    type Error = ConversionError;
+    fn try_from(
+        RawAddCycles {
+            canister_id,
+            amount,
+        }: RawAddCycles,
+    ) -> Result<Self, Self::Error> {
+        match CanisterId::try_from(canister_id) {
+            Ok(canister_id) => Ok(AddCycles {
+                canister_id,
+                amount,
+            }),
+            Err(_) => Err(ConversionError {
+                message: "Bad canister id".to_string(),
+            }),
+        }
+    }
 }
 
 impl Operation for AddCycles {
@@ -387,6 +385,30 @@ impl std::fmt::Debug for Digest {
 impl std::fmt::Display for Digest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+/// A convenience method that installs the given wasm module at the given canister id. The first
+/// controller of the given canister is set as the sender. If the canister has no controller set,
+/// the anynmous user is used.
+pub struct InstallCanisterAsController {
+    pub canister_id: CanisterId,
+    pub mode: CanisterInstallMode,
+    pub module: Vec<u8>,
+    pub payload: Vec<u8>,
+}
+
+impl Operation for InstallCanisterAsController {
+    type TargetType = PocketIc;
+
+    fn compute(self, pic: &mut PocketIc) -> OpOut {
+        pic.subnet
+            .install_wasm_in_mode(self.canister_id, self.mode, self.module, self.payload)
+            .into()
+    }
+
+    fn id(&self) -> OpId {
+        OpId("".into())
     }
 }
 
@@ -485,7 +507,7 @@ mod tests {
         let (mut pic, canister_id) = new_pic_counter_installed();
         let (_, update) = query_update_constructors(canister_id);
 
-        let cycles_balance = CyclesBalance { canister_id };
+        let cycles_balance = GetCyclesBalance { canister_id };
         let OpOut::Cycles(orig_balance) =
             compute_assert_state_immutable(&mut pic, cycles_balance.clone())
         else {

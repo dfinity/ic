@@ -1,7 +1,7 @@
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::{decode_args, encode_args, Principal};
 use common::blob::{BlobCompression, BlobId};
-use common::rest::Checkpoint;
+use common::rest::{Checkpoint, RawAddCycles, RawCanisterCall, RawCanisterId, RawSetStableMemory};
 use ic_cdk::api::management_canister::main::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgument,
     InstallCodeArgument,
@@ -163,13 +163,13 @@ impl PocketIc {
         canister_id: Principal,
         sender: Principal,
         method: &str,
-        arg: Vec<u8>,
+        payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.call_state_machine(Request::CanisterUpdateCall(CanisterCall {
+        self.call_state_machine(Request::CanisterUpdateCall(RawCanisterCall {
             sender: sender.as_slice().to_vec(),
             canister_id: canister_id.as_slice().to_vec(),
             method: method.to_string(),
-            arg,
+            payload,
         }))
     }
 
@@ -178,13 +178,13 @@ impl PocketIc {
         canister_id: Principal,
         sender: Principal,
         method: &str,
-        arg: Vec<u8>,
+        payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.call_state_machine(Request::CanisterQueryCall(CanisterCall {
+        self.call_state_machine(Request::CanisterQueryCall(RawCanisterCall {
             sender: sender.as_slice().to_vec(),
             canister_id: canister_id.as_slice().to_vec(),
             method: method.to_string(),
-            arg,
+            payload,
         }))
     }
 
@@ -371,7 +371,7 @@ impl PocketIc {
         let res = self
             .reqwest_client
             .post(self.instance_url.clone())
-            .json(&Request::SetStableMemory(SetStableMemoryArg {
+            .json(&Request::SetStableMemory(RawSetStableMemory {
                 canister_id: canister_id.as_slice().to_vec(),
                 blob_id,
             }))
@@ -393,7 +393,7 @@ impl PocketIc {
     }
 
     pub fn add_cycles(&self, canister_id: Principal, amount: u128) -> u128 {
-        self.call_state_machine(Request::AddCycles(AddCyclesArg {
+        self.call_state_machine(Request::AddCycles(RawAddCycles {
             canister_id: canister_id.as_slice().to_vec(),
             amount,
         }))
@@ -444,12 +444,12 @@ pub enum Request {
     Time,
     SetTime(SystemTime),
     AdvanceTime(Duration),
-    CanisterUpdateCall(CanisterCall),
-    CanisterQueryCall(CanisterCall),
+    CanisterUpdateCall(RawCanisterCall),
+    CanisterQueryCall(RawCanisterCall),
     CanisterExists(RawCanisterId),
     CyclesBalance(RawCanisterId),
-    AddCycles(AddCyclesArg),
-    SetStableMemory(SetStableMemoryArg),
+    AddCycles(RawAddCycles),
+    SetStableMemory(RawSetStableMemory),
     ReadStableMemory(RawCanisterId),
     Tick,
     RunUntilCompletion(RunUntilCompletionArg),
@@ -472,48 +472,6 @@ pub struct VerifyCanisterSigArg {
 pub struct RunUntilCompletionArg {
     // max_ticks until completion must be reached
     pub max_ticks: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct AddCyclesArg {
-    // raw bytes of the principal
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-    pub amount: u128,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SetStableMemoryArg {
-    // raw bytes of the principal
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-    pub blob_id: BlobId,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RawCanisterId {
-    // raw bytes of the principal
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-}
-
-impl From<Principal> for RawCanisterId {
-    fn from(principal: Principal) -> Self {
-        Self {
-            canister_id: principal.as_slice().to_vec(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CanisterCall {
-    #[serde(with = "base64")]
-    pub sender: Vec<u8>,
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-    pub method: String,
-    #[serde(with = "base64")]
-    pub arg: Vec<u8>,
 }
 
 /// Call a canister candid query method, anonymous.

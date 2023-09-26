@@ -1,7 +1,7 @@
 use candid::{decode_args, encode_args, Principal};
 use ic_cdk::api::management_canister::main::{CanisterIdRecord, CreateCanisterArgument};
-use pocket_ic::common::rest::Checkpoint;
-use pocket_ic::{CallError, CanisterCall, RawCanisterId, Request, WasmResult};
+use pocket_ic::common::rest::{Checkpoint, RawCanisterCall, RawCanisterId};
+use pocket_ic::{CallError, Request, WasmResult};
 use reqwest::{StatusCode, Url};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -220,11 +220,11 @@ fn test_saving_and_loading_checkpoint() {
     assert!(!instance_id.is_empty());
 
     // Change state of instance A by creating a canister.
-    let call = Request::CanisterUpdateCall(CanisterCall {
+    let call = Request::CanisterUpdateCall(RawCanisterCall {
         sender: Principal::anonymous().as_slice().to_vec(),
         canister_id: Principal::management_canister().as_slice().to_vec(),
         method: "provisional_create_canister_with_cycles".to_string(),
-        arg: encode_args((CreateCanisterArgument { settings: None },))
+        payload: encode_args((CreateCanisterArgument { settings: None },))
             .expect("failed to encode args"),
     });
     let response = client

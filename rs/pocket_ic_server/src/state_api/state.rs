@@ -199,9 +199,9 @@ pub enum InstanceState<T> {
     Deleted,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum UpdateError {
-    InstanceNotFound,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateError {
+    message: String,
 }
 
 pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
@@ -335,7 +335,9 @@ where
                 // If this instance is busy, return the running op and initial state
                 match instance_state {
                     InstanceState::Deleted => {
-                        return Err(UpdateError::InstanceNotFound);
+                        return Err(UpdateError {
+                            message: "Instance was deleted".to_string(),
+                        });
                     }
                     // TODO: cache lookup possible with this state_label and our own op_id
                     InstanceState::Busy { state_label, op_id } => {
@@ -400,7 +402,9 @@ where
                     }
                 }
             } else {
-                return Err(UpdateError::InstanceNotFound);
+                return Err(UpdateError {
+                    message: "Instance not found".to_string(),
+                });
             };
         // drop lock, otherwise we end up with a deadlock
         std::mem::drop(instances);
