@@ -6,7 +6,8 @@
 ///
 use super::state::{InstanceState, PocketIcApiState, UpdateReply};
 use crate::pocket_ic::{
-    ExecuteIngressMessage, GetStableMemory, GetTime, Query, SetStableMemory, SetTime,
+    AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, Query,
+    SetStableMemory, SetTime,
 };
 use crate::{
     copy_dir,
@@ -22,8 +23,9 @@ use axum::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::CanisterId;
-use pocket_ic::common::rest::{self, RawCanisterCall, RawSetStableMemory};
-use pocket_ic::RawCanisterId;
+use pocket_ic::common::rest::{
+    self, RawAddCycles, RawCanisterCall, RawCanisterId, RawSetStableMemory,
+};
 use std::sync::atomic::AtomicU64;
 use std::{collections::HashMap, sync::Arc};
 use tempfile::TempDir;
@@ -118,7 +120,7 @@ async fn run_operation(
     op: impl Operation<TargetType = PocketIc> + Send + Sync + 'static,
 ) -> (StatusCode, String) {
     match api_state.update(op.on_instance(instance_id)).await {
-        Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
         Ok(update_reply) => match update_reply {
             // If the op_id of the ongoing operation is the requested one, we return code 201.
             started @ UpdateReply::Started { .. } => {
@@ -142,7 +144,7 @@ pub async fn handler_query(
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
 ) -> (StatusCode, String) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
-        Err(_) => (StatusCode::BAD_REQUEST, "Badly formatted Query".to_string()),
+        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
         Ok(canister_call) => {
             let query_op = Query(canister_call);
             run_operation(api_state, instance_id, query_op).await
@@ -159,11 +161,17 @@ pub async fn handler_get_time(
 }
 
 pub async fn handler_get_cycles(
-    State(AppState { .. }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(()): extract::Json<()>,
-) -> (StatusCode, ()) {
-    (StatusCode::NOT_FOUND, ())
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    extract::Json(raw_canister_id): extract::Json<RawCanisterId>,
+) -> (StatusCode, String) {
+    match CanisterId::try_from(raw_canister_id.canister_id) {
+        Ok(canister_id) => {
+            let get_op = GetCyclesBalance { canister_id };
+            run_operation(api_state, instance_id, get_op).await
+        }
+        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
+    }
 }
 
 pub async fn handler_get_stable_memory(
@@ -176,7 +184,7 @@ pub async fn handler_get_stable_memory(
             let get_op = GetStableMemory { canister_id };
             run_operation(api_state, instance_id, get_op).await
         }
-        Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
     }
 }
 
@@ -189,10 +197,7 @@ pub async fn handler_execute_ingress_message(
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
 ) -> (StatusCode, String) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
-        Err(_) => (
-            StatusCode::BAD_REQUEST,
-            "Badly formatted IngressMessage".to_string(),
-        ),
+        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
         Ok(canister_call) => {
             let ingress_op = ExecuteIngressMessage(canister_call);
             run_operation(api_state, instance_id, ingress_op).await
@@ -215,16 +220,19 @@ pub async fn handler_add_cycles(
     State(AppState {
         instance_map: _,
         instances_sequence_counter: _,
-        api_state: _,
+        api_state,
         checkpoints: _,
         last_request: _,
         runtime: _,
         blob_store: _,
     }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(()): extract::Json<()>,
-) -> (StatusCode, ()) {
-    (StatusCode::NOT_FOUND, ())
+    Path(instance_id): Path<InstanceId>,
+    extract::Json(raw_add_cycles): extract::Json<RawAddCycles>,
+) -> (StatusCode, String) {
+    match AddCycles::try_from(raw_add_cycles) {
+        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
+        Ok(add_op) => run_operation(api_state, instance_id, add_op).await,
+    }
 }
 
 pub async fn handler_set_stable_memory(
@@ -242,7 +250,7 @@ pub async fn handler_set_stable_memory(
 ) -> (StatusCode, String) {
     match SetStableMemory::from_store(raw, blob_store).await {
         Ok(set_op) => run_operation(api_state, instance_id, set_op).await,
-        Err(e) => (StatusCode::BAD_REQUEST, format!("{:?}", e)),
+        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
     }
 }
 
@@ -360,30 +368,6 @@ pub async fn list_checkpoints(
         .collect::<Vec<String>>();
     serde_json::to_string(&checkpoints).unwrap()
 }
-
-// Call the IC instance with the given InstanceId
-// pub async fn call_instance(
-//     State(AppState {
-//         api_state,
-//         checkpoints: _,
-//         last_request: _,
-//         runtime: _,
-//     }): State<AppState>,
-//     Path(id): Path<InstanceId>,
-//     extract::Json(request): extract::Json<Request>,
-// ) -> (StatusCode, String) {
-//     let guard_map = todo!();
-// let guard_map = inst_map.read().await;
-// if let Some(rw_lock) = guard_map.get(&id) {
-//     let guard_sm = rw_lock.write().await;
-//     (StatusCode::OK, call_sm(&guard_sm, request))
-// } else {
-//     (
-//         StatusCode::NOT_FOUND,
-//         format!("Instance with ID {} was not found.", &id),
-//     )
-// }
-// }
 
 // TODO: Add a function that separates those two.
 pub async fn tick_and_create_checkpoint(

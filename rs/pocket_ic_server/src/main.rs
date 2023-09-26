@@ -17,9 +17,10 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
 use itertools::Itertools;
+use pocket_ic::common::rest::{RawCanisterCall, RawCanisterId};
 use pocket_ic::{
     common::{blob::BinaryBlob, blob::BlobCompression, blob::BlobId, rest::Checkpoint},
-    CanisterCall, RawCanisterId, Request,
+    Request,
 };
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState},
@@ -603,8 +604,8 @@ pub struct ParsedCanisterCall {
     arg: Vec<u8>,
 }
 
-impl From<CanisterCall> for ParsedCanisterCall {
-    fn from(call: CanisterCall) -> Self {
+impl From<RawCanisterCall> for ParsedCanisterCall {
+    fn from(call: RawCanisterCall) -> Self {
         ParsedCanisterCall {
             sender: PrincipalId::try_from(&call.sender).unwrap_or_else(|err| {
                 panic!(
@@ -621,7 +622,7 @@ impl From<CanisterCall> for ParsedCanisterCall {
                 )
             }),
             method: call.method,
-            arg: call.arg,
+            arg: call.payload,
         }
     }
 }
