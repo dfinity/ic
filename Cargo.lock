@@ -6391,8 +6391,7 @@ dependencies = [
 name = "ic-crypto-internal-sha2"
 version = "0.8.0"
 dependencies = [
- "openssl",
- "sha2 0.9.9",
+ "sha2 0.10.6",
 ]
 
 [[package]]

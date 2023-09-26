@@ -4,8 +4,5 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-openssl = "0.10.55"
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-sha2 = "0.9.1"
+sha2 = "0.10"
 
