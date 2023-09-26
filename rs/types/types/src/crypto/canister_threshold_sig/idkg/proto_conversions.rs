@@ -24,8 +24,8 @@ use ic_protobuf::registry::subnet::v1::IDkgTranscriptParams as IDkgTranscriptPar
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::registry::subnet::v1::VerifiedIDkgDealing as VerifiedIDkgDealingProto;
 use ic_protobuf::registry::subnet::v1::{DealerTuple as DealerTupleProto, SignatureTuple};
+use ic_protobuf::types::v1::BasicSignature as BasicSignatureProto;
 use ic_protobuf::types::v1::IDkgDealingSupport as IDkgDealingSupportProto;
-use ic_protobuf::types::v1::NodeId as NodeIdProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -37,15 +37,28 @@ const CURRENT_INITIAL_IDKG_DEALINGS_VERSION: u32 = 0;
 
 impl From<&IDkgTranscriptId> for IDkgTranscriptIdProto {
     fn from(transcript_id: &IDkgTranscriptId) -> Self {
-        idkg_transcript_id_proto(transcript_id)
+        IDkgTranscriptIdProto {
+            id: transcript_id.id(),
+            subnet_id: Some(subnet_id_into_protobuf(*transcript_id.source_subnet())),
+            source_height: transcript_id.source_height().get(),
+        }
     }
 }
 
-impl TryFrom<&Option<IDkgTranscriptIdProto>> for IDkgTranscriptId {
-    type Error = InitialIDkgDealingsValidationError;
+impl TryFrom<&IDkgTranscriptIdProto> for IDkgTranscriptId {
+    type Error = ProxyDecodeError;
 
-    fn try_from(proto: &Option<IDkgTranscriptIdProto>) -> Result<Self, Self::Error> {
-        idkg_transcript_id_struct(proto)
+    fn try_from(proto: &IDkgTranscriptIdProto) -> Result<Self, Self::Error> {
+        let Some(subnet_id) = proto.subnet_id.clone() else {
+            return Err(ProxyDecodeError::MissingField(
+                "IDkgTranscriptId::subnet_id",
+            ));
+        };
+        Ok(IDkgTranscriptId::new(
+            subnet_id_try_from_protobuf(subnet_id)?,
+            proto.id,
+            Height::from(proto.source_height),
+        ))
     }
 }
 
@@ -56,7 +69,7 @@ impl From<&IDkgTranscript> for IDkgTranscriptProto {
 }
 
 impl TryFrom<&IDkgTranscriptProto> for IDkgTranscript {
-    type Error = InitialIDkgDealingsValidationError;
+    type Error = ProxyDecodeError;
 
     fn try_from(proto: &IDkgTranscriptProto) -> Result<Self, Self::Error> {
         idkg_transcript_struct(proto)
@@ -79,7 +92,7 @@ impl From<&InitialIDkgDealings> for InitialIDkgDealingsProto {
 }
 
 impl TryFrom<&InitialIDkgDealingsProto> for InitialIDkgDealings {
-    type Error = InitialIDkgDealingsValidationError;
+    type Error = ProxyDecodeError;
 
     fn try_from(proto: &InitialIDkgDealingsProto) -> Result<Self, Self::Error> {
         let params_proto = proto.params.as_ref().ok_or(
@@ -89,14 +102,14 @@ impl TryFrom<&InitialIDkgDealingsProto> for InitialIDkgDealings {
         )?;
         let params = idkg_transcript_params_struct(params_proto)?;
         let dealings = initial_dealings_vec(&proto.signed_dealings)?;
-        InitialIDkgDealings::new(params, dealings)
+        Ok(InitialIDkgDealings::new(params, dealings)?)
     }
 }
 
 impl From<&IDkgOpening> for IDkgOpeningProto {
     fn from(value: &IDkgOpening) -> Self {
         Self {
-            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            transcript_id: Some(IDkgTranscriptIdProto::from(&value.transcript_id)),
             dealer: Some(node_id_into_protobuf(value.dealer_id)),
             raw_opening: value.internal_opening_raw.clone(),
         }
@@ -108,8 +121,11 @@ impl TryFrom<&IDkgOpeningProto> for IDkgOpening {
 
     fn try_from(proto: &IDkgOpeningProto) -> Result<Self, Self::Error> {
         Ok(Self {
-            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
-            dealer_id: node_id_struct(&proto.dealer)?,
+            transcript_id: try_from_option_field(
+                proto.transcript_id.as_ref(),
+                "IDkgOpening::transcript_id",
+            )?,
+            dealer_id: node_id_try_from_option(proto.dealer.clone())?,
             internal_opening_raw: proto.raw_opening.clone(),
         })
     }
@@ -118,7 +134,7 @@ impl TryFrom<&IDkgOpeningProto> for IDkgOpening {
 impl From<&IDkgComplaint> for IDkgComplaintProto {
     fn from(value: &IDkgComplaint) -> Self {
         Self {
-            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            transcript_id: Some(IDkgTranscriptIdProto::from(&value.transcript_id)),
             dealer: Some(node_id_into_protobuf(value.dealer_id)),
             raw_complaint: value.internal_complaint_raw.clone(),
         }
@@ -130,8 +146,11 @@ impl TryFrom<&IDkgComplaintProto> for IDkgComplaint {
 
     fn try_from(proto: &IDkgComplaintProto) -> Result<Self, Self::Error> {
         Ok(Self {
-            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
-            dealer_id: node_id_struct(&proto.dealer)?,
+            transcript_id: try_from_option_field(
+                proto.transcript_id.as_ref(),
+                "IDkgComplaint::transcript_id",
+            )?,
+            dealer_id: node_id_try_from_option(proto.dealer.clone())?,
             internal_complaint_raw: proto.raw_complaint.clone(),
         })
     }
@@ -159,10 +178,10 @@ impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
 impl From<&IDkgDealingSupport> for IDkgDealingSupportProto {
     fn from(value: &IDkgDealingSupport) -> Self {
         Self {
-            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            transcript_id: Some(IDkgTranscriptIdProto::from(&value.transcript_id)),
             dealer: Some(node_id_into_protobuf(value.dealer_id)),
             dealing_hash: value.dealing_hash.clone().get().0,
-            sig_share: Some(value.sig_share.clone().into()),
+            sig_share: Some(BasicSignatureProto::from(value.sig_share.clone())),
         }
     }
 }
@@ -172,8 +191,11 @@ impl TryFrom<&IDkgDealingSupportProto> for IDkgDealingSupport {
 
     fn try_from(proto: &IDkgDealingSupportProto) -> Result<Self, Self::Error> {
         Ok(Self {
-            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
-            dealer_id: node_id_struct(&proto.dealer)?,
+            transcript_id: try_from_option_field(
+                proto.transcript_id.as_ref(),
+                "IDkgDealingSupport::transcript_id",
+            )?,
+            dealer_id: node_id_try_from_option(proto.dealer.clone())?,
             dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash(proto.dealing_hash.clone())),
             sig_share: try_from_option_field(
                 proto.sig_share.clone(),
@@ -193,45 +215,29 @@ impl TryFrom<&IDkgSignedDealingTupleProto> for SignedIDkgDealing {
     type Error = ProxyDecodeError;
 
     fn try_from(proto: &IDkgSignedDealingTupleProto) -> Result<Self, Self::Error> {
-        signed_idkg_dealing_struct(&Some(proto.clone())).map_err(|e| e.into())
+        let idkg_dealing_proto = proto
+            .dealing
+            .as_ref()
+            .ok_or(ProxyDecodeError::Other("Missing IDkgDealing.".to_string()))?;
+        let idkg_dealing = IDkgDealing {
+            transcript_id: try_from_option_field(
+                idkg_dealing_proto.transcript_id.as_ref(),
+                "IDkgDealing::transcript_id",
+            )?,
+            internal_dealing_raw: idkg_dealing_proto.raw_dealing.clone(),
+        };
+        let basic_signature = BasicSignature {
+            signature: BasicSigOf::new(BasicSig(proto.signature.clone())),
+            signer: node_id_try_from_option(proto.dealer.clone())?,
+        };
+        Ok(SignedIDkgDealing {
+            content: idkg_dealing,
+            signature: basic_signature,
+        })
     }
 }
 
 // ----- Conversion helpers.
-fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
-    IDkgTranscriptIdProto {
-        id: idkg_transcript_id.id(),
-        subnet_id: Some(subnet_id_into_protobuf(*idkg_transcript_id.source_subnet())),
-        source_height: idkg_transcript_id.source_height().get(),
-    }
-}
-
-fn idkg_transcript_id_struct(
-    maybe_proto: &Option<IDkgTranscriptIdProto>,
-) -> Result<IDkgTranscriptId, InitialIDkgDealingsValidationError> {
-    let proto =
-        maybe_proto
-            .as_ref()
-            .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
-                error: "Missing IDkgTranscriptId.".to_string(),
-            })?;
-    let subnet_id_proto = proto.subnet_id.as_ref().ok_or(
-        InitialIDkgDealingsValidationError::DeserializationError {
-            error: "Missing subnet id in IDkgTranscriptId.".to_string(),
-        },
-    )?;
-    let subnet_id = subnet_id_try_from_protobuf(subnet_id_proto.clone()).map_err(|e| {
-        InitialIDkgDealingsValidationError::DeserializationError {
-            error: format!("Failure parsing subnet id in IDkgTranscriptId: {:?}", e),
-        }
-    })?;
-    Ok(IDkgTranscriptId::new(
-        subnet_id,
-        proto.id,
-        Height::from(proto.source_height),
-    ))
-}
-
 fn idkg_transcript_params_proto(params: &IDkgTranscriptParams) -> IDkgTranscriptParamsProto {
     let idkg_transcript_operation_args = match params.operation_type() {
         IDkgTranscriptOperation::Random => vec![],
@@ -247,7 +253,7 @@ fn idkg_transcript_params_proto(params: &IDkgTranscriptParams) -> IDkgTranscript
         ],
     };
     IDkgTranscriptParamsProto {
-        transcript_id: Some(idkg_transcript_id_proto(&params.transcript_id())),
+        transcript_id: Some(IDkgTranscriptIdProto::from(&params.transcript_id())),
         dealers: params
             .dealers()
             .iter()
@@ -289,19 +295,17 @@ fn idkg_transcript_operation_type_proto(
 fn idkg_transcript_operation_enum(
     op: i32,
     op_args: &[IDkgTranscriptProto],
-) -> Result<IDkgTranscriptOperation, InitialIDkgDealingsValidationError> {
+) -> Result<IDkgTranscriptOperation, ProxyDecodeError> {
     match op {
         // IDkgTranscriptOperationProto::Random
         1 => Ok(IDkgTranscriptOperation::Random),
         // IDkgTranscriptOperationProto::ReshareOfMasked
         2 => {
             if op_args.len() != 1 {
-                return Err(InitialIDkgDealingsValidationError::DeserializationError {
-                    error: format!(
-                        "Wrong number of arguments for operation ReshareOfMasked: {}",
-                        op_args.len()
-                    ),
-                });
+                return Err(ProxyDecodeError::Other(format!(
+                    "Wrong number of arguments for operation ReshareOfMasked: {}",
+                    op_args.len()
+                )));
             };
             let transcript = idkg_transcript_struct(&op_args[0])?;
             Ok(IDkgTranscriptOperation::ReshareOfMasked(transcript))
@@ -309,12 +313,10 @@ fn idkg_transcript_operation_enum(
         // IDkgTranscriptOperationProto::ReshareOfUnmasked
         3 => {
             if op_args.len() != 1 {
-                return Err(InitialIDkgDealingsValidationError::DeserializationError {
-                    error: format!(
-                        "Wrong number of arguments for operation ReshareOfUnmasked: {}",
-                        op_args.len()
-                    ),
-                });
+                return Err(ProxyDecodeError::Other(format!(
+                    "Wrong number of arguments for operation ReshareOfUnmasked: {}",
+                    op_args.len()
+                )));
             };
             let transcript = idkg_transcript_struct(&op_args[0])?;
             Ok(IDkgTranscriptOperation::ReshareOfUnmasked(transcript))
@@ -322,12 +324,10 @@ fn idkg_transcript_operation_enum(
         // IDkgTranscriptOperationProto::UnmaskedTimesMasked
         4 => {
             if op_args.len() != 2 {
-                return Err(InitialIDkgDealingsValidationError::DeserializationError {
-                    error: format!(
-                        "Wrong number of arguments for operation UnmaskedTimesMasked: {}",
-                        op_args.len()
-                    ),
-                });
+                return Err(ProxyDecodeError::Other(format!(
+                    "Wrong number of arguments for operation UnmaskedTimesMasked: {}",
+                    op_args.len()
+                )));
             };
             let transcript_1 = idkg_transcript_struct(&op_args[0])?;
             let transcript_2 = idkg_transcript_struct(&op_args[1])?;
@@ -337,38 +337,31 @@ fn idkg_transcript_operation_enum(
             ))
         }
         // IDkgTranscriptOperationProto::Unspecified, other
-        _ => Err(InitialIDkgDealingsValidationError::DeserializationError {
-            error: "Unspecified transcript operation in IDkgTranscriptParams".to_string(),
-        }),
+        _ => Err(ProxyDecodeError::Other(
+            "Unspecified transcript operation in IDkgTranscriptParams".to_string(),
+        )),
     }
-}
-
-fn node_id_struct(
-    maybe_node_id_proto: &Option<NodeIdProto>,
-) -> Result<NodeId, InitialIDkgDealingsValidationError> {
-    node_id_try_from_option(maybe_node_id_proto.to_owned()).map_err(|e| {
-        InitialIDkgDealingsValidationError::DeserializationError {
-            error: e.to_string(),
-        }
-    })
 }
 
 fn idkg_transcript_params_struct(
     proto: &IDkgTranscriptParamsProto,
-) -> Result<IDkgTranscriptParams, InitialIDkgDealingsValidationError> {
-    let transcript_id = idkg_transcript_id_struct(&proto.transcript_id)?;
+) -> Result<IDkgTranscriptParams, ProxyDecodeError> {
+    let transcript_id: IDkgTranscriptId = try_from_option_field(
+        proto.transcript_id.as_ref(),
+        "IDkgTranscriptParams::transcript_id",
+    )?;
 
     let dealers: Result<Vec<_>, _> = proto
         .dealers
         .iter()
-        .map(|tuple| node_id_struct(&tuple.dealer_id))
+        .map(|tuple| node_id_try_from_option(tuple.dealer_id.clone()))
         .collect();
     let dealers = BTreeSet::from_iter(dealers?.iter().cloned());
 
     let receivers: Result<Vec<_>, _> = proto
         .receivers
         .iter()
-        .map(|node_id| node_id_struct(&Some(node_id.clone())))
+        .map(|node_id| node_id_try_from_option(Some(node_id.clone())))
         .collect();
     let receivers = BTreeSet::from_iter(receivers?.iter().cloned());
     let params = IDkgTranscriptParams::new(
@@ -399,7 +392,7 @@ fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProt
     // TODO(CRP-1403): construct real `dealers` once `IDkgTranscript.dealers` exists.
     let dealers = vec![];
     IDkgTranscriptProto {
-        transcript_id: Some(idkg_transcript_id_proto(&idkg_transcript.transcript_id)),
+        transcript_id: Some(IDkgTranscriptIdProto::from(&idkg_transcript.transcript_id)),
         receivers: idkg_transcript
             .receivers
             .iter()
@@ -415,15 +408,16 @@ fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProt
     }
 }
 
-fn idkg_transcript_struct(
-    proto: &IDkgTranscriptProto,
-) -> Result<IDkgTranscript, InitialIDkgDealingsValidationError> {
-    let transcript_id = idkg_transcript_id_struct(&proto.transcript_id)?;
+fn idkg_transcript_struct(proto: &IDkgTranscriptProto) -> Result<IDkgTranscript, ProxyDecodeError> {
+    let transcript_id: IDkgTranscriptId = try_from_option_field(
+        proto.transcript_id.as_ref(),
+        "IDkgTranscript::transcript_id",
+    )?;
 
     let receivers: Result<Vec<_>, _> = proto
         .receivers
         .iter()
-        .map(|node_id| node_id_struct(&Some(node_id.clone())))
+        .map(|node_id| node_id_try_from_option(Some(node_id.clone())))
         .collect();
     let receivers = BTreeSet::from_iter(receivers?.iter().cloned());
     let receivers = IDkgReceivers::new(receivers).map_err(|e| {
@@ -454,7 +448,7 @@ fn signed_idkg_dealing_tuple_proto(
 ) -> IDkgSignedDealingTupleProto {
     let idkg_dealing = signed_dealing.idkg_dealing();
     let dealing = IDkgDealingProto {
-        transcript_id: Some(idkg_transcript_id_proto(&idkg_dealing.transcript_id)),
+        transcript_id: Some(IDkgTranscriptIdProto::from(&idkg_dealing.transcript_id)),
         raw_dealing: idkg_dealing.internal_dealing_raw.clone(),
     };
     IDkgSignedDealingTupleProto {
@@ -492,43 +486,16 @@ fn signature_tuple_proto(
     }
 }
 
-fn signed_idkg_dealing_struct(
-    maybe_proto: &Option<IDkgSignedDealingTupleProto>,
-) -> Result<SignedIDkgDealing, InitialIDkgDealingsValidationError> {
-    let proto =
-        maybe_proto
-            .as_ref()
-            .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
-                error: "Missing IDkgDealingTuple.".to_string(),
-            })?;
-    let idkg_dealing_proto =
-        proto
-            .dealing
-            .as_ref()
-            .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
-                error: "Missing IDkgDealing.".to_string(),
-            })?;
-    let idkg_dealing = IDkgDealing {
-        transcript_id: idkg_transcript_id_struct(&idkg_dealing_proto.transcript_id)?,
-        internal_dealing_raw: idkg_dealing_proto.raw_dealing.clone(),
-    };
-    let basic_signature = BasicSignature {
-        signature: BasicSigOf::new(BasicSig(proto.signature.clone())),
-        signer: node_id_struct(&proto.dealer)?,
-    };
-    Ok(SignedIDkgDealing {
-        content: idkg_dealing,
-        signature: basic_signature,
-    })
-}
-
 fn verified_dealings_map(
     verified_protos: &[VerifiedIDkgDealingProto],
-) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, InitialIDkgDealingsValidationError> {
+) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, ProxyDecodeError> {
     let mut result = BTreeMap::new();
     for proto in verified_protos {
         let node_index = proto.dealer_index;
-        let signed_dealing = signed_idkg_dealing_struct(&proto.signed_dealing_tuple)?;
+        let signed_dealing: SignedIDkgDealing = try_from_option_field(
+            proto.signed_dealing_tuple.as_ref(),
+            "VerifiedIDkgDealing::signed_dealing_tuple",
+        )?;
         let batch_signed_dealing = BatchSignedIDkgDealing {
             content: signed_dealing,
             signature: basic_signature_batch_struct(&proto.support_tuples)?,
@@ -540,16 +507,17 @@ fn verified_dealings_map(
 
 fn basic_signature_batch_struct(
     signature_batch: &[SignatureTuple],
-) -> Result<BasicSignatureBatch<SignedIDkgDealing>, InitialIDkgDealingsValidationError> {
+) -> Result<BasicSignatureBatch<SignedIDkgDealing>, ProxyDecodeError> {
     let mut signatures_map = BTreeMap::new();
     for tuple in signature_batch {
-        let signer = node_id_struct(&tuple.signer)?;
+        let signer = node_id_try_from_option(tuple.signer.clone())?;
         let signature = BasicSigOf::new(BasicSig(tuple.signature.clone()));
         if signatures_map.insert(signer, signature).is_some() {
             return Err(
                 InitialIDkgDealingsValidationError::MultipleSupportSharesFromSameReceiver {
                     node_id: signer,
-                },
+                }
+                .into(),
             );
         };
     }
@@ -558,11 +526,10 @@ fn basic_signature_batch_struct(
 
 fn initial_dealings_vec(
     dealing_tuple_protos: &[IDkgSignedDealingTupleProto],
-) -> Result<Vec<SignedIDkgDealing>, InitialIDkgDealingsValidationError> {
+) -> Result<Vec<SignedIDkgDealing>, ProxyDecodeError> {
     let mut result = Vec::new();
     for proto in dealing_tuple_protos {
-        let signed_dealing = signed_idkg_dealing_struct(&Some(proto.clone()))?;
-        result.push(signed_dealing);
+        result.push(SignedIDkgDealing::try_from(proto)?);
     }
     Ok(result)
 }

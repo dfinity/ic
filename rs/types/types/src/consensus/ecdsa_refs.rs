@@ -127,12 +127,10 @@ impl From<&TranscriptRef> for pb::TranscriptRef {
 impl TryFrom<&pb::TranscriptRef> for TranscriptRef {
     type Error = ProxyDecodeError;
     fn try_from(trancript_ref: &pb::TranscriptRef) -> Result<Self, Self::Error> {
-        let transcript_id = (&trancript_ref.transcript_id).try_into().map_err(|err| {
-            ProxyDecodeError::Other(format!(
-                "TranscriptRef:: Failed to convert transcript id: {:?}",
-                err
-            ))
-        })?;
+        let transcript_id = try_from_option_field(
+            trancript_ref.transcript_id.as_ref(),
+            "TranscriptRef::transcript_id",
+        )?;
         Ok(Self {
             height: Height::from(trancript_ref.height),
             transcript_id,
@@ -1124,13 +1122,10 @@ impl From<&IDkgTranscriptParamsRef> for pb::IDkgTranscriptParamsRef {
 impl TryFrom<&pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
     type Error = ProxyDecodeError;
     fn try_from(params: &pb::IDkgTranscriptParamsRef) -> Result<Self, Self::Error> {
-        let transcript_id: IDkgTranscriptId =
-            (&params.transcript_id).try_into().map_err(|err| {
-                ProxyDecodeError::Other(format!(
-                    "IDkgTranscriptParamsRef:: Failed to convert transcript Id: {:?}",
-                    err
-                ))
-            })?;
+        let transcript_id: IDkgTranscriptId = try_from_option_field(
+            params.transcript_id.as_ref(),
+            "IDkgTranscriptParamsRef::transcript_id",
+        )?;
 
         let mut dealers = BTreeSet::new();
         for pb_node_id in &params.dealers {
