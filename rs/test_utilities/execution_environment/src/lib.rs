@@ -1792,6 +1792,16 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_bitcoin_testnet_canister_id(mut self, canister: Option<CanisterId>) -> Self {
+        self.execution_config.bitcoin.testnet_canister_id = canister;
+        self
+    }
+
+    pub fn with_bitcoin_mainnet_canister_id(mut self, canister: Option<CanisterId>) -> Self {
+        self.execution_config.bitcoin.mainnet_canister_id = canister;
+        self
+    }
+
     pub fn with_bitcoin_privileged_access(mut self, canister: CanisterId) -> Self {
         self.execution_config
             .bitcoin
@@ -1912,6 +1922,13 @@ impl ExecutionTestBuilder {
                 .ecdsa_keys_held
                 .insert(ecdsa_key.clone());
         }
+
+        state.metadata.network_topology.bitcoin_mainnet_canister_id =
+            self.execution_config.bitcoin.mainnet_canister_id;
+
+        state.metadata.network_topology.bitcoin_testnet_canister_id =
+            self.execution_config.bitcoin.testnet_canister_id;
+
         let ecdsa_subnet_public_keys = self
             .ecdsa_key
             .into_iter()

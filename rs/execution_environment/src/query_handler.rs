@@ -14,6 +14,7 @@ use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
+use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
@@ -37,6 +38,7 @@ use ic_types::{
 };
 use serde::Serialize;
 use std::convert::Infallible;
+use std::str::FromStr;
 use std::{
     future::Future,
     pin::Pin,
@@ -48,6 +50,8 @@ use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use self::query_stats::QueryStatsCollector;
+use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload, QueryMethod};
+use ic_replicated_state::NetworkTopology;
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -140,16 +144,66 @@ impl InternalHttpQueryHandler {
     }
 }
 
+fn route_bitcoin_message(
+    network: BitcoinNetwork,
+    network_topology: &NetworkTopology,
+) -> Result<CanisterId, UserError> {
+    let canister_id = match network {
+        // Route to the bitcoin canister if it exists, otherwise return the error.
+        BitcoinNetwork::Testnet
+        | BitcoinNetwork::testnet
+        | BitcoinNetwork::Regtest
+        | BitcoinNetwork::regtest => {
+            network_topology
+                .bitcoin_testnet_canister_id
+                .ok_or(UserError::new(
+                    ErrorCode::CanisterNotHostedBySubnet,
+                    "Bitcoin testnet canister is not installed.".to_string(),
+                ))?
+        }
+        BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => network_topology
+            .bitcoin_mainnet_canister_id
+            .ok_or(UserError::new(
+                ErrorCode::CanisterNotHostedBySubnet,
+                "Bitcoin mainnet canister is not installed.".to_string(),
+            ))?,
+    };
+    Ok(canister_id)
+}
+
 impl QueryHandler for InternalHttpQueryHandler {
     type State = ReplicatedState;
 
     fn query(
         &self,
-        query: UserQuery,
+        mut query: UserQuery,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
+
+        // Update the query receiver if the query is for the management canister.
+        if query.receiver == CanisterId::ic_00() {
+            let network = match QueryMethod::from_str(query.method_name.as_str()) {
+                Ok(QueryMethod::BitcoinGetUtxosQuery) => {
+                    let args = BitcoinGetUtxosArgs::decode(&query.method_payload)?;
+                    args.network
+                }
+                Ok(QueryMethod::BitcoinGetBalanceQuery) => {
+                    let args = BitcoinGetBalanceArgs::decode(&query.method_payload)?;
+                    args.network
+                }
+                Err(_) => {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterMethodNotFound,
+                        format!("Query method {} not found.", query.method_name),
+                    ))
+                }
+            };
+
+            query.receiver =
+                route_bitcoin_message(network, &state.as_ref().metadata.network_topology)?;
+        }
 
         // Check the query cache first (if the query caching is enabled).
         // If a valid cache entry found, the result will be immediately returned.
