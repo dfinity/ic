@@ -191,7 +191,7 @@ fn test_unauthorized_controller() {
         status: 400,
         content_type: Some("text/plain".to_string()),
         content: format!(
-            "Effective canister id in URL {} does not match requested canister id: {}.",
+            "Effective principal id in URL {} does not match requested principal id: {}.",
             canister1, canister2
         )
         .as_bytes()

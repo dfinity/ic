@@ -2,7 +2,7 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{cbor_response, make_plaintext_response, remove_effective_canister_id},
+    common::{cbor_response, make_plaintext_response, remove_effective_principal_id},
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
     validator_executor::ValidatorExecutor,
@@ -25,7 +25,7 @@ use ic_types::{
         HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, QueryResponseHash,
         SignedRequestBytes, UserQuery,
     },
-    NodeId,
+    CanisterId, NodeId,
 };
 use std::convert::{Infallible, TryFrom};
 use std::future::Future;
@@ -140,12 +140,23 @@ impl Service<Request<Vec<u8>>> for QueryService {
             }
         };
 
-        let effective_canister_id = match remove_effective_canister_id(&mut parts) {
-            Ok(canister_id) => canister_id,
+        let effective_principal_id = match remove_effective_principal_id(&mut parts) {
+            Ok(principal_id) => principal_id,
             Err(res) => {
                 error!(
                     self.log,
-                    "Effective canister ID is not attached to query request. This is a bug."
+                    "Effective canister ID is not attached to call request. This is a bug."
+                );
+                return Box::pin(async move { Ok(res) });
+            }
+        };
+
+        let effective_canister_id = match CanisterId::new(effective_principal_id) {
+            Ok(canister_id) => canister_id,
+            Err(_) => {
+                let res = make_plaintext_response(
+                    StatusCode::BAD_REQUEST,
+                    format!("Invalid canister id: {}", effective_principal_id),
                 );
                 return Box::pin(async move { Ok(res) });
             }

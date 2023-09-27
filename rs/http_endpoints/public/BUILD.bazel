@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/phantom_newtype",
     "//rs/types/error_types",
     "//rs/types/types",
     "//rs/validator",
@@ -75,6 +76,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:serde_bytes",
     "@crate_index//:tower-test",
 ]
 
