@@ -117,6 +117,11 @@ impl<T> ValidatedArtifact<T> {
     }
 }
 
+pub enum UnvalidatedArtifactEvent<Artifact: ArtifactKind> {
+    Insert(UnvalidatedArtifact<Artifact::Message>),
+    Remove(Artifact::Id),
+}
+
 /// Unvalidated artifact
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnvalidatedArtifact<T> {

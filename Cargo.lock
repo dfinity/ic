@@ -1676,7 +1676,7 @@ dependencies = [
  "candid",
  "certificate_orchestrator_interface",
  "chacha20poly1305",
- "clap 4.4.4",
+ "clap 4.4.5",
  "cloudflare",
  "flate2",
  "futures",
@@ -1713,7 +1713,7 @@ dependencies = [
  "async-trait",
  "axum",
  "candid",
- "clap 4.4.4",
+ "clap 4.4.5",
  "futures",
  "hyper",
  "hyper-rustls",
@@ -1919,9 +1919,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.4.4"
+version = "4.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1d7b8d5ec32af0fadc644bf1fd509a688c2103b185644bb1e29d164e0703136"
+checksum = "824956d0dca8334758a5b7f7e50518d66ea319330cbceedcf76905c2f6ab30e3"
 dependencies = [
  "clap_builder",
  "clap_derive 4.4.2",
@@ -1929,9 +1929,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.4.4"
+version = "4.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5179bb514e4d7c2051749d8fcefa2ed6d06a9f4e6d69faf3805f5d80b8cf8d56"
+checksum = "122ec64120a49b4563ccaedcbea7818d069ed8e9aa6d829b82d8a4128936b2ab"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2394,7 +2394,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.4.4",
+ "clap 4.4.5",
  "criterion-plot 0.5.0",
  "futures",
  "is-terminal",
@@ -2931,7 +2931,7 @@ name = "deterministic_ips"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.4",
+ "clap 4.4.5",
  "ic-crypto-sha2",
  "thiserror",
 ]
@@ -3568,9 +3568,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
+checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
 
 [[package]]
 name = "fe-derive"
@@ -4390,7 +4390,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "axum-server",
- "clap 4.4.4",
+ "clap 4.4.5",
  "rustls 0.21.7",
  "rustls-pemfile",
  "serde_json",
@@ -4927,7 +4927,7 @@ dependencies = [
  "axum-server",
  "bytes",
  "candid",
- "clap 4.4.4",
+ "clap 4.4.5",
  "dashmap",
  "ethnum",
  "futures",
@@ -7574,7 +7574,7 @@ dependencies = [
  "axum",
  "candid",
  "ciborium",
- "clap 4.4.4",
+ "clap 4.4.5",
  "futures",
  "hex",
  "http",
@@ -11546,7 +11546,7 @@ dependencies = [
  "base64 0.11.0",
  "bytes",
  "candid",
- "clap 4.4.4",
+ "clap 4.4.5",
  "flate2",
  "form_urlencoded",
  "futures",
@@ -12554,7 +12554,7 @@ name = "log_vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.4",
+ "clap 4.4.5",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
@@ -13057,7 +13057,7 @@ name = "node_status_updater"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.4",
+ "clap 4.4.5",
  "crossbeam",
  "crossbeam-channel",
  "futures-util",
@@ -16064,7 +16064,7 @@ name = "setupos-inject-configuration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.4",
+ "clap 4.4.5",
  "ipnet",
  "tempfile",
  "tokio",
@@ -16787,7 +16787,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "clap 4.4.4",
+ "clap 4.4.5",
  "http",
  "itertools 0.11.0",
  "reqwest",
@@ -16867,7 +16867,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb94d2f3cc536af71caac6b6fcebf65860b347e7ce0cc9ebe8f70d3e521054ef"
 dependencies = [
  "cfg-if 1.0.0",
- "fastrand 2.0.0",
+ "fastrand 2.0.1",
  "redox_syscall 0.3.5",
  "rustix 0.38.3",
  "windows-sys 0.48.0",
@@ -18099,7 +18099,7 @@ name = "vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.4",
+ "clap 4.4.5",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",

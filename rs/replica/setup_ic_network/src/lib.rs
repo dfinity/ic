@@ -34,7 +34,7 @@ use ic_icos_sev::Sev;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::UnvalidatedArtifactEvent,
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
@@ -65,7 +65,6 @@ use ic_types::{
     crypto::CryptoHash,
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
-    messages::SignedIngress,
     p2p::GossipAdvert,
     replica_config::ReplicaConfig,
     NodeId, SubnetId,
@@ -156,7 +155,7 @@ pub fn setup_consensus_and_p2p(
     time_source: Arc<SysTimeSource>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    Sender<UnvalidatedArtifact<SignedIngress>>,
+    Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();

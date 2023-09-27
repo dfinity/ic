@@ -10,7 +10,7 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::UnvalidatedArtifactEvent,
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
@@ -44,6 +44,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
 };
 use ic_types::{
+    artifact_kind::IngressArtifact,
     batch::{BatchPayload, ReceivedEpochStats, ValidationContext},
     consensus::{
         certification::{Certification, CertificationContent},
@@ -58,7 +59,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, SignedIngress, SignedIngressContent, UserQuery},
+    messages::{CertificateDelegation, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
     CryptoHashOfPartialState, Height, RegistryVersion, Time,
 };
@@ -405,7 +406,7 @@ pub fn start_http_endpoint(
     pprof_collector: Arc<dyn PprofCollector>,
 ) -> (
     IngressFilterHandle,
-    Receiver<UnvalidatedArtifact<SignedIngress>>,
+    Receiver<UnvalidatedArtifactEvent<IngressArtifact>>,
     QueryExecutionHandle,
 ) {
     let metrics = MetricsRegistry::new();

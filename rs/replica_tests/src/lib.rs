@@ -12,7 +12,7 @@ use ic_ic00_types::{
     IC_00,
 };
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
     execution_environment::{IngressHistoryReader, QueryHandler},
     time_source::{SysTimeSource, TimeSource},
 };
@@ -35,6 +35,7 @@ use ic_test_utilities::{
     universal_canister::UNIVERSAL_CANISTER_WASM,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_types::artifact_kind::IngressArtifact;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
@@ -65,18 +66,18 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
+    ingress_tx: &CrossbeamSender<UnvalidatedArtifactEvent<IngressArtifact>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifact {
+        .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
             message: msg,
             peer_id: node_test_id(1),
             timestamp: SysTimeSource::new().get_relative_time(),
-        })
+        }))
         .unwrap();
 
     let start = Instant::now();
@@ -156,7 +157,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
+    pub ingress_sender: CrossbeamSender<UnvalidatedArtifactEvent<IngressArtifact>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
