@@ -46,9 +46,10 @@ fn create_consensus_pool_dir(config: &Config) {
 pub fn construct_ic_stack(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    rt_handle: tokio::runtime::Handle,
-    rt_handle_http: tokio::runtime::Handle,
-    rt_handle_xnet: tokio::runtime::Handle,
+    rt_handle_main: &tokio::runtime::Handle,
+    rt_handle_p2p: &tokio::runtime::Handle,
+    rt_handle_http: &tokio::runtime::Handle,
+    rt_handle_xnet: &tokio::runtime::Handle,
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
@@ -213,7 +214,7 @@ pub fn construct_ic_stack(
         Arc::clone(&certified_stream_store) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        rt_handle_xnet,
+        rt_handle_xnet.clone(),
         node_id,
         subnet_id,
         metrics_registry,
@@ -226,7 +227,7 @@ pub fn construct_ic_stack(
     } = setup_bitcoin_adapter_clients(
         log.clone(),
         metrics_registry,
-        rt_handle.clone(),
+        rt_handle_main.clone(),
         config.adapters_config.clone(),
     );
     let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
@@ -240,7 +241,7 @@ pub fn construct_ic_stack(
     ));
     // ---------- HTTPS OUTCALLS DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
-        rt_handle.clone(),
+        rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
         execution_services.anonymous_query_handler,
@@ -255,7 +256,7 @@ pub fn construct_ic_stack(
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
         metrics_registry,
-        &rt_handle,
+        rt_handle_p2p,
         artifact_pool_config,
         config.transport,
         config.malicious_behaviour.malicious_flags.clone(),
@@ -287,7 +288,7 @@ pub fn construct_ic_stack(
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
-        rt_handle_http,
+        rt_handle_http.clone(),
         metrics_registry,
         config.http_handler.clone(),
         execution_services.ingress_filter,

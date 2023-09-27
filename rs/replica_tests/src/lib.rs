@@ -342,9 +342,10 @@ where
             ic_replica::setup_ic_stack::construct_ic_stack(
                 &logger,
                 &metrics_registry,
-                tokio::runtime::Handle::current(),
-                tokio::runtime::Handle::current(),
-                tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
                 config.clone(),
                 temp_node,
                 subnet_id,
