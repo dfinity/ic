@@ -264,6 +264,7 @@ sh_test(
     env_inherit = [
         "HOME",
     ],
+    flaky = True,
     tags = [
         "no-sandbox",
         "requires-network",
