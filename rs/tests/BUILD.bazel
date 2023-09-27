@@ -103,11 +103,6 @@ sh_binary(
     srcs = ["create-universal-vm-config-image-ci.sh"],
 )
 
-sh_binary(
-    name = "create_universal_vm_config_image_from_tar_sh",
-    srcs = ["create-universal-vm-config-image-from-tar.sh"],
-)
-
 tip_nns_canisters(
     name = "tip-nns-canisters",
 )

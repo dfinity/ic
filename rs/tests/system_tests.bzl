@@ -4,7 +4,7 @@ Rules for system-tests.
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:defs.bzl", "zstd_compress")
+load("//bazel:defs.bzl", "untar", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -213,14 +213,10 @@ def system_test(
 def _uvm_config_image_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
-    input_tar = ctx.attr.input_tar[DefaultInfo].files.to_list()[0]
-
-    create_universal_vm_config_image = ctx.executable._create_universal_vm_config_image
-
     ctx.actions.run(
-        executable = ctx.executable._create_universal_vm_config_image_from_tar,
-        arguments = [create_universal_vm_config_image.path, input_tar.path, out.path],
-        inputs = [input_tar, create_universal_vm_config_image],
+        executable = ctx.executable._create_universal_vm_config_image,
+        arguments = ["--input", ctx.file.src.path, "--output", out.path, "--label", "CONFIG"],
+        inputs = [ctx.file.src],
         outputs = [out],
     )
     return [
@@ -232,12 +228,7 @@ def _uvm_config_image_impl(ctx):
 uvm_config_image_impl = rule(
     implementation = _uvm_config_image_impl,
     attrs = {
-        "input_tar": attr.label(),
-        "_create_universal_vm_config_image_from_tar": attr.label(
-            executable = True,
-            cfg = "exec",
-            default = ":create_universal_vm_config_image_from_tar_sh",
-        ),
+        "src": attr.label(allow_single_file = True),
         "_create_universal_vm_config_image": attr.label(
             executable = True,
             cfg = "exec",
@@ -257,6 +248,7 @@ def uvm_config_image(name, tags = None, visibility = None, **kwargs):
     """
     tar = name + "_tar"
 
+    # TODO: remove tar and untar by copy with remap and mode
     pkg_tar(
         name = tar,
         tags = ["manual"],
@@ -264,9 +256,16 @@ def uvm_config_image(name, tags = None, visibility = None, **kwargs):
         **kwargs
     )
 
+    untar(
+        name = name + "_untar",
+        src = ":" + tar,
+        tags = ["manual"],
+        visibility = ["//visibility:private"],
+    )
+
     uvm_config_image_impl(
         name = name + "_uncompressed",
-        input_tar = ":" + tar,
+        src = ":" + name + "_untar",
         tags = ["manual"],
         visibility = ["//visibility:private"],
     )

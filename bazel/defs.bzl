@@ -58,6 +58,27 @@ zstd_compress = rule(
     },
 )
 
+def _untar(ctx):
+    """Unpacks tar archives.
+    """
+    out = ctx.actions.declare_directory(ctx.label.name)
+
+    # TODO: install tar as dependency.
+    ctx.actions.run(
+        executable = "tar",
+        arguments = ["-xf", ctx.file.src.path, "-C", out.path],
+        inputs = [ctx.file.src],
+        outputs = [out],
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+untar = rule(
+    implementation = _untar,
+    attrs = {
+        "src": attr.label(allow_single_file = True),
+    },
+)
+
 def _sha256sum2url_impl(ctx):
     """
     Returns cas url pointing to the artifact with checksum specified.
