@@ -5,9 +5,11 @@ use crate::common::{
 };
 use candid::{Decode, Encode, Nat};
 use canister_test::Wasm;
-use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
+use cycles_minting_canister::{
+    IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
+};
 use dfn_candid::candid_one;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ic00_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
@@ -29,9 +31,11 @@ use ic_nns_governance::pb::v1::{
         self, configure::Operation, AddHotKey, Configure, Follow, JoinCommunityFund,
         LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
-    Empty, Governance, GovernanceError, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Proposal, ProposalInfo,
+    manage_neuron_response,
+    proposal::Action,
+    Empty, ExecuteNnsFunction, Governance, GovernanceError, ListNeurons, ListNeuronsResponse,
+    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
     RewardNodeProviders, Vote,
 };
 use ic_sns_governance::{
@@ -1329,4 +1333,31 @@ pub fn get_icp_xdr_conversion_rate(
     )
     .expect("Failed to retrieve the conversion rate");
     Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
+}
+
+pub fn cmc_set_default_authorized_subnetworks(
+    machine: &mut StateMachine,
+    subnets: Vec<SubnetId>,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) {
+    let args = SetAuthorizedSubnetworkListArgs { who: None, subnets };
+    let proposal = Proposal {
+        title: Some("set subnetworks".to_string()),
+        summary: "setting subnetworks".to_string(),
+        url: "".to_string(),
+        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
+            nns_function: NnsFunction::SetAuthorizedSubnetworks as i32,
+            payload: Encode!(&args).unwrap(),
+        })),
+    };
+
+    let propose_response = nns_governance_make_proposal(machine, sender, neuron_id, &proposal);
+
+    let proposal_id = match propose_response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(response) => response.proposal_id.unwrap(),
+        _ => panic!("Propose didn't return MakeProposal"),
+    };
+
+    nns_wait_for_proposal_execution(machine, proposal_id.id);
 }

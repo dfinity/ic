@@ -15,7 +15,8 @@ use ic_crypto_tree_hash::{
     WitnessGeneratorImpl,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CreateCanisterArgs, Method, IC_00,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CreateCanisterArgs, Method, IC_00,
 };
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
@@ -1093,6 +1094,7 @@ async fn notify_create_canister(
         block_index,
         controller,
         subnet_type,
+        settings,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
@@ -1128,7 +1130,8 @@ async fn notify_create_canister(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_create_canister(controller, from, amount, subnet_type).await;
+            let result =
+                process_create_canister(controller, from, amount, subnet_type, settings).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.as_mut().unwrap().insert(
@@ -1195,7 +1198,7 @@ fn memo_to_intent_str(memo: Memo) -> String {
     match memo {
         MEMO_CREATE_CANISTER => "CreateCanister".into(),
         MEMO_TOP_UP_CANISTER => "TopUp".into(),
-        _ => "unrecognized".into(),
+        a => format!("unrecognized: {a:?}"),
     }
 }
 
@@ -1291,7 +1294,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .ok_or_else(|| "Reserving requires a principal.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_create_canister(controller, from, tn.amount, None).await {
+        match process_create_canister(controller, from, tn.amount, None, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
                 Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
@@ -1394,6 +1397,7 @@ async fn process_create_canister(
     from: AccountIdentifier,
     amount: Tokens,
     subnet_type: Option<String>,
+    settings: Option<CanisterSettingsArgs>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -1407,7 +1411,7 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match create_canister(controller, cycles, subnet_type).await {
+    match create_canister(controller, cycles, subnet_type, settings).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
@@ -1579,6 +1583,7 @@ async fn create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
     subnet_type: Option<String>,
+    settings: Option<CanisterSettingsArgs>,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -1618,17 +1623,26 @@ async fn create_canister(
         ensure_balance(cycles)?;
     }
 
+    let canister_settings = settings
+        .map(|mut settings| {
+            if settings.controllers.is_none() {
+                settings.controllers = Some(BoundedVec::new(vec![controller_id]));
+            }
+            settings
+        })
+        .unwrap_or_else(|| {
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller_id])
+                .build()
+        });
+
     for subnet_id in subnets {
         let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
             subnet_id.into(),
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(
-                    CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![controller_id])
-                        .build(),
-                ),
+                settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),

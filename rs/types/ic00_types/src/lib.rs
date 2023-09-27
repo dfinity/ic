@@ -5,7 +5,7 @@ mod provisional;
 
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
-use bounded_vec::{BoundedVec, DataSize, UNBOUNDED};
+pub use bounded_vec::*;
 use candid::{CandidType, Decode, Deserialize, Encode};
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
@@ -838,6 +838,14 @@ impl CanisterStatusResultV2 {
         self.freezing_threshold.0.to_u64().unwrap()
     }
 
+    pub fn compute_allocation(&self) -> u64 {
+        self.settings.compute_allocation.0.to_u64().unwrap()
+    }
+
+    pub fn memory_allocation(&self) -> u64 {
+        self.settings.memory_allocation.0.to_u64().unwrap()
+    }
+
     pub fn idle_cycles_burned_per_day(&self) -> u128 {
         self.idle_cycles_burned_per_day.0.to_u128().unwrap()
     }
@@ -1396,8 +1404,10 @@ fn verify_max_bounded_controllers_length() {
 ///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
+///     freezing_threshold: opt nat;
+///     reserved_cycles_limit: opt nat;
 /// })`
-#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSettingsArgs {
     /// The field controller is deprecated and should not be used in new code.
     controller: Option<PrincipalId>,

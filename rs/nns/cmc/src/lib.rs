@@ -1,4 +1,5 @@
 use candid::CandidType;
+use ic_ic00_types::CanisterSettingsArgs;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
@@ -49,11 +50,12 @@ pub struct NotifyTopUp {
 }
 
 /// Argument taken by create canister notification endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct NotifyCreateCanister {
     pub block_index: BlockIndex,
     pub controller: PrincipalId,
     pub subnet_type: Option<String>,
+    pub settings: Option<CanisterSettingsArgs>,
 }
 
 /// Error for notify endpoints
