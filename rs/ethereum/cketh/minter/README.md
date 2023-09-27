@@ -21,7 +21,7 @@ dfx deploy minter --argument '(variant {InitArg = record { ethereum_network = va
 ## Converting ETH to ckETH
 
 ckETH deposits require calling a smart contract on the Ethereum chain and passing your principal as a `bytes32` array.
-The `principal-to-hex` binary is an utility that lets you convert a principal to the smart contract argument.
+The `principal-to-hex` binary is a utility that lets you convert a principal to the smart contract argument.
 
 ```shell
 cargo run --bin cketh-principal-to-hex $(dfx identity get-principal)
@@ -44,5 +44,5 @@ dfx canister call ledger icrc2_approve 'record {spender = record { owner = princ
 The specified amount for the withdrawal must not be greater than the approved amount.
 
 ```shell
-dfx canister call minter withdraw '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")
+dfx canister call minter withdraw_eth '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")
 ```
