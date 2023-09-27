@@ -2491,3 +2491,126 @@ fn test_copy_next_batch_of_inactive_neurons_to_stable_memory_from_neuron_id_from
 
     assert_copied_neurons(&[]);
 }
+
+mod cast_vote_and_cascade_follow {
+    use crate::{
+        governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+        neuron_store::NeuronStore,
+        pb::v1::{
+            governance::Migration,
+            neuron::{DissolveState, Followees},
+            Ballot, Neuron, Topic, Vote,
+        },
+    };
+    use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+    use maplit::hashmap;
+    use std::collections::{BTreeMap, HashMap};
+
+    const E8S: u64 = 100_000_000;
+
+    fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
+        Ballot {
+            voting_power,
+            vote: vote as i32,
+        }
+    }
+
+    fn make_test_neuron_with_followees(
+        id: u64,
+        topic: Topic,
+        followees: Vec<u64>,
+        aging_since_timestamp_seconds: u64,
+    ) -> Neuron {
+        Neuron {
+            id: Some(NeuronId { id }),
+            followees: hashmap! {
+                topic as i32 => Followees {
+                    followees: followees.into_iter().map(|id| NeuronId { id }).collect()
+                }
+            },
+            cached_neuron_stake_e8s: E8S, // clippy doesn't like 1 * E8S
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            )),
+            aging_since_timestamp_seconds,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_works() {
+        let now = 1000;
+        let topic = Topic::NetworkCanisterManagement;
+
+        let make_neuron = |id: u64, followees: Vec<u64>| {
+            make_test_neuron_with_followees(id, topic, followees, now)
+        };
+
+        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
+                                      ballots: &mut HashMap<u64, Ballot>,
+                                      id: u64,
+                                      followees: Vec<u64>,
+                                      vote: Vote| {
+            let neuron = make_neuron(id, followees);
+            let voting_power = neuron.voting_power(now);
+            neuron_map.insert(id, neuron);
+            ballots.insert(id, make_ballot(voting_power, vote));
+        };
+
+        let add_neuron_without_ballot =
+            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
+                let neuron = make_neuron(id, followees);
+                neuron_map.insert(id, neuron);
+            };
+
+        let mut heap_neurons = BTreeMap::new();
+        let mut ballots = HashMap::new();
+        for id in 1..=5 {
+            // Each neuron follows all neurons with a lower id
+            let followees = (1..id).collect();
+
+            add_neuron_with_ballot(
+                &mut heap_neurons,
+                &mut ballots,
+                id,
+                followees,
+                Vote::Unspecified,
+            );
+        }
+        // Add another neuron that follows both a neuron with a ballot and without a ballot
+        add_neuron_with_ballot(
+            &mut heap_neurons,
+            &mut ballots,
+            6,
+            vec![1, 7],
+            Vote::Unspecified,
+        );
+
+        // Add a neuron without a ballot for neuron 6 to follow.
+        add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
+
+        let mut neuron_store = NeuronStore::new(heap_neurons, Migration::default());
+
+        Governance::cast_vote_and_cascade_follow(
+            &ProposalId { id: 1 },
+            &mut ballots,
+            &NeuronId { id: 1 },
+            Vote::Yes,
+            topic,
+            |_| false,
+            &mut neuron_store,
+        );
+
+        assert_eq!(
+            ballots,
+            hashmap! {
+                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
+                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
+                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
+                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
+                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
+                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+            }
+        );
+    }
+}

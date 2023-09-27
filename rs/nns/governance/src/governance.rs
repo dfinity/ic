@@ -5543,6 +5543,23 @@ impl Governance {
         // values not allowed).
         let mut induction_votes = BTreeMap::new();
         induction_votes.insert(*voting_neuron_id, vote_of_neuron);
+
+        // Retain only neurons that have a ballot that can still be cast.  This excludes
+        // neurons with no ballots or ballots that have already been cast.
+        fn retain_neurons_with_castable_ballots(
+            followers: &mut BTreeSet<NeuronId>,
+            ballots: &HashMap<u64, Ballot>,
+        ) {
+            followers.retain(|f| {
+                ballots
+                    .get(&f.id)
+                    // Only retain neurons with unspecified ballots
+                    .map(|b| b.vote == Vote::Unspecified as i32)
+                    // Neurons without ballots are also dropped
+                    .unwrap_or_default()
+            });
+        }
+
         loop {
             // First, we cast the specified votes (in the first round,
             // this will be a single vote) and collect all neurons
@@ -5612,6 +5629,10 @@ impl Governance {
             // Clear the induction_votes, as we are going to compute a
             // new set now.
             induction_votes.clear();
+
+            // Calling "would_follow_ballots" for neurons that cannot vote is wasteful.
+            retain_neurons_with_castable_ballots(&mut all_followers, ballots);
+
             for f in all_followers.iter() {
                 let f_vote = match neuron_store.with_neuron(&NeuronId { id: f.id }, |n| {
                     n.would_follow_ballots(topic, ballots)
