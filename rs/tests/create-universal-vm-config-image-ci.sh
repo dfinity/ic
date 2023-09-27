@@ -70,7 +70,7 @@ finalize() {
 
 trap finalize EXIT
 
-size=$(du --bytes -s "$INPUT_DIR" | awk '{print $1}')
+size=$(du --bytes -s -L "$INPUT_DIR" | awk '{print $1}')
 size=$((2 * size + 1048576))
 echo "image size: $size"
 truncate -s $size "$tmp"
