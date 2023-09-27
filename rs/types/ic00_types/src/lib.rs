@@ -2137,3 +2137,11 @@ impl Payload<'_> for BitcoinGetCurrentFeePercentilesArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsResponse {}
 impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
+
+/// Query methods exported by the management canister.
+#[derive(Debug, EnumString, EnumIter, Display, Copy, Clone, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum QueryMethod {
+    BitcoinGetUtxosQuery,
+    BitcoinGetBalanceQuery,
+}
