@@ -124,7 +124,7 @@ Example: experiments/run_delegation_experiment.py
 Experiments that don't require workload generators (directly inheriting from `experiment.py`) require *one* testnet:
 the testnet on which we install canisters to benchmark.
 It should ideally be close to the hardware we are running in mainnet.
-Currently, testnets `benchmarklarge`, `benchmarksmall01` and `benchmarksmall02` are good candidates.
+Currently, testnet `benchmarklarge`is a good candidate.
 
 Experiments using workload generators (based on `workload_experiment.py`) require *two* testnets in order to
 guarantee a consistent setup of the workload generator machines.
