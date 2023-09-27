@@ -5,9 +5,8 @@
 use crate::InstanceId;
 use crate::{Computation, OpId, Operation};
 use base64;
-use ic_state_machine_tests::UserError;
-use ic_state_machine_tests::WasmResult;
 use ic_types::CanisterId;
+use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -140,28 +139,49 @@ impl<T> Default for PocketIcApiStateBuilder<T> {
 pub enum OpOut {
     NoOutput,
     Time(u64),
-    WasmResult(WasmResult),
+    CanisterResult(Result<WasmResult, UserError>),
     CanisterId(CanisterId),
-    IcUserErr(UserError),
     Cycles(u128),
     Bytes(Vec<u8>),
+    Error(PocketIcError),
 }
 
-impl From<Result<WasmResult, UserError>> for OpOut {
-    fn from(r: Result<WasmResult, UserError>) -> Self {
-        match r {
-            Ok(r) => Self::WasmResult(r),
-            Err(e) => Self::IcUserErr(e),
-        }
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+pub enum PocketIcError {
+    CanisterNotFound(CanisterId),
+}
+
+impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
+    fn from(
+        r: Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>,
+    ) -> Self {
+        let res = {
+            match r {
+                Ok(ic_state_machine_tests::WasmResult::Reply(wasm)) => Ok(WasmResult::Reply(wasm)),
+                Ok(ic_state_machine_tests::WasmResult::Reject(s)) => Ok(WasmResult::Reject(s)),
+                Err(user_err) => Err(UserError {
+                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
+                    description: user_err.description().to_string(),
+                }),
+            }
+        };
+        OpOut::CanisterResult(res)
     }
 }
 
-impl From<Result<(), UserError>> for OpOut {
-    fn from(r: Result<(), UserError>) -> Self {
-        match r {
-            Ok(_) => Self::NoOutput,
-            Err(e) => Self::IcUserErr(e),
-        }
+// TODO: Remove this Into: It's only used in the InstallCanisterAsController Operation, which also should be removed.
+impl From<Result<(), ic_state_machine_tests::UserError>> for OpOut {
+    fn from(r: Result<(), ic_state_machine_tests::UserError>) -> Self {
+        let res = {
+            match r {
+                Ok(_) => Ok(WasmResult::Reply(vec![])),
+                Err(user_err) => Err(UserError {
+                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
+                    description: user_err.description().to_string(),
+                }),
+            }
+        };
+        OpOut::CanisterResult(res)
     }
 }
 
@@ -172,10 +192,10 @@ impl std::fmt::Debug for OpOut {
             OpOut::Time(x) => write!(f, "Time({})", x),
             OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
             OpOut::Cycles(x) => write!(f, "Cycles({})", x),
-            OpOut::IcUserErr(x) => write!(f, "{}", x),
-            OpOut::WasmResult(WasmResult::Reject(x)) => write!(f, "Reject({})", x),
-            OpOut::WasmResult(WasmResult::Reply(bytes)) => {
-                write!(f, "Reply({})", base64::encode(bytes))
+            OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),
+            OpOut::CanisterResult(Err(x)) => write!(f, "CanisterResult: Err({})", x),
+            OpOut::Error(PocketIcError::CanisterNotFound(cid)) => {
+                write!(f, "CanisterNotFound({})", cid)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
         }
