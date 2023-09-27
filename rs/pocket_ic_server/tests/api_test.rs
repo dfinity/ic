@@ -1,6 +1,6 @@
 use candid::{decode_args, encode_args, Principal};
 use ic_cdk::api::management_canister::main::{CanisterIdRecord, CreateCanisterArgument};
-use pocket_ic::common::rest::{Checkpoint, RawCanisterCall, RawCanisterId};
+use pocket_ic::common::rest::{RawCanisterCall, RawCanisterId, RawCheckpoint};
 use pocket_ic::{CallError, Request, WasmResult};
 use reqwest::{StatusCode, Url};
 use std::collections::HashMap;
@@ -80,7 +80,7 @@ fn test_call_nonexistent_instance() {
 fn test_checkpoint_nonexistent_instance() {
     let url = start_server();
     let client = reqwest::blocking::Client::new();
-    let cp = Checkpoint {
+    let cp = RawCheckpoint {
         checkpoint_name: "my_checkpoint".into(),
     };
     let response = client
@@ -190,7 +190,7 @@ fn test_blob_store_wrong_encoding() {
 fn test_restore_from_invalid_checkpoint() {
     let url = start_server();
     let client = reqwest::blocking::Client::new();
-    let cp = Checkpoint {
+    let cp = RawCheckpoint {
         checkpoint_name: "foo bar".into(),
     };
 
@@ -245,7 +245,7 @@ fn test_saving_and_loading_checkpoint() {
     };
 
     // Save a checkpoint of instance A.
-    let cp = Checkpoint {
+    let cp = RawCheckpoint {
         checkpoint_name: "my_cp".into(),
     };
     let response = client

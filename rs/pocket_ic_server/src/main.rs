@@ -19,7 +19,7 @@ use ic_types::{CanisterId, PrincipalId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{RawCanisterCall, RawCanisterId};
 use pocket_ic::{
-    common::{blob::BinaryBlob, blob::BlobCompression, blob::BlobId, rest::Checkpoint},
+    common::{blob::BinaryBlob, blob::BlobCompression, blob::BlobId, rest::RawCheckpoint},
     Request,
 };
 use pocket_ic_server::state_api::{
@@ -241,7 +241,7 @@ async fn create_instance(
         runtime,
         ..
     }): State<AppState>,
-    body: Option<axum::extract::Json<Checkpoint>>,
+    body: Option<axum::extract::Json<RawCheckpoint>>,
 ) -> (StatusCode, String) {
     match body {
         Some(body) => {
@@ -336,7 +336,7 @@ async fn tick_and_create_checkpoint(
         ..
     }): State<AppState>,
     Path(id): Path<InstanceId>,
-    axum::extract::Json(payload): axum::extract::Json<Checkpoint>,
+    axum::extract::Json(payload): axum::extract::Json<RawCheckpoint>,
 ) -> (StatusCode, String) {
     let mut checkpoints = checkpoints.write().await;
     if checkpoints.contains_key(&payload.checkpoint_name) {

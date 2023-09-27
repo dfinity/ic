@@ -372,6 +372,44 @@ impl Operation for AddCycles {
     }
 }
 
+/// Writes a checkpoint directory to the disk.
+/// This directory is saved in the state graph, so a later
+/// call could copy the directory and name it -> named checkpoints.
+/// This operation, however, is only concerned with persisting the
+/// subnet state to disk and storing the directory in the graph.
+#[derive(Clone, Debug)]
+pub struct Checkpoint;
+
+impl Operation for Checkpoint {
+    type TargetType = PocketIc;
+    fn compute(self, pocket_ic: &mut Self::TargetType) -> OpOut {
+        pocket_ic.subnet.set_checkpoints_enabled(true);
+        pocket_ic.subnet.tick();
+        pocket_ic.subnet.set_checkpoints_enabled(false);
+
+        let state_dir = pocket_ic.subnet.state_dir.path();
+        // find most recent checkpoint in the state_dir/checkpoints/ directory
+        let checkpoint_dir = std::fs::read_dir(state_dir)
+            .expect("Failed to read state dir")
+            .max_by_key(|dir| {
+                dir.as_ref()
+                    .unwrap()
+                    .metadata()
+                    .unwrap()
+                    .modified()
+                    .unwrap()
+            })
+            .unwrap()
+            .unwrap()
+            .path();
+        OpOut::Checkpoint(checkpoint_dir.to_str().unwrap().to_string())
+    }
+
+    fn id(&self) -> OpId {
+        OpId("checkpoint".to_string())
+    }
+}
+
 struct Digest([u8; 32]);
 
 impl std::fmt::Debug for Digest {
@@ -388,7 +426,8 @@ impl std::fmt::Display for Digest {
     }
 }
 
-// TODO: Remove this Operation
+// TODO: deprecate this as an Op; implement it as a client library convenience function
+
 /// A convenience method that installs the given wasm module at the given canister id. The first
 /// controller of the given canister is set as the sender. If the canister has no controller set,
 /// the anynmous user is used.

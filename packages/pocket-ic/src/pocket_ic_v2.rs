@@ -255,6 +255,11 @@ impl PocketIcV2 {
         )
     }
 
+    pub fn create_checkpoint(&self) {
+        let endpoint = "update/create_checkpoint";
+        self.post::<(), &str>(endpoint, "");
+    }
+
     fn instance_url(&self) -> Url {
         let instance_id = self.instance_id;
         self.server_url
@@ -290,10 +295,8 @@ impl PocketIcV2 {
             .post(self.instance_url().join(endpoint).unwrap())
             .json(&body)
             .send()
-            .expect("HTTP failure")
-            .into();
-
-        match result {
+            .expect("HTTP failure");
+        match result.into() {
             ApiResponse::Success(t) => t,
             ApiResponse::Error { message } => panic!("{}", message),
             ApiResponse::Busy { state_label, op_id } => {

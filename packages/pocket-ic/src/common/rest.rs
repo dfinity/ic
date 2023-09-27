@@ -14,7 +14,7 @@ pub type InstanceId = usize;
 // HTTP JSON Request types
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Checkpoint {
+pub struct RawCheckpoint {
     pub checkpoint_name: String,
 }
 
