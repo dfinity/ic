@@ -30,7 +30,6 @@ pub type ChangeSet = Vec<ChangeAction>;
 pub enum ChangeAction {
     AddToValidated(ConsensusMessage),
     MoveToValidated(ConsensusMessage),
-    RemoveFromValidated(ConsensusMessage),
     RemoveFromUnvalidated(ConsensusMessage),
     HandleInvalid(ConsensusMessage, String),
     PurgeValidatedBelow(Height),
@@ -78,9 +77,6 @@ impl ContentEq for ChangeAction {
         match (self, other) {
             (ChangeAction::AddToValidated(x), ChangeAction::AddToValidated(y)) => x.content_eq(y),
             (ChangeAction::MoveToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
-            (ChangeAction::RemoveFromValidated(x), ChangeAction::RemoveFromValidated(y)) => {
-                x.content_eq(y)
-            }
             (ChangeAction::RemoveFromUnvalidated(x), ChangeAction::RemoveFromUnvalidated(y)) => {
                 x.content_eq(y)
             }
