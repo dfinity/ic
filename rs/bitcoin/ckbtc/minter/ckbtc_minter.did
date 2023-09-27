@@ -1,6 +1,24 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
+type CanisterStatusResponse = record {
+  status : CanisterStatusType;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
+
 type RetrieveBtcArgs = record {
     // The address to which the ckBTC minter should deposit BTC.
     address : text;
@@ -370,6 +388,8 @@ service : (minter_arg : MinterArg) -> {
     // Section "Minter Information" {{{
     // Returns internal minter parameters.
     get_minter_info : () -> (MinterInfo) query;
+
+    get_canister_status : () -> (CanisterStatusResponse);
     // }}}
 
     // Section "Event log" {{{

@@ -173,6 +173,19 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
     check_postcondition(updates::update_balance::update_balance(args).await)
 }
 
+#[candid_method(update)]
+#[update]
+async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
+    ic_cdk::api::management_canister::main::canister_status(
+        ic_cdk::api::management_canister::main::CanisterIdRecord {
+            canister_id: ic_cdk::id(),
+        },
+    )
+    .await
+    .expect("failed to fetch canister status")
+    .0
+}
+
 #[candid_method(query)]
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
