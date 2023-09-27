@@ -1,15 +1,9 @@
 use crate::types::Response;
-use ic_base_types::SubnetId;
-use ic_ic00_types::{CanisterStatusType, EmptyBlob, Payload as Ic00Payload, IC_00};
 use ic_interfaces::execution_environment::IngressHistoryWriter;
-use ic_logger::{error, info, ReplicaLogger};
-use ic_replicated_state::{CanisterStatus, ReplicatedState};
-use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{Payload, StopCanisterCallId, StopCanisterContext},
-    CanisterId,
-};
-use std::{mem, sync::Arc};
+use ic_logger::{error, ReplicaLogger};
+use ic_replicated_state::ReplicatedState;
+use ic_types::CanisterId;
+use std::sync::Arc;
 
 pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 
@@ -68,104 +62,4 @@ pub fn process_responses(
             }
         }
     });
-}
-
-/// Helper function to remove stop canister calls
-/// from SubnetCallContextManager based on provided call id.
-pub fn remove_stop_canister_call(
-    state: &mut ReplicatedState,
-    canister_id: CanisterId,
-    call_id: Option<StopCanisterCallId>,
-    log: &ReplicaLogger,
-) {
-    if let Some(call_id) = call_id {
-        let stop_canister_call = state
-            .metadata
-            .subnet_call_context_manager
-            .remove_stop_canister_call(call_id);
-        if stop_canister_call.is_none() {
-            info!(
-                log,
-                "Could not remove stop_canister call for call ID {} and canister {}",
-                call_id,
-                canister_id,
-            );
-        }
-    }
-}
-
-/// Checks for stopping canisters and, if any of them are ready to stop,
-/// transitions them to be fully stopped. Responses to the pending stop
-/// message(s) are written to ingress history.
-pub fn process_stopping_canisters(
-    mut state: ReplicatedState,
-    ingress_history_writer: &dyn IngressHistoryWriter<State = ReplicatedState>,
-    own_subnet_id: SubnetId,
-    log: &ReplicaLogger,
-) -> ReplicatedState {
-    let mut canister_states = state.take_canister_states();
-    let time = state.time();
-
-    for canister in canister_states.values_mut() {
-        if !(canister.status() == CanisterStatusType::Stopping
-            && canister.system_state.ready_to_stop())
-        {
-            // Canister is either not stopping or isn't ready to be stopped yet. Nothing to
-            // do.
-            continue;
-        }
-
-        // Transition the canister to "stopped".
-        let stopping_status =
-            mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
-
-        if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-            // Respond to the stop messages.
-            for stop_context in stop_contexts {
-                match stop_context {
-                    StopCanisterContext::Ingress {
-                        sender,
-                        message_id,
-                        call_id,
-                    } => {
-                        // Responding to stop_canister request from a user.
-                        remove_stop_canister_call(&mut state, canister.canister_id(), call_id, log);
-                        ingress_history_writer.set_status(
-                            &mut state,
-                            message_id,
-                            IngressStatus::Known {
-                                receiver: IC_00.get(),
-                                user_id: sender,
-                                time,
-                                state: IngressState::Completed(WasmResult::Reply(
-                                    EmptyBlob.encode(),
-                                )),
-                            },
-                        )
-                    }
-                    StopCanisterContext::Canister {
-                        sender,
-                        reply_callback,
-                        call_id,
-                        cycles,
-                    } => {
-                        // Responding to stop_canister request from a canister.
-                        let subnet_id_as_canister_id = CanisterId::from(own_subnet_id);
-                        remove_stop_canister_call(&mut state, canister.canister_id(), call_id, log);
-
-                        let response = ic_types::messages::Response {
-                            originator: sender,
-                            respondent: subnet_id_as_canister_id,
-                            originator_reply_callback: reply_callback,
-                            refund: cycles,
-                            response_payload: Payload::Data(EmptyBlob.encode()),
-                        };
-                        state.push_subnet_output_response(response.into());
-                    }
-                }
-            }
-        }
-    }
-    state.put_canister_states(canister_states);
-    state
 }

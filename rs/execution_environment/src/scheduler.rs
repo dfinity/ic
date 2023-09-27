@@ -5,7 +5,7 @@ use crate::{
         ExecutionEnvironment, RoundInstructions, RoundLimits,
     },
     metrics::MeasurementScope,
-    util::{self, process_responses},
+    util::process_responses,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
@@ -48,9 +48,9 @@ use std::{
 mod scheduler_metrics;
 use scheduler_metrics::*;
 mod round_schedule;
+use crate::util::debug_assert_or_critical_error;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
-use util::debug_assert_or_critical_error;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -862,19 +862,6 @@ impl SchedulerImpl {
         (canisters, ingress_results, heap_delta)
     }
 
-    fn process_stopping_canisters(
-        &self,
-        state: ReplicatedState,
-        log: &ReplicaLogger,
-    ) -> ReplicatedState {
-        util::process_stopping_canisters(
-            state,
-            self.ingress_history_writer.as_ref(),
-            self.own_subnet_id,
-            log,
-        )
-    }
-
     fn purge_expired_ingress_messages(&self, state: &mut ReplicatedState) {
         let current_time = state.time();
         let not_expired_yet = |ingress: &Arc<Ingress>| ingress.expiry_time >= current_time;
@@ -1617,7 +1604,7 @@ impl Scheduler for SchedulerImpl {
                 // beginning of the round), then canister deletion logic should be revised.
                 {
                     let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
-                    final_state = self.process_stopping_canisters(state, &round_log);
+                    final_state = self.exec_env.process_stopping_canisters(state);
                 }
                 {
                     let _timer = self.metrics.round_finalization_ingress.start_timer();

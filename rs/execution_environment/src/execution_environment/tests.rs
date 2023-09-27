@@ -928,6 +928,43 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
             .stop_canister_calls_len(),
         0
     );
+
+    // Test metrics are observed for stopping canister functionality.
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[
+                    (
+                        "method_name",
+                        "ic00_provisional_create_canister_with_cycles"
+                    ),
+                    ("outcome", "finished"),
+                    ("status", "success"),
+                ],
+                1
+            ),
+            (
+                &[
+                    ("method_name", "ic00_stop_canister"),
+                    ("outcome", "finished"),
+                    ("status", "success"),
+                ],
+                2
+            ),
+            (
+                &[
+                    ("method_name", "ic00_update_settings"),
+                    ("outcome", "finished"),
+                    ("status", "success"),
+                ],
+                1
+            )
+        ]),
+        fetch_histogram_vec_count(
+            test.metrics_registry(),
+            "execution_subnet_message_duration_seconds"
+        )
+    );
 }
 
 #[test]
