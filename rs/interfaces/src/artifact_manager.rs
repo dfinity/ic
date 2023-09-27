@@ -1,6 +1,6 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
-use crate::artifact_pool::ChangeResult;
-use crate::{artifact_pool::UnvalidatedArtifact, time_source::TimeSource};
+use crate::artifact_pool::{ChangeResult, UnvalidatedArtifactEvent};
+use crate::time_source::TimeSource;
 use derive_more::From;
 use ic_types::artifact::{Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
@@ -118,7 +118,7 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        new_artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
+        new_artifact_events: Vec<UnvalidatedArtifactEvent<Artifact>>,
     ) -> ChangeResult<Artifact>;
 }
 

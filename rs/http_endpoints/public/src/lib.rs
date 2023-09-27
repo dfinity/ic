@@ -54,7 +54,7 @@ use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::UnvalidatedArtifactEvent,
     consensus_pool::ConsensusPoolCache,
     crypto::BasicSigner,
     execution_environment::{IngressFilterService, QueryExecutionService},
@@ -73,11 +73,11 @@ use ic_registry_client_helpers::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
         HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
-        SignedIngress,
     },
     time::expiry_time_from_now,
     CanisterId, NodeId, SubnetId,
@@ -242,7 +242,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
     time_source: Arc<dyn TimeSource>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,

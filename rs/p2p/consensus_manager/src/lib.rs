@@ -17,7 +17,10 @@ use crossbeam_channel::Sender as CrossbeamSender;
 use ic_async_utils::JoinMap;
 use ic_interfaces::{
     artifact_manager::ArtifactProcessorEvent,
-    artifact_pool::{PriorityFnAndFilterProducer, UnvalidatedArtifact, ValidatedPoolReader},
+    artifact_pool::{
+        PriorityFnAndFilterProducer, UnvalidatedArtifact, UnvalidatedArtifactEvent,
+        ValidatedPoolReader,
+    },
     time_source::TimeSource,
 };
 use ic_logger::{error, ReplicaLogger};
@@ -297,7 +300,7 @@ pub struct ConsensusManager<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-    sender: CrossbeamSender<UnvalidatedArtifact<Artifact::Message>>,
+    sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
     time_source: Arc<dyn TimeSource>,
     transport: Arc<dyn Transport>,
     active_adverts: HashMap<Artifact::Id, (JoinHandle<()>, SlotNumber)>,
@@ -336,7 +339,7 @@ where
         adverts_received: Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-        sender: CrossbeamSender<UnvalidatedArtifact<Artifact::Message>>,
+        sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
         time_source: Arc<dyn TimeSource>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -575,7 +578,7 @@ where
         mut artifact: Option<(Artifact::Message, NodeId)>,
         mut peer_rx: watch::Receiver<HashSet<NodeId>>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-        sender: CrossbeamSender<UnvalidatedArtifact<Artifact::Message>>,
+        sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
         time_source: Arc<dyn TimeSource>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
@@ -599,11 +602,11 @@ where
             DownloadResult::Completed(artifact, peer_id) => {
                 // Send artifact to pool
                 sender
-                    .send(UnvalidatedArtifact {
+                    .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
                         message: artifact,
                         peer_id,
                         timestamp: time_source.get_relative_time(),
-                    })
+                    }))
                     .expect("Channel should not be closed");
 
                 // wait for deletion from peers
@@ -612,7 +615,10 @@ where
                     .await
                     .expect("Channel should not be closed");
 
-                // TODO: Purge from the unvalidated pool
+                // Purge from the unvalidated pool
+                sender
+                    .send(UnvalidatedArtifactEvent::Remove(id.clone()))
+                    .expect("Channel should not be closed");
             }
             DownloadResult::PriorityIsDrop => {
                 metrics.adverts_dropped_total.inc();

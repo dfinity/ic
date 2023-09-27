@@ -12,7 +12,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
-    artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifact,
+    artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifactEvent,
     execution_environment::QueryHandler, time_source::SysTimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
@@ -27,7 +27,7 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
-use ic_types::{consensus::CatchUpPackage, messages::SignedIngress, NodeId, SubnetId};
+use ic_types::{artifact_kind::IngressArtifact, consensus::CatchUpPackage, NodeId, SubnetId};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
@@ -62,7 +62,7 @@ pub fn construct_ic_stack(
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     Vec<Box<dyn JoinGuard>>,
     // TODO: remove this return value since it is used only in tests
-    Sender<UnvalidatedArtifact<SignedIngress>>,
+    Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
     XNetEndpoint,
 )> {
     // Determine the correct catch-up package.

@@ -103,7 +103,7 @@ use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
     artifact_pool::{
         ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
-        UnvalidatedArtifact, ValidatedPoolReader,
+        UnvalidatedArtifactEvent, ValidatedPoolReader,
     },
     canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
@@ -122,6 +122,8 @@ use std::sync::{
 };
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;
+
+type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactEvent<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -239,12 +241,10 @@ pub fn run_artifact_processor<
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: S,
-) -> (
-    Box<dyn JoinGuard>,
-    Sender<UnvalidatedArtifact<Artifact::Message>>,
-)
+) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>)
 where
     <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
+    <Artifact as ic_types::artifact::ArtifactKind>::Id: Send,
 {
     // Making this channel bounded can be problematic since we don't have true multiplexing
     // of P2P messages.
@@ -286,7 +286,7 @@ fn process_messages<
     time_source: Arc<SysTimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Box<S>,
-    receiver: Receiver<UnvalidatedArtifact<Artifact::Message>>,
+    receiver: Receiver<UnvalidatedArtifactEvent<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -300,9 +300,9 @@ fn process_messages<
             Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
         };
         let recv_artifact = receiver.recv_timeout(recv_timeout);
-        let batched_artifacts = match recv_artifact {
-            Ok(artifact) => {
-                let mut artifacts = vec![artifact];
+        let batched_artifact_events = match recv_artifact {
+            Ok(artifact_event) => {
+                let mut artifacts = vec![artifact_event];
                 while let Ok(artifact) = receiver.try_recv() {
                     artifacts.push(artifact);
                 }
@@ -317,7 +317,7 @@ fn process_messages<
             purged: _,
             changed,
         } = metrics
-            .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifacts));
+            .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
         for advert in adverts {
             metrics.outbound_artifacts.inc();
             metrics.outbound_artifact_bytes.inc_by(advert.size as u64);
@@ -333,7 +333,7 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 /// The struct contains all relevant interfaces for P2P to operate.
 pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// To send the process requests
-    pub sender: Sender<UnvalidatedArtifact<Artifact::Message>>,
+    pub sender: Sender<UnvalidatedArtifactEvent<Artifact>>,
     /// Reference to the artifact client.
     /// TODO: long term we can remove the 'ArtifactClient' and directly use
     /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.
