@@ -1274,6 +1274,7 @@ impl UserHandle {
             block_index: block,
             controller: *controller_id,
             subnet_type,
+            settings: None,
         };
 
         let result: Result<CanisterId, NotifyError> = self
