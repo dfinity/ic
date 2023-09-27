@@ -1,10 +1,16 @@
 #![allow(dead_code)] // TODO(NNS1-2413): remove after calling it in heartbeat.
-use crate::neuron_store::{NeuronStore, NeuronStoreError};
+use crate::{
+    neuron_store::{get_neuron_subaccount, NeuronStore, NeuronStoreError},
+    pb::v1::{Neuron, Topic},
+    storage::{Signed32, NEURON_INDEXES, STABLE_NEURON_STORE},
+};
 
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
+use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use icp_ledger::Subaccount;
 use std::{collections::VecDeque, marker::PhantomData};
-
-use crate::{pb::v1::Neuron, storage::STABLE_NEURON_STORE};
 
 const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;
 
@@ -12,9 +18,44 @@ const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;
 #[derive(Debug, PartialEq)]
 enum ValidationIssue {
     Unspecified,
-    InactiveNeuronCardinalityMismatch { heap: u64, stable: u64 },
+    InactiveNeuronCardinalityMismatch {
+        heap: u64,
+        stable: u64,
+    },
     NeuronCopyValueNotMatch(NeuronId),
     NeuronStoreError(NeuronId, NeuronStoreError),
+    SubaccountIndexCardinalityMismatch {
+        primary: u64,
+        index: u64,
+    },
+    SubaccountMissingFromIndex {
+        neuron_id: NeuronId,
+        subaccount: Subaccount,
+    },
+    PrincipalIdMissingFromIndex {
+        neuron_id: NeuronId,
+        missing_principal_ids: Vec<PrincipalId>,
+    },
+    PrincipalIndexCardinalityMismatch {
+        primary: u64,
+        index: u64,
+    },
+    TopicFolloweePairsMissingFromIndex {
+        neuron_id: NeuronId,
+        missing_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+    },
+    FollowingIndexCardinalityMismatch {
+        primary: u64,
+        index: u64,
+    },
+    KnownNeuronMissingFromIndex {
+        neuron_id: NeuronId,
+        known_neuron_name: String,
+    },
+    KnownNeuronIndexCardinalityMismatch {
+        primary: u64,
+        index: u64,
+    },
 }
 
 /// A validator for secondary neuron data, such as indexes. It can be called in heartbeat to perform
@@ -148,8 +189,11 @@ impl ValidationInProgress {
 }
 
 /// Validation issues.
+#[derive(Debug, PartialEq)]
 struct Issues {
     updated_time_seconds: u64,
+    // TODO(NNS1-2413): define a 'summary' of issues, so that the memory needed for 'issues' won't
+    // be linear to the number of neurons.
     issues: Vec<ValidationIssue>,
 }
 
@@ -200,13 +244,13 @@ trait CardinalityAndRangeValidator {
     // TODO(NNS1-2413): define BATCH_SIZE.
 
     /// Validates the cardinalities of primary data and index to be equal.
-    fn validate_cardinalities(neuron_store: &NeuronStore) -> Vec<ValidationIssue>;
+    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue>;
 
     /// Validates that the primary neuron data has corresponding entries in the index.
     fn validate_primary_neuron_has_corresponding_index_entries(
         neuron_id: NeuronId,
         neuron_store: &NeuronStore,
-    ) -> Vec<ValidationIssue>;
+    ) -> Option<ValidationIssue>;
 }
 
 struct CardinalitiesValidationTask<Validator: CardinalityAndRangeValidator> {
@@ -235,6 +279,8 @@ impl<Validator: CardinalityAndRangeValidator> ValidationTask
     fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
         self.is_done = true;
         Validator::validate_cardinalities(neuron_store)
+            .into_iter()
+            .collect()
     }
 }
 
@@ -267,78 +313,239 @@ impl<Validator: CardinalityAndRangeValidator> ValidationTask
         self.next_neuron_id.is_none()
     }
 
-    fn validate_next_chunk(&mut self, _neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        self.next_neuron_id = None;
-        vec![]
+    fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
+        let next_neuron_id = match self.next_neuron_id.take() {
+            Some(next_neuron_id) => next_neuron_id,
+            None => {
+                println!("validate_next_chunk should not be called when is_done() is true");
+                return vec![];
+            }
+        };
+        neuron_store
+            .heap_neurons()
+            .range(next_neuron_id.id..)
+            .take(DEFAULT_RANGE_VALIDATION_CHUNK_SIZE)
+            .flat_map(|(neuron_id, _)| {
+                self.next_neuron_id = Some(NeuronId { id: neuron_id + 1 });
+                Validator::validate_primary_neuron_has_corresponding_index_entries(
+                    NeuronId { id: *neuron_id },
+                    neuron_store,
+                )
+            })
+            .collect()
     }
 }
 
 struct SubaccountIndexValidator;
 
 impl CardinalityAndRangeValidator for SubaccountIndexValidator {
-    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary = neuron_store.heap_neurons().len() as u64;
+        let cardinality_index =
+            NEURON_INDEXES.with(|indexes| indexes.borrow().subaccount().num_entries()) as u64;
+        if cardinality_primary != cardinality_index {
+            Some(ValidationIssue::SubaccountIndexCardinalityMismatch {
+                primary: cardinality_primary,
+                index: cardinality_index,
+            })
+        } else {
+            None
+        }
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        _neuron_id: NeuronId,
-        _neuron_store: &NeuronStore,
-    ) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+        neuron_id: NeuronId,
+        neuron_store: &NeuronStore,
+    ) -> Option<ValidationIssue> {
+        let subaccount = get_neuron_subaccount(neuron_store, neuron_id);
+        let subaccount = match subaccount {
+            Ok(subaccount) => subaccount,
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+        };
+        let subaccount_in_index = NEURON_INDEXES.with(|indexes| {
+            indexes
+                .borrow()
+                .subaccount()
+                .contains_entry(neuron_id, &subaccount)
+        });
+        if !subaccount_in_index {
+            Some(ValidationIssue::SubaccountMissingFromIndex {
+                neuron_id,
+                subaccount,
+            })
+        } else {
+            None
+        }
     }
 }
 
 struct PrincipalIndexValidator;
 
 impl CardinalityAndRangeValidator for PrincipalIndexValidator {
-    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary: u64 = neuron_store
+            .heap_neurons()
+            .values()
+            .map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
+            .sum();
+        let cardinality_index =
+            NEURON_INDEXES.with(|indexes| indexes.borrow().principal().num_entries()) as u64;
+        if cardinality_primary != cardinality_index {
+            Some(ValidationIssue::PrincipalIndexCardinalityMismatch {
+                primary: cardinality_primary,
+                index: cardinality_index,
+            })
+        } else {
+            None
+        }
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        _neuron_id: NeuronId,
-        _neuron_store: &NeuronStore,
-    ) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+        neuron_id: NeuronId,
+        neuron_store: &NeuronStore,
+    ) -> Option<ValidationIssue> {
+        let principal_ids = neuron_store.with_neuron(&neuron_id, |neuron| {
+            neuron.principal_ids_with_special_permissions()
+        });
+        let principal_ids = match principal_ids {
+            Ok(principal_ids) => principal_ids,
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+        };
+        let missing_principal_ids: Vec<_> = principal_ids
+            .into_iter()
+            .filter(|principal_id| {
+                let pair_exists_in_index = NEURON_INDEXES.with(|indexes| {
+                    indexes
+                        .borrow()
+                        .principal()
+                        .contains_entry(&neuron_id.id, *principal_id)
+                });
+                !pair_exists_in_index
+            })
+            .collect();
+        if !missing_principal_ids.is_empty() {
+            Some(ValidationIssue::PrincipalIdMissingFromIndex {
+                neuron_id,
+                missing_principal_ids,
+            })
+        } else {
+            None
+        }
     }
 }
 
 struct FollowingIndexValidator;
 
 impl CardinalityAndRangeValidator for FollowingIndexValidator {
-    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary: u64 = neuron_store
+            .heap_neurons()
+            .values()
+            .map(|neuron| {
+                neuron
+                    .followees
+                    .values()
+                    .map(|followees_by_topic| followees_by_topic.followees.len() as u64)
+                    .sum::<u64>()
+            })
+            .sum();
+        let cardinality_index =
+            NEURON_INDEXES.with(|indexes| indexes.borrow().following().num_entries()) as u64;
+        if cardinality_primary != cardinality_index {
+            Some(ValidationIssue::FollowingIndexCardinalityMismatch {
+                primary: cardinality_primary,
+                index: cardinality_index,
+            })
+        } else {
+            None
+        }
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        _neuron_id: NeuronId,
-        _neuron_store: &NeuronStore,
-    ) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+        neuron_id: NeuronId,
+        neuron_store: &NeuronStore,
+    ) -> Option<ValidationIssue> {
+        let topic_followee_pairs =
+            neuron_store.with_neuron(&neuron_id, |neuron| neuron.topic_followee_pairs());
+        let topic_followee_pairs = match topic_followee_pairs {
+            Ok(topic_followee_pairs) => topic_followee_pairs,
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+        };
+        let missing_topic_followee_pairs: Vec<_> = topic_followee_pairs
+            .into_iter()
+            .filter(|(topic, followee)| {
+                let pair_exists_in_index = NEURON_INDEXES.with(|indexes| {
+                    indexes.borrow().following().contains_entry(
+                        Signed32::from(*topic as i32),
+                        &followee.id,
+                        &neuron_id.id,
+                    )
+                });
+                !pair_exists_in_index
+            })
+            .collect();
+        if !missing_topic_followee_pairs.is_empty() {
+            Some(ValidationIssue::TopicFolloweePairsMissingFromIndex {
+                neuron_id,
+                missing_topic_followee_pairs,
+            })
+        } else {
+            None
+        }
     }
 }
 
 struct KnownNeuronIndexValidator;
 
 impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
-    fn validate_cardinalities(_neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+    fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
+        let cardinality_primary = neuron_store
+            .heap_neurons()
+            .values()
+            .filter(|neuron| neuron.known_neuron_data.is_some())
+            .count();
+        let cardinality_index =
+            NEURON_INDEXES.with(|indexes| indexes.borrow().known_neuron().num_entries());
+        if cardinality_primary != cardinality_index {
+            Some(ValidationIssue::KnownNeuronIndexCardinalityMismatch {
+                primary: cardinality_primary as u64,
+                index: cardinality_index as u64,
+            })
+        } else {
+            None
+        }
     }
 
     fn validate_primary_neuron_has_corresponding_index_entries(
-        _neuron_id: NeuronId,
-        _neuron_store: &NeuronStore,
-    ) -> Vec<ValidationIssue> {
-        // TODO(NNS1-2413): implement the validation logic.
-        vec![]
+        neuron_id: NeuronId,
+        neuron_store: &NeuronStore,
+    ) -> Option<ValidationIssue> {
+        let known_neuron_name = neuron_store.with_neuron(&neuron_id, |neuron| {
+            neuron
+                .known_neuron_data
+                .as_ref()
+                .map(|known_neuron_data| known_neuron_data.name.clone())
+        });
+        let known_neuron_name = match known_neuron_name {
+            // Most neurons aren't known neurons.
+            Ok(None) => return None,
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+            Ok(Some(known_neuron_name)) => known_neuron_name,
+        };
+        let index_has_entry = NEURON_INDEXES.with(|indexes| {
+            indexes
+                .borrow()
+                .known_neuron()
+                .contains_entry(neuron_id, &known_neuron_name)
+        });
+        if !index_has_entry {
+            Some(ValidationIssue::KnownNeuronMissingFromIndex {
+                neuron_id,
+                known_neuron_name,
+            })
+        } else {
+            None
+        }
     }
 }
 
@@ -455,7 +662,7 @@ mod tests {
     use std::{cell::RefCell, collections::BTreeMap};
 
     use ic_base_types::PrincipalId;
-    use maplit::{btreemap, hashmap};
+    use maplit::hashmap;
 
     use crate::pb::v1::{governance::Migration, neuron::Followees, KnownNeuronData, Neuron};
 
@@ -494,45 +701,45 @@ mod tests {
 
     fn next_test_neuron() -> Neuron {
         let mut neuron = MODEL_NEURON.clone();
-        neuron.id = Some(NeuronId {
-            id: NEXT_TEST_NEURON_ID.with(|next_test_neuron_id| {
-                let mut next_test_neuron_id = next_test_neuron_id.borrow_mut();
-                let id = *next_test_neuron_id;
-                *next_test_neuron_id += 1;
-                id
-            }),
+        let id = NEXT_TEST_NEURON_ID.with(|next_test_neuron_id| {
+            let mut next_test_neuron_id = next_test_neuron_id.borrow_mut();
+            let id = *next_test_neuron_id;
+            *next_test_neuron_id += 1;
+            id
         });
+        neuron.id = Some(NeuronId { id });
         neuron
             .account
-            .splice(28..32, neuron.id.unwrap().id.to_le_bytes());
+            .splice(24..32, neuron.id.unwrap().id.to_le_bytes());
+        neuron
+            .known_neuron_data
+            .as_mut()
+            .unwrap()
+            .name
+            .push_str(&id.to_string());
         neuron
     }
 
     #[test]
     fn test_finish_validation() {
-        let neuron_store = NeuronStore::new(
-            btreemap! {
-                1 => Neuron {
-                    id: Some(NeuronId { id: 1 }),
-                    account: [1u8; 32].to_vec(),
-                    controller: Some(PrincipalId::new_user_test_id(1)),
-                    ..Default::default()
-                },
-            },
-            Migration::default(),
-        );
+        let neuron_store = NeuronStore::new_for_test(vec![Neuron {
+            id: Some(NeuronId { id: 1 }),
+            account: [1u8; 32].to_vec(),
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            ..Default::default()
+        }]);
         let mut validation = NeuronDataValidator::new(0);
 
-        // Each index use 2 rounds and we have 4 indexes.
-        for i in 0..10 {
+        // Each index use 3 rounds and invalid neuron validator takes 2 rounds.
+        for i in 0..14 {
             assert!(validation.maybe_validate(i, &neuron_store));
         }
 
         // After 10 rounds it should not validate.
-        assert!(!validation.maybe_validate(11, &neuron_store));
+        assert!(!validation.maybe_validate(14, &neuron_store));
 
         // After 1 day it should validate again.
-        assert!(validation.maybe_validate(86411, &neuron_store));
+        assert!(validation.maybe_validate(86415, &neuron_store));
     }
 
     #[test]
@@ -642,5 +849,89 @@ mod tests {
         let defects = validator.validate_next_chunk(&neuron_store);
         assert_eq!(defects, vec![]);
         assert!(validator.is_done());
+    }
+
+    #[test]
+    fn test_validator_valid() {
+        let neuron_store = NeuronStore::new_for_test(vec![Neuron {
+            cached_neuron_stake_e8s: 1,
+            ..next_test_neuron()
+        }]);
+        let mut validator = NeuronDataValidator::new(0);
+        let mut now = 1;
+        while validator.maybe_validate(now, &neuron_store) {
+            now += 1;
+        }
+        // TODO(NNS1-2413) validate from a pub method that returns issues summary.
+        assert_eq!(validator.issues.issues, vec![]);
+    }
+
+    #[test]
+    fn test_validator_invalid_issues() {
+        // Cause as many issues as possible by having an inactive neuron (without adding it to
+        // STABLE_NEURON_STORE, and remove the only neuron from indexes).
+        let neuron = next_test_neuron();
+        let neuron_store = NeuronStore::new_for_test(vec![neuron.clone()]);
+        NEURON_INDEXES
+            .with(|indexes| indexes.borrow_mut().remove_neuron(&neuron))
+            .unwrap();
+
+        let mut validator = NeuronDataValidator::new(0);
+        let mut now = 1;
+        while validator.maybe_validate(now, &neuron_store) {
+            now += 1;
+        }
+        // TODO(NNS1-2413) validate from a pub method that returns issues summary.
+        let issues = validator.issues.issues;
+        assert_eq!(issues.len(), 9);
+        assert!(matches!(
+            issues[0],
+            ValidationIssue::SubaccountMissingFromIndex { neuron_id, subaccount: _ }
+            if neuron_id == neuron.id.unwrap()
+        ));
+        assert_eq!(
+            issues[1],
+            ValidationIssue::SubaccountIndexCardinalityMismatch {
+                primary: 1,
+                index: 0
+            }
+        );
+        assert!(matches!(
+            issues[2],
+            ValidationIssue::PrincipalIdMissingFromIndex { .. }
+        ));
+        assert_eq!(
+            issues[3],
+            ValidationIssue::PrincipalIndexCardinalityMismatch {
+                primary: 3,
+                index: 0
+            }
+        );
+        assert!(matches!(
+            issues[4],
+            ValidationIssue::TopicFolloweePairsMissingFromIndex { .. }
+        ));
+        assert_eq!(
+            issues[5],
+            ValidationIssue::FollowingIndexCardinalityMismatch {
+                primary: 3,
+                index: 0
+            }
+        );
+        assert!(matches!(
+            issues[6],
+            ValidationIssue::KnownNeuronMissingFromIndex { .. }
+        ));
+        assert_eq!(
+            issues[7],
+            ValidationIssue::KnownNeuronIndexCardinalityMismatch {
+                primary: 1,
+                index: 0
+            }
+        );
+        assert_eq!(
+            issues[8],
+            ValidationIssue::InactiveNeuronCardinalityMismatch { heap: 1, stable: 0 }
+        );
     }
 }

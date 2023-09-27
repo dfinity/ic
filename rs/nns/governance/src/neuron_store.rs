@@ -145,6 +145,20 @@ impl From<NeuronStoreError> for GovernanceError {
     }
 }
 
+pub fn get_neuron_subaccount(
+    neuron_store: &NeuronStore,
+    neuron_id: NeuronId,
+) -> Result<Subaccount, NeuronStoreError> {
+    neuron_store.with_neuron(&neuron_id, |neuron| {
+        neuron
+            .subaccount()
+            .map_err(|_| NeuronStoreError::InvalidSubaccount {
+                neuron_id,
+                subaccount_bytes: neuron.account.clone(),
+            })
+    })?
+}
+
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
 #[cfg_attr(test, derive(Clone, Debug, PartialEq))]
@@ -189,6 +203,28 @@ impl NeuronStore {
             known_neuron_name_set,
             indexes_migration,
         }
+    }
+
+    #[cfg(test)]
+    pub fn new_for_test(heap_neurons: Vec<Neuron>) -> Self {
+        let mut neuron_store = Self::new(
+            heap_neurons
+                .into_iter()
+                .map(|neuron| (neuron.id.unwrap().id, neuron))
+                .collect(),
+            Migration {
+                status: Some(MigrationStatus::Succeeded as i32),
+                failure_reason: None,
+                progress: None,
+            },
+        );
+        assert_eq!(
+            neuron_store
+                .batch_add_heap_neurons_to_stable_indexes(NeuronId { id: 0 }, u64::MAX as usize)
+                .unwrap(),
+            None
+        );
+        neuron_store
     }
 
     /// Takes the heap neurons for serialization. The `self.heap_neurons` will become empty, so
