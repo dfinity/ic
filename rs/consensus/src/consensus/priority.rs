@@ -277,7 +277,7 @@ mod tests {
             let dup_msg = dup_notarization.into_message();
             let attr = ConsensusMessageAttribute::from(&dup_msg);
             // Move block back to unvalidated after attribute is computed
-            pool.remove_validated(block.clone());
+            pool.purge_validated_below(block.clone());
             pool.insert_unvalidated(block.clone());
             let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(priority(&dup_notarization_id, &attr), Stash);

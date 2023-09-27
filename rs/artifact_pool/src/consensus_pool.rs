@@ -630,9 +630,6 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
                         timestamp,
                     });
                 }
-                ChangeAction::RemoveFromValidated(to_remove) => {
-                    validated_ops.remove(to_remove.get_id());
-                }
                 ChangeAction::RemoveFromUnvalidated(to_remove) => {
                     unvalidated_ops.remove(to_remove.get_id());
                 }

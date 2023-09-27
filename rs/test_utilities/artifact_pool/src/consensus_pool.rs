@@ -649,12 +649,12 @@ impl TestConsensusPool {
         );
     }
 
-    pub fn remove_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
+    pub fn purge_validated_below<T: ConsensusMessageHashable + HasHeight>(&mut self, value: T) {
         let msg = value.into_message();
         let time_source = self.time_source.clone();
         self.apply_changes(
             time_source.as_ref(),
-            vec![ChangeAction::RemoveFromValidated(msg)],
+            vec![ChangeAction::PurgeValidatedBelow(msg.height())],
         );
     }
 

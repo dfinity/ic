@@ -711,19 +711,7 @@ pub mod test {
             let notarization = pool.validated().notarization().get_highest().unwrap();
             let catch_up_package = pool.make_catch_up_package(notarization.height());
             pool.insert_validated(catch_up_package);
-            // remove the latest notarization
-            pool.remove_validated(notarization);
-            // remove the latest finalization
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            pool.remove_validated(finalization);
-            // max notarization now only exists at height 2
-            assert_eq!(
-                pool.validated()
-                    .notarization()
-                    .height_range()
-                    .map(|x| x.max),
-                Some(Height::from(4))
-            );
+            pool.purge_validated_below(notarization);
             let pool_reader = PoolReader::new(&pool);
             // notarized/finalized height are still 3, same as catchup height
             assert_eq!(pool_reader.get_notarized_height(), Height::from(5));
