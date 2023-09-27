@@ -14,7 +14,7 @@ use crate::{
     },
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
-    util, NonReplicatedQueryKind,
+    NonReplicatedQueryKind,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -26,11 +26,11 @@ use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost, Reso
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterSettingsArgs, ComputeInitialEcdsaDealingsArgs,
-    CreateCanisterArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
-    InstallCodeArgsV2, Method as Ic00Method, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
-    SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType,
+    ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallCodeArgsV2, Method as Ic00Method,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -48,7 +48,7 @@ use ic_replicated_state::{
         SignWithEcdsaContext, StopCanisterCall, SubnetCallContext,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
+    CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
@@ -59,7 +59,7 @@ use ic_types::{
     messages::{
         extract_effective_canister_id, AnonymousQuery, CanisterCall, CanisterCallOrTask,
         CanisterMessage, CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request,
-        Response, SignedIngressContent, StopCanisterContext,
+        Response, SignedIngressContent, StopCanisterCallId, StopCanisterContext,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
@@ -71,10 +71,13 @@ use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
-use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Mutex;
+use std::{
+    collections::{BTreeMap, HashMap},
+    mem,
+};
 use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
 
@@ -1738,7 +1741,7 @@ impl ExecutionEnvironment {
                 } => {
                     let time = state.time();
                     // Rejecting a stop_canister request from a user.
-                    util::remove_stop_canister_call(state, canister_id, call_id, &self.log);
+                    self.remove_stop_canister_call(state, canister_id, call_id);
                     self.ingress_history_writer.set_status(
                         state,
                         message_id,
@@ -1761,7 +1764,7 @@ impl ExecutionEnvironment {
                 } => {
                     // Rejecting a stop_canister request from a canister.
                     let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
-                    util::remove_stop_canister_call(state, canister_id, call_id, &self.log);
+                    self.remove_stop_canister_call(state, canister_id, call_id);
 
                     let response = Response {
                         originator: sender,
@@ -2409,6 +2412,120 @@ impl ExecutionEnvironment {
                 (canister, None, NumBytes::from(0), ingress_status)
             }
         }
+    }
+
+    /// Helper function to remove stop canister calls
+    /// from SubnetCallContextManager based on provided call id.
+    pub fn remove_stop_canister_call(
+        &self,
+        state: &mut ReplicatedState,
+        canister_id: CanisterId,
+        call_id: Option<StopCanisterCallId>,
+    ) {
+        if let Some(call_id) = call_id {
+            let stop_canister_call = state
+                .metadata
+                .subnet_call_context_manager
+                .remove_stop_canister_call(call_id);
+
+            match stop_canister_call {
+                Some(stop_canister_call) => {
+                    let call = stop_canister_call.call;
+                    let time_elapsed = state.time().saturating_sub(stop_canister_call.time);
+                    if let CanisterCall::Request(request) = call {
+                        self.metrics.observe_subnet_message(
+                            &request.method_name,
+                            time_elapsed.as_secs_f64(),
+                            &Ok(()),
+                        );
+                    }
+                }
+                None => info!(
+                    self.log,
+                    "Could not remove stop_canister call for call ID {} and canister {}",
+                    call_id,
+                    canister_id,
+                ),
+            }
+        }
+    }
+
+    /// Checks for stopping canisters and, if any of them are ready to stop,
+    /// transitions them to be fully stopped. Responses to the pending stop
+    /// messages are written to ingress history.
+    pub fn process_stopping_canisters(&self, mut state: ReplicatedState) -> ReplicatedState {
+        let mut canister_states = state.take_canister_states();
+        let time = state.time();
+
+        for canister in canister_states.values_mut() {
+            if !(canister.status() == CanisterStatusType::Stopping
+                && canister.system_state.ready_to_stop())
+            {
+                // Canister is either not stopping or isn't ready to be stopped yet. Nothing to
+                // do.
+                continue;
+            }
+
+            // Transition the canister to "stopped".
+            let stopping_status =
+                mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
+
+            if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
+                // Respond to the stop messages.
+                for stop_context in stop_contexts {
+                    match stop_context {
+                        StopCanisterContext::Ingress {
+                            sender,
+                            message_id,
+                            call_id,
+                        } => {
+                            // Responding to stop_canister request from a user.
+                            self.remove_stop_canister_call(
+                                &mut state,
+                                canister.canister_id(),
+                                call_id,
+                            );
+                            self.ingress_history_writer.set_status(
+                                &mut state,
+                                message_id,
+                                IngressStatus::Known {
+                                    receiver: IC_00.get(),
+                                    user_id: sender,
+                                    time,
+                                    state: IngressState::Completed(WasmResult::Reply(
+                                        EmptyBlob.encode(),
+                                    )),
+                                },
+                            )
+                        }
+                        StopCanisterContext::Canister {
+                            sender,
+                            reply_callback,
+                            call_id,
+                            cycles,
+                        } => {
+                            // Responding to stop_canister request from a canister.
+                            let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
+                            self.remove_stop_canister_call(
+                                &mut state,
+                                canister.canister_id(),
+                                call_id,
+                            );
+                            let response = ic_types::messages::Response {
+                                originator: sender,
+                                respondent: subnet_id_as_canister_id,
+                                originator_reply_callback: reply_callback,
+                                refund: cycles,
+                                response_payload: Payload::Data(EmptyBlob.encode()),
+                            };
+                            state.push_subnet_output_response(response.into());
+                        }
+                    }
+                }
+            }
+        }
+        state.put_canister_states(canister_states);
+        state
     }
 
     fn reject_unexpected_ingress(

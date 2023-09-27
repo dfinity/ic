@@ -15,9 +15,9 @@ use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, init_query_stats, util::process_stopping_canisters, CompilationCostHandling,
-    ExecuteMessageResult, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
-    InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    execute_canister, init_query_stats, CompilationCostHandling, ExecuteMessageResult,
+    ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
+    RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
@@ -596,14 +596,9 @@ impl ExecutionTest {
 
     /// Stops stopping canisters that no longer have open call contexts.
     pub fn process_stopping_canisters(&mut self) {
-        let state = self.state.take().unwrap();
-        let own_subnet_id = state.metadata.own_subnet_id;
-        let state = process_stopping_canisters(
-            state,
-            self.ingress_history_writer.as_ref(),
-            own_subnet_id,
-            &no_op_logger(),
-        );
+        let state = self
+            .exec_env
+            .process_stopping_canisters(self.state.take().unwrap());
         self.state = Some(state);
     }
 
