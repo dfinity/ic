@@ -1304,6 +1304,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "zeroize_derive",
                 ],
             ),
+            "zstd": crate.spec(
+                version = "^0.12.4",
+            ),
         },
         splicing_config = splicing_config(
             resolver_version = "2",

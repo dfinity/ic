@@ -51,6 +51,7 @@ impl StateSyncManagerMetrics {
 #[derive(Debug, Clone)]
 pub struct StateSyncManagerHandlerMetrics {
     pub request_duration: HistogramVec,
+    pub compression_ratio: Histogram,
 }
 
 impl StateSyncManagerHandlerMetrics {
@@ -62,6 +63,11 @@ impl StateSyncManagerHandlerMetrics {
                 // 1ms, 10ms, 100ms, 1s
                 exponential_buckets(0.001, 10.0, 4).unwrap(),
                 &[HANDLER_LABEL],
+            ),
+            compression_ratio: metrics_registry.histogram(
+                "state_sync_manager_chunk_compression_ratio",
+                "State sync manager chunk compression ratio.",
+                vec![1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 10.0],
             ),
         }
     }
