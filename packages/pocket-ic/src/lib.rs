@@ -1,7 +1,9 @@
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::{decode_args, encode_args, Principal};
 use common::blob::{BlobCompression, BlobId};
-use common::rest::{Checkpoint, RawAddCycles, RawCanisterCall, RawCanisterId, RawSetStableMemory};
+use common::rest::{
+    RawAddCycles, RawCanisterCall, RawCanisterId, RawCheckpoint, RawSetStableMemory,
+};
 use ic_cdk::api::management_canister::main::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgument,
     InstallCodeArgument,
@@ -63,7 +65,7 @@ impl PocketIc {
     ) -> Result<Self, String> {
         let server_url = start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
-        let cp = Checkpoint {
+        let cp = RawCheckpoint {
             checkpoint_name: name.to_string(),
         };
         let response = reqwest_client
@@ -145,7 +147,7 @@ impl PocketIc {
             .instance_url
             .join("tick_and_create_checkpoint/")
             .unwrap();
-        let cp = Checkpoint {
+        let cp = RawCheckpoint {
             checkpoint_name: name.to_string(),
         };
         self.reqwest_client

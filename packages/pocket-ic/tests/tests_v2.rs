@@ -1,4 +1,5 @@
 use candid::{encode_one, Principal};
+use ic_cdk::api::management_canister::main::CreateCanisterArgument;
 use pocket_ic::{PocketIcV2, WasmResult};
 use std::time::SystemTime;
 
@@ -59,4 +60,21 @@ fn call_counter_can(ic: &PocketIcV2, can_id: Principal, method: &str) -> WasmRes
         encode_one(()).unwrap(),
     )
     .expect("Failed to call counter canister")
+}
+
+#[test]
+fn test_checkpoint() {
+    let pic = PocketIcV2::new();
+    let canister_id = Principal::management_canister();
+    let user = Principal::anonymous();
+
+    let _res = pic.update_call(
+        canister_id,
+        user,
+        "provisional_create_canister_with_cycles",
+        candid::encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
+    );
+
+    pic.create_checkpoint();
+    // todo: read from graph and assert
 }

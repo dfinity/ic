@@ -5,6 +5,7 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{InstanceState, OpOut, PocketIcApiState, UpdateReply};
+use crate::pocket_ic::Checkpoint;
 use crate::pocket_ic::{
     AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, Query,
     SetStableMemory, SetTime,
@@ -77,10 +78,7 @@ where
         .route("/set_time", post(handler_set_time))
         .route("/add_cycles", post(handler_add_cycles))
         .route("/set_stable_memory", post(handler_set_stable_memory))
-        .route(
-            "/install_canister_as_controller",
-            post(handler_install_canister_as_controller),
-        )
+        .route("/create_checkpoint", post(handler_create_checkpoint))
 }
 
 pub fn instances_routes<S>() -> Router<S>
@@ -178,6 +176,7 @@ impl From<OpOut> for (StatusCode, ApiResponse<()>) {
     fn from(value: OpOut) -> Self {
         match value {
             OpOut::NoOutput => (StatusCode::OK, ApiResponse::Success(())),
+            OpOut::Checkpoint(_) => (StatusCode::OK, ApiResponse::Success(())),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiResponse::Error {
@@ -428,20 +427,24 @@ pub async fn handler_set_stable_memory(
     }
 }
 
-pub async fn handler_install_canister_as_controller(
+// Only creates a checkpoint and stores the checkpoint dir in the graph;
+// does not name it or return anything
+pub async fn handler_create_checkpoint(
     State(AppState {
         instance_map: _,
         instances_sequence_counter: _,
-        api_state: _,
+        api_state,
         checkpoints: _,
         last_request: _,
         runtime: _,
         blob_store: _,
     }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(()): extract::Json<()>,
-) -> (StatusCode, ()) {
-    (StatusCode::NOT_FOUND, ())
+    Path(instance_id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    println!("creating checkpoint");
+    let op = Checkpoint;
+    let (code, res) = run_operation(api_state, instance_id, op).await;
+    (code, Json(res))
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //
@@ -463,7 +466,7 @@ pub async fn create_instance(
         runtime,
         blob_store: _,
     }): State<AppState>,
-    body: Option<extract::Json<rest::Checkpoint>>,
+    body: Option<extract::Json<rest::RawCheckpoint>>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let sm = match body {
         None => tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
@@ -555,7 +558,7 @@ pub async fn tick_and_create_checkpoint(
         blob_store: _,
     }): State<AppState>,
     Path(_id): Path<InstanceId>,
-    extract::Json(rest::Checkpoint { checkpoint_name: _ }): extract::Json<rest::Checkpoint>,
+    extract::Json(rest::RawCheckpoint { checkpoint_name: _ }): extract::Json<rest::RawCheckpoint>,
 ) -> (StatusCode, ()) {
     // Needs an Operation type
     (StatusCode::NOT_FOUND, ())

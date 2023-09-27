@@ -143,6 +143,8 @@ pub enum OpOut {
     CanisterId(CanisterId),
     Cycles(u128),
     Bytes(Vec<u8>),
+    // only stored in the graph, not returned to user
+    Checkpoint(String),
     Error(PocketIcError),
 }
 
@@ -198,6 +200,7 @@ impl std::fmt::Debug for OpOut {
                 write!(f, "CanisterNotFound({})", cid)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
+            OpOut::Checkpoint(path) => write!(f, "Checkpoint({})", path),
         }
     }
 }
