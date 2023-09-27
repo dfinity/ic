@@ -153,7 +153,7 @@ def get_execution_query_latency(testnet, load_hosts, t_start, t_end):
     RESOLUTION = "60s"
     assert (
         len(load_hosts) == 1
-        )  # Otherwise we need to SUM things up, as in https://grafana.testnet.dfinity.network/d/GWlsOrn7z/execution-metrics-2-0?editPanel=89&orgId=1&from=now-5m&to=now&var-ic=benchmarklarge&var-ic_subnet=nmql4-wbx55-wqzep-orbrv-bfvdn-q7qgm-mwquu-zlmc7-xtgvg-olns7-vqe&var-instance=All&var-node_instance=All&var-heatmap_period=$__auto_interval_heatmap_period&refresh=10s
+        )  # Otherwise we need to SUM things up, as in https://grafana.testnet.dfinity.network/d/GWlsOrn7z/execution-metrics-2-0?editPanel=89&orgId=1&from=now-5m&to=now&var-ic=cdslo&var-ic_subnet=nmql4-wbx55-wqzep-orbrv-bfvdn-q7qgm-mwquu-zlmc7-xtgvg-olns7-vqe&var-instance=All&var-node_instance=All&var-heatmap_period=$__auto_interval_heatmap_period&refresh=10s
     q1 = "rate(execution_query_duration_seconds_sum{{{}}}[{}])".format(get_common(load_hosts, testnet), RESOLUTION)
     q2 = "rate(execution_wasm_compile_sum{{{}}}[{}])".format(get_common(load_hosts, testnet), RESOLUTION)
     q3 = "rate(execution_query_duration_seconds_count{{{}}}[{}])".format(get_common(load_hosts, testnet), RESOLUTION)

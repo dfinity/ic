@@ -23,7 +23,6 @@ class Mainnet:
 
         # Testnets you have booked and the number of subnetworks each (including NNS)
         self.testnets = {
-            "benchmarklarge": 2,
             "large01": 5,
             # "large02": 5,
             "large03": 5,
