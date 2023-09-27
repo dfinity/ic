@@ -107,7 +107,7 @@ pub fn copy_dir(
 
 /// A mock implementation of PocketIC, primarily for testing purposes.
 pub mod mocket_ic {
-    use ic_state_machine_tests::WasmResult;
+    use ::pocket_ic::WasmResult;
 
     use super::*;
     use crate::state_api::state::{HasStateLabel, StateLabel};
@@ -179,9 +179,9 @@ pub mod mocket_ic {
         type TargetType = MocketIc;
 
         fn compute(self, mocket_ic: &mut MocketIc) -> OpOut {
-            OpOut::WasmResult(WasmResult::Reply(
+            OpOut::CanisterResult(Ok(WasmResult::Reply(
                 mocket_ic.query(self.payload).to_be_bytes().to_vec(),
-            ))
+            )))
         }
 
         fn id(&self) -> OpId {
@@ -243,10 +243,10 @@ mod tests {
     use super::*;
     use crate::pocket_ic::{CanisterCall, ExecuteIngressMessage, PocketIc};
     use crate::state_api::state::*;
+    use ::pocket_ic::WasmResult;
     use candid::{decode_args, encode_args};
     use ic_cdk::api::management_canister::main::CreateCanisterArgument;
     use ic_cdk::api::management_canister::provisional::CanisterIdRecord;
-    use ic_state_machine_tests::WasmResult;
     use ic_types::{CanisterId, PrincipalId};
     use tokio::runtime::Runtime;
 
@@ -318,14 +318,13 @@ mod tests {
             )
             .unwrap();
 
-        use WasmResult::*;
         match res {
-            UpdateReply::Output(OpOut::WasmResult(Reply(bytes))) => {
+            UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reply(bytes)))) => {
                 println!("wasm result bytes {:?}", bytes);
                 let (CanisterIdRecord { canister_id },) = decode_args(&bytes).unwrap();
                 println!("result: {}", canister_id);
             }
-            UpdateReply::Output(OpOut::WasmResult(Reject(x))) => {
+            UpdateReply::Output(OpOut::CanisterResult(Ok(WasmResult::Reject(x)))) => {
                 println!("wasm reject {:?}", x);
             }
             e => {

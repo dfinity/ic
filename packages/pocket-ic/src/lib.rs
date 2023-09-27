@@ -538,6 +538,11 @@ where
     call_candid_as(env, canister_id, Principal::anonymous(), method, input)
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum TryFromError {
+    ValueOutOfRange(u64),
+}
+
 /// User-facing error codes.
 ///
 /// The error codes are currently assigned using an HTTP-like
@@ -551,6 +556,7 @@ pub enum ErrorCode {
     CanisterOutputQueueFull = 201,
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
+    IngressHistoryFull = 204,
     CanisterNotFound = 301,
     CanisterMethodNotFound = 302,
     CanisterAlreadyInstalled = 303,
@@ -586,6 +592,70 @@ pub enum ErrorCode {
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
     CompositeQueryCalledInReplicatedMode = 527,
+    QueryTimeLimitExceeded = 528,
+    QueryCallGraphInternal = 529,
+    InsufficientCyclesInComputeAllocation = 530,
+    InsufficientCyclesInMemoryAllocation = 531,
+    InsufficientCyclesInMemoryGrow = 532,
+    ReservedCyclesLimitExceededInMemoryAllocation = 533,
+    ReservedCyclesLimitExceededInMemoryGrow = 534,
+}
+
+impl TryFrom<u64> for ErrorCode {
+    type Error = TryFromError;
+    fn try_from(err: u64) -> Result<ErrorCode, Self::Error> {
+        match err {
+            101 => Ok(ErrorCode::SubnetOversubscribed),
+            102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
+            201 => Ok(ErrorCode::CanisterOutputQueueFull),
+            202 => Ok(ErrorCode::IngressMessageTimeout),
+            203 => Ok(ErrorCode::CanisterQueueNotEmpty),
+            204 => Ok(ErrorCode::IngressHistoryFull),
+            301 => Ok(ErrorCode::CanisterNotFound),
+            302 => Ok(ErrorCode::CanisterMethodNotFound),
+            303 => Ok(ErrorCode::CanisterAlreadyInstalled),
+            304 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            402 => Ok(ErrorCode::InsufficientMemoryAllocation),
+            403 => Ok(ErrorCode::InsufficientCyclesForCreateCanister),
+            404 => Ok(ErrorCode::SubnetNotFound),
+            405 => Ok(ErrorCode::CanisterNotHostedBySubnet),
+            501 => Ok(ErrorCode::CanisterOutOfCycles),
+            502 => Ok(ErrorCode::CanisterTrapped),
+            503 => Ok(ErrorCode::CanisterCalledTrap),
+            504 => Ok(ErrorCode::CanisterContractViolation),
+            505 => Ok(ErrorCode::CanisterInvalidWasm),
+            506 => Ok(ErrorCode::CanisterDidNotReply),
+            507 => Ok(ErrorCode::CanisterOutOfMemory),
+            508 => Ok(ErrorCode::CanisterStopped),
+            509 => Ok(ErrorCode::CanisterStopping),
+            510 => Ok(ErrorCode::CanisterNotStopped),
+            511 => Ok(ErrorCode::CanisterStoppingCancelled),
+            512 => Ok(ErrorCode::CanisterInvalidController),
+            513 => Ok(ErrorCode::CanisterFunctionNotFound),
+            514 => Ok(ErrorCode::CanisterNonEmpty),
+            515 => Ok(ErrorCode::CertifiedStateUnavailable),
+            516 => Ok(ErrorCode::CanisterRejectedMessage),
+            517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
+            518 => Ok(ErrorCode::UnknownManagementMessage),
+            519 => Ok(ErrorCode::InvalidManagementPayload),
+            520 => Ok(ErrorCode::InsufficientCyclesInCall),
+            521 => Ok(ErrorCode::CanisterWasmEngineError),
+            522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
+            523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
+            524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
+            525 => Ok(ErrorCode::QueryCallGraphTooDeep),
+            526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
+            527 => Ok(ErrorCode::CompositeQueryCalledInReplicatedMode),
+            528 => Ok(ErrorCode::QueryTimeLimitExceeded),
+            529 => Ok(ErrorCode::QueryCallGraphInternal),
+            530 => Ok(ErrorCode::InsufficientCyclesInComputeAllocation),
+            531 => Ok(ErrorCode::InsufficientCyclesInMemoryAllocation),
+            532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
+            533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
+            534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
+            _ => Err(TryFromError::ValueOutOfRange(err)),
+        }
+    }
 }
 
 impl fmt::Display for ErrorCode {

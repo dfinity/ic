@@ -388,6 +388,7 @@ impl std::fmt::Display for Digest {
     }
 }
 
+// TODO: Remove this Operation
 /// A convenience method that installs the given wasm module at the given canister id. The first
 /// controller of the given canister is set as the sender. If the canister has no controller set,
 /// the anynmous user is used.
@@ -438,7 +439,7 @@ pub fn create_state_machine(state_dir: Option<TempDir>, runtime: Arc<Runtime>) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_state_machine_tests::WasmResult;
+    use pocket_ic::WasmResult;
 
     #[test]
     fn state_label_test() {
@@ -486,14 +487,13 @@ mod tests {
         let (mut pic, canister_id) = new_pic_counter_installed();
         let (query, update) = query_update_constructors(canister_id);
 
-        use WasmResult::*;
-        let OpOut::WasmResult(Reply(initial_bytes)) =
+        let OpOut::CanisterResult(Ok(WasmResult::Reply(initial_bytes))) =
             compute_assert_state_immutable(&mut pic, query("read"))
         else {
             unreachable!()
         };
         compute_assert_state_change(&mut pic, update("write"));
-        let OpOut::WasmResult(Reply(updated_bytes)) =
+        let OpOut::CanisterResult(Ok(WasmResult::Reply(updated_bytes))) =
             compute_assert_state_immutable(&mut pic, query("read"))
         else {
             unreachable!()

@@ -4,7 +4,7 @@
 /// body. This has to be canonicalized into a PocketIc Operation before we can
 /// deterministically update the PocketIc state machine.
 ///
-use super::state::{InstanceState, PocketIcApiState, UpdateReply};
+use super::state::{InstanceState, OpOut, PocketIcApiState, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, Query,
     SetStableMemory, SetTime,
@@ -24,8 +24,11 @@ use axum::{
 use ic_state_machine_tests::StateMachine;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, RawAddCycles, RawCanisterCall, RawCanisterId, RawSetStableMemory,
+    self, ApiResponse, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
+    RawSetStableMemory, RawStableMemory, RawTime, RawWasmResult,
 };
+use pocket_ic::WasmResult;
+use serde::Serialize;
 use std::sync::atomic::AtomicU64;
 use std::{collections::HashMap, sync::Arc};
 use tempfile::TempDir;
@@ -114,24 +117,151 @@ where
     // .nest("/:id/read", instances_read_routes::<S>())
 }
 
-async fn run_operation(
+async fn run_operation<T: Serialize>(
     api_state: ApiState,
     instance_id: InstanceId,
     op: impl Operation<TargetType = PocketIc> + Send + Sync + 'static,
-) -> (StatusCode, String) {
+) -> (StatusCode, ApiResponse<T>)
+where
+    (StatusCode, ApiResponse<T>): From<OpOut>,
+{
     match api_state.update(op.on_instance(instance_id)).await {
-        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
+        Err(e) => (
+            // TODO: what StatusCode should we use here?
+            StatusCode::BAD_REQUEST,
+            ApiResponse::Error {
+                message: format!("{:?}", e),
+            },
+        ),
         Ok(update_reply) => match update_reply {
-            // If the op_id of the ongoing operation is the requested one, we return code 201.
-            started @ UpdateReply::Started { .. } => {
-                (StatusCode::CREATED, format!("{:?}", started))
-            }
+            // If the op_id of the ongoing operation is the requested one, we return code 202.
+            UpdateReply::Started { state_label, op_id } => (
+                StatusCode::ACCEPTED,
+                ApiResponse::Started {
+                    state_label: format!("{:?}", state_label),
+                    op_id: format!("{:?}", op_id),
+                },
+            ),
             // Otherwise, the instance is busy with a different computation, so we return 409.
-            busy @ UpdateReply::Busy { .. } => (StatusCode::CONFLICT, format!("{:?}", busy)),
-            UpdateReply::Output(op_out) => {
-                (StatusCode::OK, serde_json::to_string(&op_out).unwrap())
-            }
+            UpdateReply::Busy { state_label, op_id } => (
+                StatusCode::CONFLICT,
+                ApiResponse::Busy {
+                    state_label: format!("{:?}", state_label),
+                    op_id: format!("{:?}", op_id),
+                },
+            ),
+            UpdateReply::Output(op_out) => op_out.into(),
         },
+    }
+}
+
+impl From<OpOut> for (StatusCode, ApiResponse<RawTime>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::Time(time) => (
+                StatusCode::OK,
+                ApiResponse::Success(RawTime {
+                    nanos_since_epoch: time,
+                }),
+            ),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
+impl From<OpOut> for (StatusCode, ApiResponse<()>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::NoOutput => (StatusCode::OK, ApiResponse::Success(())),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
+impl From<OpOut> for (StatusCode, ApiResponse<RawCycles>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::Cycles(cycles) => (StatusCode::OK, ApiResponse::Success(RawCycles { cycles })),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
+impl From<OpOut> for (StatusCode, ApiResponse<RawStableMemory>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::Bytes(stable_memory) => (
+                StatusCode::OK,
+                ApiResponse::Success(RawStableMemory {
+                    blob: stable_memory,
+                }),
+            ),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
+impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterResult>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::CanisterResult(wasm_result) => {
+                let inner = match wasm_result {
+                    Ok(WasmResult::Reply(wasm_result)) => {
+                        RawCanisterResult::Ok(RawWasmResult::Reply(wasm_result))
+                    }
+                    Ok(WasmResult::Reject(error_message)) => {
+                        RawCanisterResult::Ok(RawWasmResult::Reject(error_message))
+                    }
+                    Err(user_error) => RawCanisterResult::Err(user_error),
+                };
+                (StatusCode::OK, ApiResponse::Success(inner))
+            }
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
+impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterId>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::CanisterId(canister_id) => (
+                StatusCode::OK,
+                ApiResponse::Success(RawCanisterId {
+                    canister_id: canister_id.get().to_vec(),
+                }),
+            ),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
     }
 }
 
@@ -142,35 +272,50 @@ pub async fn handler_query(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
-        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
         Ok(canister_call) => {
             let query_op = Query(canister_call);
-            run_operation(api_state, instance_id, query_op).await
+            // TODO: how to know what run_operation returns, i.e. to what to parse it? (type safety?)
+            // (applies to all handlers)
+            let (code, response) = run_operation(api_state, instance_id, query_op).await;
+            (code, Json(response))
         }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
     }
 }
 
 pub async fn handler_get_time(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<RawTime>>) {
     let time_op = GetTime {};
-    run_operation(api_state, instance_id, time_op).await
+    let (code, response) = run_operation(api_state, instance_id, time_op).await;
+    (code, Json(response))
 }
 
 pub async fn handler_get_cycles(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     extract::Json(raw_canister_id): extract::Json<RawCanisterId>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<RawCycles>>) {
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let get_op = GetCyclesBalance { canister_id };
-            run_operation(api_state, instance_id, get_op).await
+            let (code, response) = run_operation(api_state, instance_id, get_op).await;
+            (code, Json(response))
         }
-        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
     }
 }
 
@@ -178,13 +323,19 @@ pub async fn handler_get_stable_memory(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     axum::extract::Json(raw_canister_id): axum::extract::Json<RawCanisterId>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<RawStableMemory>>) {
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let get_op = GetStableMemory { canister_id };
-            run_operation(api_state, instance_id, get_op).await
+            let (code, response) = run_operation(api_state, instance_id, get_op).await;
+            (code, Json(response))
         }
-        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
     }
 }
 
@@ -195,13 +346,19 @@ pub async fn handler_execute_ingress_message(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
-        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
         Ok(canister_call) => {
             let ingress_op = ExecuteIngressMessage(canister_call);
-            run_operation(api_state, instance_id, ingress_op).await
+            let (code, response) = run_operation(api_state, instance_id, ingress_op).await;
+            (code, Json(response))
         }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
     }
 }
 
@@ -209,11 +366,12 @@ pub async fn handler_set_time(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     axum::extract::Json(time): axum::extract::Json<rest::RawTime>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<()>>) {
     let op = SetTime {
         time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
     };
-    run_operation(api_state, instance_id, op).await
+    let (code, response) = run_operation(api_state, instance_id, op).await;
+    (code, Json(response))
 }
 
 pub async fn handler_add_cycles(
@@ -228,10 +386,18 @@ pub async fn handler_add_cycles(
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     extract::Json(raw_add_cycles): extract::Json<RawAddCycles>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<RawCycles>>) {
     match AddCycles::try_from(raw_add_cycles) {
-        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
-        Ok(add_op) => run_operation(api_state, instance_id, add_op).await,
+        Ok(add_op) => {
+            let (code, response) = run_operation(api_state, instance_id, add_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
     }
 }
 
@@ -247,10 +413,18 @@ pub async fn handler_set_stable_memory(
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     axum::extract::Json(raw): axum::extract::Json<RawSetStableMemory>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Json<ApiResponse<()>>) {
     match SetStableMemory::from_store(raw, blob_store).await {
-        Ok(set_op) => run_operation(api_state, instance_id, set_op).await,
-        Err(e) => (StatusCode::BAD_REQUEST, serde_json::to_string(&e).unwrap()),
+        Ok(set_op) => {
+            let (code, response) = run_operation(api_state, instance_id, set_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
     }
 }
 
