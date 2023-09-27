@@ -1060,8 +1060,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_api_boundary_node_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/boundary-api-guestos/envs/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
+        let dep_rel_path = "ic-os/boundary-api-guestos/envs/dev/disk-img.tar.zst.cas-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
