@@ -10621,6 +10621,7 @@ dependencies = [
  "tokio",
  "tokio-metrics",
  "turmoil",
+ "zstd",
 ]
 
 [[package]]
@@ -19102,6 +19103,25 @@ dependencies = [
  "quote 1.0.31",
  "syn 1.0.109",
  "synstructure",
+]
+
+[[package]]
+name = "zstd"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a27595e173641171fc74a1232b7b1c7a7cb6e18222c11e9dfb9888fa424c53c"
+dependencies = [
+ "zstd-safe",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "6.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee98ffd0b48ee95e6c5168188e44a54550b1564d9d530ee21d5f0eaed1069581"
+dependencies = [
+ "libc",
+ "zstd-sys",
 ]
 
 [[package]]

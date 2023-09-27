@@ -1,5 +1,5 @@
 {
-  "checksum": "6daaa538c7cff48a561101f761feef47b50c9ece56f8a6970fb9fba19667aa90",
+  "checksum": "4d02e834e25508c06f2bc2542f57498da84542a665e440a764dc767597414453",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -369,7 +369,7 @@
               "target": "tracing"
             },
             {
-              "id": "zstd 0.12.3+zstd.1.5.2",
+              "id": "zstd 0.12.4",
               "target": "zstd"
             }
           ],
@@ -14021,6 +14021,10 @@
             {
               "id": "zeroize 1.6.0",
               "target": "zeroize"
+            },
+            {
+              "id": "zstd 0.12.4",
+              "target": "zstd"
             }
           ],
           "selects": {}
@@ -26943,27 +26947,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -26997,27 +26986,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.4.3"
@@ -58894,13 +58868,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "zstd 0.12.3+zstd.1.5.2": {
+    "zstd 0.12.4": {
       "name": "zstd",
-      "version": "0.12.3+zstd.1.5.2",
+      "version": "0.12.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zstd/0.12.3+zstd.1.5.2/download",
-          "sha256": "76eea132fb024e0e13fd9c2f5d5d595d8a967aa72382ac2f9d39fcc95afd0806"
+          "url": "https://crates.io/api/v1/crates/zstd/0.12.4/download",
+          "sha256": "1a27595e173641171fc74a1232b7b1c7a7cb6e18222c11e9dfb9888fa424c53c"
         }
       },
       "targets": [
@@ -58938,7 +58912,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.12.3+zstd.1.5.2"
+        "version": "0.12.4"
       },
       "license": "MIT"
     },
