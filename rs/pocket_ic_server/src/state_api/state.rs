@@ -300,8 +300,9 @@ where
         instances.len() - 1
     }
 
-    pub async fn delete_instance(&self, _instance_id: InstanceId) -> Result<(), ()> {
-        todo!();
+    pub async fn delete_instance(&self, instance_id: InstanceId) {
+        let mut instances = self.inner.instances.write().await;
+        instances[instance_id] = InstanceState::Deleted;
     }
 
     pub async fn list_instances(&self) -> Vec<InstanceState<()>> {

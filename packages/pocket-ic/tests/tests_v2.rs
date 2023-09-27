@@ -1,5 +1,4 @@
 use candid::{encode_one, Principal};
-use ic_cdk::api::management_canister::main::CreateCanisterArgument;
 use pocket_ic::{PocketIcV2, WasmResult};
 use std::time::SystemTime;
 
@@ -30,6 +29,15 @@ fn test_get_set_cycle_balance() {
     assert_eq!(new_balance, 69_420);
     let balance = pic.cycle_balance(canister_id);
     assert_eq!(balance, 69_420);
+}
+
+#[test]
+fn test_create_and_drop_instances() {
+    let pic = PocketIcV2::new();
+    assert!(PocketIcV2::list_instances().contains(&"Available".to_string()));
+    drop(pic);
+    assert!(!PocketIcV2::list_instances().contains(&"Available".to_string()));
+    assert!(PocketIcV2::list_instances().contains(&"Deleted".to_string()));
 }
 
 #[test]
@@ -65,15 +73,7 @@ fn call_counter_can(ic: &PocketIcV2, can_id: Principal, method: &str) -> WasmRes
 #[test]
 fn test_checkpoint() {
     let pic = PocketIcV2::new();
-    let canister_id = Principal::management_canister();
-    let user = Principal::anonymous();
-
-    let _res = pic.update_call(
-        canister_id,
-        user,
-        "provisional_create_canister_with_cycles",
-        candid::encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
-    );
+    let _canister_id = pic.create_canister(None);
 
     pic.create_checkpoint();
     // todo: read from graph and assert
