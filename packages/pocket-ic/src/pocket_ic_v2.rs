@@ -50,6 +50,17 @@ impl PocketIcV2 {
         }
     }
 
+    pub fn list_instances() -> Vec<String> {
+        let url = crate::start_or_reuse_server().join("v2/instances").unwrap();
+        let instances: Vec<String> = reqwest::blocking::Client::new()
+            .get(url)
+            .send()
+            .expect("Failed to get result")
+            .json()
+            .expect("Failed to get json");
+        instances
+    }
+
     pub fn get_time(&self) -> SystemTime {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint);
@@ -337,6 +348,15 @@ impl PocketIcV2 {
 impl Default for PocketIcV2 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Drop for PocketIcV2 {
+    fn drop(&mut self) {
+        self.reqwest_client
+            .delete(self.instance_url())
+            .send()
+            .expect("Failed to send delete request");
     }
 }
 

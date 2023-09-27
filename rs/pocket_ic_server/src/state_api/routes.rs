@@ -13,9 +13,10 @@ use crate::pocket_ic::{
 use crate::{
     copy_dir,
     pocket_ic::{create_state_machine, PocketIc},
-    InstanceId,
+    BindOperation, BlobStore, InstanceId, Operation,
 };
-use crate::{BindOperation, BlobStore, Operation};
+use axum::body::HttpBody;
+use axum::routing::MethodRouter;
 use axum::{
     extract::{self, Path, State},
     http::StatusCode,
@@ -59,10 +60,10 @@ where
 {
     Router::new()
         // .route("root_key", get(handler_root_key))
-        .route("/query", post(handler_query))
-        .route("/get_time", get(handler_get_time))
-        .route("/get_cycles", post(handler_get_cycles))
-        .route("/get_stable_memory", post(handler_get_stable_memory))
+        .directory_route("/query", post(handler_query))
+        .directory_route("/get_time", get(handler_get_time))
+        .directory_route("/get_cycles", post(handler_get_cycles))
+        .directory_route("/get_stable_memory", post(handler_get_stable_memory))
 }
 
 pub fn instance_update_routes<S>() -> Router<S>
@@ -71,14 +72,14 @@ where
     AppState: extract::FromRef<S>,
 {
     Router::new()
-        .route(
+        .directory_route(
             "/execute_ingress_message",
             post(handler_execute_ingress_message),
         )
-        .route("/set_time", post(handler_set_time))
-        .route("/add_cycles", post(handler_add_cycles))
-        .route("/set_stable_memory", post(handler_set_stable_memory))
-        .route("/create_checkpoint", post(handler_create_checkpoint))
+        .directory_route("/set_time", post(handler_set_time))
+        .directory_route("/add_cycles", post(handler_add_cycles))
+        .directory_route("/set_stable_memory", post(handler_set_stable_memory))
+        .directory_route("/create_checkpoint", post(handler_create_checkpoint))
 }
 
 pub fn instances_routes<S>() -> Router<S>
@@ -89,15 +90,15 @@ where
     Router::new()
         //
         // List all IC instances.
-        .route("/", get(list_instances))
+        .directory_route("/", get(list_instances))
         //
         // Create a new IC instance. Returns an InstanceId.
         // If the body contains an existing checkpoint name, the instance is restored from that,
         // otherwise a new instance is created.
-        .route("/", post(create_instance))
+        .directory_route("/", post(create_instance))
         //
         // Deletes an instance.
-        .route("/:id", delete(delete_instance))
+        .directory_route("/:id", delete(delete_instance))
         //
         // All the read-only endpoints
         .nest("/:id/read", instance_read_routes())
@@ -108,7 +109,7 @@ where
         // Save this instance to a checkpoint with the given name.
         // Takes a name:String in the request body.
         // TODO: Add a function that separates those two.
-        .route(
+        .directory_route(
             "/:id/tick_and_create_checkpoint",
             post(tick_and_create_checkpoint),
         )
@@ -511,7 +512,7 @@ pub async fn list_instances(
         runtime: _,
         blob_store: _,
     }): State<AppState>,
-) -> String {
+) -> Json<Vec<String>> {
     let instances = api_state.list_instances().await;
     let instances: Vec<String> = instances
         .iter()
@@ -523,7 +524,7 @@ pub async fn list_instances(
             InstanceState::Deleted => "Deleted".to_string(),
         })
         .collect();
-    serde_json::to_string(&instances).unwrap()
+    Json(instances)
 }
 
 pub async fn list_checkpoints(
@@ -536,14 +537,14 @@ pub async fn list_checkpoints(
         runtime: _,
         blob_store: _,
     }): State<AppState>,
-) -> String {
+) -> Json<Vec<String>> {
     let checkpoints = checkpoints
         .read()
         .await
         .keys()
         .cloned()
         .collect::<Vec<String>>();
-    serde_json::to_string(&checkpoints).unwrap()
+    Json(checkpoints)
 }
 
 // TODO: Add a function that separates those two.
@@ -604,8 +605,25 @@ pub async fn delete_instance(
     }): State<AppState>,
     Path(id): Path<InstanceId>,
 ) -> StatusCode {
-    match api_state.delete_instance(id).await {
-        Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::NOT_FOUND,
+    api_state.delete_instance(id).await;
+    StatusCode::OK
+}
+
+pub trait RouterExt<S, B>
+where
+    B: HttpBody + Send + 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self;
+}
+
+impl<S, B> RouterExt<S, B> for Router<S, B>
+where
+    B: HttpBody + Send + 'static,
+    S: Clone + Send + Sync + 'static,
+{
+    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self {
+        self.route(path, method_router.clone())
+            .route(&format!("{path}/"), method_router)
     }
 }

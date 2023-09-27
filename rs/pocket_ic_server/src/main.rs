@@ -1,12 +1,11 @@
 use axum::{
     async_trait,
-    body::HttpBody,
     extract::{DefaultBodyLimit, Path, State},
     http,
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{delete, get, post, MethodRouter},
+    routing::{delete, get, post},
     Router, Server,
 };
 use clap::Parser;
@@ -23,7 +22,7 @@ use pocket_ic::{
     Request,
 };
 use pocket_ic_server::state_api::{
-    routes::{instances_routes, status, AppState},
+    routes::{instances_routes, status, AppState, RouterExt},
     state::PocketIcApiStateBuilder,
 };
 use pocket_ic_server::{copy_dir, InstanceId};
@@ -624,24 +623,5 @@ impl From<RawCanisterCall> for ParsedCanisterCall {
             method: call.method,
             arg: call.payload,
         }
-    }
-}
-
-trait RouterExt<S, B>
-where
-    B: HttpBody + Send + 'static,
-    S: Clone + Send + Sync + 'static,
-{
-    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self;
-}
-
-impl<S, B> RouterExt<S, B> for Router<S, B>
-where
-    B: HttpBody + Send + 'static,
-    S: Clone + Send + Sync + 'static,
-{
-    fn directory_route(self, path: &str, method_router: MethodRouter<S, B>) -> Self {
-        self.route(path, method_router.clone())
-            .route(&format!("{path}/"), method_router)
     }
 }
