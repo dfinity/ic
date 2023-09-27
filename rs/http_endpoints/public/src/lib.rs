@@ -36,7 +36,7 @@ use crate::{
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     query::QueryService,
-    read_state::ReadStateService,
+    read_state::{canister::CanisterReadStateService, subnet::SubnetReadStateService},
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     types::*,
@@ -80,7 +80,7 @@ use ic_types::{
         HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
     },
     time::expiry_time_from_now,
-    CanisterId, NodeId, SubnetId,
+    NodeId, PrincipalId, SubnetId,
 };
 use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
 use rand::Rng;
@@ -123,7 +123,8 @@ struct HttpHandler {
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
     status_service: EndpointService,
-    read_state_service: EndpointService,
+    canister_read_state_service: EndpointService,
+    subnet_read_state_service: EndpointService,
     pprof_home_service: EndpointService,
     pprof_profile_service: EndpointService,
     pprof_flamegraph_service: EndpointService,
@@ -312,7 +313,7 @@ pub fn start_server(
         Arc::clone(&registry_client),
         query_execution_service,
     );
-    let read_state_service = ReadStateService::new_service(
+    let canister_read_state_service = CanisterReadStateService::new_service(
         config.clone(),
         log.clone(),
         metrics.clone(),
@@ -326,6 +327,14 @@ pub fn start_server(
             log.clone(),
         ),
         Arc::clone(&registry_client),
+    );
+    let subnet_read_state_service = SubnetReadStateService::new_service(
+        config.clone(),
+        log.clone(),
+        metrics.clone(),
+        Arc::clone(&health_status),
+        Arc::clone(&delegation_from_nns),
+        state_reader_executor.clone(),
     );
     let status_service = StatusService::new_service(
         config.clone(),
@@ -380,7 +389,8 @@ pub fn start_server(
         status_service,
         catchup_service,
         dashboard_service,
-        read_state_service,
+        canister_read_state_service,
+        subnet_read_state_service,
         pprof_home_service,
         pprof_profile_service,
         pprof_flamegraph_service,
@@ -647,7 +657,8 @@ async fn make_router(
     let status_service = http_handler.status_service.clone();
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
-    let read_state_service = http_handler.read_state_service.clone();
+    let canister_read_state_service = http_handler.canister_read_state_service.clone();
+    let subnet_read_state_service = http_handler.subnet_read_state_service.clone();
     let pprof_home_service = http_handler.pprof_home_service.clone();
     let pprof_profile_service = http_handler.pprof_profile_service.clone();
     let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
@@ -678,19 +689,47 @@ async fn make_router(
 
             // Check the path
             let path = req.uri().path();
-            let (svc, effective_canister_id) =
+            let (svc, effective_principal_id) =
                 match *path.split('/').collect::<Vec<&str>>().as_slice() {
                     ["", "api", "v2", "canister", effective_canister_id, "call"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Call.into());
-                        (call_service, Some(effective_canister_id))
+                        (
+                            call_service,
+                            Some(
+                                PrincipalId::from_str(effective_canister_id)
+                                    .map_err(|err| (effective_canister_id, err.to_string())),
+                            ),
+                        )
                     }
                     ["", "api", "v2", "canister", effective_canister_id, "query"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Query.into());
-                        (query_service, Some(effective_canister_id))
+                        (
+                            query_service,
+                            Some(
+                                PrincipalId::from_str(effective_canister_id)
+                                    .map_err(|err| (effective_canister_id, err.to_string())),
+                            ),
+                        )
                     }
                     ["", "api", "v2", "canister", effective_canister_id, "read_state"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::ReadState.into());
-                        (read_state_service, Some(effective_canister_id))
+                        (
+                            canister_read_state_service,
+                            Some(
+                                PrincipalId::from_str(effective_canister_id)
+                                    .map_err(|err| (effective_canister_id, err.to_string())),
+                            ),
+                        )
+                    }
+                    ["", "api", "v2", "subnet", subnet_id, "read_state"] => {
+                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::ReadState.into());
+                        (
+                            subnet_read_state_service,
+                            Some(
+                                PrincipalId::from_str(subnet_id)
+                                    .map_err(|err| (subnet_id, err.to_string())),
+                            ),
+                        )
                     }
                     ["", "_", "catch_up_package"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::CatchUpPackage.into());
@@ -708,19 +747,19 @@ async fn make_router(
                     }
                 };
 
-            // If url contains effective canister id we attach it to the request.
-            if let Some(effective_canister_id) = effective_canister_id {
-                match CanisterId::from_str(effective_canister_id) {
-                    Ok(effective_canister_id) => {
-                        req.extensions_mut().insert(effective_canister_id);
+            // If url contains effective principal id we attach it to the request.
+            if let Some(effective_principal_id) = effective_principal_id {
+                match effective_principal_id {
+                    Ok(id) => {
+                        req.extensions_mut().insert(id);
                     }
-                    Err(e) => {
+                    Err((id, e)) => {
                         return (
                             make_plaintext_response(
                                 StatusCode::BAD_REQUEST,
                                 format!(
-                                    "Malformed request: Invalid efffective canister id {}: {}",
-                                    effective_canister_id, e
+                                    "Malformed request: Invalid efffective principal id {}: {}",
+                                    id, e
                                 ),
                             ),
                             timer,
