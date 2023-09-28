@@ -27,7 +27,6 @@ rust_library(
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "@crate_index//:arrayvec",
-        "@crate_index//:base64",
         "@crate_index//:hex",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",

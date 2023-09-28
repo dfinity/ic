@@ -6320,9 +6320,6 @@ dependencies = [
  "ic-logger",
  "ic-protobuf",
  "ic-types",
- "ic-types-test-utils",
- "mockall 0.7.2",
- "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -6501,7 +6498,6 @@ name = "ic-crypto-internal-types"
 version = "0.8.0"
 dependencies = [
  "arrayvec 0.5.2",
- "base64 0.11.0",
  "hex",
  "ic-protobuf",
  "phantom_newtype",
@@ -6565,7 +6561,6 @@ dependencies = [
  "ic-crypto-test-utils-keys",
  "ic-crypto-tls-cert-validation",
  "ic-crypto-utils-basic-sig",
- "ic-interfaces",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types",
