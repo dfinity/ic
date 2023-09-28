@@ -692,12 +692,10 @@ impl Swap {
             })
     }
 
-    /// This function updates the current contribution from direct and Neurons' Fund participants.
-    ///
-    /// Calling this function in `Swap.refresh_buyer_token_e8s` should be the only way that the
-    /// fields `direct_participation_icp_e8s` and `neurons_fund_participation_icp_e8s`
-    /// are updated.
-    fn update_participation_amounts(&mut self) {
+    /// Update derived fields:
+    /// - direct_participation_icp_e8s (derived from self.buyers)
+    /// - neurons_fund_participation_icp_e8s (derived from self.cf_participants) -- TODO(NNS1-2521)
+    fn update_total_participation_amounts(&mut self) {
         self.direct_participation_icp_e8s = Some(
             self.buyers
                 .values()
@@ -708,20 +706,27 @@ impl Swap {
         self.neurons_fund_participation_icp_e8s = Some(self.max_neurons_fund_participation_e8s());
     }
 
-    /// Update cached fields:
-    /// - direct_participation_icp_e8s
-    /// - neurons_fund_participation_icp_e8s
+    /// This function updates the current contribution from direct and Neurons' Fund participants.
     ///
-    /// This function helps unit testing the Swap canister. Normally, the cached fields should be
+    /// This function should be called directly exclusively in the following two cases:
+    /// (1) In `Swap.try_open_after_delay` to ensure that the fields are initialized.
+    /// (2) Directly in unit tests (see `update_derived_fields`).
+    #[cfg(target_arch = "wasm32")]
+    fn update_derived_fields(&mut self) {
+        self.update_total_participation_amounts()
+    }
+
+    /// This function helps unit testing the Swap canister. Normally, the derived fields should be
     /// updated as soon as the old values are invalid. However, in unit testing, we cannot rely on
     /// all the right functions being called. For example, refresh_buyer_token_e8s is
-    /// responsible for calling update_participation_amounts. While writing a unit test expressing
-    /// consistency between several fields of Swap, we might not want to also call
-    /// refresh_buyer_token_e8s. Thus, in such scenarios we need update_cached_fields to ensure
-    /// that the cached fields are updated.
+    /// responsible for calling update_total_participation_amounts. While writing a unit test
+    /// expressing consistency between several fields of Swap, we might not want to also call
+    /// refresh_buyer_token_e8s. Thus, in such scenarios we need update_derived_fields to ensure
+    /// that the derived fields are updated.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn update_cached_fields(&mut self) {
-        self.update_participation_amounts()
+    pub fn update_derived_fields(&mut self) {
+        // More update_${specific_field} methods might be added here in the future.
+        self.update_total_participation_amounts()
     }
 
     /// The count of unique CommunityFund Neurons.
@@ -749,6 +754,7 @@ impl Swap {
             // set the purge_old_ticket last principal so that the routine can start
             // in the next heartbeat
             self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
+            self.update_derived_fields();
             self.set_lifecycle(Lifecycle::Open);
             return true;
         }
@@ -1303,7 +1309,7 @@ impl Swap {
             .set_amount_icp_e8s(new_balance_e8s);
         // We compute the current participation amounts once and store the result in Swap's state,
         // for efficiency reasons.
-        self.update_participation_amounts();
+        self.update_total_participation_amounts();
 
         log!(
             INFO,
@@ -4374,7 +4380,7 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        swap.update_cached_fields();
+        swap.update_derived_fields();
 
         // test try_commit
         {
@@ -4464,7 +4470,7 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        swap.update_cached_fields();
+        swap.update_derived_fields();
 
         // test try_commit
         {

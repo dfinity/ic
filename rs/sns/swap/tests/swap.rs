@@ -1185,7 +1185,7 @@ async fn test_finalize_swap_ok() {
         direct_participation_icp_e8s: None,
         neurons_fund_participation_icp_e8s: None,
     };
-    swap.update_cached_fields();
+    swap.update_derived_fields();
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
     // the swap is open. Not only should it not work, it should do nothing.
@@ -3419,7 +3419,7 @@ fn test_derived_state() {
     };
 
     swap.buyers = buyers;
-    swap.update_cached_fields();
+    swap.update_derived_fields();
 
     let expected_derived_state3 = DerivedState {
         buyer_total_icp_e8s: 100_000_000,
@@ -3446,7 +3446,7 @@ fn test_derived_state() {
             },
         ],
     }];
-    swap.update_cached_fields();
+    swap.update_derived_fields();
 
     let expected_derived_state4 = DerivedState {
         buyer_total_icp_e8s: 800_000_000,
@@ -3471,7 +3471,7 @@ fn test_derived_state() {
         direct_participation_icp_e8s: Some(100_000_000),
         neurons_fund_participation_icp_e8s: Some(700_000_000),
     };
-    swap.update_cached_fields();
+    swap.update_derived_fields();
 
     let actual_derived_state5 = swap.derived_state();
     assert_eq!(expected_derived_state5, actual_derived_state5);
@@ -4754,7 +4754,7 @@ fn test_get_state_bounds_data_sources() {
         cf_participants: create_generic_cf_participants(1),
         ..Default::default()
     };
-    swap.update_cached_fields();
+    swap.update_derived_fields();
 
     let get_state_response = swap.get_state();
     let derived_state = get_state_response.derived.unwrap();
