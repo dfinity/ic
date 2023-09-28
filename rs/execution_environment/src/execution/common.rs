@@ -3,6 +3,7 @@
 
 use ic_registry_subnet_type::SubnetType;
 use lazy_static::lazy_static;
+use prometheus::IntCounter;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -60,6 +61,7 @@ pub(crate) fn action_to_response(
     call_origin: CallOrigin,
     time: Time,
     log: &ReplicaLogger,
+    ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     match call_origin {
         CallOrigin::Ingress(user_id, message_id) => action_to_ingress_response(
@@ -69,6 +71,7 @@ pub(crate) fn action_to_response(
             message_id,
             time,
             log,
+            ingress_with_cycles_error,
         ),
         CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
             action_to_request_response(canister, action, caller_canister_id, callback_id)
@@ -136,6 +139,7 @@ pub(crate) fn action_to_ingress_response(
     message_id: MessageId,
     time: Time,
     log: &ReplicaLogger,
+    ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     let mut refund_amount = Cycles::zero();
     let receiver = canister_id.get();
@@ -188,6 +192,7 @@ pub(crate) fn action_to_ingress_response(
         CallContextAction::AlreadyResponded => None,
     };
     if !refund_amount.is_zero() {
+        ingress_with_cycles_error.inc();
         warn!(
             log,
             "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
@@ -328,6 +333,7 @@ pub fn get_call_context_and_callback(
     canister: &CanisterState,
     response: &Response,
     logger: &ReplicaLogger,
+    unexpected_response_error: &IntCounter,
 ) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
     let call_context_manager = match canister.status() {
         CanisterStatusType::Stopped => {
@@ -335,6 +341,7 @@ pub fn get_call_context_and_callback(
             // Hence, if we receive a response for a stopped canister then that is
             // a either a bug in the code or potentially a faulty (or
             // malicious) subnet generating spurious messages.
+            unexpected_response_error.inc();
             error!(
                 logger,
                 "[EXC-BUG] Stopped canister got a response.  originator {} respondent {}.",
@@ -355,6 +362,7 @@ pub fn get_call_context_and_callback(
         Some(callback) => callback.clone(),
         None => {
             // Received an unknown callback ID. Nothing to do.
+            unexpected_response_error.inc();
             error!(
                 logger,
                 "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
@@ -371,6 +379,7 @@ pub fn get_call_context_and_callback(
         Some(call_context) => call_context.clone(),
         None => {
             // Unknown call context. Nothing to do.
+            unexpected_response_error.inc();
             error!(
                 logger,
                 "[EXC-BUG] Canister got a response for unknown request.  originator {} respondent {} callback id {}.",
@@ -434,6 +443,7 @@ pub fn apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     log: &ReplicaLogger,
+    state_changes_error: &IntCounter,
 ) {
     if let Some(CanisterStateChanges {
         globals,
@@ -469,7 +479,7 @@ pub fn apply_canister_state_changes(
             Err(err) => {
                 match &err {
                     HypervisorError::WasmEngineError(err) => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        state_changes_error.inc();
                         error!(
                             log,
                             "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
@@ -479,7 +489,7 @@ pub fn apply_canister_state_changes(
                         warn!(log, "Failed to apply state changes due to DTS: {}", err)
                     }
                     _ => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        state_changes_error.inc();
                         error!(
                             log,
                             "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err

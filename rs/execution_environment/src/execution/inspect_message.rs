@@ -8,6 +8,7 @@ use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::SignedIngressContent;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{NumInstructions, Time};
+use prometheus::IntCounter;
 
 /// Executes the system method `canister_inspect_message`.
 ///
@@ -23,6 +24,7 @@ pub fn execute_inspect_message(
     hypervisor: &Hypervisor,
     network_topology: &NetworkTopology,
     logger: &ReplicaLogger,
+    state_changes_error: &IntCounter,
 ) -> (NumInstructions, Result<(), UserError>) {
     let canister_id = canister.canister_id();
     let memory_usage = canister.memory_usage();
@@ -73,6 +75,7 @@ pub fn execute_inspect_message(
         execution_state,
         network_topology,
         &mut round_limits,
+        state_changes_error,
     );
     match output.wasm_result {
         Ok(maybe_wasm_result) => match maybe_wasm_result {

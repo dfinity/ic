@@ -1,7 +1,9 @@
 use crate::canister_settings::{validate_canister_settings, ValidatedCanisterSettings};
 use crate::execution::install_code::{validate_controller, OriginalContext};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
-use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
+use crate::execution_environment::{
+    CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
+};
 use crate::{
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
@@ -648,7 +650,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
-        execution_refund_error_counter: &IntCounter,
+        round_counters: RoundCounters,
         subnet_size: usize,
     ) -> (
         Result<InstallCodeResult, CanisterManagerError>,
@@ -673,6 +675,7 @@ impl CanisterManager {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
         };
+
         let dts_result = self.install_code_dts(
             context,
             message,
@@ -685,7 +688,7 @@ impl CanisterManager {
             execution_parameters,
             round_limits,
             CompilationCostHandling::CountFullAmount,
-            execution_refund_error_counter,
+            round_counters,
             subnet_size,
         );
         match dts_result {
@@ -743,7 +746,7 @@ impl CanisterManager {
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
-        execution_refund_error_counter: &IntCounter,
+        round_counters: RoundCounters,
         subnet_size: usize,
     ) -> DtsInstallCodeResult {
         if let Err(err) = validate_controller(&canister, &context.sender()) {
@@ -802,7 +805,7 @@ impl CanisterManager {
             network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
-            execution_refund_error_counter,
+            counters: round_counters,
             log: &self.log,
             time,
         };
@@ -835,6 +838,7 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         canister_id: CanisterId,
         state: &mut ReplicatedState,
+        canister_not_found_error: &IntCounter,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
         let time = state.time();
@@ -862,6 +866,7 @@ impl CanisterManager {
             state,
             Arc::clone(&self.ingress_history_writer),
             self.log.clone(),
+            canister_not_found_error,
         );
         Ok(())
     }

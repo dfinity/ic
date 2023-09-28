@@ -25,11 +25,27 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     pub executions_aborted: IntCounter,
 
     /// Critical error for responses above the maximum allowed size.
-    response_cycles_refund_error: IntCounter,
+    pub(crate) response_cycles_refund_error: IntCounter,
     /// Critical error for executions above the maximum allowed size.
-    execution_cycles_refund_error: IntCounter,
+    pub(crate) execution_cycles_refund_error: IntCounter,
     /// Critical error for call ID and no matching install code call.
-    call_id_without_install_code_call: IntCounter,
+    pub(crate) call_id_without_install_code_call: IntCounter,
+    /// Critical error for encountering an ingress with cycles.
+    pub(crate) ingress_with_cycles_error: IntCounter,
+    /// Critical error for ingresses that should have been filtered out.
+    pub(crate) unfiltered_ingress_error: IntCounter,
+    /// Critical error for missing canister state.
+    pub(crate) canister_not_found_error: IntCounter,
+    /// Critical error for encountering an unexpected error while applying the state changes.
+    pub(crate) state_changes_error: IntCounter,
+    /// Critical error for illegal system calls.
+    pub(crate) invalid_system_call_error: IntCounter,
+    /// Critical error for costs exceeding the cycles balance.
+    pub(crate) charging_from_balance_error: IntCounter,
+    /// Critical error for encountering an unexpected response.
+    pub(crate) unexpected_response_error: IntCounter,
+    /// Critical error for unexpected invalid canister state.
+    pub(crate) invalid_canister_state_error: IntCounter,
 }
 impl ExecutionEnvironmentMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -52,6 +68,22 @@ impl ExecutionEnvironmentMetrics {
                 .error_counter(CRITICAL_ERROR_EXECUTION_CYCLES_REFUND),
             call_id_without_install_code_call: metrics_registry
                 .error_counter(CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL),
+            ingress_with_cycles_error: metrics_registry
+                .error_counter("execution_environment_ingress_with_cycles"),
+            unfiltered_ingress_error: metrics_registry
+                .error_counter("execution_environment_unfiltered_ingress"),
+            canister_not_found_error: metrics_registry
+                .error_counter("execution_environment_canister_not_found"),
+            state_changes_error: metrics_registry
+                .error_counter("execution_environment_state_changes"),
+            invalid_system_call_error: metrics_registry
+                .error_counter("execution_environment_invalid_system_call"),
+            charging_from_balance_error: metrics_registry
+                .error_counter("execution_environment_charging_from_balance"),
+            unexpected_response_error: metrics_registry
+                .error_counter("execution_environment_unexpected_response"),
+            invalid_canister_state_error: metrics_registry
+                .error_counter("execution_environment_invalid_canister_state"),
         }
     }
 
@@ -111,14 +143,6 @@ impl ExecutionEnvironmentMetrics {
         self.subnet_messages
             .with_label_values(&[&method_name_label, &outcome_label, &status_label])
             .observe(duration);
-    }
-
-    pub fn response_cycles_refund_error_counter(&self) -> &IntCounter {
-        &self.response_cycles_refund_error
-    }
-
-    pub fn execution_cycles_refund_error_counter(&self) -> &IntCounter {
-        &self.execution_cycles_refund_error
     }
 
     pub fn observe_call_id_without_install_code_call_error_counter(

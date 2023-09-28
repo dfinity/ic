@@ -16,6 +16,7 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
 };
+
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{
@@ -27,6 +28,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
+use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -901,6 +903,7 @@ impl SystemState {
         &mut self,
         canister_id: CanisterId,
         log: &ReplicaLogger,
+        charging_from_balance_error: &IntCounter,
     ) {
         // We rely on saturating operations of `Cycles` here.
         let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
@@ -908,7 +911,7 @@ impl SystemState {
         if remaining_debit.get() > 0 {
             // This case is unreachable and may happen only due to a bug: if the
             // caller has reduced the cycles balance below the cycles debit.
-            // TODO(RUN-299): Increment a critical error counter here.
+            charging_from_balance_error.inc();
             error!(
                 log,
                 "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {} in install_code",

@@ -3,6 +3,7 @@ use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::CanisterId;
+use prometheus::IntCounter;
 use std::sync::Arc;
 
 pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
@@ -45,6 +46,7 @@ pub fn process_responses(
     state: &mut ReplicatedState,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     log: ReplicaLogger,
+    canister_not_found_error: &IntCounter,
 ) {
     responses.into_iter().for_each(|response| match response {
         Response::Ingress(ingress_response) => {
@@ -58,6 +60,7 @@ pub fn process_responses(
             if let Some(canister) = state.canister_state_mut(&canister_response.respondent) {
                 canister.push_output_response(canister_response.into())
             } else {
+                canister_not_found_error.inc();
                 error!(log, "[EXC-BUG] Canister {} is attempting to send a response, but the canister doesn't exist in the state!", canister_response.respondent);
             }
         }

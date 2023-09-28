@@ -127,13 +127,26 @@ pub enum ExecuteMessageResult {
     },
 }
 
+/// Contains counters needed to keep track of unexpected errors.
+#[derive(Clone)]
+pub struct RoundCounters<'a> {
+    pub execution_refund_error: &'a IntCounter,
+    pub state_changes_error: &'a IntCounter,
+    pub invalid_system_call_error: &'a IntCounter,
+    pub charging_from_balance_error: &'a IntCounter,
+    pub unexpected_response_error: &'a IntCounter,
+    pub response_cycles_refund_error: &'a IntCounter,
+    pub invalid_canister_state_error: &'a IntCounter,
+    pub ingress_with_cycles_error: &'a IntCounter,
+}
+
 /// Contains round-specific context necessary for resuming a paused execution.
 #[derive(Clone)]
 pub struct RoundContext<'a> {
     pub network_topology: &'a NetworkTopology,
     pub hypervisor: &'a Hypervisor,
     pub cycles_account_manager: &'a CyclesAccountManager,
-    pub execution_refund_error_counter: &'a IntCounter,
+    pub counters: RoundCounters<'a>,
     pub log: &'a ReplicaLogger,
     pub time: Time,
 }
@@ -345,6 +358,14 @@ impl ExecutionEnvironment {
             paused_execution_registry: Default::default(),
             resource_saturation_scaling,
         }
+    }
+
+    pub fn state_changes_error(&self) -> &IntCounter {
+        &self.metrics.state_changes_error
+    }
+
+    pub fn canister_not_found_error(&self) -> &IntCounter {
+        &self.metrics.canister_not_found_error
     }
 
     /// Look up the current amount of memory available on the subnet.
@@ -570,6 +591,7 @@ impl ExecutionEnvironment {
                             msg.canister_change_origin(args.get_sender_canister_version()),
                             args.get_canister_id(),
                             &mut state,
+                            &self.metrics.canister_not_found_error,
                         )
                         .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
@@ -1064,11 +1086,22 @@ impl ExecutionEnvironment {
             }
         }
 
+        let round_counters = RoundCounters {
+            execution_refund_error: &self.metrics.execution_cycles_refund_error,
+            state_changes_error: &self.metrics.state_changes_error,
+            invalid_system_call_error: &self.metrics.invalid_system_call_error,
+            charging_from_balance_error: &self.metrics.charging_from_balance_error,
+            unexpected_response_error: &self.metrics.unexpected_response_error,
+            response_cycles_refund_error: &self.metrics.response_cycles_refund_error,
+            invalid_canister_state_error: &self.metrics.invalid_canister_state_error,
+            ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
+        };
+
         let round = RoundContext {
             network_topology: &network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
-            execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
+            counters: round_counters,
             log: &self.log,
             time,
         };
@@ -1146,6 +1179,7 @@ impl ExecutionEnvironment {
                     round,
                     round_limits,
                     subnet_size,
+                    &self.metrics.state_changes_error,
                 );
                 if let ExecuteMessageResult::Finished {
                     canister: _,
@@ -1465,11 +1499,23 @@ impl ExecutionEnvironment {
             ExecutionMode::Replicated,
             self.subnet_memory_saturation(&round_limits.subnet_available_memory),
         );
+
+        let round_counters = RoundCounters {
+            execution_refund_error: &self.metrics.execution_cycles_refund_error,
+            state_changes_error: &self.metrics.state_changes_error,
+            invalid_system_call_error: &self.metrics.invalid_system_call_error,
+            charging_from_balance_error: &self.metrics.charging_from_balance_error,
+            unexpected_response_error: &self.metrics.unexpected_response_error,
+            response_cycles_refund_error: &self.metrics.response_cycles_refund_error,
+            invalid_canister_state_error: &self.metrics.invalid_canister_state_error,
+            ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
+        };
+
         let round = RoundContext {
             network_topology: &network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
-            execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
+            counters: round_counters,
             log: &self.log,
             time,
         };
@@ -1485,7 +1531,6 @@ impl ExecutionEnvironment {
             response,
             time,
             execution_parameters,
-            self.metrics.response_cycles_refund_error_counter(),
             round,
             round_limits,
             subnet_size,
@@ -1595,6 +1640,7 @@ impl ExecutionEnvironment {
             &self.hypervisor,
             &state.metadata.network_topology,
             &self.log,
+            &self.metrics.state_changes_error,
         )
         .1
     }
@@ -1645,6 +1691,7 @@ impl ExecutionEnvironment {
             &state.metadata.network_topology,
             &self.hypervisor,
             &mut round_limits,
+            &self.metrics.state_changes_error,
         )
         .2;
 
@@ -1693,6 +1740,7 @@ impl ExecutionEnvironment {
             }
             CanisterCall::Ingress(ingress) => {
                 if !refund.is_zero() {
+                    self.metrics.ingress_with_cycles_error.inc();
                     warn!(
                         self.log,
                         "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
@@ -2064,6 +2112,16 @@ impl ExecutionEnvironment {
             ExecutionMode::Replicated,
             self.subnet_memory_saturation(&round_limits.subnet_available_memory),
         );
+        let round_counters = RoundCounters {
+            execution_refund_error: &self.metrics.execution_cycles_refund_error,
+            state_changes_error: &self.metrics.state_changes_error,
+            invalid_system_call_error: &self.metrics.invalid_system_call_error,
+            charging_from_balance_error: &self.metrics.charging_from_balance_error,
+            unexpected_response_error: &self.metrics.unexpected_response_error,
+            response_cycles_refund_error: &self.metrics.response_cycles_refund_error,
+            invalid_canister_state_error: &self.metrics.invalid_canister_state_error,
+            ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
+        };
 
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
@@ -2077,7 +2135,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             round_limits,
             compilation_cost_handling,
-            self.metrics.execution_cycles_refund_error_counter(),
+            round_counters,
             subnet_size,
         );
         self.process_install_code_result(state, dts_result, dts_status, timer)
@@ -2226,13 +2284,21 @@ impl ExecutionEnvironment {
                 let timer = Timer::start();
                 let paused = self.take_paused_install_code(id).unwrap();
                 let canister = state.take_canister_state(canister_id).unwrap();
+                let round_counters = RoundCounters {
+                    execution_refund_error: &self.metrics.execution_cycles_refund_error,
+                    state_changes_error: &self.metrics.state_changes_error,
+                    invalid_system_call_error: &self.metrics.invalid_system_call_error,
+                    charging_from_balance_error: &self.metrics.charging_from_balance_error,
+                    unexpected_response_error: &self.metrics.unexpected_response_error,
+                    response_cycles_refund_error: &self.metrics.response_cycles_refund_error,
+                    invalid_canister_state_error: &self.metrics.invalid_canister_state_error,
+                    ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
+                };
                 let round = RoundContext {
                     network_topology: &state.metadata.network_topology,
                     hypervisor: &self.hypervisor,
                     cycles_account_manager: &self.cycles_account_manager,
-                    execution_refund_error_counter: self
-                        .metrics
-                        .execution_cycles_refund_error_counter(),
+                    counters: round_counters,
                     log: &self.log,
                     time: state.metadata.time(),
                 };
@@ -2331,9 +2397,11 @@ impl ExecutionEnvironment {
             // pending execution anymore.
             canister.scheduler_state.long_execution_mode = LongExecutionMode::default();
             let canister_id = canister.canister_id();
-            canister
-                .system_state
-                .apply_ingress_induction_cycles_debit(canister_id, log);
+            canister.system_state.apply_ingress_induction_cycles_debit(
+                canister_id,
+                log,
+                &self.metrics.charging_from_balance_error,
+            );
         };
     }
 
@@ -2532,6 +2600,7 @@ impl ExecutionEnvironment {
         &self,
         method: Ic00Method,
     ) -> Option<(Result<Vec<u8>, UserError>, Cycles)> {
+        self.metrics.unfiltered_ingress_error.inc();
         error!(
             self.log,
             "[EXC-BUG] Ingress messages to {} should've been filtered earlier.", method
@@ -2724,13 +2793,21 @@ pub fn execute_canister(
         Some(task) => match task {
             ExecutionTask::PausedExecution(id) => {
                 let paused = exec_env.take_paused_execution(id).unwrap();
+                let round_counters = RoundCounters {
+                    execution_refund_error: &exec_env.metrics.execution_cycles_refund_error,
+                    state_changes_error: &exec_env.metrics.state_changes_error,
+                    invalid_system_call_error: &exec_env.metrics.invalid_system_call_error,
+                    charging_from_balance_error: &exec_env.metrics.charging_from_balance_error,
+                    unexpected_response_error: &exec_env.metrics.unexpected_response_error,
+                    response_cycles_refund_error: &exec_env.metrics.response_cycles_refund_error,
+                    invalid_canister_state_error: &exec_env.metrics.invalid_canister_state_error,
+                    ingress_with_cycles_error: &exec_env.metrics.ingress_with_cycles_error,
+                };
                 let round_context = RoundContext {
                     network_topology: &network_topology,
                     hypervisor: &exec_env.hypervisor,
                     cycles_account_manager: &exec_env.cycles_account_manager,
-                    execution_refund_error_counter: exec_env
-                        .metrics
-                        .execution_cycles_refund_error_counter(),
+                    counters: round_counters,
                     log: &exec_env.log,
                     time,
                 };

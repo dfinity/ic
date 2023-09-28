@@ -17,6 +17,7 @@ use ic_types::{
 
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
+use prometheus::IntCounter;
 
 // Execute an inter-canister request or an ingress message as a replicated query.
 #[allow(clippy::too_many_arguments)]
@@ -29,6 +30,7 @@ pub fn execute_replicated_query(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    state_changes_error: &IntCounter,
 ) -> ExecuteMessageResult {
     // A replicated query runs without DTS.
     let instruction_limits = &execution_parameters.instruction_limits;
@@ -65,7 +67,7 @@ pub fn execute_replicated_query(
             instruction_limit,
             instruction_limit,
             prepaid_execution_cycles,
-            round.execution_refund_error_counter,
+            round.counters.execution_refund_error,
             subnet_size,
             round.log,
         );
@@ -90,7 +92,7 @@ pub fn execute_replicated_query(
             instruction_limit,
             instruction_limit,
             prepaid_execution_cycles,
-            round.execution_refund_error_counter,
+            round.counters.execution_refund_error,
             subnet_size,
             round.log,
         );
@@ -127,6 +129,7 @@ pub fn execute_replicated_query(
         canister.execution_state.clone().unwrap(),
         round.network_topology,
         round_limits,
+        state_changes_error,
     );
 
     let result = output.wasm_result;
@@ -140,7 +143,7 @@ pub fn execute_replicated_query(
         output.num_instructions_left,
         instruction_limit,
         prepaid_execution_cycles,
-        round.execution_refund_error_counter,
+        round.counters.execution_refund_error,
         subnet_size,
         round.log,
     );

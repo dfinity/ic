@@ -65,6 +65,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 hypervisor,
                 &network_topology,
                 &no_op_logger(),
+                exec_env.state_changes_error(),
             );
             assert_eq!(result, Ok(()), "Error executing inspect message method");
             assert_eq!(

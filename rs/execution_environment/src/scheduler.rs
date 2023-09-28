@@ -1000,6 +1000,7 @@ impl SchedulerImpl {
                 state,
                 Arc::clone(&self.ingress_history_writer),
                 self.log.clone(),
+                self.exec_env.canister_not_found_error(),
             );
         }
     }

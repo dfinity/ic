@@ -17,7 +17,7 @@ use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time};
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, IntGauge};
+use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
@@ -315,6 +315,7 @@ impl Hypervisor {
         mut execution_state: ExecutionState,
         network_topology: &NetworkTopology,
         round_limits: &mut RoundLimits,
+        state_changes_error: &IntCounter,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         assert_eq!(
             execution_parameters.instruction_limits.message(),
@@ -349,6 +350,7 @@ impl Hypervisor {
             network_topology,
             self.own_subnet_id,
             &self.log,
+            state_changes_error,
         );
         (output, execution_state, system_state)
     }
