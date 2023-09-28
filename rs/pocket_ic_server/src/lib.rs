@@ -311,11 +311,10 @@ mod tests {
             method: "provisional_create_canister_with_cycles".to_string(),
             payload: encode_args((CreateCanisterArgument { settings: None },)).unwrap(),
         });
+
+        let timeout = Some(Duration::from_secs(30));
         let res = rt
-            .block_on(
-                api_state
-                    .update_with_timeout(msg1.on_instance(instance_id), Duration::from_secs(30)),
-            )
+            .block_on(api_state.update_with_timeout(msg1.on_instance(instance_id), timeout))
             .unwrap();
 
         match res {
@@ -342,10 +341,10 @@ mod tests {
         let delay = Delay {
             duration: Duration::from_secs(1),
         };
+
+        let timeout = Some(sync_wait_timeout);
         let UpdateReply::Output(OpOut::NoOutput) = rt
-            .block_on(
-                api_state.update_with_timeout(delay.on_instance(instance_id), sync_wait_timeout),
-            )
+            .block_on(api_state.update_with_timeout(delay.on_instance(instance_id), timeout))
             .unwrap()
         else {
             panic!("result did not match!")

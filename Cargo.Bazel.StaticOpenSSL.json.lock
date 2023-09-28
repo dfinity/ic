@@ -1,5 +1,5 @@
 {
-  "checksum": "4d02e834e25508c06f2bc2542f57498da84542a665e440a764dc767597414453",
+  "checksum": "efa00c7ad0bba6a631f673076d4dd8214c52799bf71d1e612d7f3754240f8518",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3422,6 +3422,7 @@
           "common": [
             "default",
             "form",
+            "headers",
             "http1",
             "json",
             "matched-path",
@@ -3453,6 +3454,10 @@
             {
               "id": "futures-util 0.3.28",
               "target": "futures_util"
+            },
+            {
+              "id": "headers 0.3.8",
+              "target": "headers"
             },
             {
               "id": "http 0.2.9",

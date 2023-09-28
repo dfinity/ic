@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-axum = "^0.6"
+axum = { version = "^0.6.1", features = ["headers"] }
 candid = { workspace = true }
 rand = "^0.8.5"
 itertools = "0.11"

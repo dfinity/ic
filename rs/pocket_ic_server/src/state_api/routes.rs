@@ -19,7 +19,8 @@ use axum::body::HttpBody;
 use axum::routing::MethodRouter;
 use axum::{
     extract::{self, Path, State},
-    http::StatusCode,
+    headers,
+    http::{self, HeaderMap, HeaderName, StatusCode},
     routing::{delete, get, post},
     Json, Router,
 };
@@ -32,9 +33,13 @@ use pocket_ic::common::rest::{
 use pocket_ic::WasmResult;
 use serde::Serialize;
 use std::sync::atomic::AtomicU64;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+
+/// Name of a header that allows clients to specify for how long their are willing to wait for a
+/// response on a open http request.
+pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
 
 pub type InstanceMap = Arc<RwLock<HashMap<InstanceId, RwLock<StateMachine>>>>;
 
@@ -119,12 +124,16 @@ where
 async fn run_operation<T: Serialize>(
     api_state: ApiState,
     instance_id: InstanceId,
+    timeout: Option<Duration>,
     op: impl Operation<TargetType = PocketIc> + Send + Sync + 'static,
 ) -> (StatusCode, ApiResponse<T>)
 where
     (StatusCode, ApiResponse<T>): From<OpOut>,
 {
-    match api_state.update(op.on_instance(instance_id)).await {
+    match api_state
+        .update_with_timeout(op.on_instance(instance_id), timeout)
+        .await
+    {
         Err(e) => (
             // TODO: what StatusCode should we use here?
             StatusCode::BAD_REQUEST,
@@ -271,14 +280,16 @@ impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterId>) {
 pub async fn handler_query(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
 ) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
+    let timeout = timeout_or_default(headers);
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Ok(canister_call) => {
             let query_op = Query(canister_call);
             // TODO: how to know what run_operation returns, i.e. to what to parse it? (type safety?)
             // (applies to all handlers)
-            let (code, response) = run_operation(api_state, instance_id, query_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, query_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -295,7 +306,9 @@ pub async fn handler_get_time(
     Path(instance_id): Path<InstanceId>,
 ) -> (StatusCode, Json<ApiResponse<RawTime>>) {
     let time_op = GetTime {};
-    let (code, response) = run_operation(api_state, instance_id, time_op).await;
+    // Note regarding timeouts: here we are optimistic and assume that we can response within the
+    // default timeout regardless of what was specified by the client.
+    let (code, response) = run_operation(api_state, instance_id, None, time_op).await;
     (code, Json(response))
 }
 
@@ -307,7 +320,9 @@ pub async fn handler_get_cycles(
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let get_op = GetCyclesBalance { canister_id };
-            let (code, response) = run_operation(api_state, instance_id, get_op).await;
+            // Note regarding timeouts: here we are optimistic and assume that we can response within the
+            // default timeout regardless of what was specified by the client.
+            let (code, response) = run_operation(api_state, instance_id, None, get_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -322,12 +337,14 @@ pub async fn handler_get_cycles(
 pub async fn handler_get_stable_memory(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
     axum::extract::Json(raw_canister_id): axum::extract::Json<RawCanisterId>,
 ) -> (StatusCode, Json<ApiResponse<RawStableMemory>>) {
+    let timeout = timeout_or_default(headers);
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let get_op = GetStableMemory { canister_id };
-            let (code, response) = run_operation(api_state, instance_id, get_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, get_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -345,12 +362,14 @@ pub async fn handler_get_stable_memory(
 pub async fn handler_execute_ingress_message(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
     extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
 ) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
+    let timeout = timeout_or_default(headers);
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Ok(canister_call) => {
             let ingress_op = ExecuteIngressMessage(canister_call);
-            let (code, response) = run_operation(api_state, instance_id, ingress_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -370,7 +389,9 @@ pub async fn handler_set_time(
     let op = SetTime {
         time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
     };
-    let (code, response) = run_operation(api_state, instance_id, op).await;
+    // Note regarding timeouts: here we are optimistic and assume that we can response within the
+    // default timeout regardless of what was specified by the client.
+    let (code, response) = run_operation(api_state, instance_id, None, op).await;
     (code, Json(response))
 }
 
@@ -385,11 +406,13 @@ pub async fn handler_add_cycles(
         blob_store: _,
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
     extract::Json(raw_add_cycles): extract::Json<RawAddCycles>,
 ) -> (StatusCode, Json<ApiResponse<RawCycles>>) {
+    let timeout = timeout_or_default(headers);
     match AddCycles::try_from(raw_add_cycles) {
         Ok(add_op) => {
-            let (code, response) = run_operation(api_state, instance_id, add_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, add_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -412,11 +435,13 @@ pub async fn handler_set_stable_memory(
         blob_store,
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
     axum::extract::Json(raw): axum::extract::Json<RawSetStableMemory>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
     match SetStableMemory::from_store(raw, blob_store).await {
         Ok(set_op) => {
-            let (code, response) = run_operation(api_state, instance_id, set_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, set_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -441,10 +466,12 @@ pub async fn handler_create_checkpoint(
         blob_store: _,
     }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
     println!("creating checkpoint");
     let op = Checkpoint;
-    let (code, res) = run_operation(api_state, instance_id, op).await;
+    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
 
@@ -626,4 +653,47 @@ where
         self.route(path, method_router.clone())
             .route(&format!("{path}/"), method_router)
     }
+}
+
+/// A typed header that a client can use to specify the maximum duration it is willing to wait for a
+/// synchronous response.
+pub struct ProcessingTimeout(pub Duration);
+
+impl headers::Header for ProcessingTimeout {
+    fn name() -> &'static http::header::HeaderName {
+        &TIMEOUT_HEADER_NAME
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        I: Iterator<Item = &'i http::header::HeaderValue>,
+    {
+        fn to_invalid<E>(_: E) -> headers::Error {
+            headers::Error::invalid()
+        }
+
+        let value = values.next().ok_or_else(headers::Error::invalid)?;
+        let nanos = value
+            .to_str()
+            .map_err(to_invalid)?
+            .parse::<u64>()
+            .map_err(to_invalid)?;
+        Ok(Self(Duration::from_millis(nanos)))
+    }
+
+    fn encode<E>(&self, values: &mut E)
+    where
+        E: Extend<http::header::HeaderValue>,
+    {
+        let nanos = self.0.as_millis();
+        let value = http::header::HeaderValue::from_str(&format!("{nanos}")).unwrap();
+
+        values.extend(std::iter::once(value));
+    }
+}
+
+pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
+    use headers::HeaderMapExt;
+
+    header_map.typed_get::<ProcessingTimeout>().map(|x| x.0)
 }
