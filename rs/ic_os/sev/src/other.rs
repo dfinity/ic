@@ -1,7 +1,7 @@
 use async_trait::async_trait;
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
 use ic_interfaces_registry::RegistryClient;
-use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -22,8 +22,7 @@ where
         &self,
         stream: S,
         _peer: NodeId,
-        _latest_registry_version: RegistryVersion,
-        _earliest_registry_version: RegistryVersion,
+        _registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
         Ok(stream)
     }

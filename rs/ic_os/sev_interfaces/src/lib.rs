@@ -32,7 +32,6 @@ pub trait ValidateAttestedStream<S> {
         &self,
         mut stream: S,
         peer: NodeId,
-        latest_registry_version: RegistryVersion,
-        earliest_registry_version: RegistryVersion,
+        registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError>;
 }

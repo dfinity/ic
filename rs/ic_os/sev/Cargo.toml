@@ -10,7 +10,7 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { path = "../../types/base_types" }
 serde_cbor = "0.11"
 serde = { version = "1.0.99", features = ["derive"] }
 sha2 = "0.9.1"

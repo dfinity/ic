@@ -507,8 +507,7 @@ impl ConnectionManager {
             .client_config(peer_id, self.topology.latest_registry_version())
             .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause });
         let transport_config = self.transport_config.clone();
-        let earliest_registry_version = self.topology.earliest_registry_version();
-        let last_registry_version = self.topology.latest_registry_version();
+        let latest_registry_version = self.topology.latest_registry_version();
         let conn_fut = async move {
             let mut quinn_client_config = quinn::ClientConfig::new(Arc::new(client_config?));
             quinn_client_config.transport_config(transport_config);
@@ -525,8 +524,7 @@ impl ConnectionManager {
             let connection = Self::attestation_handshake(
                 handshaker,
                 peer_id,
-                earliest_registry_version,
-                last_registry_version,
+                latest_registry_version,
                 established,
                 Direction::Outbound,
             )
@@ -628,7 +626,6 @@ impl ConnectionManager {
         self.metrics.inbound_connection_total.inc();
         let handshaker = self.sev_handshake.clone();
         let node_id = self.node_id;
-        let earliest_registry_version = self.topology.earliest_registry_version();
         let last_registry_version = self.topology.latest_registry_version();
         let conn_fut = async move {
             let established =
@@ -666,7 +663,6 @@ impl ConnectionManager {
             let connection = Self::attestation_handshake(
                 handshaker,
                 peer_id,
-                earliest_registry_version,
                 last_registry_version,
                 established,
                 Direction::Inbound,
@@ -693,8 +689,7 @@ impl ConnectionManager {
     async fn attestation_handshake(
         sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         peer_id: NodeId,
-        earliest_registry_version: RegistryVersion,
-        latest_registry_version: RegistryVersion,
+        registry_version: RegistryVersion,
         conn: Connection,
         direction: Direction,
     ) -> Result<Connection, ConnectionEstablishError> {
@@ -712,12 +707,7 @@ impl ConnectionManager {
         };
 
         sev_handshake
-            .perform_attestation_validation(
-                Box::new(read_write),
-                peer_id,
-                latest_registry_version,
-                earliest_registry_version,
-            )
+            .perform_attestation_validation(Box::new(read_write), peer_id, registry_version)
             .await
             .map_err(|e| ConnectionEstablishError::SevAttestation(e.to_string()))?;
         Ok(conn)

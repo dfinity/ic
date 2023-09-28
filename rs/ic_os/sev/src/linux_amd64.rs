@@ -14,13 +14,10 @@ References:
 */
 
 use async_trait::async_trait;
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
 use ic_interfaces_registry::RegistryClient;
-use ic_registry_client_helpers::{
-    crypto::CryptoRegistry, node::NodeRegistry, subnet::SubnetRegistry,
-};
-use ic_registry_subnet_features::SevFeatureStatus;
-use ic_types::{NodeId, RegistryVersion};
+use ic_registry_client_helpers::{crypto::CryptoRegistry, node::NodeRegistry};
 use openssl::ecdsa::EcdsaSig;
 use openssl::x509::X509;
 use serde::{Deserialize, Serialize};
@@ -106,44 +103,9 @@ where
         &self,
         mut stream: S,
         peer: NodeId,
-        latest_registry_version: RegistryVersion,
-        earliest_registry_version: RegistryVersion,
+        registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
         if true {
-            return Ok(stream);
-        }
-        // Read my subnet_id from registry:
-        // loop over registry versions from earliest to latest,
-        // until subnet containing the node has been found.
-        let mut registry_version = earliest_registry_version;
-        let subnet_id = loop {
-            let subnet_id_result = self
-                .registry
-                .get_subnet_id_from_node_id(self.node_id, registry_version)
-                .map_err(ValidateAttestationError::RegistryError)
-                .and_then(|v| {
-                    v.ok_or(ValidateAttestationError::RegistryDataMissing {
-                        node_id: self.node_id,
-                        registry_version,
-                        description: "subnet_id missing".into(),
-                    })
-                });
-            if registry_version == latest_registry_version || subnet_id_result.is_ok() {
-                break subnet_id_result?;
-            };
-            registry_version += RegistryVersion::from(1);
-        };
-        // Read subnet features from registry.
-        let features = self
-            .registry
-            .get_features(subnet_id, registry_version)
-            .map_err(ValidateAttestationError::RegistryError)?
-            .ok_or(ValidateAttestationError::RegistryDataMissing {
-                node_id: self.node_id,
-                registry_version,
-                description: "features missing".into(),
-            })?;
-        if features.sev_status() == SevFeatureStatus::Disabled {
             return Ok(stream);
         }
 

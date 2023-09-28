@@ -429,7 +429,6 @@ impl TransportImpl {
         stream: TcpStream,
     ) -> Result<(NodeId, Box<dyn TlsStream>), TransportTlsHandshakeError> {
         let latest_registry_version = *self.latest_registry_version.read().await;
-        let earliest_registry_version = *self.earliest_registry_version.read().await;
         let current_allowed_clients = self.allowed_clients.read().await.clone();
         let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients);
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
@@ -453,7 +452,6 @@ impl TransportImpl {
                 tls_stream,
                 peer_id,
                 latest_registry_version,
-                earliest_registry_version,
             ),
         )
         .await
@@ -472,7 +470,6 @@ impl TransportImpl {
         stream: TcpStream,
     ) -> Result<Box<dyn TlsStream>, TransportTlsHandshakeError> {
         let latest_registry_version = *self.latest_registry_version.read().await;
-        let earliest_registry_version = *self.earliest_registry_version.read().await;
         let tls_stream = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
@@ -490,7 +487,6 @@ impl TransportImpl {
                 tls_stream,
                 peer_id,
                 latest_registry_version,
-                earliest_registry_version,
             ),
         )
         .await
