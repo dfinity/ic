@@ -52,7 +52,6 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, String>,
     pub eth_transactions: EthTransactions,
-    pub next_transaction_nonce: TransactionNonce,
 
     /// Per-principal lock for pending_retrieve_eth_requests
     #[serde(skip)]
@@ -168,27 +167,12 @@ impl State {
         );
     }
 
-    pub fn get_and_increment_nonce(&mut self) -> TransactionNonce {
-        let current_nonce = self.next_transaction_nonce;
-        self.next_transaction_nonce = self
-            .next_transaction_nonce
-            .checked_increment()
-            .expect("transaction nonce overflow only possible after U256::MAX transactions");
-        current_nonce
-    }
-
     pub fn next_request_id(&mut self) -> u64 {
         let current_request_id = self.http_request_counter;
         // overflow is not an issue here because we only use `next_request_id` to correlate
         // requests and responses in logs.
         self.http_request_counter = self.http_request_counter.wrapping_add(1);
         current_request_id
-    }
-
-    pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
-        self.next_transaction_nonce = new_nonce;
-        self.eth_transactions
-            .update_next_transaction_nonce(new_nonce);
     }
 
     pub const fn ethereum_network(&self) -> EthereumNetwork {
@@ -211,7 +195,6 @@ impl State {
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
                 .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {}", e)))?;
-            self.next_transaction_nonce = nonce;
             self.eth_transactions.update_next_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {

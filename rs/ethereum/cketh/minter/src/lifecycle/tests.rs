@@ -72,7 +72,10 @@ mod init {
         assert_eq!(state.ethereum_contract_address, None);
         assert_eq!(state.ledger_id, init_arg.ledger_id);
         assert_eq!(state.minimum_withdrawal_amount, Wei::TWO);
-        assert_eq!(state.next_transaction_nonce, TransactionNonce::ZERO);
+        assert_eq!(
+            state.eth_transactions.next_transaction_nonce(),
+            TransactionNonce::ZERO
+        );
     }
 
     fn valid_init_arg() -> InitArg {

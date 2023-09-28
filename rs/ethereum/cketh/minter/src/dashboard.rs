@@ -1,7 +1,7 @@
 use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::address::Address;
-use ic_cketh_minter::endpoints::RetrieveEthStatus;
+use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
@@ -41,7 +41,7 @@ pub struct DashboardTemplate {
     pub events_to_mint: Vec<ReceivedEthEvent>,
     pub rejected_deposits: BTreeMap<EventSource, String>,
     pub withdrawal_requests: Vec<EthWithdrawalRequest>,
-    pub pending_transaction: Option<DashboardPendingTransaction>,
+    pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub confirmed_transactions: Vec<DashboardConfirmedTransaction>,
 }
 
@@ -59,9 +59,34 @@ impl DashboardTemplate {
             .collect();
         withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.ledger_burn_index));
 
+        let mut pending_transactions: Vec<_> = state
+            .eth_transactions
+            .created_transactions_iter()
+            .map(
+                |(_nonce, ledger_burn_index, tx)| DashboardPendingTransaction {
+                    ledger_burn_index: *ledger_burn_index,
+                    destination: tx.destination,
+                    transaction_amount: tx.amount,
+                    status: RetrieveEthStatus::TxCreated,
+                },
+            )
+            .collect();
+        pending_transactions.extend(state.eth_transactions.sent_transactions_iter().flat_map(
+            |(_nonce, ledger_burn_index, txs)| {
+                txs.iter().map(|tx| DashboardPendingTransaction {
+                    ledger_burn_index: *ledger_burn_index,
+                    destination: tx.transaction().destination,
+                    transaction_amount: tx.transaction().amount,
+                    status: RetrieveEthStatus::TxSent(EthTransaction::from(tx)),
+                })
+            },
+        ));
+        pending_transactions
+            .sort_unstable_by_key(|pending_tx| Reverse(pending_tx.ledger_burn_index));
+
         let mut confirmed_transactions: Vec<_> = state
             .eth_transactions
-            .confirmed_transactions_iter()
+            .finalized_transactions_iter()
             .map(|(_tx_nonce, index, tx)| DashboardConfirmedTransaction {
                 ledger_burn_index: *index,
                 destination: tx.transaction().destination,
@@ -83,21 +108,14 @@ impl DashboardTemplate {
                 .ethereum_contract_address
                 .map_or("N/A".to_string(), |address| address.to_string()),
             ledger_id: state.ledger_id,
-            next_transaction_nonce: state.next_transaction_nonce,
+            next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
             last_synced_block: state.last_scraped_block_number,
             last_observed_block: state.last_observed_block_number,
             minted_events,
             events_to_mint,
             rejected_deposits: state.invalid_events.clone(),
             withdrawal_requests,
-            pending_transaction: state.eth_transactions.pending_tx_info().map(
-                |(req, tx, status)| DashboardPendingTransaction {
-                    ledger_burn_index: req.ledger_burn_index,
-                    destination: tx.destination,
-                    transaction_amount: tx.amount,
-                    status: status.clone(),
-                },
-            ),
+            pending_transactions,
             confirmed_transactions,
         }
     }

@@ -55,6 +55,10 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.by_key.is_empty()
+    }
+
     pub fn try_insert(
         &mut self,
         key: Key,
@@ -91,6 +95,16 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
             .and_then(|alt_key| self.by_alt_key.get(alt_key))
     }
 
+    pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
+    where
+        Key: Borrow<Q>,
+        Q: Ord,
+    {
+        self.by_key
+            .get(key)
+            .and_then(|alt_key| self.by_alt_key.get_mut(alt_key))
+    }
+
     pub fn get_alt<Q: ?Sized>(&self, alt_key: &Q) -> Option<&V>
     where
         AltKey: Borrow<Q>,
@@ -121,6 +135,20 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         self.by_key
             .iter()
             .map(|(key, alt_key)| (key, alt_key, &self.by_alt_key[alt_key]))
+    }
+
+    pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(Key, AltKey, V)>
+    where
+        Key: Borrow<Q>,
+        Q: Ord,
+    {
+        self.by_key.remove_entry(key).map(|(key, alt_key)| {
+            let value = self
+                .by_alt_key
+                .remove(&alt_key)
+                .expect("BUG: missing foreign key");
+            (key, alt_key, value)
+        })
     }
 
     /// Remove all elements from the map that match the given predicate on the primary key.
@@ -154,5 +182,17 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
 impl<Key: Ord, AltKey: Ord, V> Default for MultiKeyMap<Key, AltKey, V> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<Key: Ord, AltKey: Ord + Clone, V> FromIterator<(Key, AltKey, V)>
+    for MultiKeyMap<Key, AltKey, V>
+{
+    fn from_iter<T: IntoIterator<Item = (Key, AltKey, V)>>(iter: T) -> Self {
+        let (by_key, by_alt_key) = iter
+            .into_iter()
+            .map(|(key, alt_key, value)| ((key, alt_key.clone()), (alt_key, value)))
+            .unzip();
+        Self { by_key, by_alt_key }
     }
 }

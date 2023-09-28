@@ -58,7 +58,6 @@ impl TryFrom<InitArg> for State {
             ethereum_network,
             ecdsa_key_name,
             ethereum_contract_address,
-            next_transaction_nonce: initial_nonce,
             retrieve_eth_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
             ledger_id,

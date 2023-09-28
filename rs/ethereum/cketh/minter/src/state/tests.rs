@@ -252,7 +252,10 @@ mod upgrade {
 
         state.upgrade(upgrade_arg).expect("valid upgrade args");
 
-        assert_eq!(state.next_transaction_nonce, TransactionNonce::from(15_u64));
+        assert_eq!(
+            state.eth_transactions.next_transaction_nonce(),
+            TransactionNonce::from(15_u64)
+        );
         assert_eq!(state.minimum_withdrawal_amount, Wei::from(100_u64));
         assert_eq!(
             state.ethereum_contract_address,

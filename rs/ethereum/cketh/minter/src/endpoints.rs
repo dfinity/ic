@@ -1,6 +1,6 @@
 use crate::eth_rpc::into_nat;
 use crate::transactions::EthWithdrawalRequest;
-use crate::tx::TransactionPrice;
+use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use minicbor::{Decode, Encode};
@@ -28,6 +28,14 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {
     pub transaction_hash: String,
+}
+
+impl From<&SignedEip1559TransactionRequest> for EthTransaction {
+    fn from(value: &SignedEip1559TransactionRequest) -> Self {
+        Self {
+            transaction_hash: value.hash().to_string(),
+        }
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
