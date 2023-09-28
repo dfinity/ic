@@ -53,7 +53,9 @@ use ic_nns_governance::{
         ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
         ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
         NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
-        RewardNodeProviders, SettleCommunityFundParticipation, UpdateNodeProvider, Vote,
+        RewardNodeProviders, SettleCommunityFundParticipation,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        UpdateNodeProvider, Vote,
     },
     storage::UPGRADES_MEMORY,
 };
@@ -836,18 +838,35 @@ fn update_node_provider_(req: UpdateNodeProvider) -> Result<(), GovernanceError>
     governance_mut().update_node_provider(&caller(), req)
 }
 
+/// TODO[NNS1-2617]: Deprecate this function.
 #[export_name = "canister_update settle_community_fund_participation"]
 fn settle_community_fund_participation() {
     debug_log("settle_community_fund_participation");
     over_async(candid_one, settle_community_fund_participation_)
 }
 
+/// TODO[NNS1-2617]: Deprecate this function.
 #[candid_method(update, rename = "settle_community_fund_participation")]
 async fn settle_community_fund_participation_(
     request: SettleCommunityFundParticipation,
 ) -> Result<(), GovernanceError> {
     governance_mut()
         .settle_community_fund_participation(caller(), &request)
+        .await
+}
+
+#[export_name = "canister_update settle_neurons_fund_participation"]
+fn settle_neurons_fund_participation() {
+    debug_log("settle_neurons_fund_participation");
+    over_async(candid_one, settle_neurons_fund_participation_)
+}
+
+#[candid_method(update, rename = "settle_neurons_fund_participation")]
+async fn settle_neurons_fund_participation_(
+    request: SettleNeuronsFundParticipationRequest,
+) -> SettleNeuronsFundParticipationResponse {
+    governance_mut()
+        .settle_neurons_fund_participation(caller(), &request)
         .await
 }
 

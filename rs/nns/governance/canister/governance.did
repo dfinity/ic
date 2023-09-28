@@ -100,6 +100,11 @@ type Committed = record {
   total_neurons_fund_contribution_icp_e8s : opt nat64;
   sns_governance_canister_id : opt principal;
 };
+type Committed_1 = record {
+  total_direct_participation_icp_e8s : opt nat64;
+  total_neurons_fund_participation_icp_e8s : opt nat64;
+  sns_governance_canister_id : opt principal;
+};
 type Configure = record { operation : opt Operation };
 type Countries = record { iso_codes : vec text };
 type CreateServiceNervousSystem = record {
@@ -363,10 +368,17 @@ type NeuronStakeTransfer = record {
   transfer_timestamp : nat64;
   block_height : nat64;
 };
+type NeuronsFundNeuron = record {
+  hotkey_principal : opt text;
+  is_capped : opt bool;
+  nns_neuron_id : opt nat64;
+  amount_icp_e8s : opt nat64;
+};
 type NodeProvider = record {
   id : opt principal;
   reward_account : opt AccountIdentifier;
 };
+type Ok = record { neurons_fund_neurons : vec NeuronsFundNeuron };
 type OpenSnsTokenSwap = record {
   community_fund_investment_e8s : opt nat64;
   target_swap_canister_id : opt principal;
@@ -450,6 +462,8 @@ type Result_4 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
 type Result_5 = variant { Ok : NeuronInfo; Err : GovernanceError };
 type Result_6 = variant { Ok : NodeProvider; Err : GovernanceError };
 type Result_7 = variant { Committed : Committed; Aborted : record {} };
+type Result_8 = variant { Committed : Committed_1; Aborted : record {} };
+type Result_9 = variant { Ok : Ok; Err : GovernanceError };
 type RewardEvent = record {
   rounds_since_last_distribution : opt nat64;
   day_after_genesis : nat64;
@@ -487,6 +501,11 @@ type SettleCommunityFundParticipation = record {
   result : opt Result_7;
   open_sns_token_swap_proposal_id : opt nat64;
 };
+type SettleNeuronsFundParticipationRequest = record {
+  result : opt Result_8;
+  nns_proposal_id : opt nat64;
+};
+type SettleNeuronsFundParticipationResponse = record { result : opt Result_9 };
 type Spawn = record {
   percentage_to_spawn : opt nat32;
   new_controller : opt principal;
@@ -574,6 +593,9 @@ service : (Governance) -> {
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
+  settle_neurons_fund_participation : (
+      SettleNeuronsFundParticipationRequest,
+    ) -> (SettleNeuronsFundParticipationResponse);
   simulate_manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_node_provider : (UpdateNodeProvider) -> (Result);

@@ -35,7 +35,8 @@ use crate::{
         Neuron, NeuronInfo, NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal,
         ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
         RewardNodeProvider, RewardNodeProviders, SetSnsTokenSwapOpenTimeWindow,
-        SettleCommunityFundParticipation, SwapBackgroundInformation, Tally, Topic,
+        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse, SwapBackgroundInformation, Tally, Topic,
         UpdateNodeProvider, Vote, WaitForQuietState,
     },
     proposals::create_service_nervous_system::{
@@ -7119,6 +7120,15 @@ impl Governance {
         Ok(())
     }
 
+    /// TODO[NNS1-2617]: Implement this function.
+    pub async fn settle_neurons_fund_participation(
+        &mut self,
+        _caller: PrincipalId,
+        _request: &SettleNeuronsFundParticipationRequest,
+    ) -> SettleNeuronsFundParticipationResponse {
+        todo!()
+    }
+
     /// If the request is Committed, mint ICP and deposit it in the SNS
     /// governance canister's account. If the request is Aborted, refund
     /// Neurons' Fund neurons that participated.
@@ -7127,6 +7137,8 @@ impl Governance {
     ///
     /// On success, sets the proposal's sns_token_swap_lifecycle accord to
     /// Committed or Aborted
+    ///
+    /// TODO[NNS1-2617]: Deprecate this function.
     pub async fn settle_community_fund_participation(
         &mut self,
         caller: PrincipalId,
