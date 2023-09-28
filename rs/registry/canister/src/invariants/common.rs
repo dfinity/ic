@@ -10,12 +10,12 @@ use url::Url;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
-    crypto::v1::EcdsaSigningSubnetList, hostos_version::v1::HostosVersionRecord,
-    node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord, crypto::v1::EcdsaSigningSubnetList,
+    hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    get_node_record_node_id, make_subnet_list_record_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
-    HOSTOS_VERSION_KEY_PREFIX,
+    get_api_boundary_node_record_node_id, get_node_record_node_id, make_subnet_list_record_key,
+    ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
 };
 
 /// A representation of the data held by the registry.
@@ -112,6 +112,29 @@ pub(crate) fn get_node_records_from_snapshot(
             };
             let node_id = NodeId::from(principal_id);
             result.insert(node_id, node_record);
+        }
+    }
+    result
+}
+
+/// Returns all api boundary node records from the snapshot.
+pub(crate) fn get_api_boundary_node_records_from_snapshot(
+    snapshot: &RegistrySnapshot,
+) -> BTreeMap<NodeId, ApiBoundaryNodeRecord> {
+    let mut result = BTreeMap::<NodeId, ApiBoundaryNodeRecord>::new();
+    for key in snapshot.keys() {
+        if let Some(principal_id) =
+            get_api_boundary_node_record_node_id(String::from_utf8(key.clone()).unwrap().as_str())
+        {
+            // This is indeed an api boundary node record
+            let api_boundary_node_record = match snapshot.get(key) {
+                Some(api_boundary_node_record_bytes) => {
+                    decode_or_panic::<ApiBoundaryNodeRecord>(api_boundary_node_record_bytes.clone())
+                }
+                None => panic!("Cannot fetch api boundary node record for an existing key"),
+            };
+            let node_id = NodeId::from(principal_id);
+            result.insert(node_id, api_boundary_node_record);
         }
     }
     result

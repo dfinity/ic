@@ -273,8 +273,13 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.node.v1.ConnectionEndpoint",
         "#[derive(Eq, PartialOrd, Ord)]",
     );
+    config.type_attribute(
+        ".registry.api_boundary_node.v1.ApiBoundaryNodeRecord",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
 
     let registry_files = [
+        def.join("registry/api_boundary_node/v1/api_boundary_node.proto"),
         def.join("registry/crypto/v1/crypto.proto"),
         def.join("registry/node_operator/v1/node_operator.proto"),
         def.join("registry/nns/v1/nns.proto"),

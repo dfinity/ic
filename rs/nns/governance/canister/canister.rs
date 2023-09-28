@@ -975,7 +975,11 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
         | NnsFunction::ChangeSubnetTypeAssignment
         | NnsFunction::UpdateAllowedPrincipals
         | NnsFunction::UpdateSnsWasmSnsSubnetIds
-        | NnsFunction::InsertSnsWasmUpgradePathEntries => Cow::Borrowed(payload),
+        | NnsFunction::InsertSnsWasmUpgradePathEntries
+        | NnsFunction::AddApiBoundaryNode
+        | NnsFunction::RemoveApiBoundaryNodes
+        | NnsFunction::UpdateApiBoundaryNodeDomain
+        | NnsFunction::UpdateApiBoundaryNodesVersion => Cow::Borrowed(payload),
     }
 }
 

@@ -22,6 +22,9 @@ impl Registry {
             LOG_PREFIX, payload
         );
 
+        // Validate payload
+        self.validate_add_nodes_to_subnet_payload(&payload);
+
         let mut nodes_to_add = payload.node_ids.clone();
         let subnet_id = SubnetId::from(payload.subnet_id);
         let mut subnet_record = self.get_subnet_or_panic(subnet_id);
@@ -47,6 +50,16 @@ impl Registry {
             "{}do_add_nodes_to_subnet finished: {:?}",
             LOG_PREFIX, payload
         );
+    }
+
+    /// Ensure all nodes for new subnet are not already assigned as ApiBoundaryNode
+    pub fn validate_add_nodes_to_subnet_payload(&self, payload: &AddNodesToSubnetPayload) {
+        // Ensure that none of the Nodes are assigned as ApiBoundaryNode
+        payload.node_ids.iter().cloned().for_each(|id| {
+            if self.get_api_boundary_node_record(id).is_some() {
+                panic!("Some Nodes are already assigned as ApiBoundaryNode");
+            }
+        });
     }
 }
 

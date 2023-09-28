@@ -579,6 +579,16 @@ impl NnsFunction {
                     format!("{:?} is a deprecated NnsFunction. Use UpdateElectedReplicaVersions instead", self),
                 ));
             }
+            NnsFunction::AddApiBoundaryNode => (REGISTRY_CANISTER_ID, "add_api_boundary_node"),
+            NnsFunction::RemoveApiBoundaryNodes => {
+                (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
+            }
+            NnsFunction::UpdateApiBoundaryNodeDomain => {
+                (REGISTRY_CANISTER_ID, "update_api_boundary_node_domain")
+            }
+            NnsFunction::UpdateApiBoundaryNodesVersion => {
+                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
+            }
         };
         Ok((canister_id, method))
     }
@@ -698,6 +708,12 @@ impl Proposal {
                             // Retired NnsFunctions
                             NnsFunction::BlessReplicaVersion
                             | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
+                            NnsFunction::AddApiBoundaryNode
+                            | NnsFunction::RemoveApiBoundaryNodes
+                            | NnsFunction::UpdateApiBoundaryNodeDomain
+                            | NnsFunction::UpdateApiBoundaryNodesVersion => {
+                                Topic::ApiBoundaryNodeManagement
+                            }
                         }
                     } else {
                         println!(

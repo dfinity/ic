@@ -22,6 +22,7 @@ pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
 pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
 const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
 
+pub const API_BOUNDARY_NODE_RECORD_KEY_PREFIX: &str = "api_boundary_node_";
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
 pub const NODE_OPERATOR_RECORD_KEY_PREFIX: &str = "node_operator_record_";
 pub const REPLICA_VERSION_KEY_PREFIX: &str = "replica_version_";
@@ -216,6 +217,11 @@ pub fn maybe_parse_crypto_tls_cert_key(key: &str) -> Option<NodeId> {
     }
 }
 
+/// Makes a key for a ApiBoundaryNodeRecord registry entry.
+pub fn make_api_boundary_node_record_key(node_id: NodeId) -> String {
+    format!("{}{}", API_BOUNDARY_NODE_RECORD_KEY_PREFIX, node_id.get())
+}
+
 /// Makes a key for a NodeRecord registry entry.
 pub fn make_node_record_key(node_id: NodeId) -> String {
     format!("{}{}", NODE_RECORD_KEY_PREFIX, node_id.get())
@@ -235,6 +241,16 @@ pub fn is_node_record_key(key: &str) -> bool {
 /// the key is, in fact, a valid node_record_key.
 pub fn get_node_record_node_id(key: &str) -> Option<PrincipalId> {
     if let Some(key) = key.strip_prefix(NODE_RECORD_KEY_PREFIX) {
+        PrincipalId::from_str(key).ok()
+    } else {
+        None
+    }
+}
+
+/// Returns the node_id associated with a given api_boundary_node_record key if
+/// the key is, in fact, a valid api_boundary_node_record_key.
+pub fn get_api_boundary_node_record_node_id(key: &str) -> Option<PrincipalId> {
+    if let Some(key) = key.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX) {
         PrincipalId::from_str(key).ok()
     } else {
         None
