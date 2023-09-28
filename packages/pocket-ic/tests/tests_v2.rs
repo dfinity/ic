@@ -1,6 +1,6 @@
 use candid::{encode_one, Principal};
-use pocket_ic::{PocketIcV2, WasmResult};
-use std::time::SystemTime;
+use pocket_ic::{common::blob::BlobCompression, PocketIcV2, WasmResult};
+use std::{io::Read, time::SystemTime};
 
 #[test]
 fn test_get_and_set_and_advance_time() {
@@ -83,4 +83,40 @@ fn test_checkpoint() {
 fn test_tick() {
     let pic = PocketIcV2::new();
     pic.tick();
+}
+
+#[test]
+fn test_set_and_get_stable_memory_not_compressed() {
+    let pic = PocketIcV2::new();
+    let canister_id = pic.create_canister(None);
+    pic.add_cycles(canister_id, 1_000_000_000_000_000_000);
+    let wasm_path = std::env::var_os("COUNTER_WASM").expect("Missing counter wasm file");
+    let counter_wasm = std::fs::read(wasm_path).unwrap();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    let data = "deadbeef".as_bytes().to_vec();
+    pic.set_stable_memory(canister_id, data.clone(), BlobCompression::NoCompression);
+
+    let read_data = pic.get_stable_memory(canister_id);
+    assert_eq!(data, read_data[..8]);
+}
+
+#[test]
+fn test_set_and_get_stable_memory_compressed() {
+    let pic = PocketIcV2::new();
+    let canister_id = pic.create_canister(None);
+    pic.add_cycles(canister_id, 1_000_000_000_000_000_000);
+    let wasm_path = std::env::var_os("COUNTER_WASM").expect("Missing counter wasm file");
+    let counter_wasm = std::fs::read(wasm_path).unwrap();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    let data = "decafbad".as_bytes().to_vec();
+    let mut compressed_data = Vec::new();
+    let mut gz = flate2::read::GzEncoder::new(&data[..], flate2::Compression::default());
+    gz.read_to_end(&mut compressed_data).unwrap();
+
+    pic.set_stable_memory(canister_id, compressed_data.clone(), BlobCompression::Gzip);
+
+    let read_data = pic.get_stable_memory(canister_id);
+    assert_eq!(data, read_data[..8]);
 }

@@ -2,9 +2,13 @@
 //! replace the existing PocketIc struct.
 
 use crate::{
-    common::rest::{
-        ApiResponse, CreateInstanceResponse, InstanceId, RawAddCycles, RawCanisterCall,
-        RawCanisterId, RawCanisterResult, RawCycles, RawTime, RawWasmResult,
+    common::{
+        blob::{BlobCompression, BlobId},
+        rest::{
+            ApiResponse, CreateInstanceResponse, InstanceId, RawAddCycles, RawCanisterCall,
+            RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory,
+            RawTime, RawWasmResult,
+        },
     },
     CallError, UserError, WasmResult,
 };
@@ -51,6 +55,54 @@ impl PocketIcV2 {
             server_url,
             reqwest_client,
         }
+    }
+
+    pub fn upload_blob(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
+        // TODO: check if the hash of the blob already exists and if yes, don't upload.
+        let mut request = self
+            .reqwest_client
+            .post(self.server_url.join("blobstore/").unwrap())
+            .body(blob);
+        if compression == BlobCompression::Gzip {
+            request = request.header(reqwest::header::CONTENT_ENCODING, "gzip");
+        }
+        let blob_id = request
+            .send()
+            .expect("Failed to get response")
+            .text()
+            .expect("Failed to get text");
+
+        let hash_vec = hex::decode(blob_id).expect("Failed to decode hex");
+        let hash: Result<[u8; 32], Vec<u8>> = hash_vec.try_into();
+        BlobId(hash.expect("Invalid hash"))
+    }
+
+    pub fn set_stable_memory(
+        &self,
+        canister_id: Principal,
+        data: Vec<u8>,
+        compression: BlobCompression,
+    ) {
+        let blob_id = self.upload_blob(data, compression);
+        let endpoint = "update/set_stable_memory";
+        self.post::<(), _>(
+            endpoint,
+            RawSetStableMemory {
+                canister_id: canister_id.as_slice().to_vec(),
+                blob_id,
+            },
+        );
+    }
+
+    pub fn get_stable_memory(&self, canister_id: Principal) -> Vec<u8> {
+        let endpoint = "read/get_stable_memory";
+        let RawStableMemory { blob } = self.post(
+            endpoint,
+            RawCanisterId {
+                canister_id: canister_id.as_slice().to_vec(),
+            },
+        );
+        blob
     }
 
     pub fn list_instances() -> Vec<String> {
