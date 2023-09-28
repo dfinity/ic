@@ -265,7 +265,10 @@ fn verify_paths(
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
                 can_read_canister_metadata(
                     user,
-                    &CanisterId::new(principal_id).unwrap(),
+                    &CanisterId::new(principal_id).map_err(|_| HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!("Invalid canister id {}.", principal_id),
+                    })?,
                     &name,
                     state,
                 )?
