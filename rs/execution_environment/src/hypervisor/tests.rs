@@ -2912,6 +2912,56 @@ fn canister_init_can_set_mutable_globals() {
 }
 
 #[test]
+fn declare_memory_beyond_max_size_1() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (i32.store (i32.const 0) (i32.const 1))
+            )
+            (memory 65537)
+        )"#;
+    let err = test.canister_from_wat(wat).unwrap_err();
+    assert_eq!(ErrorCode::CanisterInvalidWasm, err.code());
+}
+
+#[test]
+fn declare_memory_beyond_max_size_2() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (i32.store (i32.const 0) (i32.const 1))
+            )
+            (memory 1 65537)
+        )"#;
+    let err = test.canister_from_wat(wat).unwrap_err();
+    assert_eq!(ErrorCode::CanisterInvalidWasm, err.code());
+}
+
+#[test]
+fn grow_memory_beyond_max_size_0() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_update test")
+                ;; growing memory past limit does not trigger trap or error
+                ;; but should return -1
+                (global.set 0 (memory.grow (i32.const 1)))
+            )
+            (memory 1 1)
+            (global (export "g") (mut i32) (i32.const 137))
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    assert_eq!(
+        Global::I32(-1),
+        test.execution_state(canister_id).exported_globals[0]
+    );
+}
+
+#[test]
 fn grow_memory_beyond_max_size_1() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
