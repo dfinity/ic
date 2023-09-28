@@ -208,14 +208,18 @@ impl InstallCodeHelper {
             instructions_left,
             message_instruction_limit,
             original.prepaid_execution_cycles,
-            round.execution_refund_error_counter,
+            round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
         );
 
         self.canister
             .system_state
-            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         if self.allocated_bytes > self.deallocated_bytes {
             let bytes = self.allocated_bytes - self.deallocated_bytes;
@@ -592,6 +596,7 @@ impl InstallCodeHelper {
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {
+                round.counters.invalid_system_call_error.inc();
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             Err(err) => {
@@ -631,7 +636,7 @@ impl InstallCodeHelper {
             ) {
                 match &err {
                     HypervisorError::WasmEngineError(err) => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        round.counters.state_changes_error.inc();
                         error!(
                             round.log,
                             "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
@@ -644,7 +649,7 @@ impl InstallCodeHelper {
                         )
                     }
                     _ => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        round.counters.state_changes_error.inc();
                         error!(
                             round.log,
                             "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
@@ -772,7 +777,11 @@ pub(crate) fn finish_err(
 
     new_canister
         .system_state
-        .apply_ingress_induction_cycles_debit(new_canister.canister_id(), round.log);
+        .apply_ingress_induction_cycles_debit(
+            new_canister.canister_id(),
+            round.log,
+            round.counters.charging_from_balance_error,
+        );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -780,7 +789,7 @@ pub(crate) fn finish_err(
         instructions_left,
         message_instruction_limit,
         original.prepaid_execution_cycles,
-        round.execution_refund_error_counter,
+        round.counters.execution_refund_error,
         original.subnet_size,
         round.log,
     );

@@ -67,6 +67,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 &network_topology,
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
+                exec_env.state_changes_error(),
             );
             let executed_instructions =
                 as_num_instructions(instructions_before - round_limits.instructions);

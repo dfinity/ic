@@ -14,6 +14,7 @@ use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{Cycles, NumInstructions, Time};
+use prometheus::IntCounter;
 
 // Execute non replicated query.
 #[allow(clippy::too_many_arguments)]
@@ -28,6 +29,7 @@ pub fn execute_non_replicated_query(
     network_topology: &NetworkTopology,
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
+    state_changes_error: &IntCounter,
 ) -> (
     CanisterState,
     NumInstructions,
@@ -102,6 +104,7 @@ pub fn execute_non_replicated_query(
         canister.execution_state.clone().unwrap(),
         network_topology,
         round_limits,
+        state_changes_error,
     );
     canister.system_state = output_system_state;
     if preserve_changes {

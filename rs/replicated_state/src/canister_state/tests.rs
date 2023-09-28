@@ -15,6 +15,7 @@ use crate::Memory;
 use ic_base_types::NumSeconds;
 use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
 use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::canister_test_id,
@@ -33,6 +34,7 @@ use ic_types::{
     CountBytes, Cycles, Time,
 };
 use ic_wasm_types::CanisterModule;
+use prometheus::IntCounter;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
@@ -61,6 +63,10 @@ fn default_output_request() -> Arc<Request> {
             .receiver(OTHER_CANISTER_ID)
             .build(),
     )
+}
+
+fn mock_metrics() -> IntCounter {
+    MetricsRegistry::new().int_counter("error_counter", "Test error counter")
 }
 
 struct CanisterStateFixture {
@@ -468,7 +474,11 @@ fn canister_state_ingress_induction_cycles_debit() {
         system_state.debited_balance()
     );
 
-    system_state.apply_ingress_induction_cycles_debit(system_state.canister_id(), &no_op_logger());
+    system_state.apply_ingress_induction_cycles_debit(
+        system_state.canister_id(),
+        &no_op_logger(),
+        &mock_metrics(),
+    );
     assert_eq!(
         Cycles::zero(),
         system_state.ingress_induction_cycles_debit()

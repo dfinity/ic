@@ -203,9 +203,11 @@ fn finish_err(
 ) -> ExecuteMessageResult {
     let mut canister = clean_canister;
 
-    canister
-        .system_state
-        .apply_ingress_induction_cycles_debit(canister.canister_id(), round.log);
+    canister.system_state.apply_ingress_induction_cycles_debit(
+        canister.canister_id(),
+        round.log,
+        round.counters.charging_from_balance_error,
+    );
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -213,7 +215,7 @@ fn finish_err(
         instructions_left,
         instruction_limit,
         original.prepaid_execution_cycles,
-        round.execution_refund_error_counter,
+        round.counters.execution_refund_error,
         original.subnet_size,
         round.log,
     );
@@ -338,7 +340,11 @@ impl UpdateHelper {
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
-            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
@@ -380,6 +386,7 @@ impl UpdateHelper {
             round.network_topology,
             round.hypervisor.subnet_id(),
             round.log,
+            round.counters.state_changes_error,
         );
         let heap_delta = if output.wasm_result.is_ok() {
             NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
@@ -400,13 +407,14 @@ impl UpdateHelper {
             original.call_origin,
             round.time,
             round.log,
+            round.counters.ingress_with_cycles_error,
         );
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
             original.prepaid_execution_cycles,
-            round.execution_refund_error_counter,
+            round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
         );

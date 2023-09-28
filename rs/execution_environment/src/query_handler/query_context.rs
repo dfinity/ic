@@ -393,6 +393,7 @@ impl<'a> QueryContext<'a> {
             &self.network_topology,
             self.hypervisor,
             &mut self.round_limits,
+            self.query_critical_error,
         );
         let instructions_executed = instruction_limit - instructions_left;
         self.total_instructions_used += instructions_executed;
@@ -412,7 +413,12 @@ impl<'a> QueryContext<'a> {
     ) -> Result<(CanisterState, CallOrigin, CallContextAction), UserError> {
         let canister_id = canister.canister_id();
         let (callback, callback_id, call_context, call_context_id) =
-            match common::get_call_context_and_callback(&canister, &response, self.log) {
+            match common::get_call_context_and_callback(
+                &canister,
+                &response,
+                self.log,
+                self.query_critical_error,
+            ) {
                 Some(r) => r,
                 None => {
                     error!(
@@ -501,6 +507,7 @@ impl<'a> QueryContext<'a> {
             canister.execution_state.take().unwrap(),
             &self.network_topology,
             &mut self.round_limits,
+            self.query_critical_error,
         );
 
         let canister_current_memory_usage = canister.memory_usage();
@@ -591,6 +598,7 @@ impl<'a> QueryContext<'a> {
                 canister.execution_state.take().unwrap(),
                 &self.network_topology,
                 &mut self.round_limits,
+                self.query_critical_error,
             );
 
         canister.execution_state = Some(output_execution_state);

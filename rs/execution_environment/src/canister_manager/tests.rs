@@ -5,7 +5,7 @@ use crate::{
         CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::{CanisterSettings, CanisterSettingsBuilder},
-    execution_environment::as_round_instructions,
+    execution_environment::{as_round_instructions, RoundCounters},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
     IngressHistoryWriterImpl, RoundLimits,
@@ -334,6 +334,17 @@ fn install_code(
         .method_payload(args.encode())
         .build();
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
+
+    let round_counters = RoundCounters {
+        execution_refund_error: &no_op_counter,
+        state_changes_error: &no_op_counter,
+        invalid_system_call_error: &no_op_counter,
+        charging_from_balance_error: &no_op_counter,
+        unexpected_response_error: &no_op_counter,
+        response_cycles_refund_error: &no_op_counter,
+        invalid_canister_state_error: &no_op_counter,
+        ingress_with_cycles_error: &no_op_counter,
+    };
     let (result, instructions_used, canister) = canister_manager.install_code(
         context,
         CanisterCall::Ingress(Arc::new(ingress)),
@@ -341,7 +352,7 @@ fn install_code(
         state,
         execution_parameters,
         round_limits,
-        &no_op_counter,
+        round_counters,
         SMALL_APP_SUBNET_MAX_SIZE,
     );
     let instructions_left = instruction_limit - instructions_used.min(instruction_limit);
@@ -3916,11 +3927,13 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         .execution_state
         .is_some());
 
+    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             canister_test_id(0),
             &mut state,
+            &no_op_counter,
         )
         .unwrap();
 
