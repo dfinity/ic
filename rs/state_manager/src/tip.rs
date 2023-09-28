@@ -223,7 +223,7 @@ pub(crate) fn spawn_tip_thread(
 
                         TipRequest::FlushPageMapDelta { height, pagemaps } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
-                            #[cfg(debug_assert)]
+                            #[cfg(debug_assertions)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
@@ -276,7 +276,7 @@ pub(crate) fn spawn_tip_thread(
                             replicated_state,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
-                            #[cfg(debug_assert)]
+                            #[cfg(debug_assertions)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
