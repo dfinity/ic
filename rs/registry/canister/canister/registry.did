@@ -1,3 +1,8 @@
+type AddApiBoundaryNodePayload = record {
+  node_id : principal;
+  domain : text;
+  version : text;
+};
 type AddFirewallRulesPayload = record {
   expected_hash : text;
   scope : FirewallRulesScope;
@@ -159,6 +164,7 @@ type RecoverSubnetPayload = record {
   state_hash : vec nat8;
   time_ns : nat64;
 };
+type RemoveApiBoundaryNodesPayload = record { node_ids : vec principal };
 type RemoveFirewallRulesPayload = record {
   expected_hash : text;
   scope : FirewallRulesScope;
@@ -201,6 +207,14 @@ type SubnetFeatures = record {
   http_requests : bool;
 };
 type SubnetType = variant { application; verified_application; system };
+type UpdateApiBoundaryNodeDomainPayload = record {
+  node_id : principal;
+  domain : text;
+};
+type UpdateApiBoundaryNodesVersionPayload = record {
+  version : text;
+  node_ids : vec principal;
+};
 type UpdateElectedHostosVersionsPayload = record {
   release_package_urls : vec text;
   hostos_version_to_elect : opt text;
@@ -279,6 +293,7 @@ type UpdateUnassignedNodesConfigPayload = record {
   ssh_readonly_access : opt vec text;
 };
 service : {
+  add_api_boundary_node : (AddApiBoundaryNodePayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
   add_node : (AddNodePayload) -> (Result);
   add_node_operator : (AddNodeOperatorPayload) -> ();
@@ -298,6 +313,7 @@ service : {
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (Result_4) query;
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> (Result_1);
   recover_subnet : (RecoverSubnetPayload) -> ();
+  remove_api_boundary_nodes : (RemoveApiBoundaryNodesPayload) -> ();
   remove_firewall_rules : (RemoveFirewallRulesPayload) -> ();
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();
   remove_node_operators : (RemoveNodeOperatorsPayload) -> ();
@@ -306,6 +322,10 @@ service : {
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
   retire_replica_version : (RetireReplicaVersionPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
+  update_api_boundary_node_domain : (UpdateApiBoundaryNodeDomainPayload) -> ();
+  update_api_boundary_nodes_version : (
+      UpdateApiBoundaryNodesVersionPayload,
+    ) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   update_elected_replica_versions : (UpdateElectedReplicaVersionsPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();

@@ -65,6 +65,7 @@ use ic_nns_test_utils::{
 };
 use ic_prep_lib::subnet_configuration;
 use ic_protobuf::registry::{
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
@@ -84,8 +85,8 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    get_node_record_node_id, is_node_record_key, make_blessed_replica_versions_key,
-    make_canister_migrations_record_key, make_crypto_node_key,
+    get_node_record_node_id, is_node_record_key, make_api_boundary_node_record_key,
+    make_blessed_replica_versions_key, make_canister_migrations_record_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
@@ -122,13 +123,17 @@ use prost::Message;
 use registry_canister::mutations::{
     common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
+    do_add_api_boundary_node::AddApiBoundaryNodePayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
     do_recover_subnet::RecoverSubnetPayload,
+    do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
+    do_update_api_boundary_node_domain::UpdateApiBoundaryNodeDomainPayload,
+    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
     do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
     do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
@@ -442,6 +447,17 @@ enum SubCommand {
     ProposeToUpdateNodesHostosVersion(ProposeToUpdateNodesHostosVersionCmd),
     /// Get current list of elected HostOS versions
     GetElectedHostosVersions,
+    /// Propose to add an API Boundary Node
+    ProposeToAddApiBoundaryNode(ProposeToAddApiBoundaryNodeCmd),
+    /// Propose to remove a set of API Boundary Nodes
+    ProposeToRemoveApiBoundaryNodes(ProposeToRemoveApiBoundaryNodesCmd),
+    /// Propose to update the domain of an API Boundary Node
+    ProposeToUpdateApiBoundaryNodeDomain(ProposeToUpdateApiBoundaryNodeDomainCmd),
+    /// Propose to update the version of a set of API Boundary Nodes
+    ProposeToUpdateApiBoundaryNodesVersion(ProposeToUpdateApiBoundaryNodesVersionCmd),
+    /// Sub-command to fetch an API Boundary Node record from the registry.
+    /// Retrieve an API Boundary Node record
+    GetApiBoundaryNode(GetApiBoundaryNodeCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -4124,6 +4140,155 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToUpdateNodesHo
     }
 }
 
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToAddApiBoundaryNodeCmd {
+    #[clap(long, required = true, alias = "node-id")]
+    /// The node to assign as an API Boundary Node
+    node: PrincipalId,
+
+    #[clap(long, required = true)]
+    /// The domain name the API Boundary Node will use
+    domain: String,
+
+    #[clap(long, required = true, alias = "version-id")]
+    /// The version the API Boundary Node will use
+    version: String,
+}
+
+impl ProposalTitle for ProposeToAddApiBoundaryNodeCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Add API Boundary Node {}", self.node),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<AddApiBoundaryNodePayload> for ProposeToAddApiBoundaryNodeCmd {
+    async fn payload(&self, _: Url) -> AddApiBoundaryNodePayload {
+        AddApiBoundaryNodePayload {
+            node_id: NodeId::from(self.node),
+            version: self.version.clone(),
+            domain: self.domain.clone(),
+        }
+    }
+}
+
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToRemoveApiBoundaryNodesCmd {
+    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
+    /// The set of API Boundary Nodes that should be returned to an unassigned state
+    nodes: Vec<PrincipalId>,
+}
+
+impl ProposalTitle for ProposeToRemoveApiBoundaryNodesCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Remove API Boundary Nodes {}",
+                self.nodes
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<RemoveApiBoundaryNodesPayload> for ProposeToRemoveApiBoundaryNodesCmd {
+    async fn payload(&self, _: Url) -> RemoveApiBoundaryNodesPayload {
+        RemoveApiBoundaryNodesPayload {
+            node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
+        }
+    }
+}
+
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateApiBoundaryNodeDomainCmd {
+    #[clap(long, required = true, alias = "node-id")]
+    /// The API Boundary Node to update
+    node: PrincipalId,
+
+    #[clap(long, required = true)]
+    /// The domain name the API Boundary Node will use
+    domain: String,
+}
+
+impl ProposalTitle for ProposeToUpdateApiBoundaryNodeDomainCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Update API Boundary Node Domain {}", self.node),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<UpdateApiBoundaryNodeDomainPayload>
+    for ProposeToUpdateApiBoundaryNodeDomainCmd
+{
+    async fn payload(&self, _: Url) -> UpdateApiBoundaryNodeDomainPayload {
+        UpdateApiBoundaryNodeDomainPayload {
+            node_id: NodeId::from(self.node),
+            domain: self.domain.clone(),
+        }
+    }
+}
+
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateApiBoundaryNodesVersionCmd {
+    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
+    /// The set of API Boundary Nodes that should have their version updated
+    nodes: Vec<PrincipalId>,
+
+    #[clap(long, required = true, alias = "version-id")]
+    /// The version that the set of API Boundary Node will use
+    version: String,
+}
+
+impl ProposalTitle for ProposeToUpdateApiBoundaryNodesVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Update API Boundary Nodes Version {}",
+                self.nodes
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(", "),
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<UpdateApiBoundaryNodesVersionPayload>
+    for ProposeToUpdateApiBoundaryNodesVersionCmd
+{
+    async fn payload(&self, _: Url) -> UpdateApiBoundaryNodesVersionPayload {
+        UpdateApiBoundaryNodesVersionPayload {
+            node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
+            version: self.version.clone(),
+        }
+    }
+}
+
+/// Sub-command to fetch an API Boundary Node record from the registry.
+#[derive(Parser)]
+struct GetApiBoundaryNodeCmd {
+    /// The node id
+    node_id: PrincipalId,
+}
+
 async fn get_firewall_rules_from_registry(
     registry_canister: &RegistryCanister,
     scope: &FirewallRulesScope,
@@ -4214,6 +4379,10 @@ async fn main() {
             SubCommand::ProposeToUpdateNodesHostosVersion(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
+            SubCommand::ProposeToAddApiBoundaryNode(_) => (),
+            SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
+            SubCommand::ProposeToUpdateApiBoundaryNodeDomain(_) => (),
+            SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -5388,6 +5557,76 @@ async fn main() {
                     .expect("Error decoding HostosVersionRecord from registry");
                 println!("{}", hostos_version_record.hostos_version_id);
             }
+        }
+        SubCommand::ProposeToAddApiBoundaryNode(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::AddApiBoundaryNode,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToRemoveApiBoundaryNodes(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::RemoveApiBoundaryNodes,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateApiBoundaryNodeDomain(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateApiBoundaryNodeDomain,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateApiBoundaryNodesVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateApiBoundaryNodesVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::GetApiBoundaryNode(cmd) => {
+            print_and_get_last_value::<ApiBoundaryNodeRecord>(
+                make_api_boundary_node_record_key(cmd.node_id.into())
+                    .as_bytes()
+                    .to_vec(),
+                &registry_canister,
+                opts.json,
+            )
+            .await;
         }
     }
 }

@@ -162,6 +162,7 @@ impl Registry {
 
     /// Validates runtime payload values that aren't checked by invariants
     /// Ensures all nodes for new subnet a) exist and b) are not in another subnet
+    /// Ensure all nodes for new subnet are not already assigned as ApiBoundaryNode
     /// Ensures that a valid subnet_id is specified for EcdsaKeyRequests
     /// Ensures that ECDSA keys a) exist and b) are present on the requested subnet
     fn validate_create_subnet_payload(&self, payload: &CreateSubnetPayload) {
@@ -197,13 +198,22 @@ impl Registry {
                     subnet_members.insert(NodeId::from(PrincipalId::try_from(v).unwrap()));
                 });
             });
+
         let intersection = subnet_members
             .intersection(&node_ids_hash_set)
             .copied()
             .collect::<HashSet<_>>();
+
         if !intersection.is_empty() {
             panic!("Some Nodes are already members of Subnets");
         }
+
+        // Ensure that none of the Nodes are assigned as ApiBoundaryNode
+        payload.node_ids.iter().cloned().for_each(|id| {
+            if self.get_api_boundary_node_record(id).is_some() {
+                panic!("Some Nodes are already assigned as ApiBoundaryNode");
+            }
+        });
 
         if let Some(ref ecdsa_config) = payload.ecdsa_config {
             match self.validate_ecdsa_initial_config(ecdsa_config, None) {

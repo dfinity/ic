@@ -2817,6 +2817,8 @@ pub enum Topic {
     ReplicaVersionManagement = 13,
     /// Proposals related to SNS and Community Fund.
     SnsAndCommunityFund = 14,
+    /// Proposals related to the management of API Boundary Nodes
+    ApiBoundaryNodeManagement = 15,
 }
 impl Topic {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2840,6 +2842,7 @@ impl Topic {
             Topic::SubnetReplicaVersionManagement => "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT",
             Topic::ReplicaVersionManagement => "TOPIC_REPLICA_VERSION_MANAGEMENT",
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
+            Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2860,6 +2863,7 @@ impl Topic {
             "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT" => Some(Self::SubnetReplicaVersionManagement),
             "TOPIC_REPLICA_VERSION_MANAGEMENT" => Some(Self::ReplicaVersionManagement),
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
+            "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
             _ => None,
         }
     }
@@ -3186,6 +3190,14 @@ pub enum NnsFunction {
     /// This function is meant as a Break Glass mechanism for when an open call context in
     /// the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
     HardResetNnsRootToVersion = 42,
+    /// A proposal to add a new API Boundary Node using an assigned node
+    AddApiBoundaryNode = 43,
+    /// A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
+    RemoveApiBoundaryNodes = 44,
+    /// A proposal to update an API Boundary Node with a new domain name
+    UpdateApiBoundaryNodeDomain = 45,
+    /// A proposal to update the version of a set of API Boundary Nodes
+    UpdateApiBoundaryNodesVersion = 46,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3245,6 +3257,14 @@ impl NnsFunction {
             }
             NnsFunction::UpdateNodesHostosVersion => "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION",
             NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
+            NnsFunction::AddApiBoundaryNode => "NNS_FUNCTION_ADD_API_BOUNDARY_NODE",
+            NnsFunction::RemoveApiBoundaryNodes => "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES",
+            NnsFunction::UpdateApiBoundaryNodeDomain => {
+                "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODE_DOMAIN"
+            }
+            NnsFunction::UpdateApiBoundaryNodesVersion => {
+                "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3301,6 +3321,14 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION" => Some(Self::UpdateNodesHostosVersion),
             "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION" => Some(Self::HardResetNnsRootToVersion),
+            "NNS_FUNCTION_ADD_API_BOUNDARY_NODE" => Some(Self::AddApiBoundaryNode),
+            "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES" => Some(Self::RemoveApiBoundaryNodes),
+            "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODE_DOMAIN" => {
+                Some(Self::UpdateApiBoundaryNodeDomain)
+            }
+            "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION" => {
+                Some(Self::UpdateApiBoundaryNodesVersion)
+            }
             _ => None,
         }
     }

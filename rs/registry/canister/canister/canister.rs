@@ -33,6 +33,7 @@ use registry_canister::{
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
+        do_add_api_boundary_node::AddApiBoundaryNodePayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
@@ -40,9 +41,12 @@ use registry_canister::{
         do_create_subnet::CreateSubnetPayload,
         do_delete_subnet::DeleteSubnetPayload,
         do_recover_subnet::RecoverSubnetPayload,
+        do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_retire_replica_version::RetireReplicaVersionPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_update_api_boundary_node_domain::UpdateApiBoundaryNodeDomainPayload,
+        do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
         do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
         do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
         do_update_node_directly::UpdateNodeDirectlyPayload,
@@ -558,6 +562,60 @@ fn change_subnet_membership() {
 #[candid_method(update, rename = "change_subnet_membership")]
 fn change_subnet_membership_(payload: ChangeSubnetMembershipPayload) {
     registry_mut().do_change_subnet_membership(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update add_api_boundary_node"]
+fn add_api_boundary_node() {
+    check_caller_is_governance_and_log("add_api_boundary_node");
+    over(candid_one, |payload: AddApiBoundaryNodePayload| {
+        add_api_boundary_node_(payload)
+    });
+}
+
+#[candid_method(update, rename = "add_api_boundary_node")]
+fn add_api_boundary_node_(payload: AddApiBoundaryNodePayload) {
+    registry_mut().do_add_api_boundary_node(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update remove_api_boundary_nodes"]
+fn remove_api_boundary_nodes() {
+    check_caller_is_governance_and_log("remove_api_boundary_nodes");
+    over(candid_one, |payload: RemoveApiBoundaryNodesPayload| {
+        remove_api_boundary_nodes_(payload)
+    });
+}
+
+#[candid_method(update, rename = "remove_api_boundary_nodes")]
+fn remove_api_boundary_nodes_(payload: RemoveApiBoundaryNodesPayload) {
+    registry_mut().do_remove_api_boundary_nodes(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_api_boundary_node_domain"]
+fn update_api_boundary_node_domain() {
+    check_caller_is_governance_and_log("update_api_boundary_node_domain");
+    over(candid_one, |payload: UpdateApiBoundaryNodeDomainPayload| {
+        update_api_boundary_node_domain_(payload)
+    });
+}
+
+#[candid_method(update, rename = "update_api_boundary_node_domain")]
+fn update_api_boundary_node_domain_(payload: UpdateApiBoundaryNodeDomainPayload) {
+    registry_mut().do_update_api_boundary_node_domain(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_api_boundary_nodes_version"]
+fn update_api_boundary_nodes_version() {
+    check_caller_is_governance_and_log("update_api_boundary_nodes_version");
+    over(candid_one, update_api_boundary_nodes_version_);
+}
+
+#[candid_method(update, rename = "update_api_boundary_nodes_version")]
+fn update_api_boundary_nodes_version_(payload: UpdateApiBoundaryNodesVersionPayload) {
+    registry_mut().do_update_api_boundary_nodes_version(payload);
     recertify_registry();
 }
 
