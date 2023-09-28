@@ -19,9 +19,10 @@ ExecStart=/bin/bash -c '                                                        
         --local-configuration-path    "/var/opt/nginx/domains.conf"                           \
         --configuration-template-sw-path "/etc/certificate-syncer/domain-with-sw.tmpl"        \
         --configuration-template-no-sw-path "/etc/certificate-syncer/domain-without-sw.tmpl"  \
-        ${RAW_DOMAINS_PATH:+         --no-sw-domains-path       "${RAW_DOMAINS_PATH}"}        \
+        ${RAW_DOMAINS_PATH:+          --no-sw-domains-path       "${RAW_DOMAINS_PATH}"}       \
         --domain-mappings-path        "/var/opt/nginx/domain_canister_mappings.js"            \
         --metrics-addr                "[::]:9322"                                             \
+        ${POLLING_INTERVAL_SEC:+      --polling-interval-sec    "${POLLING_INTERVAL_SEC}"}    \
 '
 
 [Install]

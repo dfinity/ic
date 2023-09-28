@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{Context as AnyhowContext, Error};
 use async_trait::async_trait;
+use mockall::automock;
 use opentelemetry::KeyValue;
 use tracing::info;
 
@@ -31,6 +32,7 @@ pub enum PersistError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
+#[automock]
 #[async_trait]
 pub trait Persist: Send + Sync {
     async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError>;
@@ -196,6 +198,10 @@ pub struct WithDedup<T, U>(pub T, pub Arc<RwLock<Option<U>>>);
 #[async_trait]
 impl<T: Persist> Persist for WithDedup<T, Vec<Package>> {
     async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError> {
+        if self.1.read().unwrap().is_none() && pkgs.is_empty() {
+            return Ok(PersistStatus::SkippedEmpty);
+        }
+
         if self
             .1
             .read()
@@ -217,18 +223,6 @@ impl<T: Persist> Persist for WithDedup<T, Vec<Package>> {
         }
 
         out
-    }
-}
-
-pub struct WithEmpty<T>(pub T);
-
-#[async_trait]
-impl<T: Persist> Persist for WithEmpty<T> {
-    async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError> {
-        if pkgs.is_empty() {
-            return Ok(PersistStatus::SkippedEmpty);
-        }
-        self.0.persist(pkgs).await
     }
 }
 
@@ -301,6 +295,78 @@ mod tests {
             std::fs::read_to_string(tmp_dir.path().join("mappings"))?,
             "let domain_mappings = {\"test\":\"aaaaa-aa\"}; export default domain_mappings;",
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dedup_empty() -> Result<(), Error> {
+        let mut mock = MockPersist::new();
+        mock.expect_persist()
+            .returning(|_| Ok(PersistStatus::Completed));
+
+        let initial_value: Option<Vec<Package>> = None;
+        let persister = WithDedup(mock, Arc::new(RwLock::new(initial_value)));
+
+        let empty_package: &[Package] = &[];
+        let out = persister.persist(empty_package).await?;
+
+        assert_eq!(out, PersistStatus::SkippedEmpty,);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dedup_unchanged() -> Result<(), Error> {
+        let mut mock = MockPersist::new();
+        mock.expect_persist()
+            .returning(|_| Ok(PersistStatus::Completed));
+
+        let initial_value: Option<Vec<Package>> = None;
+        let persister = WithDedup(mock, Arc::new(RwLock::new(initial_value)));
+
+        let single_package: &[Package] = &[Package {
+            name: "test1".into(),
+            canister: Principal::from_text("aaaaa-aa")?,
+            pair: Pair(
+                "key1".to_string().into_bytes(),
+                "cert1".to_string().into_bytes(),
+            ),
+        }];
+
+        let double_package: &[Package] = &[
+            Package {
+                name: "test1".into(),
+                canister: Principal::from_text("aaaaa-aa")?,
+                pair: Pair(
+                    "key1".to_string().into_bytes(),
+                    "cert1".to_string().into_bytes(),
+                ),
+            },
+            Package {
+                name: "test2".into(),
+                canister: Principal::from_text("aaaaa-aa")?,
+                pair: Pair(
+                    "key2".to_string().into_bytes(),
+                    "cert2".to_string().into_bytes(),
+                ),
+            },
+        ];
+
+        let out = persister.persist(single_package).await?;
+        assert_eq!(out, PersistStatus::Completed,);
+
+        let out = persister.persist(single_package).await?;
+        assert_eq!(out, PersistStatus::SkippedUnchanged,);
+
+        let out = persister.persist(double_package).await?;
+        assert_eq!(out, PersistStatus::Completed,);
+
+        let out = persister.persist(double_package).await?;
+        assert_eq!(out, PersistStatus::SkippedUnchanged,);
+
+        let out = persister.persist(single_package).await?;
+        assert_eq!(out, PersistStatus::Completed,);
 
         Ok(())
     }

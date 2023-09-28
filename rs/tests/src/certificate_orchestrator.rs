@@ -31,7 +31,7 @@ use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
     DispenseTaskResponse, EncryptedPair, ExportCertificatesError, ExportCertificatesResponse,
-    GetRegistrationResponse, Id, InitArg, ListAllowedPrincipalsError,
+    GetRegistrationError, GetRegistrationResponse, Id, InitArg, ListAllowedPrincipalsError,
     ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
     PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, RemoveRegistrationError,
     RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse,
@@ -274,7 +274,10 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingOrder).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingOrder, false).await;
+
+        // Check the state of an inexistent registration
+        check_registration(agent.clone(), ident_a.clone(), cid, inexistent_registration_id.clone(), domain_a.clone(), canister_a, State::PendingOrder, true).await;
 
         // Submit a duplicate registration
         match create_registration(agent.clone(), ident_a.clone(), cid, domain_a.clone(), canister_a).await {
@@ -291,7 +294,7 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::PendingOrder).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::PendingOrder, false).await;
 
         // Update registrations by going through all registration states
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingChallengeResponse)).await
@@ -299,28 +302,28 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingChallengeResponse).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingChallengeResponse, false).await;
 
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingAcmeApproval)).await
         {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingAcmeApproval).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingAcmeApproval, false).await;
 
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::Available)).await
         {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::Available).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::Available, false).await;
 
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::Canister(canister_b)).await
         {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_b, State::Available).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_b, State::Available, false).await;
 
         // Update inexistent registration
         match update_registration(agent.clone(), ident_a.clone(), cid, inexistent_registration_id.clone(), UpdateType::State(State::Available)).await
@@ -342,7 +345,7 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::Failed(BoundedString::<127>::from("Test"))).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::Failed(BoundedString::<127>::from("Test")), false).await;
 
         // Remove failed registration
         if let RemoveRegistrationResponse::Err(err) = remove_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone()).await {
@@ -362,6 +365,342 @@ pub fn registration_test(env: TestEnv) {
             RemoveRegistrationResponse::Err(err) => panic!("removeRegistration failed: {err:?} expected RemoveRegistrationError::Unauthorized"),
             RemoveRegistrationResponse::Ok(()) => panic!("removeRegistration failed: got Ok(), expected RemoveRegistrationError::Unauthorized"),
         };
+    });
+}
+
+// Goal: Verify that stuck registration requests are expired
+//
+// Runbook:
+// * install the canister with two root and add an allowed principal and "short" times
+// * create a registration and set it to available
+// * create a registration and keep it in a processing state
+// * wait for the expirer to do its work
+// * verify that the available registration is not expired, while the processing registration is
+pub fn expiration_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
+    let root_ident_a = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+    let ident_a = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+
+    let principal_a = ident_a.sender().unwrap();
+
+    let canister_a = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+    let canister_b = Principal::from_text("oa7fk-maaaa-aaaam-abgka-cai").unwrap();
+
+    let domain_a = String::from("example.com");
+    let domain_b = String::from("www.test.org");
+
+    let registration_expiration_ttl = 5;
+    let in_progress_ttl = 60;
+    let management_task_interval = 2;
+
+    info!(&logger, "installing canister");
+
+    let args = Encode!(&InitArg {
+        root_principals: vec![root_ident_a.sender().unwrap()],
+        id_seed: 1,
+        registration_expiration_ttl: Some(registration_expiration_ttl),
+        in_progress_ttl: Some(in_progress_ttl),
+        management_task_interval: Some(management_task_interval),
+    })
+    .unwrap();
+
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let cid =
+        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+
+    info!(&logger, "creating agent");
+    let agent = app_node.build_default_agent();
+    let rt = Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        // wait for canister to finish installing
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match agent_observes_canister_module(&agent, &cid).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        })
+        .await
+        .unwrap();
+
+        info!(&logger, "created canister={cid}");
+
+        // Add identity A to the allowed principals in order to create registrations
+        match add_allowed_principal(agent.clone(), root_ident_a.clone(), cid, principal_a).await {
+            ModifyAllowedPrincipalResponse::Ok(()) => {}
+            v => panic!("addAllowedPrincipal failed: {v:?}, expected ok"),
+        }
+
+        // Create a registration
+        let registration_a_id = match create_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            domain_a.clone(),
+            canister_a,
+        )
+        .await
+        {
+            CreateRegistrationResponse::Ok(id) => id,
+            v => panic!("createRegistration failed: {v:?}, expected ok with a registration id"),
+        };
+
+        // Check the state of the registration
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            domain_a.clone(),
+            canister_a,
+            State::PendingOrder,
+            false,
+        )
+        .await;
+
+        // Create a registration for another domain
+        let registration_b_id = match create_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            domain_b.clone(),
+            canister_b,
+        )
+        .await
+        {
+            CreateRegistrationResponse::Ok(id) => id,
+            v => panic!("createRegistration failed: {v:?}, expected ok with a registration id"),
+        };
+
+        // Check the state of the registration
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_b_id.clone(),
+            domain_b.clone(),
+            canister_b,
+            State::PendingOrder,
+            false,
+        )
+        .await;
+
+        // Set registration to available
+        match update_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_b_id.clone(),
+            UpdateType::State(State::Available),
+        )
+        .await
+        {
+            UpdateRegistrationResponse::Ok(()) => {}
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
+
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_b_id.clone(),
+            domain_b.clone(),
+            canister_b,
+            State::Available,
+            false,
+        )
+        .await;
+
+        // Wait for expirer to do its work
+        tokio::time::sleep(Duration::from_secs(2 * registration_expiration_ttl)).await;
+
+        // Check that the "in-progress" registration request has been expired
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            domain_a.clone(),
+            canister_a,
+            State::PendingOrder,
+            true,
+        )
+        .await;
+
+        // Check that the successful registration request is still available
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_b_id.clone(),
+            domain_b.clone(),
+            canister_b,
+            State::Available,
+            false,
+        )
+        .await;
+    });
+}
+
+// Goal: Verify that a stuck renewal is also expired
+//
+// Runbook:
+// * install the canister with two root and add an allowed principal and "short" times
+// * create a registration and set it to available
+// * set the registration back to a processing state as it would happen for a renewal
+// * wait for the expirer to do its work
+// * verify that the registration is expired
+pub fn renewal_expiration_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
+    let root_ident_a = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+    let ident_a = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+
+    let principal_a = ident_a.sender().unwrap();
+
+    let canister_a = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+
+    let domain_a = String::from("example.com");
+
+    let registration_expiration_ttl = 5;
+    let in_progress_ttl = 60;
+    let management_task_interval = 2;
+
+    info!(&logger, "installing canister");
+
+    let args = Encode!(&InitArg {
+        root_principals: vec![root_ident_a.sender().unwrap()],
+        id_seed: 1,
+        registration_expiration_ttl: Some(registration_expiration_ttl),
+        in_progress_ttl: Some(in_progress_ttl),
+        management_task_interval: Some(management_task_interval),
+    })
+    .unwrap();
+
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let cid =
+        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+
+    info!(&logger, "creating agent");
+    let agent = app_node.build_default_agent();
+    let rt = Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        // wait for canister to finish installing
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match agent_observes_canister_module(&agent, &cid).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        })
+        .await
+        .unwrap();
+
+        info!(&logger, "created canister={cid}");
+
+        // Add identity A to the allowed principals in order to create registrations
+        match add_allowed_principal(agent.clone(), root_ident_a.clone(), cid, principal_a).await {
+            ModifyAllowedPrincipalResponse::Ok(()) => {}
+            v => panic!("addAllowedPrincipal failed: {v:?}, expected ok"),
+        }
+
+        // Create a registration
+        let registration_a_id = match create_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            domain_a.clone(),
+            canister_a,
+        )
+        .await
+        {
+            CreateRegistrationResponse::Ok(id) => id,
+            v => panic!("createRegistration failed: {v:?}, expected ok with a registration id"),
+        };
+
+        // Check the state of the registration
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            domain_a.clone(),
+            canister_a,
+            State::PendingOrder,
+            false,
+        )
+        .await;
+
+        // Set registration to available
+        match update_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            UpdateType::State(State::Available),
+        )
+        .await
+        {
+            UpdateRegistrationResponse::Ok(()) => {}
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
+
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            domain_a.clone(),
+            canister_a,
+            State::Available,
+            false,
+        )
+        .await;
+
+        // Set registration to back to pending order
+        match update_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            UpdateType::State(State::PendingOrder),
+        )
+        .await
+        {
+            UpdateRegistrationResponse::Ok(()) => {}
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
+
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            domain_a.clone(),
+            canister_a,
+            State::PendingOrder,
+            false,
+        )
+        .await;
+
+        // Wait for expirer to do its work
+        tokio::time::sleep(Duration::from_secs(2 * registration_expiration_ttl)).await;
+
+        // Check that renewal registration has been expired
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            domain_a.clone(),
+            canister_a,
+            State::PendingOrder,
+            true,
+        )
+        .await;
     });
 }
 
@@ -627,6 +966,137 @@ pub fn task_queue_test(env: TestEnv) {
         match peek_task(agent.clone(), ident_a.clone(), cid).await {
             PeekTaskResponse::Err(PeekTaskError::NoTasksAvailable) => {}
             v => panic!("peekTask failed: {v:?} expected PeekTaskError::NoTasksAvailable"),
+        };
+    });
+}
+
+// Goal: Verify that a task is scheduled again if the worker does not process within a given time
+//
+// Runbook:
+// * install the canister with two root and add an allowed principal and "short" times
+// * create a registration and schedule a task
+// * dispense the task and wait
+// * check that the orchestrator scheduled the task again
+pub fn retry_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
+    let root_ident_a = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+    let ident_a = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+
+    let principal_a = ident_a.sender().unwrap();
+
+    let canister_a = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+
+    let domain_a = String::from("example.com");
+
+    let registration_expiration_ttl = 60;
+    let in_progress_ttl = 5;
+    let management_task_interval = 2;
+
+    info!(&logger, "installing canister");
+
+    let args = Encode!(&InitArg {
+        root_principals: vec![root_ident_a.sender().unwrap()],
+        id_seed: 1,
+        registration_expiration_ttl: Some(registration_expiration_ttl),
+        in_progress_ttl: Some(in_progress_ttl),
+        management_task_interval: Some(management_task_interval),
+    })
+    .unwrap();
+
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let cid =
+        app_node.create_and_install_canister_with_arg(CERTIFICATE_ORCHESTRATOR_WASM, Some(args));
+
+    info!(&logger, "creating agent");
+    let agent = app_node.build_default_agent();
+    let rt = Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        // wait for canister to finish installing
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            match agent_observes_canister_module(&agent, &cid).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        })
+        .await
+        .unwrap();
+
+        info!(&logger, "created canister={cid}");
+
+        // Add identity A to the allowed principals in order to create registrations
+        match add_allowed_principal(agent.clone(), root_ident_a.clone(), cid, principal_a).await {
+            ModifyAllowedPrincipalResponse::Ok(()) => {}
+            v => panic!("addAllowedPrincipal failed: {v:?}, expected ok"),
+        }
+
+        // Create a registration
+        let registration_a_id = match create_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            domain_a.clone(),
+            canister_a,
+        )
+        .await
+        {
+            CreateRegistrationResponse::Ok(id) => id,
+            v => panic!("createRegistration failed: {v:?}, expected ok with a registration id"),
+        };
+
+        // Check the state of the registration
+        check_registration(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            domain_a.clone(),
+            canister_a,
+            State::PendingOrder,
+            false,
+        )
+        .await;
+
+        // queue task with immediate deadline
+        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let timestamp_now = current_time.as_nanos() as u64;
+
+        match queue_task(
+            agent.clone(),
+            ident_a.clone(),
+            cid,
+            registration_a_id.clone(),
+            timestamp_now,
+        )
+        .await
+        {
+            QueueTaskResponse::Ok(_) => {}
+            v => panic!("queueTask failed: {v:?}, expected ok with a registration id"),
+        };
+
+        // dispense task
+        match dispense_task(agent.clone(), ident_a.clone(), cid).await {
+            DispenseTaskResponse::Ok(id) => {
+                if id != registration_a_id {
+                    panic!("dispenseTask failed: expected {registration_a_id:?}, but got {id:?}")
+                }
+            }
+            v => panic!("dispenseTask failed: {v:?}, expected ok with a registration id"),
+        };
+
+        // Wait for expirer to do its work
+        tokio::time::sleep(Duration::from_secs(2 * in_progress_ttl)).await;
+
+        // check if task has been rescheduled
+        match peek_task(agent.clone(), ident_a.clone(), cid).await {
+            PeekTaskResponse::Ok(id) => {
+                if id != registration_a_id {
+                    panic!("peekTask failed: expected {registration_a_id:?}, but got {id:?}")
+                }
+            }
+            v => panic!("peekTask failed: {v:?}, expected ok with a registration id"),
         };
     });
 }
@@ -917,6 +1387,7 @@ async fn check_registration(
     name: String,
     principal: Principal,
     state: State,
+    inexistent_registration: bool,
 ) {
     match get_registration(
         agent.clone(),
@@ -927,6 +1398,12 @@ async fn check_registration(
     .await
     {
         GetRegistrationResponse::Ok(v) => {
+            if inexistent_registration {
+                panic!(
+                    "getRegistration failed: registration should not exist {:?} ({:?}): {:?}",
+                    v.name, v.canister, v.state
+                )
+            }
             if String::from(v.name.clone()) != name {
                 panic!(
                     "getRegistration failed: registration has name {:?}, expected {:?}",
@@ -943,6 +1420,14 @@ async fn check_registration(
                 panic!(
                     "getRegistration failed: registration has state {:?}, expected {:?}",
                     v.state, state
+                )
+            }
+        }
+        GetRegistrationResponse::Err(GetRegistrationError::NotFound) => {
+            if !inexistent_registration {
+                panic!(
+                    "getRegistration failed: registration does not exist {:?} ({:?}): {:?}",
+                    name, principal, state
                 )
             }
         }

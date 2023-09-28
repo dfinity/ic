@@ -33,7 +33,7 @@ use crate::{
     http::HyperClient,
     import::CertificatesImporter,
     metrics::{MetricParams, WithMetrics},
-    persist::{Persister, WithDedup, WithEmpty},
+    persist::{Persister, WithDedup},
     reload::{Reloader, WithReload},
     render::Renderer,
     verify::{Parser as CertificateParser, Verifier, WithVerify},
@@ -48,8 +48,6 @@ mod render;
 mod verify;
 
 const SERVICE_NAME: &str = "certificate-syncer";
-
-const SECOND: Duration = Duration::from_secs(1);
 
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]
@@ -80,6 +78,9 @@ struct Cli {
 
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+
+    #[arg(long, default_value = "10")]
+    polling_interval_sec: u64,
 }
 
 #[tokio::main]
@@ -166,7 +167,6 @@ async fn main() -> Result<(), Error> {
     );
     let persister = WithReload(persister, reloader);
     let persister = WithDedup(persister, Arc::new(RwLock::new(None)));
-    let persister = WithEmpty(persister);
     let persister = WithMetrics(
         persister,
         MetricParams::new(&meter, SERVICE_NAME, "persist"),
@@ -176,7 +176,10 @@ async fn main() -> Result<(), Error> {
     // Runner
     let runner = Runner::new(importer, persister);
     let runner = WithMetrics(runner, MetricParams::new(&meter, SERVICE_NAME, "run"));
-    let runner = WithThrottle(runner, ThrottleParams::new(10 * SECOND));
+    let runner = WithThrottle(
+        runner,
+        ThrottleParams::new(Duration::from_secs(cli.polling_interval_sec)),
+    );
     let mut runner = runner;
 
     // Service
