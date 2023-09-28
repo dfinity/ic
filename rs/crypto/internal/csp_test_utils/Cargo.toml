@@ -14,13 +14,10 @@ ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" } # Would like to get rid of this but as long as the CSP depends on ic-types we can't really.
-ic-types-test-utils = { path = "../../../types/types_test_utils" }
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 # No other ic-dependencies are allowed.
 
-mockall = "0.7.2"
-proptest = "1.0"
 rand = "0.8"
 rand_chacha = "0.3"
 serde_cbor = "0.11"
