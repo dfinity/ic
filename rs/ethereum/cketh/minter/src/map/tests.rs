@@ -73,6 +73,45 @@ fn should_iterate_in_order_of_primary_key() {
 }
 
 #[test]
+fn should_remove_entry() {
+    let mut map = MultiKeyMap::<PrimaryKey, AltKey, u32>::default();
+    for i in 0..10 {
+        map.try_insert(PrimaryKey::new(i), AltKey::new((b'a' + i as u8) as char), i)
+            .unwrap();
+    }
+
+    let key_to_remove = PrimaryKey::new(5);
+    assert_eq!(
+        map.remove_entry(&key_to_remove),
+        Some((key_to_remove, AltKey::new('f'), 5))
+    );
+    assert!(!map.contains(&key_to_remove));
+    assert!(!map.contains_alt(&AltKey::new('f')));
+
+    assert_eq!(map.remove_entry(&PrimaryKey::new(200)), None);
+}
+
+#[test]
+fn should_insert_after_removal() {
+    let mut map = MultiKeyMap::<PrimaryKey, AltKey, u32>::default();
+    map.try_insert(PrimaryKey::new(1), AltKey::new('a'), 1)
+        .unwrap();
+    assert!(map
+        .try_insert(PrimaryKey::new(1), AltKey::new('a'), 1)
+        .is_err());
+
+    assert_eq!(
+        map.remove_entry(&PrimaryKey::new(1)),
+        Some((PrimaryKey::new(1), AltKey::new('a'), 1))
+    );
+
+    assert_eq!(
+        map.try_insert(PrimaryKey::new(1), AltKey::new('a'), 1),
+        Ok(())
+    );
+}
+
+#[test]
 fn should_remove_all_elements_whose_primary_key_is_less_than_some_bound() {
     let mut map = MultiKeyMap::<PrimaryKey, AltKey, u32>::default();
     for i in 0..10 {

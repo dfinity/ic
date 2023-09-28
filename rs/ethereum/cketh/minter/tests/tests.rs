@@ -41,7 +41,7 @@ fn should_deposit_and_withdraw() {
     let encoded_principal = encode_principal(cketh.caller.into());
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
-    tick_until_next_request(&cketh.env);
+    tick_until_next_http_request(&cketh.env, "eth_getBlockByNumber");
     cketh.handle_rpc_call(
         "https://rpc.ankr.com/eth",
         "eth_getBlockByNumber",
@@ -53,7 +53,7 @@ fn should_deposit_and_withdraw() {
         eth_get_block_by_number(),
     );
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
-    tick_until_next_request(&cketh.env);
+    tick_until_next_http_request(&cketh.env, "eth_getLogs");
 
     let amount: u64 = 100_000_000_000_000_000; // 0.1 ETH
 
@@ -73,8 +73,6 @@ fn should_deposit_and_withdraw() {
             amount,
         })),
     );
-
-    tick_until_next_request(&cketh.env);
 
     for _ in 0..10 {
         cketh.env.advance_time(Duration::from_secs(1));
@@ -294,10 +292,15 @@ fn encode_principal(principal: Principal) -> String {
     format!("0x{}", hex::encode(fixed_bytes))
 }
 
-fn tick_until_next_request(env: &StateMachine) {
+fn tick_until_next_http_request(env: &StateMachine, method: &str) {
     for _ in 0..MAX_TICKS {
-        if !env.canister_http_request_contexts().is_empty() {
-            break;
+        for context in env.canister_http_request_contexts().values() {
+            assert_has_header(context, "Content-Type", "application/json");
+            let parsed_method =
+                parse_method(std::str::from_utf8(&context.body.clone().unwrap()).unwrap()).unwrap();
+            if parsed_method == method {
+                break;
+            }
         }
         env.tick();
         env.advance_time(Duration::from_nanos(1));
@@ -516,7 +519,6 @@ impl CkEthSetup {
         self.env
             .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
         self.env.tick();
-        self.env.tick();
     }
 
     pub fn wait_and_validate_withdrawal(&mut self, transaction_hash: String, block_index: u64) {
@@ -533,29 +535,19 @@ impl CkEthSetup {
             RetrieveEthStatus::TxCreated
         );
 
-        self.withdrawal_step();
-        self.withdrawal_step();
-
-        assert_eq!(
-            self.retrieve_eth_status(block_index),
-            RetrieveEthStatus::TxSigned(EthTransaction { transaction_hash })
-        );
-
-        self.withdrawal_step();
+        tick_until_next_http_request(&self.env, "eth_sendRawTransaction");
         self.handle_rpc_call(
             "https://rpc.ankr.com/eth",
             "eth_sendRawTransaction",
             eth_send_raw_transaction(),
         );
+
         assert_eq!(
             self.retrieve_eth_status(block_index),
-            RetrieveEthStatus::TxSent(EthTransaction {
-                transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()
-            })
+            RetrieveEthStatus::TxSent(EthTransaction { transaction_hash })
         );
 
-        self.withdrawal_step();
+        tick_until_next_http_request(&self.env, "eth_getTransactionByHash");
         self.handle_rpc_call(
             "https://rpc.ankr.com/eth",
             "eth_getTransactionByHash",

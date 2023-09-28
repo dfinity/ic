@@ -239,7 +239,7 @@
                 </tbody>
             </table>
 
-            <h3>Pending Transaction ckETH → ETH</h3>
+            <h3>Pending Transactions ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>
@@ -250,14 +250,14 @@
                 </tr>
                 </thead>
                 <tbody>
-                {% if let Some(tx) = pending_transaction %}
+                {% for tx in pending_transactions %}
                 <tr>
                     <td class="numeric">{{ tx.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(tx.destination) %}</td>
                     <td class="numeric">{{ tx.transaction_amount }}</td>
                     <td>{{ tx.status }}</td>
                 </tr>
-                {% endif %}
+                {% endfor %}
                 </tbody>
             </table>
 

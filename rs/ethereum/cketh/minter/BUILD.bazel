@@ -117,6 +117,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:ethabi",
+        "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",

@@ -1,4 +1,5 @@
 use candid::{candid_method, Nat};
+use futures::future::join_all;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -7,7 +8,7 @@ use ic_cketh_minter::endpoints::{
     Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
 use ic_cketh_minter::eth_logs::{report_transaction_error, ReceivedEthEventError};
-use ic_cketh_minter::eth_rpc::FeeHistory;
+use ic_cketh_minter::eth_rpc::{FeeHistory, HttpOutcallResult};
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
@@ -19,9 +20,12 @@ use ic_cketh_minter::state::{
     lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
 };
 use ic_cketh_minter::storage;
-use ic_cketh_minter::transactions::EthWithdrawalRequest;
+use ic_cketh_minter::transactions::{
+    create_transaction, CreateTransactionError, EthWithdrawalRequest,
+};
 use ic_cketh_minter::tx::{
-    estimate_transaction_price, AccessList, ConfirmedEip1559Transaction, Eip1559TransactionRequest,
+    estimate_transaction_price, ConfirmedEip1559Transaction, SignedEip1559TransactionRequest,
+    TransactionPrice,
 };
 use ic_cketh_minter::{
     eth_logs, eth_rpc, MINT_RETRY_DELAY, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL,
@@ -30,6 +34,7 @@ use ic_cketh_minter::{
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use std::cmp::{min, Ordering};
+use std::iter::zip;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -266,32 +271,6 @@ async fn process_retrieve_eth_requests() {
         }
     };
 
-    let result: Result<(), String> = async {
-        create_transaction().await?;
-        sign_transaction().await?;
-        send_transaction().await?;
-        confirm_transaction().await
-    }
-    .await;
-
-    if let Err(e) = result {
-        log!(
-            DEBUG,
-            "Failed to process ETH retrieval request: {e:?}. Will retry later."
-        );
-    }
-}
-
-async fn create_transaction() -> Result<(), String> {
-    let withdrawal_request =
-        match read_state(|s| s.eth_transactions.maybe_process_new_transaction()) {
-            Some(withdrawal_request) => withdrawal_request,
-            None => return Ok(()),
-        };
-    log!(
-        DEBUG,
-        "[process_retrieve_eth_requests]: processing {withdrawal_request:?}",
-    );
     let transaction_price = estimate_transaction_price(&eth_fee_history().await);
     let max_transaction_fee = transaction_price.max_transaction_fee();
     log!(
@@ -299,120 +278,165 @@ async fn create_transaction() -> Result<(), String> {
         "[withdraw]: Estimated max transaction fee: {:?}",
         max_transaction_fee,
     );
-
-    let tx_amount = match withdrawal_request
-        .withdrawal_amount
-        .checked_sub(max_transaction_fee)
-    {
-        Some(tx_amount) => tx_amount,
-        None => {
-            mutate_state(|s| {
-                s.eth_transactions
-                    .reschedule_withdrawal_request(withdrawal_request.clone())
-            });
-            return Err(format!(
-                "Insufficient amount in {withdrawal_request:?} to cover transaction fees: {max_transaction_fee:?}. Request moved back to end of queue."
-            ));
-        }
-    };
-
-    let (nonce, chain_id) =
-        mutate_state(|s| (s.get_and_increment_nonce(), s.ethereum_network.chain_id()));
-    let transaction = Eip1559TransactionRequest {
-        chain_id,
-        nonce,
-        max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-        max_fee_per_gas: transaction_price.max_fee_per_gas,
-        gas_limit: transaction_price.gas_limit,
-        destination: withdrawal_request.destination,
-        amount: tx_amount,
-        data: Vec::new(),
-        access_list: AccessList::new(),
-    };
-    mutate_state(|s| {
-        s.eth_transactions
-            .record_created_transaction(withdrawal_request, transaction.clone())
-    });
-    Ok(())
+    // TODO FI-933: for re-submission re-evaluate prices of all transactions whose nonce is at least
+    // the value of eth_getTransactionCount at latest height. If needed resubmit transactions by
+    // bumping price and insert transactions into created_tx. They will be picked up when calling
+    // sign_and_send_transactions_batch in the same timer iteration.
+    create_transactions_batch(transaction_price);
+    sign_and_send_transactions_batch().await;
+    finalize_transactions_batch().await;
 }
 
-async fn sign_transaction() -> Result<(), String> {
-    let transaction = match read_state(|s| s.eth_transactions.next_to_sign()) {
-        Some(transaction) => transaction,
-        None => return Ok(()),
-    };
-    log!(DEBUG, "Signing transaction {transaction:?}");
-    match transaction.sign().await {
-        Ok(signed_tx) => {
-            mutate_state(|s| {
-                log!(DEBUG, "Queueing signed transaction: {signed_tx:?}");
-                s.eth_transactions
-                    .record_signed_transaction(signed_tx.clone());
-            });
-            Ok(())
-        }
-        Err(e) => Err(e),
-    }
-}
+fn create_transactions_batch(transaction_price: TransactionPrice) {
+    for request in read_state(|s| s.eth_transactions.withdrawal_requests_batch(5)) {
+        log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
+        let ethereum_network = read_state(State::ethereum_network);
+        let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
+        match create_transaction(&request, nonce, transaction_price.clone(), ethereum_network) {
+            Ok(tx) => {
+                log!(
+                    DEBUG,
+                    "[create_transactions_batch]: created transaction {tx:?}",
+                );
 
-async fn send_transaction() -> Result<(), String> {
-    let signed_tx = match read_state(|s| s.eth_transactions.next_to_send()) {
-        Some(signed_tx) => signed_tx,
-        None => return Ok(()),
-    };
-    let result = read_state(EthRpcClient::from_state)
-        .eth_send_raw_transaction(signed_tx.raw_transaction_hex())
-        .await
-        .expect("HTTP call failed");
-    log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
-    match result {
-        JsonRpcResult::Result(tx_result) if tx_result == SendRawTransactionResult::Ok => {
-            mutate_state(|s| {
-                s.eth_transactions
-                    .record_sent_transaction(signed_tx.clone())
-            });
-            Ok(())
-        }
-        JsonRpcResult::Result(tx_result) => Err(format!(
-            "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
-        )),
-        JsonRpcResult::Error { code, message } => Err(format!(
-            "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
-        )),
-    }
-}
-
-async fn confirm_transaction() -> Result<(), String> {
-    let sent_tx = match read_state(|s| s.eth_transactions.next_to_confirm()) {
-        Some(sent_tx) => sent_tx,
-        None => return Ok(()),
-    };
-    let result = read_state(EthRpcClient::from_state)
-        .eth_get_transaction_by_hash(sent_tx.hash())
-        .await;
-    match result {
-        Ok(Some(tx)) => {
-            if let Some((block_hash, block_number, _transaction_index)) = tx.mined_in_block() {
-                let confirmed_tx =
-                    ConfirmedEip1559Transaction::new(sent_tx, block_hash, block_number);
-                log!(INFO, "Confirmed transaction: {confirmed_tx:?}");
-                mutate_state(|s| {
-                    s.eth_transactions
-                        .record_confirmed_transaction(confirmed_tx.clone())
-                });
-                Ok(())
-            } else {
-                Err(format!(
-                    "Transaction {sent_tx:?} found but not confirmed yet. Will retry later.",
-                ))
+                mutate_state(|s| s.eth_transactions.record_created_transaction(request, tx));
             }
+            Err(CreateTransactionError::InsufficientAmount {
+                ledger_burn_index,
+                withdrawal_amount,
+                max_transaction_fee,
+            }) => {
+                log!(
+                    INFO,
+                    "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient
+                amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}.
+                Request moved back to end of queue."
+                );
+                mutate_state(|s| s.eth_transactions.reschedule_withdrawal_request(request));
+            }
+        };
+    }
+}
+
+async fn sign_and_send_transactions_batch() {
+    let signed_transactions = sign_transactions_batch().await;
+    let results = send_transactions_batch(&signed_transactions).await;
+    for (signed_tx, result) in zip(signed_transactions, results) {
+        log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
+        match result {
+            Ok(JsonRpcResult::Result(tx_result)) if tx_result == SendRawTransactionResult::Ok => {
+                 mutate_state(|s| {
+                    s.eth_transactions
+                        .record_sent_transaction(signed_tx)
+                });
+            }
+            // TODO FI-933: in case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
+            // if the stuck transaction was mined in the meantime. In that case we should probably
+            // add the resubmitted transaction to sent_tx to keep a trace of it. It will be cleaned-up
+            // once the transaction is finalized.
+            Ok(JsonRpcResult::Result(tx_result)) => log!(INFO,
+                "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
+            ),
+            Ok(JsonRpcResult::Error { code, message }) => log!(INFO,
+                "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
+            ),
+            Err(e) => {
+                log!(INFO, "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later.")
+            }
+        };
+    }
+}
+
+async fn sign_transactions_batch() -> Vec<SignedEip1559TransactionRequest> {
+    let transactions_batch: Vec<_> = read_state(|s| {
+        s.eth_transactions
+            .created_transactions_iter()
+            .map(|(_nonce, _ledger_burn_index, tx)| tx)
+            .cloned()
+            .collect()
+    });
+    log!(DEBUG, "Signing transactions {transactions_batch:?}");
+    let results = join_all(transactions_batch.into_iter().map(|tx| tx.sign())).await;
+    let mut errors = Vec::new();
+    let mut signed_transactions = Vec::with_capacity(results.len());
+    for result in results {
+        match result {
+            Ok(signed_tx) => signed_transactions.push(signed_tx),
+            Err(e) => errors.push(e),
         }
-        Ok(None) => Err(format!(
-            "Transaction {sent_tx:?} not found. Will retry later.",
-        )),
-        Err(e) => Err(format!(
-            "Failed to get transaction by hash {sent_tx:?}: {e:?}. Will retry later.",
-        )),
+    }
+    if !errors.is_empty() {
+        // At this point there might be a gap in transaction nonces between signed transactions, e.g.,
+        // transactions 1,2,4,5 were signed, but 3 was not due to some unexpected error.
+        // This means that transactions 4 and 5 are currently stuck until transaction 3 is signed.
+        // However, we still proceed with transactions 4 and 5 since that way they might be mined faster
+        // once transaction 3 is sent on the next iteration. Otherwise, we would need to re-sign transactions 4 and 5
+        // and send them (together with transaction 3) on the next iteration.
+        log!(INFO, "Errors encountered during signing: {errors:?}");
+    }
+    log!(DEBUG, "Signed transactions {signed_transactions:?}");
+    signed_transactions
+}
+
+async fn send_transactions_batch(
+    signed_transactions: &[SignedEip1559TransactionRequest],
+) -> Vec<HttpOutcallResult<JsonRpcResult<SendRawTransactionResult>>> {
+    let rpc_client = read_state(EthRpcClient::from_state);
+    join_all(
+        signed_transactions
+            .iter()
+            .map(|tx| rpc_client.eth_send_raw_transaction(tx.raw_transaction_hex())),
+    )
+    .await
+}
+
+// TODO FI-942: currently finalized transaction just means that it was mined in some block.
+// We should decide on whether a transaction was finalized by comparing the transaction nonce with
+// eth_getTransactionCount at finalized block height and if finalized retrieve the transaction receipt
+// to store with the transaction.
+async fn finalize_transactions_batch() {
+    let sent_transactions: Vec<_> = read_state(|s| {
+        s.eth_transactions
+            .sent_transactions_iter()
+            .flat_map(|(_nonce, _index, txs)| txs)
+            .cloned()
+            .collect()
+    });
+    let rpc_client = read_state(EthRpcClient::from_state);
+    let results = join_all(
+        sent_transactions
+            .iter()
+            .map(|tx| rpc_client.eth_get_transaction_by_hash(tx.hash())),
+    )
+    .await;
+
+    for (sent_tx, result) in zip(sent_transactions, results) {
+        match result {
+            Ok(Some(tx)) => {
+                if let Some((block_hash, block_number, _transaction_index)) = tx.mined_in_block() {
+                    let confirmed_tx =
+                        ConfirmedEip1559Transaction::new(sent_tx, block_hash, block_number);
+                    log!(INFO, "Confirmed transaction: {confirmed_tx:?}");
+                    mutate_state(|s| {
+                        s.eth_transactions
+                            .record_finalized_transaction(confirmed_tx)
+                    });
+                } else {
+                    log!(
+                        DEBUG,
+                        "Transaction {sent_tx:?} found but not confirmed yet. Will retry later.",
+                    )
+                }
+            }
+            Ok(None) => log!(
+                DEBUG,
+                "Transaction {sent_tx:?} not found. Will retry later.",
+            ),
+            Err(e) => log!(
+                INFO,
+                "Failed to get transaction by hash {sent_tx:?}: {e:?}. Will retry later.",
+            ),
+        };
     }
 }
 
