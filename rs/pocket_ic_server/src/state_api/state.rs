@@ -338,8 +338,7 @@ where
     where
         S: Operation<TargetType = T> + Send + 'static,
     {
-        self.update_with_timeout(computation, self.inner.sync_wait_time)
-            .await
+        self.update_with_timeout(computation, None).await
     }
 
     /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
@@ -347,11 +346,12 @@ where
     pub async fn update_with_timeout<S>(
         &self,
         computation: Computation<S>,
-        sync_wait_time: Duration,
+        sync_wait_time: Option<Duration>,
     ) -> UpdateResult
     where
         S: Operation<TargetType = T> + Send + 'static,
     {
+        let sync_wait_time = sync_wait_time.unwrap_or(self.inner.sync_wait_time);
         let st = self.inner.clone();
         let mut instances = st.instances.write().await;
         let (bg_task, busy_outcome) =

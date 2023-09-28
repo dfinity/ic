@@ -34,9 +34,10 @@ fn test_get_set_cycle_balance() {
 #[test]
 fn test_create_and_drop_instances() {
     let pic = PocketIcV2::new();
+    let id = pic.instance_id;
     assert!(PocketIcV2::list_instances().contains(&"Available".to_string()));
     drop(pic);
-    assert!(!PocketIcV2::list_instances().contains(&"Available".to_string()));
+    assert!(!PocketIcV2::list_instances()[id].contains(&"Available".to_string()));
     assert!(PocketIcV2::list_instances().contains(&"Deleted".to_string()));
 }
 
