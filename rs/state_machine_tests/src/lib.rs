@@ -69,6 +69,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
+use ic_types::batch::{EpochStatsMessages, TotalCanisterQueryStats};
 pub use ic_types::canister_http::CanisterHttpRequestContext;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
@@ -823,7 +824,7 @@ impl StateMachine {
                 response_payload: MsgPayload::Data(reply.encode()),
             });
         }
-        self.execute_payload(payload)
+        self.execute_payload(payload);
     }
 
     /// Makes the state machine tick until there are no more messages in the system.
@@ -857,7 +858,7 @@ impl StateMachine {
     }
 
     /// Triggers a single round of execution with block payload as an input.
-    pub fn execute_payload(&self, payload: PayloadBuilder) {
+    pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -871,7 +872,7 @@ impl StateMachine {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
                 bitcoin_adapter_responses: vec![],
-                query_stats: None,
+                query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
@@ -892,6 +893,8 @@ impl StateMachine {
                 .0,
             batch_number
         );
+
+        batch_number
     }
 
     pub fn execute_block_with_xnet_payload(&self, xnet_payload: XNetPayload) {
@@ -1783,6 +1786,38 @@ impl StateMachine {
         );
     }
 
+    /// Returns the query stats of the specified canister.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the specified canister does not exist.
+    pub fn query_stats(&self, canister_id: &CanisterId) -> TotalCanisterQueryStats {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .scheduler_state
+            .total_query_stats
+            .clone()
+    }
+
+    /// Set query stats for the given canister to the specified value.
+    pub fn set_query_stats(
+        &mut self,
+        canister_id: &CanisterId,
+        total_query_stats: TotalCanisterQueryStats,
+    ) {
+        let (h, mut state) = self.state_manager.take_tip();
+        state
+            .canister_state_mut(canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .scheduler_state
+            .total_query_stats = total_query_stats;
+
+        self.state_manager
+            .commit_and_certify(state, h.increment(), CertificationScope::Full);
+    }
+
     /// Returns the cycle balance of the specified canister.
     ///
     /// # Panics
@@ -1838,6 +1873,10 @@ impl StateMachine {
             .canister_http_request_contexts
             .clone()
     }
+
+    pub fn deliver_query_stats(&self, query_stats: EpochStatsMessages) -> Height {
+        self.execute_payload(PayloadBuilder::new().with_query_stats(Some(query_stats)))
+    }
 }
 
 fn sign_prehashed_message_with_derived_key(
@@ -1881,6 +1920,7 @@ pub struct PayloadBuilder {
     ingress_messages: Vec<SignedIngress>,
     xnet_payload: XNetPayload,
     consensus_responses: Vec<Response>,
+    query_stats: Option<EpochStatsMessages>,
 }
 
 impl Default for PayloadBuilder {
@@ -1891,6 +1931,7 @@ impl Default for PayloadBuilder {
             ingress_messages: Default::default(),
             xnet_payload: Default::default(),
             consensus_responses: Default::default(),
+            query_stats: Default::default(),
         }
         .with_max_expiry_time_from_now(GENESIS.into())
     }
@@ -1915,6 +1956,13 @@ impl PayloadBuilder {
     pub fn with_nonce(self, nonce: u64) -> Self {
         Self {
             nonce: Some(nonce),
+            ..self
+        }
+    }
+
+    pub fn with_query_stats(self, query_stats: Option<EpochStatsMessages>) -> Self {
+        Self {
+            query_stats,
             ..self
         }
     }

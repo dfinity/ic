@@ -37,8 +37,10 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
-use ic_types::batch::{CanisterQueryStats, ReceivedEpochStats};
-use ic_types::epoch_from_height;
+use ic_types::batch::{
+    CanisterQueryStats, EpochStatsMessages, QueryStatsMessage, ReceivedEpochStats,
+    TotalCanisterQueryStats,
+};
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
     chunkable::{ChunkId, ChunkableArtifact},
@@ -50,6 +52,7 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
+use ic_types::{epoch_from_height, QUERY_STATS_EPOCH_LENGTH};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
     stat::{utimensat, UtimensatFlags},
@@ -4974,4 +4977,154 @@ proptest! {
             byte_limit
         );
     }
+}
+
+/// Test if query stats are correctly aggregated into the canister state.
+///
+/// Delivers QUERY_STATS_EPOCH_LENGTH batches with query stats. This will
+/// trigger exactly one aggregation.
+///
+/// This test also tests that stats for non-existing canisters are simply ignored.
+///
+/// It also assumes NUM_MALICIOUS malicious nodes, which send bogus values, which
+/// do not impact the values added to the canister state.
+#[test]
+fn query_stats_are_collected() {
+    let mut env = StateMachineBuilder::new().build();
+
+    const INITIAL_VALUES: u128 = 42;
+
+    const NUM_NODES: usize = 13;
+    const NUM_MALICIOUS: usize = 4;
+    let proposers: Vec<NodeId> = (0..NUM_NODES)
+        .map(|i| NodeId::from(PrincipalId::new_node_test_id(i as u64)))
+        .collect();
+
+    // Install two canister
+    let test_canister_id = env.install_canister_wat(TEST_CANISTER, vec![1], None);
+
+    // Install a canister for which only malicious nodes will attempt to charge
+    // Send a different payload to ensure the ingress message gets executed.
+    let malicious_overreporting = env.install_canister_wat(TEST_CANISTER, vec![2], None);
+    let malicious_underreporting = env.install_canister_wat(TEST_CANISTER, vec![3], None);
+
+    // Set initial query stats for all canisters
+    for canister in [
+        &test_canister_id,
+        &malicious_overreporting,
+        &malicious_underreporting,
+    ] {
+        env.set_query_stats(
+            canister,
+            TotalCanisterQueryStats {
+                num_calls: INITIAL_VALUES,
+                num_instructions: INITIAL_VALUES,
+                ingress_payload_size: INITIAL_VALUES,
+                egress_payload_size: INITIAL_VALUES,
+            },
+        );
+    }
+
+    // Create a fake canister ID. This canister should not be part of the replicated state.
+    // The ID choosen here has to be larger than the number of canister installed above.
+    let uninstalled_canister = canister_test_id(1337);
+
+    // Verify initial state of the query stats
+    fn check_query_stats_unmodified(env: &StateMachine, canister_id: &CanisterId) {
+        let canister_state = env.query_stats(canister_id);
+        assert!(canister_state.num_calls == INITIAL_VALUES);
+        assert!(canister_state.num_instructions == INITIAL_VALUES);
+        assert!(canister_state.ingress_payload_size == INITIAL_VALUES);
+        assert!(canister_state.egress_payload_size == INITIAL_VALUES);
+    }
+
+    // Run for an entire epoch and then deliver one more batch to ensure query stats get copied to the canister state.
+    // In practise, some batches have already been delivered (e.g. ingress messages for canister installation).
+    for i in 0..QUERY_STATS_EPOCH_LENGTH as usize + 1 {
+        let mut stats = vec![];
+
+        // Append query stats the first time each node is a block maker.
+        if i < NUM_NODES {
+            stats.push(QueryStatsMessage {
+                canister_id: test_canister_id,
+                stats: CanisterQueryStats {
+                    num_calls: if i < NUM_MALICIOUS {
+                        1337 // "Malicious" nodes send too large values, but that should not affect what is being charged
+                    } else {
+                        1
+                    },
+                    num_instructions: 2,
+                    ingress_payload_size: 3,
+                    egress_payload_size: 4,
+                },
+            });
+
+            // This canister does not exist in the replicated state.
+            // We simply want to make sure nothing crashes in the case where we have stats for a canister
+            // that does not exist (e.g. it got uninstalled).
+            stats.push(QueryStatsMessage {
+                canister_id: uninstalled_canister,
+                stats: CanisterQueryStats {
+                    num_calls: 1,
+                    num_instructions: 2,
+                    ingress_payload_size: 3,
+                    egress_payload_size: 4,
+                },
+            });
+
+            if i < NUM_MALICIOUS {
+                // Simulate malicious nodes sending stats for a canister that does not execute any queries
+                stats.push(QueryStatsMessage {
+                    canister_id: malicious_overreporting,
+                    stats: CanisterQueryStats {
+                        num_calls: 1,
+                        num_instructions: 2,
+                        ingress_payload_size: 3,
+                        egress_payload_size: 4,
+                    },
+                });
+            } else {
+                // Simulate malicious nodes not sending (under-reporting) stats for a canister that does execute queries
+                stats.push(QueryStatsMessage {
+                    canister_id: malicious_underreporting,
+                    stats: CanisterQueryStats {
+                        num_calls: 1,
+                        num_instructions: 2,
+                        ingress_payload_size: 3,
+                        egress_payload_size: 4,
+                    },
+                });
+            }
+        }
+
+        let height = env.deliver_query_stats(EpochStatsMessages {
+            proposer: proposers[i % NUM_NODES],
+            stats,
+            epoch: epoch_from_height(Height::from(i as u64)),
+        });
+
+        if height.get() < QUERY_STATS_EPOCH_LENGTH {
+            // Query stats in the canister state should only be changed after more than QUERY_STATS_EPOCH_LENGTH batches.
+            // have been delivered. Before, they should be unchanged.
+            println!("Checking query stats in round {}", i);
+            check_query_stats_unmodified(&env, &test_canister_id);
+            check_query_stats_unmodified(&env, &malicious_overreporting);
+            check_query_stats_unmodified(&env, &malicious_underreporting);
+        }
+    }
+
+    // As each proposer in that epoch proposed the same value, we should see that value * 13 in the canister state
+    // after one epoch.
+    // The same should be the case even for canister where malicious nodes have not been sending query stats.
+    for canister in [&test_canister_id, &malicious_underreporting] {
+        let canister_state = env.query_stats(canister);
+        assert!(canister_state.num_calls == NUM_NODES as u128 + INITIAL_VALUES);
+        assert!(canister_state.num_instructions == 2 * NUM_NODES as u128 + INITIAL_VALUES);
+        assert!(canister_state.ingress_payload_size == 3 * NUM_NODES as u128 + INITIAL_VALUES);
+        assert!(canister_state.egress_payload_size == 4 * NUM_NODES as u128 + INITIAL_VALUES);
+    }
+
+    // The imbalanced canister should not have been charged, as only malicious nodes
+    // (incorrectly) report query statistics for this canister.
+    check_query_stats_unmodified(&env, &malicious_overreporting);
 }
