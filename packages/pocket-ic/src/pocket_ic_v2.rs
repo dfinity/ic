@@ -21,6 +21,9 @@ use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 use std::time::{Duration, SystemTime};
 
+const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
+const PROCESSING_TIME_VALUE_MS: u64 = 30_000;
+
 pub struct PocketIcV2 {
     pub instance_id: InstanceId,
     server_url: Url,
@@ -284,6 +287,7 @@ impl PocketIcV2 {
         let result = self
             .reqwest_client
             .get(self.instance_url().join(endpoint).unwrap())
+            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
             .send()
             .expect("HTTP failure")
             .into();
@@ -304,6 +308,7 @@ impl PocketIcV2 {
         let result = self
             .reqwest_client
             .post(self.instance_url().join(endpoint).unwrap())
+            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
             .json(&body)
             .send()
             .expect("HTTP failure");
