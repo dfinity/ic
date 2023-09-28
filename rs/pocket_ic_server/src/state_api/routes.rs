@@ -8,7 +8,7 @@ use super::state::{InstanceState, OpOut, PocketIcApiState, UpdateReply};
 use crate::pocket_ic::Checkpoint;
 use crate::pocket_ic::{
     AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, Query,
-    SetStableMemory, SetTime,
+    SetStableMemory, SetTime, Tick,
 };
 use crate::{
     copy_dir,
@@ -85,6 +85,7 @@ where
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/create_checkpoint", post(handler_create_checkpoint))
+        .directory_route("/tick", post(handler_tick))
 }
 
 pub fn instances_routes<S>() -> Router<S>
@@ -110,15 +111,6 @@ where
         //
         // All the state-changing endpoints
         .nest("/:id/update", instance_update_routes())
-        //
-        // Save this instance to a checkpoint with the given name.
-        // Takes a name:String in the request body.
-        // TODO: Add a function that separates those two.
-        .directory_route(
-            "/:id/tick_and_create_checkpoint",
-            post(tick_and_create_checkpoint),
-        )
-    // .nest("/:id/read", instances_read_routes::<S>())
 }
 
 async fn run_operation<T: Serialize>(
@@ -396,15 +388,7 @@ pub async fn handler_set_time(
 }
 
 pub async fn handler_add_cycles(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state,
-        checkpoints: _,
-        last_request: _,
-        runtime: _,
-        blob_store: _,
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
     extract::Json(raw_add_cycles): extract::Json<RawAddCycles>,
@@ -456,21 +440,24 @@ pub async fn handler_set_stable_memory(
 // Only creates a checkpoint and stores the checkpoint dir in the graph;
 // does not name it or return anything
 pub async fn handler_create_checkpoint(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state,
-        checkpoints: _,
-        last_request: _,
-        runtime: _,
-        blob_store: _,
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
     println!("creating checkpoint");
     let op = Checkpoint;
+    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(res))
+}
+
+pub async fn handler_tick(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let op = Tick;
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
@@ -530,15 +517,7 @@ pub async fn create_instance(
 }
 
 pub async fn list_instances(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state,
-        checkpoints: _,
-        last_request: _,
-        runtime: _,
-        blob_store: _,
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
 ) -> Json<Vec<String>> {
     let instances = api_state.list_instances().await;
     let instances: Vec<String> = instances
@@ -555,15 +534,7 @@ pub async fn list_instances(
 }
 
 pub async fn list_checkpoints(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state: _,
-        checkpoints,
-        last_request: _,
-        runtime: _,
-        blob_store: _,
-    }): State<AppState>,
+    State(AppState { checkpoints, .. }): State<AppState>,
 ) -> Json<Vec<String>> {
     let checkpoints = checkpoints
         .read()
@@ -574,62 +545,8 @@ pub async fn list_checkpoints(
     Json(checkpoints)
 }
 
-// TODO: Add a function that separates those two.
-pub async fn tick_and_create_checkpoint(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state: _,
-        checkpoints: _,
-        last_request: _,
-        runtime: _,
-        blob_store: _,
-    }): State<AppState>,
-    Path(_id): Path<InstanceId>,
-    extract::Json(rest::RawCheckpoint { checkpoint_name: _ }): extract::Json<rest::RawCheckpoint>,
-) -> (StatusCode, ()) {
-    // Needs an Operation type
-    (StatusCode::NOT_FOUND, ())
-    // let mut checkpoints = checkpoints.write().await;
-    // if checkpoints.contains_key(&payload.checkpoint_name) {
-    //     return (
-    //         StatusCode::CONFLICT,
-    //         format!("Checkpoint {} already exists.", payload.checkpoint_name),
-    //     );
-    // }
-    // let guard_map = instance_map.read().await;
-    // if let Some(rw_lock) = guard_map.get(&id) {
-    //     let guard_sm = rw_lock.write().await;
-    //     // Enable checkpoints and make a tick to write a checkpoint.
-    //     guard_sm.set_checkpoints_enabled(true);
-    //     guard_sm.tick();
-    //     guard_sm.set_checkpoints_enabled(false);
-    //     // Copy state directory to named location.
-    //     let checkpoint_dir = TempDir::new().expect("Failed to create tempdir");
-    //     copy_dir(guard_sm.state_dir.path(), checkpoint_dir.path())
-    //         .expect("Failed to copy state directory");
-    //     checkpoints.insert(payload.checkpoint_name, Arc::new(checkpoint_dir));
-    //     (StatusCode::CREATED, "Checkpoint created.".to_string())
-    // } else {
-    //     // id not found in map; return error
-    //     // TODO: Result Type for this call
-    //     (
-    //         StatusCode::NOT_FOUND,
-    //         format!("Instance with ID {} was not found.", &id),
-    //     )
-    // }
-}
-
 pub async fn delete_instance(
-    State(AppState {
-        instance_map: _,
-        instances_sequence_counter: _,
-        api_state,
-        checkpoints: _,
-        last_request: _,
-        runtime: _,
-        blob_store: _,
-    }): State<AppState>,
+    State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
 ) -> StatusCode {
     api_state.delete_instance(id).await;

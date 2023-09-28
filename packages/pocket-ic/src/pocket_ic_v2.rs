@@ -61,6 +61,11 @@ impl PocketIcV2 {
         instances
     }
 
+    pub fn tick(&self) {
+        let endpoint = "update/tick";
+        self.post::<(), _>(endpoint, "");
+    }
+
     pub fn get_time(&self) -> SystemTime {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint);

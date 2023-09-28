@@ -100,8 +100,8 @@ impl Operation for SetTime {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct GetTime {}
+#[derive(Clone, Copy, Debug)]
+pub struct GetTime;
 
 impl Operation for GetTime {
     type TargetType = PocketIc;
@@ -116,8 +116,8 @@ impl Operation for GetTime {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Tick {}
+#[derive(Clone, Debug, Copy)]
+pub struct Tick;
 
 impl Operation for Tick {
     type TargetType = PocketIc;
@@ -377,7 +377,7 @@ impl Operation for AddCycles {
 /// call could copy the directory and name it -> named checkpoints.
 /// This operation, however, is only concerned with persisting the
 /// subnet state to disk and storing the directory in the graph.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Checkpoint;
 
 impl Operation for Checkpoint {

@@ -35,10 +35,9 @@ fn test_get_set_cycle_balance() {
 fn test_create_and_drop_instances() {
     let pic = PocketIcV2::new();
     let id = pic.instance_id;
-    assert!(PocketIcV2::list_instances().contains(&"Available".to_string()));
+    assert_eq!(PocketIcV2::list_instances()[id], "Available".to_string());
     drop(pic);
-    assert!(!PocketIcV2::list_instances()[id].contains(&"Available".to_string()));
-    assert!(PocketIcV2::list_instances().contains(&"Deleted".to_string()));
+    assert_eq!(PocketIcV2::list_instances()[id], "Deleted".to_string());
 }
 
 #[test]
@@ -78,4 +77,10 @@ fn test_checkpoint() {
 
     pic.create_checkpoint();
     // todo: read from graph and assert
+}
+
+#[test]
+fn test_tick() {
+    let pic = PocketIcV2::new();
+    pic.tick();
 }
