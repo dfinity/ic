@@ -192,14 +192,14 @@ class MasterFile:
     def write(self, w: IO):
         # Header
         header = [
-            "$TTL 10",
+            "$TTL 1",
             f"$ORIGIN {self.zone.name}.",
             f"@    IN    SOA   ns1.example.com. {self.zone.name}. (",
             "      2023071301  ; Serial number",
             "      3600        ; Refresh",
             "      1800        ; Retry",
             "      604800      ; Expire",
-            "      86400 )     ; Minimum TTL",
+            "      1 )         ; Minimum TTL",
             "",
         ]
 
@@ -364,7 +364,7 @@ class Handler(BaseHandler):
         records = [r for r in z.records]
 
         if name is not None:
-            records = [r for r in records if f"{r.name}.{z.name}" == name]
+            records = [r for r in records if r.name == name]
 
         self.write(
             encode_result(
@@ -377,7 +377,7 @@ class Handler(BaseHandler):
                             "content": r.content(),
                             "zone_id": z.id,
                             "zone_name": z.name,
-                            "ttl": 3600,
+                            "ttl": 1,
                         },
                         **API_CONTAINER_DNS_RECORD,
                     }
@@ -420,7 +420,7 @@ class Handler(BaseHandler):
                         "content": r.content(),
                         "zone_id": z.id,
                         "zone_name": z.name,
-                        "ttl": 3600,
+                        "ttl": 1,
                     },
                     **API_CONTAINER_DNS_RECORD,
                 }
@@ -464,7 +464,7 @@ class Handler(BaseHandler):
                         "content": r.content(),
                         "zone_id": z.id,
                         "zone_name": z.name,
-                        "ttl": 3600,
+                        "ttl": 1,
                     },
                     **API_CONTAINER_DNS_RECORD,
                 }
