@@ -9756,6 +9756,7 @@ dependencies = [
  "ic-transport",
  "ic-types",
  "parking_lot 0.12.1",
+ "serde",
  "slog",
  "threadpool",
  "tokio",
