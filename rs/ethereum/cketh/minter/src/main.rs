@@ -564,6 +564,19 @@ async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
 }
 
+#[candid_method(update)]
+#[update]
+async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
+    ic_cdk::api::management_canister::main::canister_status(
+        ic_cdk::api::management_canister::main::CanisterIdRecord {
+            canister_id: ic_cdk::id(),
+        },
+    )
+    .await
+    .expect("failed to fetch canister status")
+    .0
+}
+
 #[post_upgrade]
 fn post_upgrade(minter_arg: Option<MinterArg>) {
     use ic_cketh_minter::lifecycle;
@@ -580,6 +593,10 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     use ic_metrics_encoder::MetricsEncoder;
+
+    if ic_cdk::api::data_certificate().is_none() {
+        ic_cdk::trap("update call rejected");
+    }
 
     if req.path() == "/metrics" {
         let mut writer = MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
