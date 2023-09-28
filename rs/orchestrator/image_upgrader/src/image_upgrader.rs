@@ -70,7 +70,7 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     ...
 ///
 ///     let upgrade = Upgrader {...};
-///     
+///
 ///     upgrade.confirm_boot().await;
 ///
 ///     upgrade.upgrade_loop(exit_signal, interval, timeout, |result| async {
@@ -154,7 +154,11 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
                 "Request to download image {:?} from {}",
                 version, release_package_url
             );
-            let file_downloader = FileDownloader::new(Some(self.log().clone())).follow_redirects();
+            let file_downloader = FileDownloader::new_with_timeout(
+                Some(self.log().clone()),
+                Duration::from_secs(60),
+                /* allow_redirects = */ true,
+            );
             let start_time = std::time::Instant::now();
             let download_result = file_downloader
                 .download_file(release_package_url, self.image_path(), hash.clone())
