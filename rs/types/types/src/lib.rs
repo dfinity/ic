@@ -140,7 +140,7 @@ pub struct HeightTag {}
 pub type Height = AmountOf<HeightTag, u64>;
 
 /// Length of an epoch of query statistics in blocks
-const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
+pub const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
 
 pub struct QueryStatsTag {}
 /// The epoch as used by query stats aggregation.

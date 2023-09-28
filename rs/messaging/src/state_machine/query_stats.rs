@@ -2,6 +2,7 @@ use ic_base_types::CanisterId;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::batch::{CanisterQueryStats, EpochStatsMessages, ReceivedEpochStats};
+use ic_types::consensus::get_faults_tolerated;
 use ic_types::{epoch_from_height, Height};
 use std::collections::BTreeMap;
 
@@ -77,26 +78,37 @@ pub fn deliver_query_stats(
     if Some(epoch) != state.epoch_query_stats.epoch {
         if let Some(state_epoch) = state.epoch_query_stats.epoch {
             if state_epoch.get() + 1 == epoch.get() {
-                let num_nodes = state.system_metadata().node_public_keys.len();
+                // Determine number of nodes in subnet
+                if let Some(num_nodes) = state
+                    .system_metadata()
+                    .network_topology
+                    .get_subnet_size(&state.metadata.own_subnet_id)
+                {
+                    // We first aggregate to a temporary data structure, so that we can release the borrow on the state
+                    let mut query_stats_to_be_applied = vec![];
+                    for (canister_id, inner) in &state.epoch_query_stats.stats {
+                        // Aggregate node statistics only if we have received query stats from this canister from enough nodes.
+                        // Otherwise malicious nodes could have a large impact on the choosen value.
+                        let need_stats_from = num_nodes - get_faults_tolerated(num_nodes);
+                        if inner.len() >= need_stats_from {
+                            // Aggregate data
+                            let individual_stats: Vec<&CanisterQueryStats> =
+                                inner.iter().map(|(_, stats)| stats).collect();
 
-                // We first aggregate to a temporary data structure, so that we can release the borrow on the state
-                let mut query_stats_to_be_applied = vec![];
-                for (canister_id, inner) in &state.epoch_query_stats.stats {
-                    // Aggregate node statistics only if we have received query stats from this canister from enough nodes.
-                    // Otherwise malicious nodes could have a large impact on the choosen value.
-                    if inner.len() > (num_nodes as f32 / 3. * 2. + 1.).ceil() as usize {
-                        // Aggregate data
-                        let individual_stats: Vec<&CanisterQueryStats> =
-                            inner.iter().map(|(_, stats)| stats).collect();
-
-                        let aggregated_stats = aggregate_canister_query_stats(individual_stats);
-                        query_stats_to_be_applied.push((*canister_id, aggregated_stats));
+                            let aggregated_stats = aggregate_canister_query_stats(individual_stats);
+                            query_stats_to_be_applied.push((*canister_id, aggregated_stats));
+                        }
                     }
-                }
 
-                // For each canister, apply the aggregated stats
-                for (canister_id, aggregated_stats) in query_stats_to_be_applied {
-                    apply_query_stats_to_canister(logger, canister_id, &aggregated_stats, state);
+                    // For each canister, apply the aggregated stats
+                    for (canister_id, aggregated_stats) in query_stats_to_be_applied {
+                        apply_query_stats_to_canister(
+                            logger,
+                            canister_id,
+                            &aggregated_stats,
+                            state,
+                        );
+                    }
                 }
             }
         }

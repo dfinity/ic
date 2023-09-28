@@ -9,8 +9,8 @@ mod xnet;
 
 pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
 pub use self::execution_environment::{
-    CanisterQueryStats, EpochStats, EpochStatsMessages, QueryStatsPayload, ReceivedEpochStats,
-    TotalCanisterQueryStats,
+    CanisterQueryStats, EpochStats, EpochStatsMessages, QueryStatsMessage, QueryStatsPayload,
+    ReceivedEpochStats, TotalCanisterQueryStats,
 };
 pub use self::ingress::{IngressPayload, IngressPayloadError};
 pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
