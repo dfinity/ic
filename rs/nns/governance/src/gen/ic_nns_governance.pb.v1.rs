@@ -2453,6 +2453,7 @@ pub struct MostRecentMonthlyNodeProviderRewards {
 }
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
+/// / TODO\[NNS1-2617\]: Deprecate this message.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2481,10 +2482,10 @@ pub mod settle_community_fund_participation {
         /// fetched using the swap canister's get_state method.
         #[prost(message, optional, tag = "1")]
         pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-        /// Total amount of contributions from direct swap participants.
+        /// Total contribution amount from direct swap participants.
         #[prost(uint64, optional, tag = "2")]
         pub total_direct_contribution_icp_e8s: ::core::option::Option<u64>,
-        /// Total amount of contributions from the Neuron's Fund.
+        /// Total contribution amount from the Neuron's Fund.
         /// TODO\[NNS1-2570\]: Ensure this field is set.
         #[prost(uint64, optional, tag = "3")]
         pub total_neurons_fund_contribution_icp_e8s: ::core::option::Option<u64>,
@@ -2505,6 +2506,170 @@ pub mod settle_community_fund_participation {
         Committed(Committed),
         #[prost(message, tag = "3")]
         Aborted(Aborted),
+    }
+}
+/// Request to settle the Neurons' Fund participation in this SNS Swap.
+///
+/// When a swap ends, the Swap canister notifies the Neurons' Fund of the swap's ultimate result,
+/// which can be either `Committed` or `Aborted`. Note that currently, the Neurons' Fund is managed
+/// by the NNS Governance canister.
+/// * If the result is `Committed`:
+///    - Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
+///      the Matched Funding rules). This computation is based on the total direct participation
+///      amount, which is thus a field of `Committed`.
+///    - Neurons' Fund converts the "effective" amount of maturity into ICP by:
+///      - Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
+///        to the SNS treasury.
+///      - Refunding whatever maturity is left over (the maximum possible maturity is reserved by
+///        the Neurons' Fund before the swap begins).
+///    - Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
+///      (see SettleNeuronsFundParticipationResponse).
+///    - The Swap canister then creates SNS neurons for the Neurons' Fund participants.
+/// * If the result is Aborted, the Neurons' Fund is refunded for all maturity reserved for this SNS.
+///
+/// This design assumes trust between the Neurons' Fund and the SNS Swap canisters. In the one hand,
+/// the Swap trusts that the Neurons' Fund sends the correct amount of ICP to the SNS treasury,
+/// and that the Neurons' Fund allocates its participants following the Matched Funding rules. On the
+/// other hand, the Neurons' Fund trusts that the Swap will indeed create appropriate SNS neurons
+/// for the Neurons' Fund participants.
+///
+/// The justification for this trust assumption is as follows. The Neurons' Fund can be trusted as
+/// it is controlled by the NNS. The SNS Swap can be trusted as it is (1) deployed by SNS-W, which is
+/// also part of the NNS and (2) upgraded via an NNS proposal (unlike all other SNS canisters).
+///
+/// This request may be submitted only by the Swap canister of an SNS instance created by
+/// a CreateServiceNervousSystem proposal.
+///
+/// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+/// manually propagated to (sns) swap.proto.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SettleNeuronsFundParticipationRequest {
+    /// Proposal ID of the CreateServiceNervousSystem proposal that created this SNS instance.
+    #[prost(uint64, optional, tag = "1")]
+    pub nns_proposal_id: ::core::option::Option<u64>,
+    /// Each of the possibilities here corresponds to one of two ways that a swap can terminate.
+    /// See also sns_swap_pb::Lifecycle::is_terminal.
+    #[prost(
+        oneof = "settle_neurons_fund_participation_request::Result",
+        tags = "2, 3"
+    )]
+    pub result: ::core::option::Option<settle_neurons_fund_participation_request::Result>,
+}
+/// Nested message and enum types in `SettleNeuronsFundParticipationRequest`.
+pub mod settle_neurons_fund_participation_request {
+    /// When this happens, the NNS Governance needs to do several things:
+    /// (1) Compute the effective amount of ICP per neuron of the Neurons' Fund as a function of
+    ///      `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
+    ///      equal `total_neurons_fund_contribution_icp_e8s`.
+    /// (2) Mint (via the ICP Ledger) and sent to the SNS governance the amount of
+    ///      `total_neurons_fund_contribution_icp_e8s`.
+    /// (3) Respond to this request with `SettleNeuronsFundParticipationResponse`, providing
+    ///      the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
+    ///      as computed in step (1).
+    /// (4) Refund each neuron of the Neurons' Fund with (reserved - effective) amount of ICP.
+    /// Effective amounts depend on `total_direct_participation_icp_e8s` and the participation limits
+    /// of a particular SNS instance, namely, each participation must be between
+    /// `min_participant_icp_e8s` and `max_participant_icp_e8s`.
+    /// - If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
+    ///    then it is ineligible to participate.
+    /// - If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
+    ///    then its participation amount is limited to `max_participant_icp_e8s`.
+    /// Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
+    /// the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Committed {
+        /// This is where the minted ICP will be sent.
+        #[prost(message, optional, tag = "1")]
+        pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// Total amount of participation from direct swap participants.
+        #[prost(uint64, optional, tag = "2")]
+        pub total_direct_participation_icp_e8s: ::core::option::Option<u64>,
+        /// Total amount of participation from the Neurons' Fund.
+        /// TODO\[NNS1-2570\]: Ensure this field is set.
+        #[prost(uint64, optional, tag = "3")]
+        pub total_neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    }
+    /// When this happens, all priorly reserved maturity for this SNS instance needs to be restored to
+    /// the Neurons' Fund neurons.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Aborted {}
+    /// Each of the possibilities here corresponds to one of two ways that a swap can terminate.
+    /// See also sns_swap_pb::Lifecycle::is_terminal.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "2")]
+        Committed(Committed),
+        #[prost(message, tag = "3")]
+        Aborted(Aborted),
+    }
+}
+/// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
+/// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
+/// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
+/// field as `committed`. The NNS Governance then computes the ultimate distribution of maturity in
+/// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
+/// that will use this information to create SNS neurons of an appropriate size for each
+/// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
+/// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
+/// case it should be empty.
+///
+/// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+/// manually propagated to (sns) swap.proto.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SettleNeuronsFundParticipationResponse {
+    #[prost(
+        oneof = "settle_neurons_fund_participation_response::Result",
+        tags = "1, 2"
+    )]
+    pub result: ::core::option::Option<settle_neurons_fund_participation_response::Result>,
+}
+/// Nested message and enum types in `SettleNeuronsFundParticipationResponse`.
+pub mod settle_neurons_fund_participation_response {
+    /// Represents one NNS neuron from the Neurons' Fund participating in this swap.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronsFundNeuron {
+        /// The NNS neuron ID of the participating neuron.
+        #[prost(uint64, optional, tag = "1")]
+        pub nns_neuron_id: ::core::option::Option<u64>,
+        /// The amount of Neurons' Fund participation associated with this neuron.
+        #[prost(uint64, optional, tag = "2")]
+        pub amount_icp_e8s: ::core::option::Option<u64>,
+        /// The principal that can vote on behalf of this neuron.
+        #[prost(string, optional, tag = "3")]
+        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
+        /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
+        /// has been capped to reflect the maximum participation amount for this SNS swap.
+        #[prost(bool, optional, tag = "4")]
+        pub is_capped: ::core::option::Option<bool>,
+    }
+    /// Request was completed successfully.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Ok {
+        #[prost(message, repeated, tag = "1")]
+        pub neurons_fund_neurons: ::prost::alloc::vec::Vec<NeuronsFundNeuron>,
+    }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Err(super::GovernanceError),
+        #[prost(message, tag = "2")]
+        Ok(Ok),
     }
 }
 /// Audit events in order to leave an audit trail for certain operations.
