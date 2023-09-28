@@ -42,8 +42,7 @@ where
         &self,
         stream: S,
         peer: NodeId,
-        _latest_registry_version: RegistryVersion,
-        _earliest_registry_version: RegistryVersion,
+        _registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
         let peers = self.allowed_peers.lock().unwrap();
         if peers.contains(&peer) {

@@ -7511,12 +7511,12 @@ name = "ic-icos-sev"
 version = "0.8.0"
 dependencies = [
  "async-trait",
+ "ic-base-types",
  "ic-icos-sev-interfaces",
  "ic-interfaces-registry",
  "ic-registry-client-helpers",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
- "ic-types",
  "openssl",
  "serde",
  "serde_cbor",

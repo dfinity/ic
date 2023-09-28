@@ -20,7 +20,7 @@ rust_library(
         "//rs/interfaces/registry",
         "//rs/registry/helpers",
         "//rs/registry/subnet_features",
-        "//rs/types/types",
+        "//rs/types/base_types",
         "@crate_index//:openssl",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
