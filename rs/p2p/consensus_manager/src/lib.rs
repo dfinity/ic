@@ -1,6 +1,5 @@
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    hash::Hash,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -32,7 +31,7 @@ use ic_types::NodeId;
 use phantom_newtype::AmountOf;
 use prometheus::{Histogram, IntCounter, IntGauge};
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::{
     runtime::Handle,
     select,
@@ -47,9 +46,6 @@ use tokio::{
 const ENABLE_ARTIFACT_PUSH: bool = false;
 /// Artifact push threshold. Artifacts smaller or equal than this are pushed.
 const ARTIFACT_PUSH_THRESHOLD: usize = 5 * 1024;
-
-//TODO(NET-1539): Move all these bounds to the ArtifactKind trait directly.
-// pub trait Send + Sync + Hash +'static: Send + Sync  + Hash + 'static {}
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
@@ -212,14 +208,7 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
     log: ReplicaLogger,
     rt: Handle,
     pool: ValidatedPoolReaderRef<Artifact>,
-) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>)
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-{
+) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>) {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
     let endpoint: &'static str = Artifact::TAG.into();
     let router = Router::new()
@@ -234,14 +223,7 @@ where
 async fn rpc_handler<Artifact: ArtifactKind>(
     State(pool): State<ValidatedPoolReaderRef<Artifact>>,
     payload: Bytes,
-) -> Result<Bytes, StatusCode>
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
-{
+) -> Result<Bytes, StatusCode> {
     let id: Artifact::Id = bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let jh =
@@ -261,13 +243,7 @@ async fn update_handler<Artifact: ArtifactKind>(
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
-) -> Result<(), StatusCode>
-where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Sync,
-{
+) -> Result<(), StatusCode> {
     let update: AdvertUpdate<Artifact> =
         bincode::deserialize(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
 
@@ -323,11 +299,7 @@ pub struct ConsensusManager<Artifact: ArtifactKind, Pool, ReceivedAdvert> {
 impl<Artifact, Pool> ConsensusManager<Artifact, Pool, (AdvertUpdate<Artifact>, NodeId, ConnId)>
 where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id:
-        Serialize + for<'a> Deserialize<'a> + Clone + Eq + Hash + Send + Sync,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send + Sync,
+    Artifact: ArtifactKind,
 {
     pub fn start_consensus_manager(
         log: ReplicaLogger,
@@ -771,19 +743,14 @@ where
 /// - HashMap: #peers * (32 + 8)
 /// - advert: ±200
 /// For 10k tasks ~50Mb
-async fn send_advert_to_all_peers<Artifact>(
+async fn send_advert_to_all_peers<Artifact: ArtifactKind>(
     rt_handle: Handle,
     transport: Arc<dyn Transport>,
     commit_id: CommitId,
     slot_number: SlotNumber,
     advert: Advert<Artifact>,
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
-) where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Clone + Send,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send,
-{
+) {
     let mut in_progress_transmissions = JoinMap::new();
     // stores the connection ID of the last successful transmission to a peer.
     let mut completed_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
@@ -886,25 +853,18 @@ async fn send_advert_to_peer(
 }
 
 #[derive(Deserialize, Serialize)]
-pub enum Data<Artifact: ArtifactKind>
-where
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Message: Serialize,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a>,
-{
+pub enum Data<Artifact: ArtifactKind> {
+    #[serde(bound(deserialize = ""))]
     Artifact(Artifact::Message),
+    #[serde(bound(deserialize = ""))]
     Advert(Advert<Artifact>),
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct AdvertUpdate<Artifact: ArtifactKind>
-where
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a>,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a>,
-{
+pub struct AdvertUpdate<Artifact: ArtifactKind> {
     slot_number: SlotNumber,
     commit_id: CommitId,
+    #[serde(bound(deserialize = "Artifact: DeserializeOwned"))]
     data: Data<Artifact>,
 }
 

@@ -39,7 +39,7 @@ impl ArtifactKind for ConsensusArtifact {
 }
 
 /// The `ArtifactKind` of ingress message.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct IngressArtifact;
 
 /// `IngressArtifact` implements the `ArtifactKind` trait.
@@ -63,7 +63,7 @@ impl ArtifactKind for IngressArtifact {
 }
 
 /// The `ArtifactKind` of certification messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CertificationArtifact;
 
 /// `CertificationArtifact` implements the `ArtifactKind` trait.
@@ -104,7 +104,7 @@ impl ArtifactKind for CertificationArtifact {
 }
 
 /// The `ArtifactKind` of DKG messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DkgArtifact;
 
 /// `DkgArtifact` implements the `ArtifactKind` trait.
@@ -133,7 +133,7 @@ impl ArtifactKind for DkgArtifact {
 }
 
 /// The `ArtifactKind` of ECDSA messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EcdsaArtifact;
 
 /// `EcdsaArtifact` implements the `ArtifactKind` trait.
@@ -158,7 +158,7 @@ impl ArtifactKind for EcdsaArtifact {
 }
 
 /// The `ArtifactKind` of CanisterHttp messages.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CanisterHttpArtifact;
 
 /// `CanisterHttpArtifact` implements the `ArtifactKind` trait.

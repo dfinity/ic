@@ -25,6 +25,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     Height,
 };
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -67,7 +68,7 @@ impl StateSync {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StateSyncArtifact;
 
 impl ArtifactKind for StateSyncArtifact {
