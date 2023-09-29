@@ -6,10 +6,12 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
 pub fn decode<Ctx>(d: &mut Decoder<'_>, _ctx: &mut Ctx) -> Result<Nat, Error> {
-    let mut probe = d.probe();
-    match probe.u64() {
+    let pos = d.position();
+    match d.u64() {
         Ok(n) => return Ok(Nat::from(n)),
-        Err(e) if e.is_type_mismatch() => (),
+        Err(e) if e.is_type_mismatch() => {
+            d.set_position(pos);
+        }
         Err(e) => return Err(e),
     }
     let tag: Tag = d.tag()?;

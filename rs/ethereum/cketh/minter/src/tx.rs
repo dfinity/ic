@@ -112,9 +112,9 @@ impl rlp::Encodable for Eip1559Signature {
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct SignedEip1559TransactionRequest {
     #[n(0)]
-    transaction: Eip1559TransactionRequest,
+    pub transaction: Eip1559TransactionRequest,
     #[n(1)]
-    signature: Eip1559Signature,
+    pub signature: Eip1559Signature,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]

@@ -1,6 +1,23 @@
+use crate::address::Address;
+use crate::checked_amount::CheckedAmountOf;
+use crate::endpoints::CandidBlockTag;
+use crate::eth_logs::{EventSource, ReceivedEthEvent};
+use crate::eth_rpc::Hash;
 use crate::lifecycle::init::InitArg;
+use crate::lifecycle::upgrade::UpgradeArg;
+use crate::lifecycle::EthereumNetwork;
 use crate::numeric::wei_from_milli_ether;
+use crate::state::event::{Event, EventType};
 use crate::state::State;
+use crate::tx::{
+    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest,
+    SignedEip1559TransactionRequest, StorageKey,
+};
+use candid::{Nat, Principal};
+use ethnum::u256;
+use proptest::array::{uniform20, uniform32};
+use proptest::collection::vec as pvec;
+use proptest::prelude::*;
 
 mod next_request_id {
     use crate::state::tests::a_state;
@@ -26,7 +43,6 @@ mod next_request_id {
 }
 
 fn a_state() -> State {
-    use candid::Principal;
     State::try_from(InitArg {
         ethereum_network: Default::default(),
         ecdsa_key_name: "test_key_1".to_string(),
@@ -278,5 +294,202 @@ mod upgrade {
             next_transaction_nonce: Default::default(),
         })
         .expect("valid init args")
+    }
+}
+
+fn arb_hash() -> impl Strategy<Value = Hash> {
+    uniform32(any::<u8>()).prop_map(Hash)
+}
+
+fn arb_address() -> impl Strategy<Value = Address> {
+    uniform20(any::<u8>()).prop_map(Address::new)
+}
+
+fn arb_principal() -> impl Strategy<Value = Principal> {
+    pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+}
+
+fn arb_u256() -> impl Strategy<Value = u256> {
+    uniform32(any::<u8>()).prop_map(u256::from_be_bytes)
+}
+
+fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
+    (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| CheckedAmountOf::from_words(hi, lo))
+}
+
+fn arb_event_source() -> impl Strategy<Value = EventSource> {
+    (arb_hash(), arb_checked_amount_of()).prop_map(|(transaction_hash, log_index)| EventSource {
+        transaction_hash,
+        log_index,
+    })
+}
+
+fn arb_block_tag() -> impl Strategy<Value = CandidBlockTag> {
+    prop_oneof![
+        Just(CandidBlockTag::Safe),
+        Just(CandidBlockTag::Latest),
+        Just(CandidBlockTag::Finalized),
+    ]
+}
+
+fn arb_nat() -> impl Strategy<Value = Nat> {
+    any::<u128>().prop_map(Nat::from)
+}
+
+fn arb_storage_key() -> impl Strategy<Value = StorageKey> {
+    uniform32(any::<u8>()).prop_map(StorageKey)
+}
+fn arb_access_list_item() -> impl Strategy<Value = AccessListItem> {
+    (arb_address(), pvec(arb_storage_key(), 0..100)).prop_map(|(address, storage_keys)| {
+        AccessListItem {
+            address,
+            storage_keys,
+        }
+    })
+}
+fn arb_access_list() -> impl Strategy<Value = AccessList> {
+    pvec(arb_access_list_item(), 0..100).prop_map(AccessList)
+}
+
+prop_compose! {
+    fn arb_init_arg()(
+        contract_address in proptest::option::of(arb_address()),
+        ethereum_block_height in arb_block_tag(),
+        minimum_withdrawal_amount in arb_nat(),
+        next_transaction_nonce in arb_nat(),
+        ledger_id in arb_principal(),
+        ecdsa_key_name in "[a-z_]*",
+    ) -> InitArg {
+        InitArg {
+            ethereum_network: EthereumNetwork::Sepolia,
+            ecdsa_key_name,
+            ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
+            ledger_id,
+            ethereum_block_height,
+            minimum_withdrawal_amount,
+            next_transaction_nonce,
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_upgrade_arg()(
+        contract_address in proptest::option::of(arb_address()),
+        ethereum_block_height in proptest::option::of(arb_block_tag()),
+        minimum_withdrawal_amount in proptest::option::of(arb_nat()),
+        next_transaction_nonce in proptest::option::of(arb_nat()),
+    ) -> UpgradeArg {
+        UpgradeArg {
+            ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
+            ethereum_block_height,
+            minimum_withdrawal_amount,
+            next_transaction_nonce,
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_received_eth_event()(
+        transaction_hash in arb_hash(),
+        block_number in arb_checked_amount_of(),
+        log_index in arb_checked_amount_of(),
+        from_address in arb_address(),
+        value in arb_checked_amount_of(),
+        principal in arb_principal(),
+    ) -> ReceivedEthEvent {
+        ReceivedEthEvent {
+            transaction_hash,
+            block_number,
+            log_index,
+            from_address,
+            value,
+            principal,
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_signed_tx()(
+        chain_id in any::<u64>(),
+        nonce in arb_checked_amount_of(),
+        max_priority_fee_per_gas in arb_checked_amount_of(),
+        max_fee_per_gas in arb_checked_amount_of(),
+        gas_limit in arb_u256(),
+        destination in arb_address(),
+        amount in arb_checked_amount_of(),
+        data in pvec(any::<u8>(), 0..20),
+        access_list in arb_access_list(),
+        r in arb_u256(),
+        s in arb_u256(),
+        signature_y_parity in any::<bool>(),
+    ) -> SignedEip1559TransactionRequest {
+        SignedEip1559TransactionRequest {
+            transaction: Eip1559TransactionRequest {
+                chain_id,
+                nonce,
+                max_priority_fee_per_gas,
+                max_fee_per_gas,
+                gas_limit,
+                destination,
+                amount,
+                data,
+                access_list,
+            },
+            signature: Eip1559Signature {
+                r,
+                s,
+                signature_y_parity,
+            },
+        }
+    }
+}
+
+fn arb_event_type() -> impl Strategy<Value = EventType> {
+    prop_oneof![
+        arb_init_arg().prop_map(EventType::Init),
+        arb_upgrade_arg().prop_map(EventType::Upgrade),
+        arb_received_eth_event().prop_map(EventType::AcceptedDeposit),
+        arb_event_source().prop_map(|event_source| EventType::InvalidDeposit {
+            event_source,
+            reason: "bad principal".to_string()
+        }),
+        (arb_event_source(), any::<u64>()).prop_map(|(event_source, index)| {
+            EventType::MintedCkEth {
+                event_source,
+                mint_block_index: index.into(),
+            }
+        }),
+        arb_checked_amount_of().prop_map(|block_number| EventType::SyncedToBlock { block_number }),
+        (any::<u64>(), arb_signed_tx()).prop_map(|(withdrawal_id, tx)| {
+            EventType::SignedTx {
+                withdrawal_id: withdrawal_id.into(),
+                tx,
+            }
+        }),
+        (any::<u64>(), arb_hash()).prop_map(|(withdrawal_id, txhash)| {
+            EventType::SentTransaction {
+                withdrawal_id: withdrawal_id.into(),
+                txhash,
+            }
+        }),
+        (any::<u64>(), arb_hash()).prop_map(|(withdrawal_id, txhash)| {
+            EventType::FinalizedTransaction {
+                withdrawal_id: withdrawal_id.into(),
+                txhash,
+            }
+        }),
+    ]
+}
+
+fn arb_event() -> impl Strategy<Value = Event> {
+    (any::<u64>(), arb_event_type()).prop_map(|(timestamp, payload)| Event { timestamp, payload })
+}
+
+proptest! {
+    #[test]
+    fn event_encoding_roundtrip(event in arb_event()) {
+        use ic_stable_structures::storable::Storable;
+        let bytes = event.to_bytes();
+        prop_assert_eq!(&event, &Event::from_bytes(bytes.clone()), "failed to decode bytes {}", hex::encode(bytes));
     }
 }

@@ -43,7 +43,9 @@ pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Debug, Default, Serialize, Deserialize, Clone, Encode, Decode)]
+#[derive(
+    CandidType, Debug, Default, Serialize, Deserialize, Clone, Encode, Decode, PartialEq, Eq,
+)]
 #[cbor(index_only)]
 pub enum CandidBlockTag {
     /// The latest mined block.
