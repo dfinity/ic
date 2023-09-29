@@ -317,10 +317,8 @@ pub fn create_dealing(
     shares: &SecretShares,
     seed: Seed,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IdkgCreateDealingInternalError::UnsupportedAlgorithm),
-    }?;
+    let curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IdkgCreateDealingInternalError::UnsupportedAlgorithm)?;
 
     IDkgDealingInternal::new(
         shares,
@@ -368,10 +366,8 @@ pub fn create_transcript(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     operation_mode: &IDkgTranscriptOperationInternal,
 ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IDkgCreateTranscriptInternalError::UnsupportedAlgorithm),
-    }?;
+    let curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IDkgCreateTranscriptInternalError::UnsupportedAlgorithm)?;
 
     IDkgTranscriptInternal::new(
         curve,
@@ -565,10 +561,8 @@ pub fn publicly_verify_dealing(
     number_of_receivers: NumberOfNodes,
     associated_data: &[u8],
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm),
-    }?;
+    let curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     dealing
         .publicly_verify(
@@ -597,10 +591,8 @@ pub fn privately_verify_dealing(
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm),
-    }?;
+    let curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     dealing
         .privately_verify(
@@ -656,13 +648,9 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaGenerateSigShareInternalError {
     }
 }
 
+// Returns None if the AlgorithmId does not map to threshold ECDSA
 fn signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usize)> {
-    match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => {
-            Some((EccCurveType::K256, EccCurveType::K256.scalar_bytes()))
-        }
-        _ => None,
-    }
+    EccCurveType::from_algorithm(algorithm_id).map(|curve| (curve, curve.scalar_bytes()))
 }
 
 /// Create a new threshold ECDSA signature share
@@ -807,10 +795,8 @@ pub fn combine_sig_shares(
     sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
     algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
-    let curve_type = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => EccCurveType::K256,
-        _ => return Err(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm),
-    };
+    let curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm)?;
 
     sign::ThresholdEcdsaCombinedSigInternal::new(
         derivation_path,
@@ -820,7 +806,7 @@ pub fn combine_sig_shares(
         presig_transcript,
         reconstruction_threshold,
         sig_shares,
-        curve_type,
+        curve,
     )
     .map_err(|e| e.into())
 }

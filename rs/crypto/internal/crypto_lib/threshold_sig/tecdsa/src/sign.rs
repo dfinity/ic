@@ -223,13 +223,12 @@ impl ThresholdEcdsaCombinedSigInternal {
         algorithm_id: AlgorithmId,
         bytes: &[u8],
     ) -> ThresholdEcdsaSerializationResult<Self> {
-        let curve_type = match algorithm_id {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-            x => Err(ThresholdEcdsaSerializationError(format!(
+        let curve_type = EccCurveType::from_algorithm(algorithm_id).ok_or_else(|| {
+            ThresholdEcdsaSerializationError(format!(
                 "Invalid algorithm {:?} for threshold ECDSA",
-                x
-            ))),
-        }?;
+                algorithm_id
+            ))
+        })?;
 
         let slen = curve_type.scalar_bytes();
 
