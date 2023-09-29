@@ -116,7 +116,7 @@ struct Cli {
     acme_account_id: Option<String>,
 
     #[arg(long)]
-    acme_account_key: Option<String>,
+    acme_account_key_path: Option<PathBuf>,
 
     #[arg(long, default_value = "https://acme-v02.api.letsencrypt.org")]
     acme_provider_url: String,
@@ -125,7 +125,7 @@ struct Cli {
     cloudflare_api_url: String,
 
     #[arg(long)]
-    cloudflare_api_key: String,
+    cloudflare_api_key_path: PathBuf,
 
     #[arg(long, default_value = "60")]
     peek_sleep_sec: u64,
@@ -403,14 +403,16 @@ async fn main() -> Result<(), Error> {
     // ACME
     let Cli {
         acme_account_id,
-        acme_account_key,
+        acme_account_key_path,
         acme_provider_url,
         ..
     } = cli;
 
-    let acme_account = match (acme_account_id, acme_account_key) {
+    let acme_account = match (acme_account_id, acme_account_key_path) {
         // Re-use existing account
-        (Some(id), Some(key)) => {
+        (Some(id), Some(path)) => {
+            let key =
+                std::fs::read_to_string(path).context("failed to open acme account key file")?;
             let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
                 r#"{{
                     "id": "{acme_provider_url}/acme/acct/{id}",
@@ -465,13 +467,20 @@ async fn main() -> Result<(), Error> {
     );
 
     // Cloudflare
-    let dns_creator = Cloudflare::new(&cli.cloudflare_api_url, &cli.cloudflare_api_key)?;
+    let dns_creator = {
+        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path.clone())
+            .context("failed to open cloudflare api key file")?;
+        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
+    };
     let dns_creator = WithMetrics(
         dns_creator,
         MetricParams::new(&meter, SERVICE_NAME, "dns_create"),
     );
 
-    let dns_deleter = Cloudflare::new(&cli.cloudflare_api_url, &cli.cloudflare_api_key)?;
+    let dns_deleter = {
+        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path)?;
+        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
+    };
     let dns_deleter = WithMetrics(
         dns_deleter,
         MetricParams::new(&meter, SERVICE_NAME, "dns_delete"),
