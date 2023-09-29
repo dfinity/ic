@@ -60,7 +60,7 @@ impl rlp::Encodable for AccessListItem {
     }
 }
 
-/// https://eips.ethereum.org/EIPS/eip-1559
+/// <https://eips.ethereum.org/EIPS/eip-1559>
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct Eip1559TransactionRequest {
     #[n(0)]
