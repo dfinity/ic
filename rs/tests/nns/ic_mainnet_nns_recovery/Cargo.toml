@@ -19,5 +19,5 @@ tests = { path = "../../" }
 ic-types = { path = "../../../types/types" }
 serde = { version = "1.0.115", features = ["derive"] }
 slog = { version = "2.5.2", features = ["release_max_level_trace"] }
-ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }
+ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", rev = "f842906afaa2443206b8365d51950ed3ef85c940"}
 url = "2.1.1"
