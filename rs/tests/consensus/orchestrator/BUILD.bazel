@@ -7,8 +7,6 @@ MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
 
 SUBNET_RECOVERY_RUNTIME_DEPS = [
     "//rs/tests:recovery/binaries",
-    "//ic-os/guestos/envs/prod:update-img.tar.zst.sha256",
-    "//ic-os/guestos/envs/prod:upload_update-img",
 ]
 
 ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = ["//rs/tests:src/orchestrator/orchestrator_universal_vm_activation.sh"]
