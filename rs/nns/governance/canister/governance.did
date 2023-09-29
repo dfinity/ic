@@ -213,6 +213,9 @@ type GovernanceParameters = record {
   proposal_rejection_fee : opt Tokens;
   voting_reward_parameters : opt VotingRewardParameters;
 };
+type IdealMatchedParticipationFunction = record {
+  serialized_representation : opt text;
+};
 type Image = record { base64_encoding : opt text };
 type IncreaseDissolveDelay = record {
   additional_dissolve_delay_seconds : nat32;
@@ -374,6 +377,19 @@ type NeuronsFundNeuron = record {
   nns_neuron_id : opt nat64;
   amount_icp_e8s : opt nat64;
 };
+type NeuronsFundNeuron_1 = record {
+  hotkey_principal : opt principal;
+  is_capped : opt bool;
+  nns_neuron_id : opt nat64;
+  amount_icp_e8s : opt nat64;
+};
+type NeuronsFundParticipation = record {
+  neurons_fund_snapshot : opt NeuronsFundSnapshot;
+  ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
+};
+type NeuronsFundSnapshot = record {
+  neurons_fund_neurons : vec NeuronsFundNeuron_1;
+};
 type NodeProvider = record {
   id : opt principal;
   reward_account : opt AccountIdentifier;
@@ -416,6 +432,7 @@ type Proposal = record {
 };
 type ProposalData = record {
   id : opt NeuronId;
+  neurons_fund_participation : opt NeuronsFundParticipation;
   failure_reason : opt GovernanceError;
   cf_participants : vec CfParticipant;
   ballots : vec record { nat64; Ballot };

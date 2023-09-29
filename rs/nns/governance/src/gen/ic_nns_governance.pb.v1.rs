@@ -1351,6 +1351,83 @@ pub struct ProposalData {
     pub sns_token_swap_lifecycle: ::core::option::Option<i32>,
     #[prost(message, optional, tag = "20")]
     pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
+    /// This structure contains data for settling the Neurons' Fund participation at the end of a swap.
+    /// This data is however not sufficient, as settling a swap requires knowing the ultimate result
+    /// (Aborted or Committed) and, if Committed, the overall direct participation amount. For more
+    /// details, refer to `SettleNeuronsFundParticipationRequest`.
+    ///
+    /// TODO\[NNS1-2566\]: deprecate `original_total_community_fund_maturity_e8s_equivalent` and
+    /// `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
+    #[prost(message, optional, tag = "21")]
+    pub neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundParticipation {
+    /// The function used in the implementation of Matched Funding.
+    ///
+    /// If an NNS Governance upgrade takes place *during* a swap, the original "ideal" matched
+    /// participation function needs to be recovered at the end of the swap, ensuring e.g., that
+    /// the amount of maturity stored in `neurons_fund_snapshot` will not not be exceeded for due to
+    /// a change in this function.
+    #[prost(message, optional, tag = "1")]
+    pub ideal_matched_participation_function:
+        ::core::option::Option<IdealMatchedParticipationFunction>,
+    /// The snapshot of the Neurons' Fund allocation of its maximum swap participation amount among
+    /// its neurons. This snapshot is computed at the execution time of the NNS proposal leading
+    /// to the swap opening; it is then used at the end of a swap to compute the refund amounts
+    /// per Neuron' Fund neuron.
+    #[prost(message, optional, tag = "2")]
+    pub neurons_fund_snapshot: ::core::option::Option<NeuronsFundSnapshot>,
+}
+/// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
+/// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints
+/// while allocating its overall participation amount among its neurons' maturity. In contrast,
+/// The "effective" matched participation function `crate::neurons_fund::MatchedParticipationFunction`
+/// is computed *based* on this one.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IdealMatchedParticipationFunction {
+    /// The encoding of the "ideal" matched participation function is defined in `crate::neurons_fund`.
+    /// In the future, we could change this message to represent full abstract syntactic trees
+    /// comprised of elementary mathematical operators, with literals and variables as tree leaves.
+    #[prost(string, optional, tag = "1")]
+    pub serialized_representation: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// The snapshot of the Neurons' Fund allocation of its maximum swap participation amount among
+/// its neurons. This snapshot is computed at the execution time of the NNS proposal leading
+/// to the swap opening; it is then used at the end of a swap to compute the refund amounts
+/// per Neuron' Fund neuron.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundSnapshot {
+    #[prost(message, repeated, tag = "1")]
+    pub neurons_fund_neurons: ::prost::alloc::vec::Vec<neurons_fund_snapshot::NeuronsFundNeuron>,
+}
+/// Nested message and enum types in `NeuronsFundSnapshot`.
+pub mod neurons_fund_snapshot {
+    /// Represents one NNS neuron from the Neurons' Fund participating in this swap.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronsFundNeuron {
+        /// The NNS neuron ID of the participating neuron.
+        #[prost(uint64, optional, tag = "1")]
+        pub nns_neuron_id: ::core::option::Option<u64>,
+        /// The amount of Neurons' Fund participation associated with this neuron.
+        #[prost(uint64, optional, tag = "2")]
+        pub amount_icp_e8s: ::core::option::Option<u64>,
+        /// The principal that can vote on behalf of this neuron.
+        #[prost(message, optional, tag = "3")]
+        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
+        /// has been capped to reflect the maximum participation amount for this SNS swap.
+        #[prost(bool, optional, tag = "4")]
+        pub is_capped: ::core::option::Option<bool>,
+    }
 }
 /// This message has a couple of unusual features.
 ///
