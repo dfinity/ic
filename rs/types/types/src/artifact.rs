@@ -68,13 +68,11 @@ pub enum Artifact {
 #[try_into(owned, ref, ref_mut)]
 pub enum ArtifactAttribute {
     ConsensusMessage(ConsensusMessageAttribute),
-    IngressMessage(IngressMessageAttribute),
     DkgMessage(DkgMessageAttribute),
     CertificationMessage(CertificationMessageAttribute),
     EcdsaMessage(EcdsaMessageAttribute),
     CanisterHttpMessage(CanisterHttpResponseAttribute),
-    FileTreeSync(FileTreeSyncAttribute),
-    StateSync(()),
+    EmptyAttr(()),
 }
 
 /// Artifact identifier type.
@@ -349,17 +347,6 @@ impl From<&IngressMessageId> for MessageId {
     }
 }
 
-/// Dummy definition of ingress message attribute for now.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct IngressMessageAttribute;
-
-// Placeholder for now.
-impl IngressMessageAttribute {
-    pub fn new(_message: &SignedIngress) -> Self {
-        IngressMessageAttribute
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Certification artifacts
 
@@ -541,9 +528,6 @@ pub struct StateSyncFilter {
 
 // ------------------------------------------------------------------------------
 // FileTreeSync artifacts
-
-/// File tree sync attribute.
-pub type FileTreeSyncAttribute = String;
 
 // ------------------------------------------------------------------------------
 // Conversions

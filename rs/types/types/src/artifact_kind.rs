@@ -47,7 +47,7 @@ impl ArtifactKind for IngressArtifact {
     const TAG: ArtifactTag = ArtifactTag::IngressArtifact;
     type Id = IngressMessageId;
     type Message = SignedIngress;
-    type Attribute = IngressMessageAttribute;
+    type Attribute = ();
     type Filter = ();
 
     /// The function converts a `SignedIngress` into an advert for an
@@ -55,7 +55,7 @@ impl ArtifactKind for IngressArtifact {
     fn message_to_advert(msg: &SignedIngress) -> Advert<IngressArtifact> {
         Advert {
             id: IngressMessageId::from(msg),
-            attribute: IngressMessageAttribute::new(msg),
+            attribute: (),
             size: msg.count_bytes(),
             integrity_hash: crypto_hash(msg.binary()).get(),
         }

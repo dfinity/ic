@@ -135,7 +135,7 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(&self) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<IngressMessageId, ()> {
         let pool = self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(&pool)
     }

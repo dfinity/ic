@@ -32,7 +32,7 @@ use ic_test_utilities::{
 };
 use ic_types::crypto::crypto_hash;
 use ic_types::{
-    artifact::{IngressMessageAttribute, IngressMessageId, SignedIngress},
+    artifact::{IngressMessageId, SignedIngress},
     batch::ValidationContext,
     CountBytes, Height, NumBytes, RegistryVersion,
 };
@@ -76,7 +76,6 @@ proptest! {
 
                 for m in singed_ingress_vec.iter() {
                     let message_id = IngressMessageId::from(m);
-                    let attribute = IngressMessageAttribute::new(m);
                     access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
                             message: m.clone(),
@@ -87,7 +86,7 @@ proptest! {
                             message_id.clone(),
                             node_test_id(0),
                             m.count_bytes(),
-                            attribute,
+                            (),
                             crypto_hash(m.binary()).get(),
                         ))]);
                         // check that message is indeed in the pool

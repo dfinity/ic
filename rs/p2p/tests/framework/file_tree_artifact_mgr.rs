@@ -6,9 +6,7 @@
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
 use ic_interfaces::artifact_pool::{ChangeResult, UnvalidatedArtifactEvent};
 use ic_interfaces::time_source::TimeSource;
-use ic_replica_setup_ic_network::{
-    TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
-};
+use ic_replica_setup_ic_network::{TestArtifact, TestArtifactId, TestArtifactMessage};
 use ic_types::artifact::{Advert, ArtifactId, Priority};
 use ic_types::chunkable::Chunkable;
 use ic_types::crypto::CryptoHash;
@@ -50,7 +48,7 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
         let adverts = unvalidated_pool
             .iter()
             .map(|(artifact_id, artifact)| Advert {
-                attribute: artifact.id.to_string(),
+                attribute: (),
                 size: 0,
                 id: artifact.id.clone(),
                 integrity_hash: CryptoHash(artifact_id.clone().into_bytes()),
@@ -83,11 +81,8 @@ impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
 
     fn get_priority_function(
         &self,
-    ) -> Box<dyn Fn(&TestArtifactId, &TestArtifactAttribute) -> Priority + Send + Sync + 'static>
-    {
-        Box::new(
-            move |_id: &'_ TestArtifactId, _attribute: &'_ TestArtifactAttribute| Priority::Fetch,
-        )
+    ) -> Box<dyn Fn(&TestArtifactId, &()) -> Priority + Send + Sync + 'static> {
+        Box::new(move |_id: &'_ TestArtifactId, ()| Priority::Fetch)
     }
 
     fn get_chunk_tracker(&self, id: &TestArtifactId) -> Box<dyn Chunkable + Send + Sync> {

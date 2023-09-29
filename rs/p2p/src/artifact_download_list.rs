@@ -281,7 +281,6 @@ mod tests {
     use crate::download_management::tests::TestArtifactManager;
     use ic_test_utilities::p2p::p2p_test_setup_logger;
     use ic_test_utilities::types::ids::node_test_id;
-    use ic_types::artifact::ArtifactAttribute;
     use ic_types::crypto::CryptoHash;
     use ic_types::p2p;
     use std::convert::TryFrom;
@@ -298,7 +297,7 @@ mod tests {
         for advert_id in 0..num_adverts {
             let gossip_advert = GossipAdvert {
                 artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
-                attribute: ArtifactAttribute::FileTreeSync(advert_id.to_string()),
+                attribute: ic_types::artifact::ArtifactAttribute::EmptyAttr(()),
                 size: 0,
                 integrity_hash: CryptoHash(vec![u8::try_from(advert_id).unwrap()]),
             };

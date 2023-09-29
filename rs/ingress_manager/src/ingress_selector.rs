@@ -506,7 +506,7 @@ mod tests {
     };
     use ic_types::crypto::crypto_hash;
     use ic_types::{
-        artifact::{IngressMessageAttribute, IngressMessageId},
+        artifact::IngressMessageId,
         batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         messages::{MessageId, SignedIngress},
@@ -632,7 +632,6 @@ mod tests {
                 let ingress_messages = vec![m1.clone(), m2, m3];
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
-                    let attribute = IngressMessageAttribute::new(m);
                     access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
                             message: m.clone(),
@@ -645,7 +644,7 @@ mod tests {
                                 message_id.clone(),
                                 node_test_id(0),
                                 m.count_bytes(),
-                                attribute,
+                                (),
                                 crypto_hash(m.binary()).get(),
                             ))],
                         );
@@ -821,7 +820,6 @@ mod tests {
                     .expiry_time(mock_time() + MAX_INGRESS_TTL)
                     .build();
                 let message_id = IngressMessageId::from(&ingress_msg1);
-                let attribute = IngressMessageAttribute::new(&ingress_msg1);
                 access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
@@ -835,7 +833,7 @@ mod tests {
                             message_id,
                             node_test_id(0),
                             ingress_size1,
-                            attribute,
+                            (),
                             crypto_hash(ingress_msg1.binary()).get(),
                         ))],
                     );
@@ -881,7 +879,6 @@ mod tests {
                     .expiry_time(mock_time() + MAX_INGRESS_TTL)
                     .build();
                 let message_id = IngressMessageId::from(&ingress_msg1);
-                let attribute = IngressMessageAttribute::new(&ingress_msg1);
                 access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
@@ -895,7 +892,7 @@ mod tests {
                             message_id,
                             node_test_id(0),
                             ingress_size1,
-                            attribute,
+                            (),
                             crypto_hash(ingress_msg1.binary()).get(),
                         ))],
                     );
@@ -959,7 +956,6 @@ mod tests {
                 // add them to the pool
                 access_ingress_pool(&ingress_pool, |ingress_pool| {
                     let message_id = IngressMessageId::from(&ingress_msg1);
-                    let attribute = IngressMessageAttribute::new(&ingress_msg1);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
                         peer_id: node_test_id(0),
@@ -971,12 +967,11 @@ mod tests {
                             message_id,
                             node_test_id(0),
                             ingress_msg1.count_bytes(),
-                            attribute,
+                            (),
                             crypto_hash(ingress_msg1.binary()).get(),
                         ))],
                     );
 
-                    let attribute = IngressMessageAttribute::new(&ingress_msg2);
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
@@ -989,7 +984,7 @@ mod tests {
                             message_id,
                             node_test_id(0),
                             ingress_msg2.count_bytes(),
-                            attribute,
+                            (),
                             crypto_hash(ingress_msg2.binary()).get(),
                         ))],
                     );
@@ -1049,7 +1044,6 @@ mod tests {
                 // add them to the pool
                 access_ingress_pool(&ingress_pool, |ingress_pool| {
                     let message_id = IngressMessageId::from(&ingress_msg1);
-                    let attribute = IngressMessageAttribute::new(&ingress_msg1);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
                         peer_id: node_test_id(0),
@@ -1061,12 +1055,11 @@ mod tests {
                             message_id,
                             node_test_id(0),
                             ingress_msg1.count_bytes(),
-                            attribute,
+                            (),
                             crypto_hash(ingress_msg1.binary()).get(),
                         ))],
                     );
 
-                    let attribute = IngressMessageAttribute::new(&ingress_msg2);
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
@@ -1079,7 +1072,7 @@ mod tests {
                             message_id,
                             node_test_id(0),
                             ingress_msg2.count_bytes(),
-                            attribute,
+                            (),
                             crypto_hash(ingress_msg2.binary()).get(),
                         ))],
                     );
@@ -1235,9 +1228,6 @@ mod tests {
                     .build();
                 let message_id2 = IngressMessageId::from(&ingress_msg2);
 
-                let attribute1 = IngressMessageAttribute::new(&ingress_msg1);
-                let attribute2 = IngressMessageAttribute::new(&ingress_msg2);
-
                 access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg1.clone(),
@@ -1250,7 +1240,7 @@ mod tests {
                             message_id1,
                             node_test_id(0),
                             ingress_msg1.count_bytes(),
-                            attribute1,
+                            (),
                             crypto_hash(ingress_msg1.binary()).get(),
                         ))],
                     );
@@ -1265,7 +1255,7 @@ mod tests {
                             message_id2,
                             node_test_id(0),
                             ingress_msg2.count_bytes(),
-                            attribute2,
+                            (),
                             crypto_hash(ingress_msg2.binary()).get(),
                         ))],
                     );
@@ -1435,7 +1425,6 @@ mod tests {
 
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
-                    let attribute = IngressMessageAttribute::new(m);
                     access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
                             message: m.clone(),
@@ -1448,7 +1437,7 @@ mod tests {
                                 message_id.clone(),
                                 node_test_id(0),
                                 m.count_bytes(),
-                                attribute,
+                                (),
                                 crypto_hash(m.binary()).get(),
                             ))],
                         );
@@ -1815,7 +1804,6 @@ mod tests {
                     .build();
 
                 let msg_id = IngressMessageId::from(&msg);
-                let msg_attribute = IngressMessageAttribute::new(&msg);
                 let msg_hash = crypto_hash(msg.binary()).get();
                 let _payload = IngressPayload::from(vec![msg.clone()]);
 
@@ -1830,7 +1818,7 @@ mod tests {
                         msg_id,
                         node_test_id(0),
                         0,
-                        msg_attribute,
+                        (),
                         msg_hash,
                     ))],
                 );

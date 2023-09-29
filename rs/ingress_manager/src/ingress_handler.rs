@@ -11,10 +11,7 @@ use ic_interfaces::{
 };
 use ic_logger::{debug, warn};
 use ic_types::{
-    artifact::{IngressMessageAttribute, IngressMessageId},
-    ingress::IngressStatus,
-    time::current_time,
-    CountBytes,
+    artifact::IngressMessageId, ingress::IngressStatus, time::current_time, CountBytes,
 };
 
 impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
@@ -114,7 +111,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
                 IngressMessageId::from(ingress_object),
                 artifact.peer_id,
                 size,
-                IngressMessageAttribute::new(ingress_message),
+                (),
                 integrity_hash,
             ))
         }));
@@ -199,7 +196,6 @@ mod tests {
                     .nonce(2)
                     .sign_for_randomly_generated_sender()
                     .build();
-                let attribute = IngressMessageAttribute::new(&ingress_message);
                 let message_id = IngressMessageId::from(&ingress_message);
                 let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
 
@@ -217,7 +213,7 @@ mod tests {
                     message_id,
                     node_test_id(0),
                     size,
-                    attribute,
+                    (),
                     integrity_hash,
                 ));
                 assert!(change_set.contains(&expected_change_action));
@@ -412,7 +408,6 @@ mod tests {
                     .expiry_time(current_time + MAX_INGRESS_TTL / 2)
                     .sign_for_randomly_generated_sender()
                     .build();
-                let attribute = IngressMessageAttribute::new(&good_msg);
                 let good_msg_integrity_hash =
                     ic_types::crypto::crypto_hash(good_msg.binary()).get();
                 let bad_msg = SignedIngressBuilder::new()
@@ -442,7 +437,7 @@ mod tests {
                     good_id,
                     node_test_id(0),
                     good_msg.count_bytes(),
-                    attribute,
+                    (),
                     good_msg_integrity_hash,
                 ));
                 let expected_change_action2 = ChangeAction::RemoveFromUnvalidated(bad_id);

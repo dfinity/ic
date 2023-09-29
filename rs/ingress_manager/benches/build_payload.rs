@@ -39,11 +39,9 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
-    artifact::{IngressMessageAttribute, IngressMessageId},
-    batch::ValidationContext,
-    ingress::IngressStatus,
-    malicious_flags::MaliciousFlags,
-    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
+    artifact::IngressMessageId, batch::ValidationContext, ingress::IngressStatus,
+    malicious_flags::MaliciousFlags, CanisterId, Cycles, Height, NumBytes, PrincipalId,
+    RegistryVersion, SubnetId, Time,
 };
 use rand::{Rng, RngCore};
 use std::{
@@ -158,7 +156,6 @@ fn prepare(
             .canister_id(*canisters.next().unwrap())
             .build();
         let message_id = IngressMessageId::from(&ingress);
-        let attribute = IngressMessageAttribute::new(&ingress);
         let peer_id = (i % 10) as u64;
         let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
         pool.insert(UnvalidatedArtifact {
@@ -170,7 +167,7 @@ fn prepare(
             message_id,
             node_test_id(peer_id),
             0,
-            attribute,
+            (),
             integrity_hash,
         )));
     }
