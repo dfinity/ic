@@ -46,6 +46,11 @@ function copy_files() {
     cp "${IDENTITY_PEM}" "${CFG_DIR}/identity.pem"
     cp "${ENC_KEY_PEM}" "${CFG_DIR}/enc_key.pem"
     get_nns_der >"${CFG_DIR}/root_key.der"
+    echo -n "${CLOUDFLARE_API_KEY}" >"${CFG_DIR}/cloudflare_api_key.txt"
+
+    if ! [ -z ${ACME_ACCOUNT_KEY:-} ]; then
+        echo -n "${ACME_ACCOUNT_KEY:-}" >"${CFG_DIR}/acme_account_key.txt"
+    fi
 }
 
 function generate_config() {
@@ -61,9 +66,9 @@ NAME_SERVERS_PORT=${NAME_SERVERS_PORT:-}
 DELEGATION_DOMAIN=${DELEGATION_DOMAIN}
 ACME_PROVIDER_URL=${ACME_PROVIDER_URL:-}
 ACME_ACCOUNT_ID=${ACME_ACCOUNT_ID:-}
-ACME_ACCOUNT_KEY=${ACME_ACCOUNT_KEY:-}
+ACME_ACCOUNT_KEY_PATH=${ACME_ACCOUNT_KEY:+"${CFG_DIR}"/acme_account_key.txt}
 CLOUDFLARE_API_URL=${CLOUDFLARE_API_URL:-}
-CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY}
+CLOUDFLARE_API_KEY_PATH=${CFG_DIR}/cloudflare_api_key.txt
 TASK_DELAY_SEC=${TASK_DELAY_SEC:-}
 TASK_ERROR_DELAY_SEC=${TASK_ERROR_DELAY_SEC:-}
 PEEK_SLEEP_SEC=${PEEK_SLEEP_SEC:-}
