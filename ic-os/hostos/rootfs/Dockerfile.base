@@ -139,7 +139,7 @@ RUN \
         tar xf snp-release-2023-05-24.tar.gz && \
         cd snp-release-2023-05-24 && \
         cp usr/local/bin/qemu-system-x86_64 /usr/local/bin && \
-        cp -r usr/local/share/qemu /usr/local/share/qemu && \
+        cp -r usr/local/share/qemu /usr/local/share && \
         dpkg -i linux/host/linux-image-*.deb && \
         cp kvm.conf /etc/modprobe.d/ && \
         ln -sf vmlinuz-${sev_snp_host_kernel_version} /boot/vmlinuz && \
@@ -147,6 +147,7 @@ RUN \
         find /boot -name "*.old" | xargs -L 1 unlink && \
         find /boot -name "*generic" | xargs rm && \
         find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf && \
+        touch /var/run/SEV && \
         rm -rf /tmp/snp-release-2023-05-24 ; \
     fi
 

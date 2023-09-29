@@ -50,8 +50,14 @@ RUN cd /tmp/ && \
 # Download and verify SEV-SNP binaries
 RUN cd /tmp/ && \
     curl -L -O https://github.com/dfinity/AMDSEV/releases/download/snp-release-2023-05-24/snp-release-2023-05-24.tar.gz && \
-    echo "dae30357ee68cbe1347d8bdf84f8b4f883c999be  snp-release-2023-05-24.tar.gz" > snp-release.sha256 && \
+    echo "94d3fc86498261767cdaef7261232bf1315a7b06a981b14cb628487aa3d793e8  snp-release-2023-05-24.tar.gz" > snp-release.sha256 && \
     shasum -c snp-release.sha256
+
+# Download and verify SEV-guest binaries
+RUN cd /tmp/ && \
+    curl -L -O https://github.com/dfinity/sev-guest/releases/download/sev-guest-2023-08-15/sev-guest.tar.gz && \
+    echo "db0c996be7c0132d30fe446b76bd3ab8d3b4a0eb058205aaae7225ea98361c6f  sev-guest.tar.gz" > sev-guest.sha256 && \
+    shasum -c sev-guest.sha256
 
 #
 # Second build stage:
@@ -97,6 +103,7 @@ RUN cd /tmp/ && \
 # If CPU_SUPPORT is "sev", install the guest kernel
 # TODO: Generate SEV build conditionally
 COPY --from=download /tmp/snp-release-2023-05-24.tar.gz /tmp/snp-release-2023-05-24.tar.gz
+COPY --from=download /tmp/sev-guest.tar.gz /tmp/sev-guest.tar.gz
 ARG sev_snp_guest_kernel_version=6.1.0-rc4-snp-guest-93fa8c5918a4
 RUN \
     echo "CPU_SUPPORT: ${CPU_SUPPORT}" && \
@@ -110,8 +117,13 @@ RUN \
         find /boot -name "*.old" | xargs -L 1 unlink && \
         find /boot -name "*generic" | xargs rm && \
         find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf && \
-        rm -rf /tmp/snp-release-2023-05-24 ; \
+
+        # Install sev-guest tools
+        mkdir -p /var/lib/sev-guest && \
+        tar --strip-components=1 -C /var/lib/sev-guest -zvxf /tmp/sev-guest.tar.gz && \
+	rm -rf /tmp/snp-release-2023-05-24 ; \
     fi
 
 # Cleanup
 RUN rm /tmp/snp-release-2023-05-24.tar.gz
+RUN rm /tmp/sev-guest.tar.gz
