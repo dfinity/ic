@@ -29,7 +29,7 @@ impl AsRef<[u8]> for Address {
 impl Address {
     pub const ZERO: Self = Self([0u8; 20]);
 
-    pub fn new(bytes: [u8; 20]) -> Self {
+    pub const fn new(bytes: [u8; 20]) -> Self {
         Self(bytes)
     }
 

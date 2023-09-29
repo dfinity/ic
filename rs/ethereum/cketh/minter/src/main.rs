@@ -140,7 +140,28 @@ async fn scrap_eth_logs_between(
                     event.value,
                     event.principal
                 );
-                mutate_state(|s| process_event(s, EventType::AcceptedDeposit(event)));
+                if ic_cketh_minter::blocklist::is_blocked(event.from_address) {
+                    log!(
+                        INFO,
+                        "Received event from a blocked address: {} for {} WEI",
+                        event.from_address,
+                        event.value,
+                    );
+                    mutate_state(|s| {
+                        process_event(
+                            s,
+                            EventType::InvalidDeposit {
+                                event_source: ic_cketh_minter::eth_logs::EventSource {
+                                    transaction_hash: event.transaction_hash,
+                                    log_index: event.log_index,
+                                },
+                                reason: format!("blocked address {}", event.from_address),
+                            },
+                        )
+                    });
+                } else {
+                    mutate_state(|s| process_event(s, EventType::AcceptedDeposit(event)));
+                }
             }
             if has_new_events {
                 ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint_cketh()));
@@ -488,6 +509,14 @@ async fn withdraw_eth(
         ))
     });
 
+    let destination = Address::from_str(&recipient)
+        .and_then(|a| validate_address_as_destination(a).map_err(|e| e.to_string()))
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
+
+    if ic_cketh_minter::blocklist::is_blocked(destination) {
+        ic_cdk::trap("attempted to withdraw ETH to a blocked address");
+    }
+
     let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
 
     let minimum_withdrawal_amount = read_state(|s| s.minimum_withdrawal_amount);
@@ -496,10 +525,6 @@ async fn withdraw_eth(
             min_withdrawal_amount: minimum_withdrawal_amount.into(),
         });
     }
-
-    let destination = Address::from_str(&recipient)
-        .and_then(|a| validate_address_as_destination(a).map_err(|e| e.to_string()))
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
 
     let ledger_canister_id = read_state(|s| s.ledger_id);
     let client = ICRC1Client {
@@ -586,6 +611,14 @@ async fn eth_fee_history() -> FeeHistory {
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     let ledger_burn_index = LedgerBurnIndex::new(block_index);
     read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
+}
+
+#[candid_method(query)]
+#[query]
+fn is_address_blocked(address_string: String) -> bool {
+    let address = Address::from_str(&address_string)
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
+    ic_cketh_minter::blocklist::is_blocked(address)
 }
 
 #[candid_method(update)]

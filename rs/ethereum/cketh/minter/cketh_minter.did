@@ -157,6 +157,8 @@ service : (MinterArg) -> {
     // Retrieve the status of a withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
 
+    // Check if an address is blocked by the minter.
+    is_address_blocked : (text) -> (bool) query;
     // Retrieve the status of the minter canister.
     get_canister_status : () -> (CanisterStatusResponse);
 }
