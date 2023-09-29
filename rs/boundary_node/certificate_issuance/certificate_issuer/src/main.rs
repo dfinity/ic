@@ -211,18 +211,25 @@ async fn main() -> Result<(), Error> {
         || GOOGLE_IPS.to_owned(), // default
     );
 
-    let resolver = Resolver(TokioAsyncResolver::tokio(
-        ResolverConfig::from_parts(
-            None,
-            vec![],
-            NameServerConfigGroup::from_ips_clear(
-                &name_servers,         // ips
-                cli.name_servers_port, // port
-                true,                  // trust_nx_responses
+    let resolver = {
+        let mut opts = ResolverOpts::default();
+
+        // Disable caching of DNS results
+        opts.cache_size = 0;
+
+        Resolver(TokioAsyncResolver::tokio(
+            ResolverConfig::from_parts(
+                None,
+                vec![],
+                NameServerConfigGroup::from_ips_clear(
+                    &name_servers,         // ips
+                    cli.name_servers_port, // port
+                    true,                  // trust_nx_responses
+                ),
             ),
-        ),
-        ResolverOpts::default(),
-    )?);
+            opts,
+        )?)
+    };
 
     let resolver = WithMetrics(resolver, MetricParams::new(&meter, SERVICE_NAME, "resolve"));
 
