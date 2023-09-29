@@ -62,7 +62,7 @@ pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoCo
 }
 
 fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
-    ic_crypto_test_utils::dkg::ni_dkg_csp_dealing(0)
+    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
 }
 
 fn empty_ni_dkg_dealing() -> NiDkgDealing {
@@ -71,7 +71,7 @@ fn empty_ni_dkg_dealing() -> NiDkgDealing {
     }
 }
 
-pub use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts_with_committee;
+pub use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts_with_committee;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types_test_utils::ids::NODE_1;
 

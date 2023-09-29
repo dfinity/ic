@@ -1,6 +1,9 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
 
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    ni_dkg_groth20_bls12_381, CspNiDkgDealing,
+};
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
@@ -178,6 +181,85 @@ pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
             (*signer, sig_share)
         })
         .collect()
+}
+
+pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
+    use ni_dkg_groth20_bls12_381 as scheme;
+    fn fr(seed: u8) -> scheme::FrBytes {
+        scheme::FrBytes([seed; scheme::FrBytes::SIZE])
+    }
+    fn g1(seed: u8) -> scheme::G1Bytes {
+        scheme::G1Bytes([seed; scheme::G1Bytes::SIZE])
+    }
+    fn g2(seed: u8) -> scheme::G2Bytes {
+        scheme::G2Bytes([seed; scheme::G2Bytes::SIZE])
+    }
+    const NUM_RECEIVERS: usize = 1;
+    CspNiDkgDealing::Groth20_Bls12_381(scheme::Dealing {
+        public_coefficients: scheme::PublicCoefficientsBytes {
+            coefficients: Vec::new(),
+        },
+        ciphertexts: scheme::EncryptedShares {
+            rand_r: [g1(seed); scheme::NUM_CHUNKS],
+            rand_s: [g1(seed); scheme::NUM_CHUNKS],
+            rand_z: [g2(seed); scheme::NUM_CHUNKS],
+            ciphertext_chunks: (0..NUM_RECEIVERS)
+                .map(|i| [g1(seed ^ (i as u8)); scheme::NUM_CHUNKS])
+                .collect(),
+        },
+        zk_proof_decryptability: ni_dkg_groth20_bls12_381::ZKProofDec {
+            // TODO(CRP-530): Populate this when it has been defined in the spec.
+            first_move_y0: g1(seed),
+            first_move_b: [g1(seed); scheme::NUM_ZK_REPETITIONS],
+            first_move_c: [g1(seed); scheme::NUM_ZK_REPETITIONS],
+            second_move_d: (0..NUM_RECEIVERS + 1)
+                .map(|i| g1(seed ^ (i as u8)))
+                .collect(),
+            second_move_y: g1(seed),
+            response_z_r: (0..NUM_RECEIVERS).map(|i| fr(seed | (i as u8))).collect(),
+            response_z_s: [fr(seed); scheme::NUM_ZK_REPETITIONS],
+            response_z_b: fr(seed),
+        },
+        zk_proof_correct_sharing: ni_dkg_groth20_bls12_381::ZKProofShare {
+            first_move_f: g1(seed),
+            first_move_a: g2(seed),
+            first_move_y: g1(seed),
+            response_z_r: fr(seed),
+            response_z_a: fr(seed),
+        },
+    })
+}
+
+pub fn empty_ni_dkg_transcripts_with_committee(
+    committee: Vec<NodeId>,
+    registry_version: u64,
+) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    vec![
+        (
+            NiDkgTag::LowThreshold,
+            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::LowThreshold,
+                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+        (
+            NiDkgTag::HighThreshold,
+            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+    ]
+    .into_iter()
+    .collect()
+}
+
+pub fn empty_ni_dkg_transcripts() -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    empty_ni_dkg_transcripts_with_committee(vec![NodeId::from(PrincipalId::new_node_test_id(0))], 0)
 }
 
 pub struct RandomNiDkgConfigBuilder {
