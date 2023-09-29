@@ -14,8 +14,8 @@ use ic_crypto_internal_threshold_sig_bls12381::types::{
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
