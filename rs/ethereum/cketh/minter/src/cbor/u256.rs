@@ -7,10 +7,12 @@ const U32_MAX: u256 = u256::new(u32::MAX as u128);
 const U64_MAX: u256 = u256::new(u64::MAX as u128);
 
 pub fn decode<Ctx>(d: &mut Decoder<'_>, _ctx: &mut Ctx) -> Result<u256, Error> {
-    let mut probe = d.probe();
-    match probe.u64() {
+    let pos = d.position();
+    match d.u64() {
         Ok(n) => return Ok(u256::from(n)),
-        Err(e) if e.is_type_mismatch() => (),
+        Err(e) if e.is_type_mismatch() => {
+            d.set_position(pos);
+        }
         Err(e) => return Err(e),
     }
 
