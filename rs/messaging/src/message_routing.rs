@@ -40,7 +40,7 @@ use ic_types::{
 use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::convert::TryFrom;
 use std::ops::Range;
 use std::sync::mpsc::{sync_channel, TrySendError};
@@ -77,6 +77,7 @@ const PHASE_COMMIT: &str = "commit";
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
+const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 
 const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
     "mr_wasm_custom_sections_memory_usage_bytes";
@@ -254,6 +255,12 @@ pub(crate) struct MessageRoutingMetrics {
     process_batch_duration: Histogram,
     /// Batch processing phase durations, by phase.
     pub process_batch_phase_duration: HistogramVec,
+    /// Number of timed out requests.
+    pub timed_out_requests_total: IntCounter,
+    /// Height at which the subnet last split (if during the lifetime of this
+    /// replica process; otherwise zero).
+    pub subnet_split_height: IntGaugeVec,
+
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
     /// for the extra copies of the state that the protocol has to store for
@@ -271,6 +278,7 @@ pub(crate) struct MessageRoutingMetrics {
     canister_history_memory_usage_bytes: IntGauge,
     /// The total number of changes in canister history per canister on this subnet.
     canister_history_total_num_changes: Histogram,
+
     /// Critical error for not being able to calculate a subnet size.
     critical_error_missing_subnet_size: IntCounter,
     /// Critical error: public keys of own subnet nodes are missing
@@ -284,8 +292,6 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: the batch times of successive batches regressed (when they
     /// are supposed to be monotonically increasing).
     critical_error_batch_time_regression: IntCounter,
-    /// Number of timed out requests.
-    pub timed_out_requests_total: IntCounter,
 }
 
 impl MessageRoutingMetrics {
@@ -321,6 +327,16 @@ impl MessageRoutingMetrics {
                 decimal_buckets(-3, 1),
                 &["phase"],
             ),
+            timed_out_requests_total: metrics_registry.int_counter(
+                METRIC_TIMED_OUT_REQUESTS_TOTAL,
+                "Count of timed out requests.",
+            ),
+            subnet_split_height: metrics_registry.int_gauge_vec(
+                METRIC_SUBNET_SPLIT_HEIGHT,
+                "Height at which the subnet last split (if during the lifetime of this replica process).",
+                &["split_from"],
+            ),
+
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
                 "Total memory footprint of all canisters on this subnet.",
@@ -339,6 +355,7 @@ impl MessageRoutingMetrics {
                 // 0, 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
             ),
+
             critical_error_missing_subnet_size: metrics_registry
                 .error_counter(CRITICAL_ERROR_MISSING_SUBNET_SIZE),
             critical_error_missing_or_invalid_node_public_keys: metrics_registry
@@ -349,10 +366,6 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
             critical_error_batch_time_regression: metrics_registry
                 .error_counter(CRITICAL_ERROR_BATCH_TIME_REGRESSION),
-            timed_out_requests_total: metrics_registry.int_counter(
-                METRIC_TIMED_OUT_REQUESTS_TOTAL,
-                "Count of timed out requests.",
-            ),
         }
     }
 
@@ -878,6 +891,10 @@ impl BatchProcessor for BatchProcessorImpl {
                 "State has resulted from splitting subnet {}, running phase 2 of state splitting",
                 split_from
             );
+            self.metrics
+                .subnet_split_height
+                .with_label_values(&[&split_from.to_string()])
+                .set(batch.batch_number.get() as i64);
             state.after_split();
         }
         self.observe_phase_duration(PHASE_LOAD_STATE, &timer);
