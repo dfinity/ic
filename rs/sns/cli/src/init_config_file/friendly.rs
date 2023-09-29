@@ -26,6 +26,9 @@ mod nns_governance_pb {
     };
 }
 
+#[cfg(test)]
+mod friendly_tests;
+
 // Implements the format used by test_sns_init_v2.yaml in the root of this
 // package. Studying that is a much more ergonomic way of becoming familiar with
 // the format that we are trying to implement here.
@@ -801,6 +804,3 @@ impl VestingSchedule {
         }
     }
 }
-
-#[cfg(test)]
-mod friendly_tests;
