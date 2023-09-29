@@ -6,6 +6,8 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+CONFIG_OVERRIDE_PATH="/dev/disk/by-label/OVERRIDE"
+
 CONFIG_DIR="/config"
 CONFIG_TMP="/var/ic/config"
 CONFIG_INI="${CONFIG_DIR}/config.ini"
@@ -25,7 +27,19 @@ function print_config_file() {
     else
         log_and_reboot_on_error "1" "config.ini not found. Please copy a valid config.ini to the SetupOS installer config partition."
     fi
+}
 
+# Clone configuration from "OVERRIDE" USB (used in testing)
+function clone_from_usb() {
+    if [ ! -b "${CONFIG_OVERRIDE_PATH}" ]; then
+        return
+    fi
+
+    TMPDIR=$(mktemp -d)
+    mount "${CONFIG_OVERRIDE_PATH}" "${TMPDIR}"
+    tar xf "${TMPDIR}/config.tar" --no-same-permissions --no-same-owner -C "${CONFIG_TMP}"
+    umount "${TMPDIR}"
+    rm -rf "${TMPDIR}"
 }
 
 function create_config_tmp() {
@@ -120,6 +134,7 @@ main() {
     normalize_config
     read_variables
     verify_variables
+    clone_from_usb
     log_end "$(basename $0)"
 }
 
