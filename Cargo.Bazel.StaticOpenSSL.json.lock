@@ -1,5 +1,5 @@
 {
-  "checksum": "060c78a1e4ab18e5269b72f770951e6398f1e6bdaa3ee2765b0d8aa0157eec19",
+  "checksum": "344f4b27f4134e831c010822a85d0f96c0a023b438dd5671e35bc355956e5235",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14163,7 +14163,7 @@
               "target": "walrus"
             },
             {
-              "id": "warp 0.3.5",
+              "id": "warp 0.3.6",
               "target": "warp"
             },
             {
@@ -42420,92 +42420,6 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "rustls 0.20.8": {
-      "name": "rustls",
-      "version": "0.20.8",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rustls/0.20.8/download",
-          "sha256": "fff78fc74d175294f4e83b28343315ffcfb114b156f0185e9741cb5570f50e2f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rustls",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "rustls",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "log",
-            "logging",
-            "tls12"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "log 0.4.19",
-              "target": "log"
-            },
-            {
-              "id": "ring 0.16.20",
-              "target": "ring"
-            },
-            {
-              "id": "rustls 0.20.8",
-              "target": "build_script_build"
-            },
-            {
-              "id": "sct 0.7.0",
-              "target": "sct"
-            },
-            {
-              "id": "webpki 0.22.1",
-              "target": "webpki"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.20.8"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "link_deps": {
-          "common": [
-            {
-              "id": "ring 0.16.20",
-              "target": "ring"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "Apache-2.0/ISC/MIT"
-    },
     "rustls 0.21.5": {
       "name": "rustls",
       "version": "0.21.5",
@@ -50550,61 +50464,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "tokio-rustls 0.23.4": {
-      "name": "tokio-rustls",
-      "version": "0.23.4",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-rustls/0.23.4/download",
-          "sha256": "c43ee83903113e03984cb9e5cebe6c04a5116269e900e3ddba8f068a62adda59"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tokio_rustls",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "tokio_rustls",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "logging",
-            "tls12"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "rustls 0.20.8",
-              "target": "rustls"
-            },
-            {
-              "id": "tokio 1.32.0",
-              "target": "tokio"
-            },
-            {
-              "id": "webpki 0.22.1",
-              "target": "webpki"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.23.4"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "tokio-rustls 0.24.1": {
       "name": "tokio-rustls",
       "version": "0.24.1",
@@ -50901,13 +50760,13 @@
       },
       "license": "MIT"
     },
-    "tokio-tungstenite 0.18.0": {
+    "tokio-tungstenite 0.20.1": {
       "name": "tokio-tungstenite",
-      "version": "0.18.0",
+      "version": "0.20.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-tungstenite/0.18.0/download",
-          "sha256": "54319c93411147bced34cb5609a80e0a8e44c5999c93903a81cd866630ec0bfd"
+          "url": "https://crates.io/api/v1/crates/tokio-tungstenite/0.20.1/download",
+          "sha256": "212d5dcb2a1ce06d81107c3d0ffa3121fe974b73f068c8282cb1c32328113b6c"
         }
       },
       "targets": [
@@ -50950,14 +50809,14 @@
               "target": "tokio"
             },
             {
-              "id": "tungstenite 0.18.0",
+              "id": "tungstenite 0.20.1",
               "target": "tungstenite"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.18.0"
+        "version": "0.20.1"
       },
       "license": "MIT"
     },
@@ -52654,13 +52513,13 @@
       },
       "license": "MIT"
     },
-    "tungstenite 0.18.0": {
+    "tungstenite 0.20.1": {
       "name": "tungstenite",
-      "version": "0.18.0",
+      "version": "0.20.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tungstenite/0.18.0/download",
-          "sha256": "30ee6ab729cd4cf0fd55218530c4522ed30b7b6081752839b68fcec8d0960788"
+          "url": "https://crates.io/api/v1/crates/tungstenite/0.20.1/download",
+          "sha256": "9e3dac10fd62eaf6617d3a904ae222845979aec67c615d1c842b4002c7666fb9"
         }
       },
       "targets": [
@@ -52681,7 +52540,7 @@
         ],
         "crate_features": {
           "common": [
-            "base64",
+            "data-encoding",
             "handshake",
             "http",
             "httparse",
@@ -52693,16 +52552,16 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
               "id": "byteorder 1.4.3",
               "target": "byteorder"
             },
             {
               "id": "bytes 1.5.0",
               "target": "bytes"
+            },
+            {
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
             },
             {
               "id": "http 0.2.9",
@@ -52740,7 +52599,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.18.0"
+        "version": "0.20.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -54632,13 +54491,13 @@
       },
       "license": "MIT"
     },
-    "warp 0.3.5": {
+    "warp 0.3.6": {
       "name": "warp",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/warp/0.3.5/download",
-          "sha256": "ba431ef570df1287f7f8b07e376491ad54f84d26ac473489427231e1718e1f69"
+          "url": "https://crates.io/api/v1/crates/warp/0.3.6/download",
+          "sha256": "c1e92e22e03ff1230c03a1a8ee37d2f89cd489e2e541b7550d6afad96faed169"
         }
       },
       "targets": [
@@ -54744,7 +54603,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-rustls 0.23.4",
+              "id": "tokio-rustls 0.24.1",
               "target": "tokio_rustls"
             },
             {
@@ -54752,7 +54611,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tokio-tungstenite 0.18.0",
+              "id": "tokio-tungstenite 0.20.1",
               "target": "tokio_tungstenite"
             },
             {
@@ -54771,7 +54630,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.5"
+        "version": "0.3.6"
       },
       "license": "MIT"
     },
@@ -56823,13 +56682,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {

@@ -1240,7 +1240,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^2.3.1",
             ),
             "warp": crate.spec(
-                version = "^0.3.2",
+                version = "^0.3.6",
                 features = [
                     "tls",
                 ],
