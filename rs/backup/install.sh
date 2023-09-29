@@ -153,6 +153,8 @@ cp ${CONFIG_FILE} ${WORK_DIR}
 cp ${PUBLIC_KEY_FILE} ${WORK_DIR}
 cp ${UPDATE_FILE} ${WORK_DIR}
 
+echo "Setting kernel parameters..."
+echo "vm.max_map_count=2097152" | sudo tee /etc/sysctl.d/90-replica.conf
 echo "Installing system config..."
 sudo cp ${SERVICE_CONFIG_FILE} /etc/systemd/system
 echo "Reloading services..."
