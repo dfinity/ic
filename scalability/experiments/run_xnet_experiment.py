@@ -31,7 +31,7 @@ gflags.DEFINE_integer("payload_size", 1024, "Payload size for Xnet messages")
 gflags.DEFINE_float("max_error_rate", 0.05, "Maximum number of failed Xnet messages accepted per iteration.")
 gflags.DEFINE_float("max_seq_errors", 0.0, "Maximum number of sequence errors to accept for iteration.")
 gflags.DEFINE_float("min_send_rate", 0.3, "Minimum send rate accepted for success of iteration.")
-gflags.DEFINE_integer("target_latency_secs", 40, "Targeted latency of Xnet requests.")
+gflags.DEFINE_integer("target_latency_secs", 80, "Targeted latency of Xnet requests.")
 gflags.DEFINE_integer("target_rps", 500, "Target total rate at which to send Xnet messages.")
 gflags.DEFINE_integer(
     "tests_first_subnet_index",
