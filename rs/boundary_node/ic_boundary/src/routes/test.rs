@@ -1,8 +1,19 @@
 use super::*;
 
 use crate::persist::test::node;
+use anyhow::Error;
+use axum::{
+    body::Body,
+    http::Request,
+    middleware,
+    response::IntoResponse,
+    routing::method_routing::{get, post},
+    Router,
+};
 use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
+use tower::Service;
 
+#[derive(Clone)]
 struct ProxyRouter {
     node: Node,
     root_key: Vec<u8>,
@@ -17,7 +28,7 @@ impl Proxy for ProxyRouter {
         _node: Node,
         _canister_id: Principal,
     ) -> Result<Response, ErrorCause> {
-        Ok("foobar".into_response())
+        Ok("test_response".into_response())
     }
 }
 
@@ -52,12 +63,30 @@ async fn test_status() -> Result<(), Error> {
         root_key: root_key.clone(),
     });
 
-    let (rk, h) = (
+    let (state_rootkey, state_health, state_lookup) = (
         proxy_router.clone() as Arc<dyn RootKey>,
         proxy_router.clone() as Arc<dyn Health>,
+        proxy_router.clone() as Arc<dyn Lookup>,
     );
 
-    let resp: Response = status(State((rk, h))).await?.into_response();
+    let mut app = Router::new()
+        .route(
+            PATH_STATUS,
+            get(status).with_state((state_rootkey, state_health)),
+        )
+        .layer(middleware::from_fn_with_state(
+            state_lookup,
+            preprocess_request,
+        ));
+
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/api/v2/status")
+        .body(Body::from(""))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (_parts, body) = resp.into_parts();
@@ -77,10 +106,13 @@ async fn test_status() -> Result<(), Error> {
 async fn test_query() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
-    let state = ProxyRouter {
+    let state = Arc::new(ProxyRouter {
         node: node.clone(),
         root_key,
-    };
+    });
+
+    let state_lookup = state.clone() as Arc<dyn Lookup>;
+    let state_proxy = state.clone() as Arc<dyn Proxy>;
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
     let canister_id = Principal::from_text("sxiki-5ygae-aq").unwrap();
@@ -105,24 +137,29 @@ async fn test_query() -> Result<(), Error> {
 
     let body = serde_cbor::to_vec(&envelope).unwrap();
 
-    let mut ctx = RequestContext::default();
-    parse_body(&mut ctx, &body)?;
-    ctx.canister_id = Some(canister_id);
-    ctx.node = Some(node);
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v2/canister/{canister_id}/query"
+        ))
+        .body(Body::from(body))
+        .unwrap();
 
-    let request = Request::builder().body(Body::from(body)).unwrap();
+    let mut app = Router::new()
+        .route(PATH_QUERY, post(handle_call).with_state(state_proxy))
+        .layer(middleware::from_fn_with_state(
+            state_lookup,
+            preprocess_request,
+        ));
 
-    let resp = query(State(Arc::new(state)), Extension(ctx), request)
-        .await
-        .unwrap()
-        .into_response();
+    let resp = app.call(request).await.unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
-    assert_eq!(body, "foobar");
+    assert_eq!(body, "test_response");
 
     Ok(())
 }

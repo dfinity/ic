@@ -32,6 +32,7 @@ use {
 };
 
 use crate::{
+    cache::{cache_middleware, Cache},
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
     configuration::{
@@ -237,57 +238,78 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     let routers_https = {
-        let query_route = Router::new().route("/api/v2/canister/:canister_id/query", {
-            post(routes::query).with_state(p.clone())
-        });
-
-        let update_call_route = {
-            let mut route = Router::new().route("/api/v2/canister/:canister_id/call", {
-                post(routes::call).with_state(p.clone())
+        let query_route = {
+            let mut route = Router::new().route(routes::PATH_QUERY, {
+                post(routes::handle_call).with_state(p.clone())
             });
+
+            // Setup caching if configured
+            if let Some(cache_size) = cli.cache.cache_size_bytes {
+                let cache = Cache::new(
+                    cache_size,
+                    cli.cache.cache_max_item_size_bytes,
+                    Duration::from_secs(cli.cache.cache_ttl_seconds),
+                    cli.cache.cache_non_anonymous,
+                );
+
+                let cache = Arc::new(cache);
+
+                route = route.layer(middleware::from_fn_with_state(
+                    Arc::clone(&cache),
+                    cache_middleware,
+                ));
+            }
+
+            route
+        };
+
+        let call_route = {
+            let mut route = Router::new().route(routes::PATH_CALL, {
+                post(routes::handle_call).with_state(p.clone())
+            });
+
             // will panic if ip_rate_limit is Some(0)
             if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
                 route = RateLimit::try_from(rl).unwrap().add_ip_rate_limiting(route);
             }
+
             // will panic if subnet_rate_limit is Some(0)
             if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_subnet {
                 route = RateLimit::try_from(rl)
                     .unwrap()
                     .add_subnet_rate_limiting(route)
             }
+
             route
         };
 
-        let read_state_route = Router::new().route("/api/v2/canister/:canister_id/read_state", {
-            post(routes::read_state).with_state(p.clone())
+        let read_state_route = Router::new().route(routes::PATH_READ_STATE, {
+            post(routes::handle_call).with_state(p.clone())
         });
 
-        let r1 = query_route
-            .merge(update_call_route)
-            .merge(read_state_route)
-            .layer(
-                ServiceBuilder::new()
-                    .layer(DefaultBodyLimit::max(2 * MB))
-                    .layer(middleware::from_fn_with_state(
-                        lk.clone(),
-                        routes::preprocess_request,
-                    )),
-            );
-
-        let status_route = Router::new().route("/api/v2/status", {
+        let status_route = Router::new().route(routes::PATH_STATUS, {
             get(routes::status).with_state((rk.clone(), h.clone()))
         });
 
-        r1.merge(status_route).layer(
-            ServiceBuilder::new()
-                .set_x_request_id(MakeRequestUuid)
-                .propagate_x_request_id()
-                .layer(middleware::from_fn_with_state(
-                    HttpMetricParams::new(&registry, "http_request_in"),
-                    metrics::with_metrics_middleware,
-                ))
-                .layer(middleware::from_fn(routes::postprocess_response)),
-        )
+        query_route
+            .merge(call_route)
+            .merge(read_state_route)
+            .merge(status_route)
+            .layer(
+                ServiceBuilder::new()
+                    .set_x_request_id(MakeRequestUuid)
+                    .propagate_x_request_id()
+                    .layer(DefaultBodyLimit::max(2 * MB))
+                    .layer(middleware::from_fn_with_state(
+                        HttpMetricParams::new(&registry, "http_request_in"),
+                        metrics::with_metrics_middleware,
+                    ))
+                    .layer(middleware::from_fn_with_state(
+                        lk.clone(),
+                        routes::preprocess_request,
+                    ))
+                    .layer(middleware::from_fn(routes::postprocess_response)),
+            )
     };
 
     #[cfg(feature = "tls")]

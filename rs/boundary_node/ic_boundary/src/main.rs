@@ -4,6 +4,7 @@ use clap::Parser;
 use crate::cli::Cli;
 
 mod acme;
+mod cache;
 mod check;
 mod cli;
 mod configuration;

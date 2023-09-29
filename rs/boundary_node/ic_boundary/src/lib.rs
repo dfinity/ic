@@ -1,4 +1,5 @@
 mod acme;
+mod cache;
 mod check;
 mod cli;
 mod configuration;

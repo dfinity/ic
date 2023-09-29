@@ -21,6 +21,7 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "firewall")]
     pub firewall: FirewallConfig,
 
+    #[cfg(feature = "tls")]
     #[command(flatten, next_help_heading = "tls")]
     pub tls: TlsConfig,
 
@@ -29,6 +30,9 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "rate_limiting")]
     pub rate_limiting: RateLimitingConfig,
+
+    #[command(flatten, next_help_heading = "cache")]
+    pub cache: CacheConfig,
 }
 
 #[derive(Args)]
@@ -109,20 +113,19 @@ pub struct FirewallConfig {
     pub nftables_system_replicas_var: String,
 }
 
+#[cfg(feature = "tls")]
 #[derive(Args)]
 pub struct TlsConfig {
     /// The path to the ACME credentials file
-    #[cfg(feature = "tls")]
+
     #[clap(long, default_value = "acme.json")]
     pub acme_credentials_path: PathBuf,
 
     /// The path to the ingress TLS cert
-    #[cfg(feature = "tls")]
     #[clap(long, default_value = "cert.pem")]
     pub tls_cert_path: PathBuf,
 
     /// The path to the ingress TLS private-key
-    #[cfg(feature = "tls")]
     #[clap(long, default_value = "pkey.pem")]
     pub tls_pkey_path: PathBuf,
 }
@@ -142,4 +145,20 @@ pub struct RateLimitingConfig {
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
     #[clap(long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
+}
+
+#[derive(Args)]
+pub struct CacheConfig {
+    /// Maximum size of in-memory cache in bytes
+    #[clap(long)]
+    pub cache_size_bytes: Option<u64>,
+    /// Maximum size of a single cached response item in bytes
+    #[clap(long, default_value = "32768")]
+    pub cache_max_item_size_bytes: usize,
+    /// Time-to-live for cache entries in seconds
+    #[clap(long, default_value = "60")]
+    pub cache_ttl_seconds: u64,
+    /// Whether to cache non-anonymous requests
+    #[clap(long, default_value = "false")]
+    pub cache_non_anonymous: bool,
 }
