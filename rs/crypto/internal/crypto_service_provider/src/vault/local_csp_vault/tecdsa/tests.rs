@@ -177,6 +177,7 @@ mod ecdsa_sign_share {
 
         AlgorithmId::iter()
             .filter(|algorithm_id| *algorithm_id != AlgorithmId::ThresholdEcdsaSecp256k1)
+            .filter(|algorithm_id| *algorithm_id != AlgorithmId::ThresholdEcdsaSecp256r1)
             .for_each(|wrong_algorithm_id| {
                 let parameters = EcdsaSignShareParameters::default();
                 let mut canister_sks = MockSecretKeyStore::new();

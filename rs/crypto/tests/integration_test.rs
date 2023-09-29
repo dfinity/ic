@@ -812,7 +812,7 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
 /// Ensure the structs are consistent and then update the test below.
 #[test]
 fn algorithm_id_should_match_algorithm_id_proto() {
-    let algorithm_id_variants = 17;
+    let algorithm_id_variants = 18;
     assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
 
     for i in 0..algorithm_id_variants {
@@ -884,6 +884,10 @@ fn algorithm_id_should_match_algorithm_id_proto() {
     assert_eq!(
         AlgorithmId::MegaSecp256k1 as i32,
         AlgorithmIdProto::MegaSecp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdEcdsaSecp256r1 as i32,
+        AlgorithmIdProto::ThresholdEcdsaSecp256r1 as i32
     );
 }
 

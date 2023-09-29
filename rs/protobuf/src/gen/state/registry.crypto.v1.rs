@@ -58,6 +58,7 @@ pub enum AlgorithmId {
     RsaSha256 = 14,
     ThresholdEcdsaSecp256k1 = 15,
     MegaSecp256k1 = 16,
+    ThresholdEcdsaSecp256r1 = 17,
 }
 impl AlgorithmId {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -83,6 +84,7 @@ impl AlgorithmId {
             AlgorithmId::RsaSha256 => "ALGORITHM_ID_RSA_SHA256",
             AlgorithmId::ThresholdEcdsaSecp256k1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1",
             AlgorithmId::MegaSecp256k1 => "ALGORITHM_ID_MEGA_SECP_256K1",
+            AlgorithmId::ThresholdEcdsaSecp256r1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -105,6 +107,7 @@ impl AlgorithmId {
             "ALGORITHM_ID_RSA_SHA256" => Some(Self::RsaSha256),
             "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1" => Some(Self::ThresholdEcdsaSecp256k1),
             "ALGORITHM_ID_MEGA_SECP_256K1" => Some(Self::MegaSecp256k1),
+            "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1" => Some(Self::ThresholdEcdsaSecp256r1),
             _ => None,
         }
     }

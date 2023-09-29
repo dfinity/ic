@@ -145,6 +145,7 @@ pub enum AlgorithmId {
     RsaSha256 = 14,
     ThresholdEcdsaSecp256k1 = 15,
     MegaSecp256k1 = 16,
+    ThresholdEcdsaSecp256r1 = 17,
 }
 
 impl From<AlgorithmId> for u8 {
@@ -201,6 +202,7 @@ impl From<i32> for AlgorithmId {
             14 => AlgorithmId::RsaSha256,
             15 => AlgorithmId::ThresholdEcdsaSecp256k1,
             16 => AlgorithmId::MegaSecp256k1,
+            17 => AlgorithmId::ThresholdEcdsaSecp256r1,
             _ => AlgorithmId::Placeholder,
         }
     }

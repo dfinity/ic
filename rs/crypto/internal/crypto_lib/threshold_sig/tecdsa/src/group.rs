@@ -97,6 +97,14 @@ impl EccCurveType {
         }
     }
 
+    pub(crate) fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
+        match alg_id {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => Some(EccCurveType::K256),
+            //AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
+            _ => None,
+        }
+    }
+
     /// Return a vector over all available curve types
     ///
     /// This is mostly useful for tests
