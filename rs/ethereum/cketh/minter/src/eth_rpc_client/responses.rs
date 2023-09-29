@@ -38,7 +38,7 @@ pub struct TransactionReceipt {
     /// Index of the transaction within the block.
     /// A Block has a limit of 30 million gas and a transaction costs at least 21_000 gas,
     /// meaning that a block contains at most 1428 transactions, see
-    /// https://ethereum.org/en/developers/docs/gas/#block-size
+    /// <https://ethereum.org/en/developers/docs/gas/#block-size>
     pub transaction_index: Quantity,
 }
 

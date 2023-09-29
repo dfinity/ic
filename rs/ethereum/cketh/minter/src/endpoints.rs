@@ -52,12 +52,12 @@ pub enum CandidBlockTag {
     Latest,
     /// The latest safe head block.
     /// See
-    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     #[cbor(n(1))]
     Safe,
     /// The latest finalized block.
     /// See
-    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     #[cbor(n(2))]
     Finalized,
 }

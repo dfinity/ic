@@ -231,7 +231,7 @@ impl HttpResponsePayload for Transaction {
 }
 
 /// Block tags.
-/// See https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block
+/// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
 #[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BlockTag {
@@ -240,11 +240,11 @@ pub enum BlockTag {
     Latest,
     /// The latest safe head block.
     /// See
-    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     Safe,
     /// The latest finalized block.
     /// See
-    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     Finalized,
 }
 
