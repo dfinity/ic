@@ -21,24 +21,18 @@ use pocket_ic::common::rest::RawCanisterCall;
 use pocket_ic::common::rest::RawSetStableMemory;
 use serde::Deserialize;
 use serde::Serialize;
-use std::sync::Arc;
+use std::{sync::Arc, time::SystemTime};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 pub struct PocketIc {
     subnet: StateMachine,
-    nonce: u64,
-    time: Time,
 }
 
 #[allow(clippy::new_without_default)]
 impl PocketIc {
     pub fn new(sm: StateMachine) -> Self {
-        Self {
-            subnet: sm,
-            nonce: 0,
-            time: Time::from_nanos_since_unix_epoch(0),
-        }
+        Self { subnet: sm }
     }
 }
 impl Default for PocketIc {
@@ -63,9 +57,11 @@ impl HasStateLabel for PocketIc {
             .map(|(_, h)| h.0)
             .unwrap_or_else(|| [0u8; 32].to_vec());
         let mut hasher = Sha256::new();
+        let nanos = systemtime_to_unix_epoch_nanos(self.subnet.time());
         hasher.write(&subnet_state_hash[..]);
-        hasher.write(&self.nonce.to_be_bytes());
-        hasher.write(&self.time.as_nanos_since_unix_epoch().to_be_bytes());
+        // XXX: We should make the nonce part of the environment.
+        // hasher.write(&self.nonce.to_be_bytes());
+        hasher.write(&nanos.to_be_bytes());
         StateLabel(hasher.finish())
     }
 }
@@ -88,10 +84,9 @@ impl Operation for SetTime {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        // set time for all subnets; but also for the whole PocketIC
-        // subnets won't have their own time field in the future.
+        // XXX: for now, we use the StateMachine's time as the system time. Later, we will take
+        // StateMachine appart and have a system time that applies to all subnets.
         pic.subnet.set_time(self.time.into());
-        pic.time = self.time;
         OpOut::NoOutput
     }
 
@@ -107,8 +102,8 @@ impl Operation for GetTime {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        // get time from PocketIC, not from subnet:
-        OpOut::Time(pic.time.as_nanos_since_unix_epoch())
+        let nanos = systemtime_to_unix_epoch_nanos(pic.subnet.time());
+        OpOut::Time(nanos)
     }
 
     fn id(&self) -> OpId {
@@ -473,6 +468,14 @@ pub fn create_state_machine(state_dir: Option<TempDir>, runtime: Arc<Runtime>) -
             .with_runtime(runtime)
             .build()
     }
+}
+
+fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
+    st.duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .try_into()
+        .unwrap()
 }
 
 #[cfg(test)]
