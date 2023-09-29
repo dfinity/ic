@@ -96,12 +96,12 @@ where
     Router::new()
         //
         // List all IC instances.
-        .directory_route("/", get(list_instances))
+        .route("/", get(list_instances))
         //
         // Create a new IC instance. Returns an InstanceId.
         // If the body contains an existing checkpoint name, the instance is restored from that,
         // otherwise a new instance is created.
-        .directory_route("/", post(create_instance))
+        .route("/", post(create_instance))
         //
         // Deletes an instance.
         .directory_route("/:id", delete(delete_instance))
@@ -531,18 +531,6 @@ pub async fn list_instances(
         })
         .collect();
     Json(instances)
-}
-
-pub async fn list_checkpoints(
-    State(AppState { checkpoints, .. }): State<AppState>,
-) -> Json<Vec<String>> {
-    let checkpoints = checkpoints
-        .read()
-        .await
-        .keys()
-        .cloned()
-        .collect::<Vec<String>>();
-    Json(checkpoints)
 }
 
 pub async fn delete_instance(

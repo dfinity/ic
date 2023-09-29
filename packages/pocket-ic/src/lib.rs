@@ -1,128 +1,64 @@
-use candid::utils::{ArgumentDecoder, ArgumentEncoder};
-use candid::{decode_args, encode_args, Principal};
-use common::blob::{BlobCompression, BlobId};
-use common::rest::{
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawCheckpoint, RawSetStableMemory,
+use crate::common::{
+    blob::{BlobCompression, BlobId},
+    rest::{
+        ApiResponse, CreateInstanceResponse, InstanceId, RawAddCycles, RawCanisterCall,
+        RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawTime,
+        RawWasmResult,
+    },
 };
-use ic_cdk::api::management_canister::main::{
-    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgument,
-    InstallCodeArgument,
+use candid::{
+    decode_args, encode_args,
+    utils::{ArgumentDecoder, ArgumentEncoder},
+    Principal,
+};
+use ic_cdk::api::management_canister::{
+    main::{CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument},
+    provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
 };
 use reqwest::Url;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::path::PathBuf;
-use std::process::Command;
-use std::time::{Duration, Instant, SystemTime};
-
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{
+    path::PathBuf,
+    process::Command,
+    time::{Duration, Instant, SystemTime},
+};
 pub mod common;
-pub mod pocket_ic_v2;
 
-pub use pocket_ic_v2::PocketIcV2;
-
+const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
+const PROCESSING_TIME_VALUE_MS: u64 = 30_000;
 const LOCALHOST: &str = "127.0.0.1";
-type InstanceId = String;
 
-// ======================================================================================================
-// Code borrowed from https://github.com/dfinity/test-state-machine-client/blob/main/src/lib.rs
-// The StateMachine struct is renamed to `PocketIc` and given new interface.
 pub struct PocketIc {
     pub instance_id: InstanceId,
-    // The PocketIC server's base address plus "/instances/<instance_id>/".
-    // All communication with this IC instance goes through this endpoint.
-    instance_url: Url,
     server_url: Url,
     reqwest_client: reqwest::blocking::Client,
 }
 
 impl PocketIc {
     pub fn new() -> Self {
-        let server_url = start_or_reuse_server();
+        let server_url = crate::start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
-        let instance_id = reqwest_client
-            .post(server_url.join("instances/").unwrap())
+        use CreateInstanceResponse::*;
+        let instance_id = match reqwest_client
+            .post(server_url.join("instances").unwrap())
             .send()
             .expect("Failed to get result")
-            .text()
-            .expect("Failed to get text");
-        let instance_url = server_url
-            .join("instances/")
-            .unwrap()
-            .join(&format!("{instance_id}/"))
-            .unwrap();
+            .json::<CreateInstanceResponse>()
+            .expect("Could not parse response for create instance request")
+        {
+            Created { instance_id } => instance_id,
+            Error { message } => panic!("{}", message),
+        };
 
         Self {
             instance_id,
-            instance_url,
             server_url,
             reqwest_client,
         }
     }
 
-    pub fn new_from_snapshot<S: AsRef<str> + std::fmt::Display + serde::Serialize + Copy>(
-        name: S,
-    ) -> Result<Self, String> {
-        let server_url = start_or_reuse_server();
-        let reqwest_client = reqwest::blocking::Client::new();
-        let cp = RawCheckpoint {
-            checkpoint_name: name.to_string(),
-        };
-        let response = reqwest_client
-            .post(server_url.join("instances/").unwrap())
-            .json(&cp)
-            .send()
-            .expect("Failed to get result");
-        let status = response.status();
-        match status {
-            reqwest::StatusCode::CREATED => {
-                let instance_id = response.text().expect("Failed to get text");
-                let instance_url = server_url
-                    .join("instances/")
-                    .unwrap()
-                    .join(&format!("{instance_id}/"))
-                    .unwrap();
-
-                Ok(Self {
-                    instance_id,
-                    instance_url,
-                    server_url,
-                    reqwest_client,
-                })
-            }
-            reqwest::StatusCode::BAD_REQUEST => {
-                Err(format!("Could not find snapshot named '{name}'."))
-            }
-            _ => Err(format!(
-                "The PocketIC server returned status code {}: {:?}!",
-                status,
-                response.text()
-            )),
-        }
-    }
-
-    pub fn list_instances() -> Vec<InstanceId> {
-        let url = start_or_reuse_server().join("instances/").unwrap();
-        let response = reqwest::blocking::Client::new()
-            .get(url)
-            .send()
-            .expect("Failed to get result")
-            .text()
-            .expect("Failed to get text");
-        response.split(", ").map(String::from).collect()
-    }
-
-    pub fn send_request(&self, request: Request) -> String {
-        self.reqwest_client
-            .post(self.instance_url.clone())
-            .json(&request)
-            .send()
-            .expect("Failed to get result")
-            .text()
-            .expect("Failed to get text")
-    }
-
-    fn set_blob_store(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
+    pub fn upload_blob(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
+        // TODO: check if the hash of the blob already exists and if yes, don't upload.
         let mut request = self
             .reqwest_client
             .post(self.server_url.join("blobstore/").unwrap())
@@ -141,24 +77,96 @@ impl PocketIc {
         BlobId(hash.expect("Invalid hash"))
     }
 
-    // TODO: Add a function that separates those two
-    pub fn tick_and_create_checkpoint(&self, name: &str) -> String {
-        let url = self
-            .instance_url
-            .join("tick_and_create_checkpoint/")
-            .unwrap();
-        let cp = RawCheckpoint {
-            checkpoint_name: name.to_string(),
-        };
-        self.reqwest_client
-            .post(url)
-            .json(&cp)
+    pub fn set_stable_memory(
+        &self,
+        canister_id: Principal,
+        data: Vec<u8>,
+        compression: BlobCompression,
+    ) {
+        let blob_id = self.upload_blob(data, compression);
+        let endpoint = "update/set_stable_memory";
+        self.post::<(), _>(
+            endpoint,
+            RawSetStableMemory {
+                canister_id: canister_id.as_slice().to_vec(),
+                blob_id,
+            },
+        );
+    }
+
+    pub fn get_stable_memory(&self, canister_id: Principal) -> Vec<u8> {
+        let endpoint = "read/get_stable_memory";
+        let RawStableMemory { blob } = self.post(
+            endpoint,
+            RawCanisterId {
+                canister_id: canister_id.as_slice().to_vec(),
+            },
+        );
+        blob
+    }
+
+    pub fn list_instances() -> Vec<String> {
+        let url = crate::start_or_reuse_server().join("instances").unwrap();
+        let instances: Vec<String> = reqwest::blocking::Client::new()
+            .get(url)
             .send()
             .expect("Failed to get result")
-            .text()
-            .expect("Failed to get text")
+            .json()
+            .expect("Failed to get json");
+        instances
     }
-    // ------------------------------------------------------------------
+
+    pub fn tick(&self) {
+        let endpoint = "update/tick";
+        self.post::<(), _>(endpoint, "");
+    }
+
+    pub fn get_time(&self) -> SystemTime {
+        let endpoint = "read/get_time";
+        let result: RawTime = self.get(endpoint);
+        SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
+    }
+
+    pub fn set_time(&self, time: SystemTime) {
+        let endpoint = "update/set_time";
+        self.post::<(), _>(
+            endpoint,
+            RawTime {
+                nanos_since_epoch: time
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_nanos() as u64,
+            },
+        );
+    }
+
+    pub fn advance_time(&self, duration: Duration) {
+        let now = self.get_time();
+        self.set_time(now + duration);
+    }
+
+    pub fn cycle_balance(&self, canister_id: Principal) -> u128 {
+        let endpoint = "read/get_cycles";
+        let result: RawCycles = self.post(
+            endpoint,
+            RawCanisterId {
+                canister_id: canister_id.as_slice().to_vec(),
+            },
+        );
+        result.cycles
+    }
+
+    pub fn add_cycles(&self, canister_id: Principal, amount: u128) -> u128 {
+        let endpoint = "update/add_cycles";
+        let result: RawCycles = self.post(
+            endpoint,
+            RawAddCycles {
+                canister_id: canister_id.as_slice().to_vec(),
+                amount,
+            },
+        );
+        result.cycles
+    }
 
     pub fn update_call(
         &self,
@@ -167,12 +175,8 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.call_state_machine(Request::CanisterUpdateCall(RawCanisterCall {
-            sender: sender.as_slice().to_vec(),
-            canister_id: canister_id.as_slice().to_vec(),
-            method: method.to_string(),
-            payload,
-        }))
+        let endpoint = "update/execute_ingress_message";
+        self.canister_call(endpoint, canister_id, sender, method, payload)
     }
 
     pub fn query_call(
@@ -182,16 +186,8 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.call_state_machine(Request::CanisterQueryCall(RawCanisterCall {
-            sender: sender.as_slice().to_vec(),
-            canister_id: canister_id.as_slice().to_vec(),
-            method: method.to_string(),
-            payload,
-        }))
-    }
-
-    pub fn root_key(&self) -> Vec<u8> {
-        self.call_state_machine(Request::RootKey)
+        let endpoint = "read/query";
+        self.canister_call(endpoint, canister_id, sender, method, payload)
     }
 
     pub fn create_canister(&self, sender: Option<Principal>) -> CanisterId {
@@ -199,7 +195,7 @@ impl PocketIc {
             self,
             Principal::management_canister(),
             sender.unwrap_or(Principal::anonymous()),
-            "create_canister",
+            "provisional_create_canister_with_cycles",
             (CreateCanisterArgument { settings: None },),
         )
         .map(|(x,)| x)
@@ -216,7 +212,7 @@ impl PocketIc {
             self,
             Principal::management_canister(),
             sender.unwrap_or(Principal::anonymous()),
-            "create_canister",
+            "provisional_create_canister_with_cycles",
             (CreateCanisterArgument { settings },),
         )
         .map(|(x,)| x)
@@ -330,97 +326,84 @@ impl PocketIc {
         )
     }
 
-    pub fn canister_exists(&self, canister_id: Principal) -> bool {
-        self.call_state_machine(Request::CanisterExists(RawCanisterId::from(canister_id)))
+    pub fn create_checkpoint(&self) {
+        let endpoint = "update/create_checkpoint";
+        self.post::<(), &str>(endpoint, "");
     }
 
-    pub fn time(&self) -> SystemTime {
-        self.call_state_machine(Request::Time)
+    fn instance_url(&self) -> Url {
+        let instance_id = self.instance_id;
+        self.server_url
+            .join("/instances/")
+            .unwrap()
+            .join(&format!("{instance_id}/"))
+            .unwrap()
     }
 
-    pub fn set_time(&self, time: SystemTime) {
-        self.call_state_machine(Request::SetTime(time))
-    }
-
-    pub fn advance_time(&self, duration: Duration) {
-        self.call_state_machine(Request::AdvanceTime(duration))
-    }
-
-    pub fn tick(&self) {
-        self.call_state_machine(Request::Tick)
-    }
-
-    // TODO: There have been complaints that this function is misleading.
-    // We should consider removing it from the interface or refactoring it.
-
-    pub fn run_until_completion(&self, max_ticks: u64) {
-        self.call_state_machine(Request::RunUntilCompletion(RunUntilCompletionArg {
-            max_ticks,
-        }))
-    }
-
-    pub fn get_stable_memory(&self, canister_id: Principal) -> Vec<u8> {
-        self.call_state_machine(Request::ReadStableMemory(RawCanisterId::from(canister_id)))
-    }
-
-    pub fn set_stable_memory(
-        &self,
-        canister_id: Principal,
-        data: Vec<u8>,
-        compression: BlobCompression,
-    ) -> Result<(), String> {
-        let blob_id = self.set_blob_store(data, compression);
-        let res = self
+    fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
+        let result = self
             .reqwest_client
-            .post(self.instance_url.clone())
-            .json(&Request::SetStableMemory(RawSetStableMemory {
-                canister_id: canister_id.as_slice().to_vec(),
-                blob_id,
-            }))
+            .get(self.instance_url().join(endpoint).unwrap())
+            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
             .send()
-            .expect("Failed to get result");
-        let status = res.status();
-        let text = res.text().expect("Failed to get text");
-        match status {
-            reqwest::StatusCode::OK => Ok(()),
-            _ => Err(format!(
-                "The PocketIC server returned status code {}: {:?}!",
-                status, text
-            )),
+            .expect("HTTP failure")
+            .into();
+
+        match result {
+            ApiResponse::Success(t) => t,
+            ApiResponse::Error { message } => panic!("{}", message),
+            ApiResponse::Busy { state_label, op_id } => {
+                panic!("Busy: state_label: {}, op_id: {}", state_label, op_id)
+            }
+            ApiResponse::Started { state_label, op_id } => {
+                panic!("Started: state_label: {}, op_id: {}", state_label, op_id)
+            }
         }
     }
 
-    pub fn cycle_balance(&self, canister_id: Principal) -> u128 {
-        self.call_state_machine(Request::CyclesBalance(RawCanisterId::from(canister_id)))
+    fn post<T: DeserializeOwned, B: Serialize>(&self, endpoint: &str, body: B) -> T {
+        let result = self
+            .reqwest_client
+            .post(self.instance_url().join(endpoint).unwrap())
+            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
+            .json(&body)
+            .send()
+            .expect("HTTP failure");
+        match result.into() {
+            ApiResponse::Success(t) => t,
+            ApiResponse::Error { message } => panic!("{}", message),
+            ApiResponse::Busy { state_label, op_id } => {
+                panic!("Busy: state_label: {}, op_id: {}", state_label, op_id)
+            }
+            ApiResponse::Started { state_label, op_id } => {
+                panic!("Started: state_label: {}, op_id: {}", state_label, op_id)
+            }
+        }
     }
 
-    pub fn add_cycles(&self, canister_id: Principal, amount: u128) -> u128 {
-        self.call_state_machine(Request::AddCycles(RawAddCycles {
-            canister_id: canister_id.as_slice().to_vec(),
-            amount,
-        }))
-    }
-
-    /// Verifies a canister signature. Returns Ok(()) if the signature is valid.
-    /// On error, returns a string describing the error.
-    pub fn verify_canister_signature(
+    fn canister_call(
         &self,
-        msg: Vec<u8>,
-        sig: Vec<u8>,
-        pubkey: Vec<u8>,
-        root_pubkey: Vec<u8>,
-    ) -> Result<(), String> {
-        self.call_state_machine(Request::VerifyCanisterSig(VerifyCanisterSigArg {
-            msg,
-            sig,
-            pubkey,
-            root_pubkey,
-        }))
-    }
+        endpoint: &str,
+        canister_id: Principal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        let raw_canister_call = RawCanisterCall {
+            sender: sender.as_slice().to_vec(),
+            canister_id: canister_id.as_slice().to_vec(),
+            method: method.to_string(),
+            payload,
+        };
 
-    fn call_state_machine<T: DeserializeOwned>(&self, request: Request) -> T {
-        let res = self.send_request(request);
-        serde_json::from_str(&res).expect("Failed to decode json")
+        let result: RawCanisterResult = self.post(endpoint, raw_canister_call);
+        match result {
+            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
+                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
+                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
+            },
+            RawCanisterResult::Err(user_error) => Err(user_error),
+        }
     }
 }
 
@@ -432,79 +415,11 @@ impl Default for PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        let _result = self
-            .reqwest_client
-            .delete(self.instance_url.clone())
+        self.reqwest_client
+            .delete(self.instance_url())
             .send()
-            .expect("Failed to delete instance on server");
+            .expect("Failed to send delete request");
     }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum Request {
-    RootKey,
-    Time,
-    SetTime(SystemTime),
-    AdvanceTime(Duration),
-    CanisterUpdateCall(RawCanisterCall),
-    CanisterQueryCall(RawCanisterCall),
-    CanisterExists(RawCanisterId),
-    CyclesBalance(RawCanisterId),
-    AddCycles(RawAddCycles),
-    SetStableMemory(RawSetStableMemory),
-    ReadStableMemory(RawCanisterId),
-    Tick,
-    RunUntilCompletion(RunUntilCompletionArg),
-    VerifyCanisterSig(VerifyCanisterSigArg),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct VerifyCanisterSigArg {
-    #[serde(with = "base64")]
-    pub msg: Vec<u8>,
-    #[serde(with = "base64")]
-    pub sig: Vec<u8>,
-    #[serde(with = "base64")]
-    pub pubkey: Vec<u8>,
-    #[serde(with = "base64")]
-    pub root_pubkey: Vec<u8>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RunUntilCompletionArg {
-    // max_ticks until completion must be reached
-    pub max_ticks: u64,
-}
-
-/// Call a canister candid query method, anonymous.
-pub fn query_candid<Input, Output>(
-    env: &PocketIc,
-    canister_id: Principal,
-    method: &str,
-    input: Input,
-) -> Result<Output, CallError>
-where
-    Input: ArgumentEncoder,
-    Output: for<'a> ArgumentDecoder<'a>,
-{
-    query_candid_as(env, canister_id, Principal::anonymous(), method, input)
-}
-
-/// Call a canister candid query method, authenticated.
-pub fn query_candid_as<Input, Output>(
-    env: &PocketIc,
-    canister_id: Principal,
-    sender: Principal,
-    method: &str,
-    input: Input,
-) -> Result<Output, CallError>
-where
-    Input: ArgumentEncoder,
-    Output: for<'a> ArgumentDecoder<'a>,
-{
-    with_candid(input, |bytes| {
-        env.query_call(canister_id, sender, method, bytes)
-    })
 }
 
 /// Call a canister candid method, authenticated.
@@ -538,6 +453,32 @@ where
     Output: for<'a> ArgumentDecoder<'a>,
 {
     call_candid_as(env, canister_id, Principal::anonymous(), method, input)
+}
+
+/// A helper function that we use to implement both [`call_candid`] and
+/// [`query_candid`].
+pub fn with_candid<Input, Output>(
+    input: Input,
+    f: impl FnOnce(Vec<u8>) -> Result<WasmResult, UserError>,
+) -> Result<Output, CallError>
+where
+    Input: ArgumentEncoder,
+    Output: for<'a> ArgumentDecoder<'a>,
+{
+    let in_bytes = encode_args(input).expect("failed to encode args");
+    match f(in_bytes) {
+        Ok(WasmResult::Reply(out_bytes)) => Ok(decode_args(&out_bytes).unwrap_or_else(|e| {
+            panic!(
+                "Failed to decode response as candid type {}:\nerror: {}\nbytes: {:?}\nutf8: {}",
+                std::any::type_name::<Output>(),
+                e,
+                out_bytes,
+                String::from_utf8_lossy(&out_bytes),
+            )
+        })),
+        Ok(WasmResult::Reject(message)) => Err(CallError::Reject(message)),
+        Err(user_error) => Err(CallError::UserError(user_error)),
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -660,8 +601,8 @@ impl TryFrom<u64> for ErrorCode {
     }
 }
 
-impl fmt::Display for ErrorCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // E.g. "IC0301"
         write!(f, "IC{:04}", *self as i32)
     }
@@ -676,8 +617,8 @@ pub struct UserError {
     pub description: String,
 }
 
-impl fmt::Display for UserError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for UserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // E.g. "IC0301: Canister 42 not found"
         write!(f, "{}: {}", self.code, self.description)
     }
@@ -698,52 +639,6 @@ pub enum WasmResult {
     /// Returned with an error message when the canister decides to reject the
     /// message
     Reject(String),
-}
-
-/// A helper function that we use to implement both [`call_candid`] and
-/// [`query_candid`].
-pub fn with_candid<Input, Output>(
-    input: Input,
-    f: impl FnOnce(Vec<u8>) -> Result<WasmResult, UserError>,
-) -> Result<Output, CallError>
-where
-    Input: ArgumentEncoder,
-    Output: for<'a> ArgumentDecoder<'a>,
-{
-    let in_bytes = encode_args(input).expect("failed to encode args");
-    match f(in_bytes) {
-        Ok(WasmResult::Reply(out_bytes)) => Ok(decode_args(&out_bytes).unwrap_or_else(|e| {
-            panic!(
-                "Failed to decode response as candid type {}:\nerror: {}\nbytes: {:?}\nutf8: {}",
-                std::any::type_name::<Output>(),
-                e,
-                out_bytes,
-                String::from_utf8_lossy(&out_bytes),
-            )
-        })),
-        Ok(WasmResult::Reject(message)) => Err(CallError::Reject(message)),
-        Err(user_error) => Err(CallError::UserError(user_error)),
-    }
-}
-
-// ===================================
-
-// By default, serde serializes Vec<u8> to a list of numbers, which is inefficient.
-// This enables serializing Vec<u8> to a compact base64 representation.
-#[allow(deprecated)]
-pub mod base64 {
-    use serde::{Deserialize, Serialize};
-    use serde::{Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(v: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
-        let base64 = base64::encode(v);
-        String::serialize(&base64, s)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
-        let base64 = String::deserialize(d)?;
-        base64::decode(base64.as_bytes()).map_err(|e| serde::de::Error::custom(e))
-    }
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
