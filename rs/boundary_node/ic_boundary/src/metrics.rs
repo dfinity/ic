@@ -6,6 +6,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
+    Extension,
 };
 use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
@@ -18,25 +19,18 @@ use prometheus::{
 use tower_http::request_id::RequestId;
 use tracing::info;
 
-use crate::routes::RequestContext;
+use crate::{
+    cache::CacheStatus,
+    routes::{ErrorCause, RequestContext},
+};
 
 const KB: f64 = 1024.0;
-const MB: f64 = 1024.0 * KB;
 
-pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 2.0, 3.0, 10.0];
+pub const HTTP_DURATION_BUCKETS: &[f64] = &[0.05, 0.1, 0.2, 0.4, 0.8, 2.0, 4.0];
 pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] =
     &[128.0, 256.0, 512.0, KB, 2.0 * KB, 4.0 * KB, 8.0 * KB];
-pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] = &[
-    1.0 * KB,
-    8.0 * KB,
-    64.0 * KB,
-    128.0 * KB,
-    512.0 * KB,
-    1.0 * MB,
-    2.0 * MB,
-    8.0 * MB,
-    16.0 * MB,
-];
+pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] =
+    &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB, 512.0 * KB];
 
 const LABELS_HTTP: &[&str] = &[
     "request_type",
@@ -44,15 +38,14 @@ const LABELS_HTTP: &[&str] = &[
     "subnet_id",
     "node_id",
     "error_cause",
-    "is_anonymous",
-    "body_error",
+    "cache_status",
 ];
 
 // A wrapper for http::Body implementations that tracks the number of bytes sent
 pub struct MetricsBody<D, E> {
     inner: Pin<Box<dyn HttpBody<Data = D, Error = E> + Send + 'static>>,
     callback: Box<dyn Fn(u64, Result<(), String>) + Send + 'static>,
-    content_length: Option<u64>,
+    expected_size: Option<u64>,
     bytes_sent: u64,
 }
 
@@ -66,14 +59,16 @@ impl<D, E> MetricsBody<D, E> {
         B: HttpBody<Data = D, Error = E> + Send + 'static,
         D: Buf,
     {
-        // Try to parse header if provided
-        let content_length =
-            content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()));
+        // Body can sometimes provide an exact size in the hint, use that
+        let expected_size = body.size_hint().exact().or_else(|| {
+            // Try to parse header if provided otherwise
+            content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()))
+        });
 
         Self {
             inner: Box::pin(body),
             callback: Box::new(callback),
-            content_length,
+            expected_size,
             bytes_sent: 0,
         }
     }
@@ -86,11 +81,13 @@ impl<D, E> MetricsBody<D, E> {
 // 2) When there's such header - they call poll_data() until they get advertised in the header number of bytes
 //    and don't call poll_data() anymore so Poll::Ready(None) variant is never reached
 // 3) They call is_end_stream() and if it returns true then they don't call poll_data() anymore
+// 4) By using size_hint() if it yields an exact number
 //
 // So we have to cover all these:
 // * We don't implement is_end_stream() (default impl in Trait just returns false) so that
 //   the caller will have to use poll_data()
 // * We have to have a Content-Length stored to check if we got already that much data
+// * We check size_hint() for an exact value
 
 impl<D, E> HttpBody for MetricsBody<D, E>
 where
@@ -113,10 +110,8 @@ where
                     self.bytes_sent += buf.remaining() as u64;
 
                     // Check if we already got what was expected
-                    if let Some(v) = self.content_length {
-                        if self.bytes_sent >= v {
-                            (self.callback)(self.bytes_sent, Ok(()));
-                        }
+                    if Some(self.bytes_sent) >= self.expected_size {
+                        (self.callback)(self.bytes_sent, Ok(()));
                     }
                 }
 
@@ -264,25 +259,30 @@ impl HttpMetricParams {
 // for http calls through axum we do axum middleware instead of WithMetrics
 pub async fn with_metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
+    Extension(request_id): Extension<RequestId>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> impl IntoResponse {
-    let request_id = request
-        .extensions()
-        .get::<RequestId>()
-        .and_then(|id| id.header_value().to_str().ok())
+    let request_id = request_id
+        .header_value()
+        .to_str()
         .unwrap_or("bad_request_id")
         .to_string();
 
+    // Perform the request & measure duration
     let start_time = Instant::now();
     let response = next.run(request).await;
     let proc_duration = start_time.elapsed().as_secs_f64();
 
+    // Extract extensions
     let request_ctx = response
         .extensions()
         .get::<RequestContext>()
         .cloned()
         .unwrap_or_default();
+
+    let error_cause = response.extensions().get::<ErrorCause>().cloned();
+    let cache_status = response.extensions().get::<CacheStatus>().cloned();
 
     let request_type = request_ctx.request_type.to_string();
     let status_code = response.status();
@@ -299,8 +299,6 @@ pub async fn with_metrics_middleware(
         .map(|x| x.id.to_string())
         .unwrap_or("unknown".to_string());
 
-    let error_cause = format!("{}", request_ctx.error_cause);
-
     let sender = request_ctx.sender.map(|x| x.to_string());
 
     let HttpMetricParams {
@@ -316,19 +314,30 @@ pub async fn with_metrics_middleware(
     let record_metrics = move |response_size: u64, body_result: Result<(), String>| {
         let full_duration = start_time.elapsed().as_secs_f64();
 
-        let is_anonymous = request_ctx
-            .is_anonymous()
-            .map(|p| if p { "yes" } else { "no" }) // Faster than to_string().as_str()
-            .unwrap_or("unknown");
+        let cache_error = match &cache_status {
+            Some(CacheStatus::Error(e)) => Some(e.clone()),
+            _ => None,
+        };
+
+        let cache_status = &cache_status
+            .clone()
+            .map(|x| x.to_string())
+            .unwrap_or(CacheStatus::Skip.to_string());
+
+        let (error_cause, error_details) = match &error_cause {
+            Some(v) => (Some(v.to_string()), v.details()),
+            None => (None, None),
+        };
+
+        let error_cause_label = error_cause.clone().unwrap_or("none".to_string());
 
         let labels = &[
             request_type.as_str(),
             status_code.as_str(),
             subnet_id.as_str(),
             node_id.as_str(),
-            error_cause.as_str(),
-            is_anonymous,
-            if body_result.is_err() { "yes" } else { "no" },
+            error_cause_label.as_str(),
+            cache_status.as_str(),
         ];
 
         counter.with_label_values(labels).inc();
@@ -346,9 +355,9 @@ pub async fn with_metrics_middleware(
         info!(
             action,
             request_id,
-            request_type = format!("{}", request_ctx.request_type),
+            request_type = request_ctx.request_type.to_string(),
             error_cause,
-            error_details = request_ctx.error_cause.details(),
+            error_details,
             status = status_code.as_u16(),
             subnet_id,
             node_id,
@@ -361,6 +370,10 @@ pub async fn with_metrics_middleware(
             request_size = request_ctx.request_size,
             response_size,
             body_error = body_result.err(),
+            cache_status,
+            cache_error,
+            nonce_len = request_ctx.nonce.clone().map(|x| x.len()),
+            arg_len = request_ctx.arg.clone().map(|x| x.len()),
         );
     };
 

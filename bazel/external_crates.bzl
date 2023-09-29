@@ -1054,6 +1054,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "static_assertions": crate.spec(
                 version = "^0.3.4",
             ),
+            "stretto": crate.spec(
+                version = "^0.8",
+                features = [
+                    "full",
+                ],
+            ),
             "strum": crate.spec(
                 version = "^0.24.1",
                 features = [
