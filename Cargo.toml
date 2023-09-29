@@ -122,6 +122,7 @@ members = [
   "rs/ic_os/deterministic_ips",
   "rs/ic_os/launch-single-vm",
   "rs/ic_os/setupos-inject-configuration",
+  "rs/ic_os/setupos-disable-checks",
   "rs/ic_os/sev_interfaces",
   "rs/ic_os/sev",
   "rs/ic_os/sevctl",
@@ -414,4 +415,4 @@ prost = "0.11.9"
 prost-build = "0.11.9"
 tonic = "0.9.2"
 tonic-build = "0.9.2"
-tower = { version = "0.4.13", features = [ "full"] }
+tower = { version = "0.4.13", features = ["full"] }

@@ -1249,7 +1249,7 @@ dependencies = [
  "hyper",
  "ic-agent",
  "ic-utils 0.27.0",
- "indoc",
+ "indoc 1.0.9",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -4825,7 +4825,7 @@ dependencies = [
  "humantime",
  "hyper",
  "ic-agent",
- "indoc",
+ "indoc 1.0.9",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -11692,6 +11692,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa799dd5ed20a7e349f3b4639aa80d74549c81716d9ec4f994c9b5815598306"
 
 [[package]]
+name = "indoc"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e186cfbae8084e513daff4240b4797e342f988cecda4fb6c939150f96315fd8"
+
+[[package]]
 name = "infer"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16006,6 +16012,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "setupos-disable-checks"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.5",
+ "indoc 2.0.4",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "setupos-inject-configuration"
 version = "0.1.0"
 dependencies = [
@@ -17031,7 +17048,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
- "indoc",
+ "indoc 1.0.9",
  "itertools 0.10.5",
  "json5",
  "k256 0.13.1",

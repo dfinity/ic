@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Error};
-use clap::Parser;
+use clap::{Args, Parser};
 use ipnet::Ipv6Net;
 use loopdev::{create_loop_device, detach_loop_device};
 use sysmount::{mount, umount};
@@ -23,17 +23,27 @@ struct Cli {
     #[arg(long, default_value = "disk.img")]
     image_path: PathBuf,
 
-    #[arg(long)]
-    ipv6_prefix: Ipv6Net,
-
-    #[arg(long)]
-    ipv6_gateway: Ipv6Net,
+    #[command(flatten)]
+    network: NetworkConfig,
 
     #[arg(long)]
     private_key_path: Option<PathBuf>,
 
     #[arg(long, value_delimiter = ',')]
     public_keys: Option<Vec<String>>,
+}
+
+#[derive(Args)]
+#[group(required = true)]
+struct NetworkConfig {
+    #[arg(long)]
+    ipv6_prefix: Option<Ipv6Net>,
+
+    #[arg(long)]
+    ipv6_gateway: Option<Ipv6Net>,
+
+    #[arg(long, conflicts_with_all = ["ipv6_prefix", "ipv6_gateway"])]
+    ipv6_address: Option<Ipv6Net>,
 }
 
 #[tokio::main]
@@ -64,15 +74,25 @@ async fn main() -> Result<(), Error> {
         .context("failed to print previous config")?;
 
     // Update config.ini
-    write_config(
-        &target_dir.path().join("config.ini"),
-        &Config {
-            ipv6_prefix: cli.ipv6_prefix,
-            ipv6_gateway: cli.ipv6_gateway,
-        },
-    )
-    .await
-    .context("failed to write config file")?;
+    let cfg = match (
+        cli.network.ipv6_prefix,
+        cli.network.ipv6_gateway,
+        cli.network.ipv6_address,
+    ) {
+        // PrefixAndGateway
+        (Some(ipv6_prefix), Some(ipv6_gateway), None) => {
+            Config::PrefixAndGateway(ipv6_prefix, ipv6_gateway)
+        }
+
+        // Address
+        (None, None, Some(ipv6_address)) => Config::Address(ipv6_address),
+
+        _ => panic!("invalid network arguments"),
+    };
+
+    write_config(&target_dir.path().join("config.ini"), &cfg)
+        .await
+        .context("failed to write config file")?;
 
     // Update node-provider private-key
     if let Some(private_key_path) = cli.private_key_path {
@@ -110,9 +130,9 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-struct Config {
-    ipv6_prefix: Ipv6Net,
-    ipv6_gateway: Ipv6Net,
+enum Config {
+    PrefixAndGateway(Ipv6Net, Ipv6Net),
+    Address(Ipv6Net),
 }
 
 async fn print_file_contents(path: &Path) -> Result<(), Error> {
@@ -128,14 +148,22 @@ async fn print_file_contents(path: &Path) -> Result<(), Error> {
 async fn write_config(path: &Path, cfg: &Config) -> Result<(), Error> {
     let mut f = File::create(path).context("failed to create config file")?;
 
-    writeln!(
-        &mut f,
-        "ipv6_prefix={}",
-        cfg.ipv6_prefix.addr().to_string().trim_end_matches("::")
-    )?;
+    match cfg {
+        Config::PrefixAndGateway(ipv6_prefix, ipv6_gateway) => {
+            writeln!(
+                &mut f,
+                "ipv6_prefix={}",
+                ipv6_prefix.addr().to_string().trim_end_matches("::")
+            )?;
 
-    writeln!(&mut f, "ipv6_subnet=/{}", cfg.ipv6_prefix.prefix_len())?;
-    writeln!(&mut f, "ipv6_gateway={}", cfg.ipv6_gateway.addr())?;
+            writeln!(&mut f, "ipv6_subnet=/{}", ipv6_prefix.prefix_len())?;
+            writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway.addr())?;
+        }
+
+        Config::Address(ipv6_address) => {
+            writeln!(&mut f, "ipv6_address={}", ipv6_address.addr())?;
+        }
+    }
 
     Ok(())
 }
