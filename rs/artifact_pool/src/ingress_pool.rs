@@ -19,7 +19,7 @@ use ic_interfaces::{
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{Advert, IngressMessageAttribute, IngressMessageId, Priority, PriorityFn},
+    artifact::{Advert, IngressMessageId, Priority, PriorityFn},
     artifact_kind::IngressArtifact,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, NodeId, Time,
@@ -305,14 +305,14 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
                     message_id,
                     source_node_id,
                     size,
-                    attribute,
+                    (),
                     integrity_hash,
                 )) => {
                     if source_node_id == self.node_id {
                         adverts.push(Advert {
                             size,
                             id: message_id.clone(),
-                            attribute: attribute.clone(),
+                            attribute: (),
                             integrity_hash: integrity_hash.clone(),
                         });
                     }
@@ -470,10 +470,7 @@ impl IngressPrioritizer {
 }
 
 impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPrioritizer {
-    fn get_priority_function(
-        &self,
-        pool: &IngressPoolImpl,
-    ) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
+    fn get_priority_function(&self, pool: &IngressPoolImpl) -> PriorityFn<IngressMessageId, ()> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to
         // reduce latency in cases where replicas don't have enough ingress messages
@@ -508,7 +505,6 @@ mod tests {
         FastForwardTimeSource,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::artifact::IngressMessageAttribute;
     use rand::Rng;
     use std::time::Duration;
 
@@ -668,7 +664,6 @@ mod tests {
                     IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 let ingress_msg_0 = SignedIngressBuilder::new().nonce(1).build();
                 let message_id0 = IngressMessageId::from(&ingress_msg_0);
-                let attribute_0 = IngressMessageAttribute::new(&ingress_msg_0);
                 let msg_0_integrity_hash =
                     ic_types::crypto::crypto_hash(ingress_msg_0.binary()).get();
 
@@ -704,7 +699,7 @@ mod tests {
                         message_id0.clone(),
                         node_test_id(0),
                         0,
-                        attribute_0,
+                        (),
                         msg_0_integrity_hash,
                     )),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
@@ -758,7 +753,6 @@ mod tests {
                         .expiry_time(now + expiry)
                         .build();
                     let message_id = IngressMessageId::from(&ingress);
-                    let attribute = IngressMessageAttribute::new(&ingress);
                     let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
                     let peer_id = (i % nodes) as u64;
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -770,7 +764,7 @@ mod tests {
                         message_id,
                         node_test_id(peer_id),
                         0,
-                        attribute,
+                        (),
                         integrity_hash,
                     )));
                 }

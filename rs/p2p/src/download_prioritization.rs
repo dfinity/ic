@@ -838,9 +838,9 @@ pub(crate) mod test {
     /// Returns a priority for a given artifact based on its content.
     /// This function is used for tests where artifacts are expected to be of
     /// a certain type (`FileTreeSync`).
-    fn priority_fn_dynamic(_id: &ArtifactId, attribute: &ArtifactAttribute) -> Priority {
-        if let ArtifactAttribute::FileTreeSync(attr) = attribute {
-            let attr = attr.parse::<i32>().unwrap();
+    fn priority_fn_dynamic(id: &ArtifactId, _: &ArtifactAttribute) -> Priority {
+        if let ArtifactId::FileTreeSync(id) = id {
+            let attr = id.parse::<i32>().unwrap();
             // Divvy up the 30 adverts in groups of 12, 9, 9
             // Equally distribute the 3 groups to 3 peers
             if attr > 17 {
@@ -881,7 +881,7 @@ pub(crate) mod test {
         let artifact_id = id.to_string();
         GossipAdvert {
             artifact_id: ArtifactId::FileTreeSync(artifact_id.clone()),
-            attribute: ArtifactAttribute::FileTreeSync(artifact_id),
+            attribute: ic_types::artifact::ArtifactAttribute::EmptyAttr(()),
             size: 0,
             // Integrity hash is not checked in the tests here
             integrity_hash: CryptoHash(vec![id as u8]),
@@ -1311,7 +1311,7 @@ pub(crate) mod test {
                 .add_advert(
                     GossipAdvert {
                         artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
-                        attribute: ArtifactAttribute::FileTreeSync(advert_id.to_string()),
+                        attribute: ic_types::artifact::ArtifactAttribute::EmptyAttr(()),
                         size: 0,
                         integrity_hash: CryptoHash(vec![]),
                     },

@@ -54,7 +54,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
 use ic_transport::transport::create_transport;
 use ic_types::{
-    artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
+    artifact::{Advert, ArtifactKind, ArtifactTag},
     artifact_kind::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
@@ -694,22 +694,20 @@ pub struct TestArtifact;
 pub type TestArtifactMessage = FileTreeSyncArtifact;
 /// The artifact ID used by the testing framework.
 pub type TestArtifactId = FileTreeSyncId;
-/// The attribute of the artifact used by the testing framework.
-pub type TestArtifactAttribute = FileTreeSyncAttribute;
 
 /// `TestArtifact` implements the `ArtifactKind` trait.
 impl ArtifactKind for TestArtifact {
     const TAG: ArtifactTag = ArtifactTag::FileTreeSyncArtifact;
     type Message = TestArtifactMessage;
     type Id = TestArtifactId;
-    type Attribute = TestArtifactAttribute;
+    type Attribute = ();
     type Filter = ();
 
     /// The function converts a TestArtifactMessage to an advert for a
     /// TestArtifact.
     fn message_to_advert(msg: &TestArtifactMessage) -> Advert<TestArtifact> {
         Advert {
-            attribute: msg.id.to_string(),
+            attribute: (),
             size: 0,
             id: msg.id.clone(),
             integrity_hash: CryptoHash(msg.id.clone().into_bytes()),
