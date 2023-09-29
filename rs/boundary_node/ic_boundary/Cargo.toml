@@ -73,7 +73,7 @@ url = "2.1.1"
 x509-parser = { version = "0.15.1", features = ["verify"] }
 
 [dev-dependencies]
-wiremock = "=0.5.18"
+wiremock = "=0.5.19"
 ic-crypto-test-utils-keys = { path = "../../crypto/test_utils/keys" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
