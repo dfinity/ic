@@ -1290,6 +1290,64 @@ message ProposalData {
   optional ic_sns_swap.pb.v1.Lifecycle sns_token_swap_lifecycle = 19;
 
   DerivedProposalInformation derived_proposal_information = 20;
+
+  // This structure contains data for settling the Neurons' Fund participation at the end of a swap.
+  // This data is however not sufficient, as settling a swap requires knowing the ultimate result
+  // (Aborted or Committed) and, if Committed, the overall direct participation amount. For more
+  // details, refer to `SettleNeuronsFundParticipationRequest`.
+  //
+  // TODO[NNS1-2566]: deprecate `original_total_community_fund_maturity_e8s_equivalent` and
+  // `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
+  optional NeuronsFundParticipation neurons_fund_participation = 21;
+}
+
+message NeuronsFundParticipation {
+  // The function used in the implementation of Matched Funding.
+  //
+  // If an NNS Governance upgrade takes place *during* a swap, the original "ideal" matched
+  // participation function needs to be recovered at the end of the swap, ensuring e.g., that
+  // the amount of maturity stored in `neurons_fund_snapshot` will not not be exceeded for due to
+  // a change in this function.
+  optional IdealMatchedParticipationFunction ideal_matched_participation_function = 1;
+
+  // The snapshot of the Neurons' Fund allocation of its maximum swap participation amount among
+  // its neurons. This snapshot is computed at the execution time of the NNS proposal leading
+  // to the swap opening; it is then used at the end of a swap to compute the refund amounts
+  // per Neuron' Fund neuron.
+  optional NeuronsFundSnapshot neurons_fund_snapshot = 2;
+}
+
+// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
+// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints
+// while allocating its overall participation amount among its neurons' maturity. In contrast,
+// The "effective" matched participation function `crate::neurons_fund::MatchedParticipationFunction`
+// is computed *based* on this one.
+message IdealMatchedParticipationFunction {
+  // The encoding of the "ideal" matched participation function is defined in `crate::neurons_fund`.
+  // In the future, we could change this message to represent full abstract syntactic trees
+  // comprised of elementary mathematical operators, with literals and variables as tree leaves.
+  optional string serialized_representation = 1;
+}
+
+// The snapshot of the Neurons' Fund allocation of its maximum swap participation amount among
+// its neurons. This snapshot is computed at the execution time of the NNS proposal leading
+// to the swap opening; it is then used at the end of a swap to compute the refund amounts
+// per Neuron' Fund neuron.
+message NeuronsFundSnapshot {
+  // Represents one NNS neuron from the Neurons' Fund participating in this swap.
+  message NeuronsFundNeuron {
+    // The NNS neuron ID of the participating neuron.
+    optional uint64 nns_neuron_id = 1;
+    // The amount of Neurons' Fund participation associated with this neuron.
+    optional uint64 amount_icp_e8s = 2;
+    // The principal that can vote on behalf of this neuron.
+    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 3;
+    // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
+    // has been capped to reflect the maximum participation amount for this SNS swap.
+    optional bool is_capped = 4;
+  }
+
+  repeated NeuronsFundNeuron neurons_fund_neurons = 1;
 }
 
 // This message has a couple of unusual features.
