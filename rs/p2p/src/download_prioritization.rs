@@ -881,7 +881,7 @@ pub(crate) mod test {
         let artifact_id = id.to_string();
         GossipAdvert {
             artifact_id: ArtifactId::FileTreeSync(artifact_id.clone()),
-            attribute: ic_types::artifact::ArtifactAttribute::EmptyAttr(()),
+            attribute: ic_types::artifact::ArtifactAttribute::Empty(()),
             size: 0,
             // Integrity hash is not checked in the tests here
             integrity_hash: CryptoHash(vec![id as u8]),
@@ -1311,7 +1311,7 @@ pub(crate) mod test {
                 .add_advert(
                     GossipAdvert {
                         artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
-                        attribute: ic_types::artifact::ArtifactAttribute::EmptyAttr(()),
+                        attribute: ic_types::artifact::ArtifactAttribute::Empty(()),
                         size: 0,
                         integrity_hash: CryptoHash(vec![]),
                     },

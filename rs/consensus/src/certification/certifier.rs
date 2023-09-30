@@ -14,10 +14,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::consensus::{Committee, HasCommittee, HasHeight};
 use ic_types::{
-    artifact::{
-        CertificationMessageAttribute, CertificationMessageFilter, CertificationMessageId,
-        Priority, PriorityFn,
-    },
+    artifact::{CertificationMessageFilter, CertificationMessageId, Priority, PriorityFn},
     artifact_kind::CertificationArtifact,
     consensus::certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
@@ -73,17 +70,14 @@ impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact,
     fn get_priority_function(
         &self,
         certification_pool: &Pool,
-    ) -> PriorityFn<CertificationMessageId, CertificationMessageAttribute> {
+    ) -> PriorityFn<CertificationMessageId, ()> {
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
-        Box::new(move |_, attribute| {
-            let height = match attribute {
-                CertificationMessageAttribute::Certification(height) => height,
-                CertificationMessageAttribute::CertificationShare(height) => height,
-            };
+        Box::new(move |id, _| {
+            let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
-            if *height < cup_height || certified_heights.contains(height) {
+            if height < cup_height || certified_heights.contains(&height) {
                 Priority::Drop
             } else {
                 Priority::Fetch
@@ -771,7 +765,7 @@ mod tests {
                                     CryptoHash(Vec::new())
                                 )),
                             },
-                            &CertificationMessageAttribute::Certification(Height::from(*height))
+                            &()
                         ),
                         *prio
                     );
