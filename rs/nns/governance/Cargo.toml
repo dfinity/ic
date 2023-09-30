@@ -62,6 +62,8 @@ maplit = "1.0.2"
 mockall = "0.11.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
+rust_decimal = "1.25"
+rust_decimal_macros = "1.25"
 serde = { version = "1.0", features = ["derive"] }
 rand = "0.8"
 rand_chacha = "0.3"

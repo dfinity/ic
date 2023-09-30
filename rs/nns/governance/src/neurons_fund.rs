@@ -6,14 +6,32 @@
 
 use ic_nervous_system_common::E8;
 use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
-
-// TODO[NNS1-2619]
-// use rust_decimal::Decimal;
-// use rust_decimal_macros::dec;
+use rust_decimal::{
+    prelude::{FromPrimitive, ToPrimitive},
+    Decimal, RoundingStrategy,
+};
+use rust_decimal_macros::dec;
 
 /// This is a theoretical limit which should be smaller than any realistic amount of maturity
 /// that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
 const MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S: u64 = 333_000 * E8;
+
+/// The implmentation of `Decimal::from_u64` cannot fail.
+pub fn u64_to_dec(x: u64) -> Decimal {
+    Decimal::from_u64(x).unwrap()
+}
+
+/// The canonical converter from (non-negative) `Decimal` to `u64`.
+pub fn dec_to_u64(x: Decimal) -> Result<u64, String> {
+    if x.is_sign_negative() {
+        return Err(format!("Cannot convert negative value {:?} to u64.", x));
+    }
+    // The same could be achieved via `x.round()`, but we opt for verbosity.
+    let x = x.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
+    // We already checked that 0 <= x; the only reason `to_u64` can fail at this point is overflow.
+    Decimal::to_u64(&x)
+        .ok_or_else(|| format!("Overflow while trying to convert value {:?} to u64.", x))
+}
 
 #[derive(Debug)]
 pub enum LinearScalingCoefficientValidationError {
@@ -386,19 +404,20 @@ impl TryFrom<NeuronsFundParticipationConstraints> for ValidatedNeuronsFundPartic
 ///
 /// Additionally, the equality `f(g(y)) = y` must hold for all `y` s.t. `f(g(y))` is defined.
 pub trait InvertibleFunction {
-    fn apply(&self, x: u64) -> f64;
-    fn invert(&self, x: f64) -> Result<u64, String>;
+    fn apply(&self, x: u64) -> Decimal;
+    fn invert(&self, x: Decimal) -> Result<u64, String>;
 }
 
 pub struct SimpleLinearFunction {}
 
 impl InvertibleFunction for SimpleLinearFunction {
-    fn apply(&self, x: u64) -> f64 {
-        x as f64
+    fn apply(&self, x: u64) -> Decimal {
+        u64_to_dec(x)
     }
 
-    fn invert(&self, x: f64) -> Result<u64, String> {
-        Ok(x.round() as u64)
+    fn invert(&self, x: Decimal) -> Result<u64, String> {
+        x.to_u64()
+            .ok_or_else(|| format!("{:?} cannot be converted to u64", x))
     }
 }
 
@@ -480,47 +499,52 @@ impl<T> IntervalPartition<NeuronsInterval<T>> for Vec<NeuronsInterval<T>> {
 }
 
 pub struct MatchedParticipationFunction {
-    function: Box<dyn Fn(u64) -> f64>,
+    function: Box<dyn Fn(u64) -> Decimal>,
     params: ValidatedNeuronsFundParticipationConstraints,
 }
 
 impl MatchedParticipationFunction {
     pub fn new(
-        function: Box<dyn Fn(u64) -> f64>,
+        function: Box<dyn Fn(u64) -> Decimal>,
         params: ValidatedNeuronsFundParticipationConstraints,
     ) -> Result<Self, String> {
         // TODO[NNS1-2619]: validate params
         Ok(Self { function, params })
     }
 
-    pub fn apply(&self, direct_participation_icp_e8s: u64) -> f64 {
+    pub fn apply(&self, direct_participation_icp_e8s: u64) -> Decimal {
+        // Normally, this threshold follows from `self.function`, a.k.a. the "ideal" participation
+        // matching function. However, we add an explicit check here in order to make this
+        // threashold more prominantly visible from readong the code. In addition, having this
+        // branch allows us to use functions with a less complicated shape in the tests.
         if direct_participation_icp_e8s < self.params.min_direct_participation_threshold_icp_e8s {
-            return 0.0;
+            return dec!(0.0);
         }
 
-        // Check if this is a special case.
+        let intervals = &self.params.coefficient_intervals;
+        // This condition is always satisfied, as `self.params` has been validated. We add it here
+        // again for verbosity.
+        assert!(
+            !intervals.is_empty(),
+            "There must be at least one interval."
+        );
+
+        // Special case A: direct_participation_icp_e8s is less than the first interval.
+        if direct_participation_icp_e8s
+            < intervals.first().unwrap().from_direct_participation_icp_e8s
         {
-            let intervals = &self.params.coefficient_intervals;
-            assert!(
-                !intervals.is_empty(),
-                "There must be at least one interval."
-            );
-            // Special case A: direct_participation_icp_e8s is less than the first interval.
-            if let Some(first_interval) = intervals.first() {
-                if direct_participation_icp_e8s < first_interval.from_direct_participation_icp_e8s {
-                    // This should not happen in practice, as the first interval should contain 0.
-                    return 0.0;
-                }
-            }
-            // Special case B: direct_participation_icp_e8s is greated than the last interval.
-            if let Some(last_interval) = intervals.last() {
-                if last_interval.to_direct_participation_icp_e8s <= direct_participation_icp_e8s {
-                    return u64::min(
-                        self.params.max_neurons_fund_participation_icp_e8s,
-                        MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-                    ) as f64;
-                }
-            }
+            // This should not happen in practice, as the first interval should contain 0.
+            return dec!(0.0);
+        }
+
+        // Special case B: direct_participation_icp_e8s is greated than or equal to the last
+        // interval's upper bound.
+        if intervals.last().unwrap().to_direct_participation_icp_e8s <= direct_participation_icp_e8s
+        {
+            return u64_to_dec(u64::min(
+                self.params.max_neurons_fund_participation_icp_e8s,
+                MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
+            ));
         }
 
         // Otherwise, direct_participation_icp_e8s must fall into one of the intervals.
@@ -531,27 +555,65 @@ impl MatchedParticipationFunction {
             ..
         }) = self.params.find_interval(direct_participation_icp_e8s)
         {
-            // Normal case:
+            // This value is how much of Neurons' Fund maturity we should "ideally" allocate.
             let ideal = (self.function)(direct_participation_icp_e8s);
-            let effective = (*intercept_icp_e8s as f64)
-                + ((*slope_numerator as f64) * ideal) / (*slope_denominator as f64);
-            let hard_cap = std::cmp::min(
+
+            // Convert to Decimal
+            let intercept_icp_e8s = u64_to_dec(*intercept_icp_e8s);
+            let slope_numerator = Decimal::from(*slope_numerator);
+            let slope_denominator = Decimal::from(*slope_denominator);
+
+            // Normally, `self.params.max_neurons_fund_participation_icp_e8s` should be set to a
+            // *reasonable* value. Since this value is computed based on the overall amount of
+            // maturity in the Neurons' Fund (at the time when the swap is being opened), in theory
+            // it could grow indefinitely. To safeguard against overly massive Neurons' Fund
+            // participation to a single SNS swap, the NNS Governance (which manages the
+            // Neurons' Fund) should limit the Neurons' Fund maximal theoretically possible amount
+            // of participation also by `MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S`.
+            // Here, we apply this threshold again for making it more explicit.
+            let hard_cap = u64_to_dec(u64::min(
                 self.params.max_neurons_fund_participation_icp_e8s,
                 MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-            ) as f64;
-            return f64::min(effective, hard_cap);
+            ));
+
+            // This value is how much of Neurons' Fund maturity can "effectively" be allocated.
+            // This value may be less than or equal to the "ideal" value above, due to:
+            // (1) Some Neurons' fund neurons being too small to participate at all (at this direct
+            //     participation amount, `direct_participation_icp_e8s`). This is taken into account
+            //     via the `(slope_numerator / slope_denominator)` factor.
+            // (2) Some Neurons' fund neurons being too big to fully participate (at this direct
+            //     participation amount, `direct_participation_icp_e8s`). This is taken into account
+            //     via the `intercept_icp_e8s` component.
+            // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap`; so
+            //     we enforce the limited at `hard_cap`.
+            let effective = hard_cap.min(intercept_icp_e8s.saturating_add(
+                // slope_denominator can't be zero as it has been validated.
+                // See `LinearScalingCoefficientValidationError::DenominatorIsZero`.
+                (slope_numerator / slope_denominator).saturating_mul(ideal),
+            ));
+            return effective;
         }
 
-        unreachable!("Found a bug in MatchedParticipationFunction.apply");
+        unreachable!(
+            "Found a bug in MatchedParticipationFunction.apply({})",
+            direct_participation_icp_e8s
+        );
     }
 }
 
 mod tests {
+    use super::{
+        dec_to_u64, u64_to_dec, InvertibleFunction, MatchedParticipationFunction,
+        SimpleLinearFunction,
+    };
     use crate::neurons_fund::ValidatedNeuronsFundParticipationConstraints;
-
-    use super::{InvertibleFunction, MatchedParticipationFunction, SimpleLinearFunction};
     use ic_nervous_system_common::E8;
     use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
+    use rust_decimal::{
+        prelude::{FromPrimitive, ToPrimitive},
+        Decimal,
+    };
+    use rust_decimal_macros::dec;
 
     #[test]
     fn test_simple_linear_function() {
@@ -561,7 +623,7 @@ mod tests {
             let x1 = f.invert(y).unwrap();
             assert_eq!(x, x1);
         };
-        let run_test_for_b = |y: f64| {
+        let run_test_for_b = |y: Decimal| {
             let x = f.invert(y).unwrap();
             let y1 = f.apply(x);
             assert_eq!(y, y1);
@@ -571,10 +633,10 @@ mod tests {
         run_test_for_a(888 * E8 + 123);
         run_test_for_a(9_999 * E8);
 
-        run_test_for_b(0 as f64);
-        run_test_for_b((77 * E8) as f64);
-        run_test_for_b((888 * E8 + 123) as f64);
-        run_test_for_b((9_999 * E8) as f64);
+        run_test_for_b(u64_to_dec(0));
+        run_test_for_b(u64_to_dec(77 * E8));
+        run_test_for_b(u64_to_dec(888 * E8 + 123));
+        run_test_for_b(u64_to_dec(9_999 * E8));
     }
 
     #[test]
@@ -631,29 +693,32 @@ mod tests {
         let f = SimpleLinearFunction {};
         let g: MatchedParticipationFunction =
             MatchedParticipationFunction::new(Box::from(move |x| f.apply(x)), params).unwrap();
-        fn round(x: f64) -> u64 {
-            x.round() as u64
-        }
         // Below min_direct_participation_threshold_icp_e8s
-        assert_eq!(round(g.apply(0)), 0);
+        assert_eq!(dec_to_u64(g.apply(0)).unwrap(), 0);
         // Falls into Interval A, thus we expect slope(0.5) * x + intercept_icp_e8s(111)
-        assert_eq!(round(g.apply(90 * E8)), 45 * E8 + 111);
+        assert_eq!(dec_to_u64(g.apply(90 * E8)).unwrap(), 45 * E8 + 111);
         // Falls into Interval B, thus we expect slope(0.6) * x + intercept_icp_e8s(222)
-        assert_eq!(round(g.apply(100 * E8)), 60 * E8 + 222);
+        assert_eq!(dec_to_u64(g.apply(100 * E8)).unwrap(), 60 * E8 + 222);
         // Falls into Interval C, thus we expect slope(0.7) * x + intercept_icp_e8s(333)
-        assert_eq!(round(g.apply(5_000 * E8)), 3_500 * E8 + 333);
+        assert_eq!(dec_to_u64(g.apply(5_000 * E8)).unwrap(), 3_500 * E8 + 333);
         // Falls into Interval D, thus we expect slope(0.8) * x + intercept_icp_e8s(444)
-        assert_eq!(round(g.apply(100_000 * E8 - 1)), 80_000 * E8 - 1 + 444);
+        assert_eq!(
+            dec_to_u64(g.apply(100_000 * E8 - 1)).unwrap(),
+            80_000 * E8 - 1 + 444
+        );
         // Falls into Interval D, thus we expect slope(0.9) * x + intercept_icp_e8s(555)
-        assert_eq!(round(g.apply(100_000 * E8)), 90_000 * E8 + 555);
+        assert_eq!(
+            dec_to_u64(g.apply(100_000 * E8)).unwrap(),
+            90_000 * E8 + 555
+        );
         // Beyond the last interval
         assert_eq!(
-            round(g.apply(1_000_000 * E8)),
+            dec_to_u64(g.apply(1_000_000 * E8)).unwrap(),
             max_neurons_fund_participation_icp_e8s
         );
         // Extremely high value
         assert_eq!(
-            round(g.apply(u64::MAX)),
+            dec_to_u64(g.apply(u64::MAX)).unwrap(),
             max_neurons_fund_participation_icp_e8s
         );
     }
