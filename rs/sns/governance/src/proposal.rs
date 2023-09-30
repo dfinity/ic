@@ -24,6 +24,7 @@ use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
+use ic_nervous_system_common::{i2d, E8};
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
 use std::{
@@ -292,15 +293,15 @@ fn validate_and_render_transfer_sns_treasury_funds(
     sns_transfer_fee_e8s: u64,
 ) -> Result<String, String> {
     let mut defects: Vec<String> = vec![];
-    let from = match transfer.from_treasury() {
-        TransferFrom::IcpTreasury => "ICP Treasury (NNS Ledger)",
-        TransferFrom::SnsTokenTreasury => "SNS Token Treasury (SNS Ledger)",
+    let (from, unit) = match transfer.from_treasury() {
+        TransferFrom::IcpTreasury => ("ICP Treasury (ICP Ledger)", "ICP"),
+        TransferFrom::SnsTokenTreasury => ("SNS Token Treasury (SNS Ledger)", "SNS Tokens"),
         TransferFrom::Unspecified => {
             defects.push(
                 "Must specify a treasury from which to transfer the funds (ICP/SNS Token)."
                     .to_string(),
             );
-            ""
+            ("", "")
         }
     };
 
@@ -354,18 +355,18 @@ fn validate_and_render_transfer_sns_treasury_funds(
         ));
     }
 
+    let display_amount_tokens = i2d(transfer.amount_e8s) / i2d(E8);
+
     Ok(format!(
         r"# Proposal to transfer SNS Treasury funds:
-## Source treasury: {}
-## Amount (e8s): {}
-## Target principal: {}
-## Target account: {}
-## Memo: {}",
-        from,
-        transfer.amount_e8s,
-        to_principal,
-        to_account,
-        transfer.memo.unwrap_or(0)
+## Source treasury: {from}
+## Amount: {display_amount_tokens:.8} {unit}
+## Amount (e8s): {amount_e8s}
+## Target principal: {to_principal}
+## Target account: {to_account}
+## Memo: {memo}",
+        amount_e8s = transfer.amount_e8s,
+        memo = transfer.memo.unwrap_or(0)
     ))
 }
 
@@ -2231,7 +2232,8 @@ Version {
             )
             .unwrap(),
             r"# Proposal to transfer SNS Treasury funds:
-## Source treasury: ICP Treasury (NNS Ledger)
+## Source treasury: ICP Treasury (ICP Ledger)
+## Amount: 0.01000000 ICP
 ## Amount (e8s): 1000000
 ## Target principal: bg4sm-wzk
 ## Target account: bg4sm-wzk
@@ -2243,7 +2245,7 @@ Version {
             validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
-                    amount_e8s: 1000000,
+                    amount_e8s: 10000000,
                     memo: None,
                     to_principal: Some(basic_principal_id()),
                     to_subaccount: Some(Subaccount {
@@ -2254,8 +2256,9 @@ Version {
             )
             .unwrap(),
             r"# Proposal to transfer SNS Treasury funds:
-## Source treasury: ICP Treasury (NNS Ledger)
-## Amount (e8s): 1000000
+## Source treasury: ICP Treasury (ICP Ledger)
+## Amount: 0.10000000 ICP
+## Amount (e8s): 10000000
 ## Target principal: bg4sm-wzk
 ## Target account: bg4sm-wzk
 ## Memo: 0"
@@ -2268,7 +2271,7 @@ Version {
             validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
-                    amount_e8s: 1000000,
+                    amount_e8s: E8,
                     memo: None,
                     to_principal: Some(basic_principal_id()),
                     to_subaccount: Some(subaccount_1())
@@ -2277,11 +2280,34 @@ Version {
             )
             .unwrap(),
             r"# Proposal to transfer SNS Treasury funds:
-## Source treasury: ICP Treasury (NNS Ledger)
-## Amount (e8s): 1000000
+## Source treasury: ICP Treasury (ICP Ledger)
+## Amount: 1.00000000 ICP
+## Amount (e8s): 100000000
 ## Target principal: bg4sm-wzk
 ## Target account: bg4sm-wzk-msokwai.1
 ## Memo: 0"
+        );
+
+        // Valid transfer from SNS treasury
+        assert_eq!(
+            validate_and_render_transfer_sns_treasury_funds(
+                &TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::SnsTokenTreasury.into(),
+                    amount_e8s: 1000000,
+                    memo: Some(1000),
+                    to_principal: Some(basic_principal_id()),
+                    to_subaccount: None
+                },
+                0
+            )
+            .unwrap(),
+            r"# Proposal to transfer SNS Treasury funds:
+## Source treasury: SNS Token Treasury (SNS Ledger)
+## Amount: 0.01000000 SNS Tokens
+## Amount (e8s): 1000000
+## Target principal: bg4sm-wzk
+## Target account: bg4sm-wzk
+## Memo: 1000"
         );
     }
 
@@ -2361,7 +2387,7 @@ Version {
                 0
             )
             .unwrap_err(),
-            "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nFor transactions from ICP Treasury (NNS Ledger), the fee and minimum transaction is 10000 e8s"
+            "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nFor transactions from ICP Treasury (ICP Ledger), the fee and minimum transaction is 10000 e8s"
         );
         assert_eq!(
             validate_and_render_transfer_sns_treasury_funds(
