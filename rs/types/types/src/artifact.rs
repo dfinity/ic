@@ -69,10 +69,9 @@ pub enum Artifact {
 pub enum ArtifactAttribute {
     ConsensusMessage(ConsensusMessageAttribute),
     DkgMessage(DkgMessageAttribute),
-    CertificationMessage(CertificationMessageAttribute),
     EcdsaMessage(EcdsaMessageAttribute),
     CanisterHttpMessage(CanisterHttpResponseAttribute),
-    EmptyAttr(()),
+    Empty(()),
 }
 
 /// Artifact identifier type.
@@ -356,13 +355,6 @@ impl From<&IngressMessageId> for MessageId {
 pub struct CertificationMessageId {
     pub hash: CertificationMessageHash,
     pub height: Height,
-}
-
-/// The certification message attribute used by the priority function.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CertificationMessageAttribute {
-    Certification(Height),
-    CertificationShare(Height),
 }
 
 /// Certification message filter is by height.

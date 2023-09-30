@@ -1245,7 +1245,7 @@ pub mod tests {
         for advert_id in range {
             let gossip_advert = GossipAdvert {
                 artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
-                attribute: ic_types::artifact::ArtifactAttribute::EmptyAttr(()),
+                attribute: ic_types::artifact::ArtifactAttribute::Empty(()),
                 size: 0,
                 integrity_hash: CryptoHash(Vec::from(advert_id.to_be_bytes())),
             };

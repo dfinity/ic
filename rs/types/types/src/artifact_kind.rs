@@ -71,32 +71,26 @@ impl ArtifactKind for CertificationArtifact {
     const TAG: ArtifactTag = ArtifactTag::CertificationArtifact;
     type Id = CertificationMessageId;
     type Message = CertificationMessage;
-    type Attribute = CertificationMessageAttribute;
+    type Attribute = ();
     type Filter = CertificationMessageFilter;
 
     /// The function converts a `CertificationMessage` into an advert for a
     /// `CertificationArtifact`.
     fn message_to_advert(msg: &CertificationMessage) -> Advert<CertificationArtifact> {
         use CertificationMessage::*;
-        let (attribute, id) = match msg {
-            Certification(cert) => (
-                CertificationMessageAttribute::Certification(cert.height),
-                CertificationMessageId {
-                    height: cert.height,
-                    hash: CertificationMessageHash::Certification(crypto_hash(cert)),
-                },
-            ),
-            CertificationShare(share) => (
-                CertificationMessageAttribute::CertificationShare(share.height),
-                CertificationMessageId {
-                    height: share.height,
-                    hash: CertificationMessageHash::CertificationShare(crypto_hash(share)),
-                },
-            ),
+        let id = match msg {
+            Certification(cert) => CertificationMessageId {
+                height: cert.height,
+                hash: CertificationMessageHash::Certification(crypto_hash(cert)),
+            },
+            CertificationShare(share) => CertificationMessageId {
+                height: share.height,
+                hash: CertificationMessageHash::CertificationShare(crypto_hash(share)),
+            },
         };
         Advert {
             id,
-            attribute,
+            attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
             integrity_hash: crypto_hash(msg).get(),
         }
