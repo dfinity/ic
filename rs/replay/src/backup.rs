@@ -308,14 +308,8 @@ pub(crate) fn deserialize_consensus_artifacts(
             }
         }
 
-        // Insert block proposals.
-        for file_name in height_artifacts
-            .proposals
-            .iter()
-            // If there was a finalization, insert only the finalized proposal.
-            // Otherwise, insert all.
-            .filter(|name| name.contains(finalized_block_hash.unwrap_or("")))
-        {
+        // Insert the finalized block proposal.
+        if let Some(file_name) = height_artifacts.proposals.first() {
             let file = path.join(file_name);
             let proposal = read_artifact_if_correct_height::<BlockProposal, pb::BlockProposal>(
                 &file,
@@ -381,8 +375,8 @@ pub(crate) fn deserialize_consensus_artifacts(
         )?;
         artifacts.push(rt.into_message());
 
-        // Insert the notarizations.
-        for file_name in &height_artifacts.notarizations {
+        // Insert the finalized notarization.
+        for file_name in &height_artifacts.notarizations.first() {
             let file = path.join(file_name);
             let not = read_artifact_if_correct_height::<Notarization, pb::Notarization>(
                 &file,
