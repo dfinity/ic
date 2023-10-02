@@ -430,7 +430,7 @@ impl ExhaustiveSet for NiDkgTargetId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         <[u8; NiDkgTargetId::SIZE]>::exhaustive_set(rng)
             .into_iter()
-            .map(|elem| NiDkgTargetId::new(elem))
+            .map(NiDkgTargetId::new)
             .collect()
     }
 }

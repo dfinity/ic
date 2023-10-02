@@ -1960,7 +1960,7 @@ impl SetupBuilder {
         let time_source = FastForwardTimeSource::new();
         let crypto = CryptoComponentImpl::new_with_csp_and_fake_node_id(
             mock_csp,
-            self.logger.unwrap_or_else(|| no_op_logger()),
+            self.logger.unwrap_or_else(no_op_logger),
             Arc::clone(&registry_client),
             node_id(),
             crypto_metrics,

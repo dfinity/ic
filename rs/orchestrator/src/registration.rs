@@ -954,7 +954,7 @@ mod tests {
                 let node_config = Config::new(temp_dir.into_path());
 
                 let node_registration = NodeRegistration::new(
-                    self.logger.unwrap_or_else(|| no_op_logger()),
+                    self.logger.unwrap_or_else(no_op_logger),
                     node_config,
                     registry_client,
                     orchestrator_metrics,

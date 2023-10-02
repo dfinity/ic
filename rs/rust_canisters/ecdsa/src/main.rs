@@ -39,7 +39,7 @@ async fn get_sig(options: Options) {
                 options
                     .derivation_path
                     .into_iter()
-                    .map(|x| ByteBuf::from(x))
+                    .map(ByteBuf::from)
                     .collect()
             ),
             key_id: EcdsaKeyId {

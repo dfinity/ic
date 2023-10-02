@@ -324,7 +324,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 );
                 assert_eq!(
                     dst_state_manager.checkpoint_heights(),
-                    (1..=i).map(|i| height(i)).collect::<Vec<_>>()
+                    (1..=i).map(height).collect::<Vec<_>>()
                 );
             }
 

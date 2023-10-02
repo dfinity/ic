@@ -59,7 +59,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             g.bench_function(BenchmarkId::new("labeled_tree", num_subtrees), |b| {
                 b.iter_batched(
                     || labeled_tree.clone(),
-                    |t| std::mem::drop(t),
+                    std::mem::drop,
                     BatchSize::SmallInput,
                 )
             });

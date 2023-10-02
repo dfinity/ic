@@ -160,7 +160,7 @@ impl SnsInitializationFlowTestSetup {
     pub fn default_setup() -> Self {
         let state_machine = StateMachine::new();
 
-        let funded_principals: Vec<_> = (0..10).map(|i| PrincipalId::new_user_test_id(i)).collect();
+        let funded_principals: Vec<_> = (0..10).map(PrincipalId::new_user_test_id).collect();
         let developer_principal_id = *TEST_NEURON_1_OWNER_PRINCIPAL;
 
         let nns_init_payloads = {

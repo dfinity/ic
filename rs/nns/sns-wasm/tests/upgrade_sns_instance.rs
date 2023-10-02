@@ -353,8 +353,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms_legacy() {
         vesting_period_seconds: None,
     };
     // We make these to create some extra transactions so an archive will spawn.
-    let airdrop_neurons: Vec<NeuronDistribution> =
-        (1..20_u64).map(|id| airdrop_neuron(id)).collect();
+    let airdrop_neurons: Vec<NeuronDistribution> = (1..20_u64).map(airdrop_neuron).collect();
 
     let payload = SnsInitPayload {
         transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
@@ -628,8 +627,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed_legacy() {
         vesting_period_seconds: None,
     };
     // We make these to create some extra transactions so an archive will spawn.
-    let airdrop_neurons: Vec<NeuronDistribution> =
-        (1..20_u64).map(|id| airdrop_neuron(id)).collect();
+    let airdrop_neurons: Vec<NeuronDistribution> = (1..20_u64).map(airdrop_neuron).collect();
 
     let payload = SnsInitPayload {
         transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),

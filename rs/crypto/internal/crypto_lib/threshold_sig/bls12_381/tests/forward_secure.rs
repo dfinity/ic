@@ -83,7 +83,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
 
     let ptext_chunks: Vec<_> = ptext
         .iter()
-        .map(|s| PlaintextChunks::from_scalar(s))
+        .map(PlaintextChunks::from_scalar)
         .collect::<Vec<_>>();
 
     let pks_and_scalars = pks.iter().cloned().zip(ptext_chunks).collect::<Vec<_>>();
