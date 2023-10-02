@@ -334,7 +334,7 @@ pub(crate) fn syscalls(
         caller
             .data_mut()
             .system_api_mut()
-            .and_then(|api| f(api))
+            .and_then(f)
             .map_err(|e| process_err(&mut caller, e))
     }
 

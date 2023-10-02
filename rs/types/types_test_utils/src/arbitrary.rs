@@ -110,9 +110,9 @@ prop_compose! {
         RequestMetadata {
             call_tree_depth,
             call_tree_start_time: call_tree_start_time_nanos
-                .map(|call_tree_start_time_nanos| Time::from_nanos_since_unix_epoch(call_tree_start_time_nanos)),
+                .map(Time::from_nanos_since_unix_epoch),
             call_subtree_deadline: call_subtree_deadline_nanos
-                .map(|deadline_nanos| Time::from_nanos_since_unix_epoch(deadline_nanos)),
+                .map(Time::from_nanos_since_unix_epoch),
         }
     }
 }

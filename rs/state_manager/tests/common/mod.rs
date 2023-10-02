@@ -462,7 +462,7 @@ pub fn pipe_manifest(
     // Only the manifest chunks should be requested
     let manifest_chunks: HashSet<_> = (MANIFEST_CHUNK_ID_OFFSET
         ..MANIFEST_CHUNK_ID_OFFSET + src.meta_manifest.sub_manifest_hashes.len() as u32)
-        .map(|x| ChunkId::new(x))
+        .map(ChunkId::new)
         .collect();
     assert!(ids.iter().all(|id| manifest_chunks.contains(id)));
 

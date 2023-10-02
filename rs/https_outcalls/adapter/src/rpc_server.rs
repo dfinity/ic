@@ -154,14 +154,14 @@ impl CanisterHttpService for CanisterHttp {
                                 RequestError::DirectAndSocks((direct_err, socks_err))
                             })
                     }
-                    resp => resp.map_err(|err| RequestError::Direct(err)),
+                    resp => resp.map_err(RequestError::Direct),
                 }
             } else {
                 self.metrics.requests_socks.inc();
                 self.socks_client
                     .request(http_req)
                     .await
-                    .map_err(|err| RequestError::Socks(err))
+                    .map_err(RequestError::Socks)
             }
         } else {
             let mut http_req = hyper::Request::new(Body::from(req.body));
@@ -171,7 +171,7 @@ impl CanisterHttpService for CanisterHttp {
             self.client
                 .request(http_req)
                 .await
-                .map_err(|err| RequestError::Direct(err))
+                .map_err(RequestError::Direct)
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);

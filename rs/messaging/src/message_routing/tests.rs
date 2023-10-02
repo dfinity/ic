@@ -283,7 +283,7 @@ impl RegistryFixture {
 
         self.write_record(
             &make_routing_table_record_key(),
-            routing_table.map(|rt| RoutingTableProto::from(rt)),
+            routing_table.map(RoutingTableProto::from),
         )
     }
 
@@ -297,7 +297,7 @@ impl RegistryFixture {
 
         self.write_record(
             &make_canister_migrations_record_key(),
-            canister_migrations.map(|cm| CanisterMigrationsProto::from(cm)),
+            canister_migrations.map(CanisterMigrationsProto::from),
         )
     }
 
@@ -311,7 +311,7 @@ impl RegistryFixture {
 
         self.write_record(
             ROOT_SUBNET_ID_KEY,
-            nns_subnet_id.map(|id| subnet_id_into_protobuf(id)),
+            nns_subnet_id.map(subnet_id_into_protobuf),
         )
     }
 

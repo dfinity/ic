@@ -394,7 +394,7 @@ impl<'a> TestState<'a> {
         params: Vec<WastArg>,
         id: Option<Id<'a>>,
     ) -> Result<Vec<wasmtime::Val>, String> {
-        let params: Vec<_> = params.into_iter().map(|a| convert::arg(a)).collect();
+        let params: Vec<_> = params.into_iter().map(convert::arg).collect();
         if params.iter().any(|p| p.is_none()) {
             return Ok(vec![]);
         }

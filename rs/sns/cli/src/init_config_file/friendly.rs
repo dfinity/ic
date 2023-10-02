@@ -394,7 +394,7 @@ impl SnsConfigurationFile {
         let url = Some(url.clone());
 
         let logo = parse_image_path(logo, base_path)
-            .map(|logo| Some(logo))
+            .map(Some)
             .map_err(|err| defects.push(err))
             .unwrap_or_default();
 
@@ -629,7 +629,7 @@ impl Token {
 
         // Read the token-logo file contents from the path buf
         let token_logo = parse_image_path(logo, base_path)
-            .map(|image| Some(image))
+            .map(Some)
             .map_err(|err| vec![err])?;
 
         Ok(nns_governance_pb::LedgerParameters {

@@ -111,9 +111,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 Ok::<_, warp::Rejection>(warp::reply::reply())
             });
 
-        let basic_head = warp::head()
-            .and(warp::path("head"))
-            .map(|| warp::reply::reply());
+        let basic_head = warp::head().and(warp::path("head")).map(warp::reply::reply);
 
         let routes = basic_post
             .or(basic_get)

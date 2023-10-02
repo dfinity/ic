@@ -288,11 +288,11 @@ proptest! {
         .prop_flat_map(|num_requests| {
             (
                 proptest::collection::vec(
-                    arbitrary::request().prop_map(|request| Arc::from(request)),
+                    arbitrary::request().prop_map(Arc::from),
                     num_requests,
                 ),
                 proptest::collection::vec(
-                    (0..=1000_u64).prop_map(|t| Time::from_nanos_since_unix_epoch(t)),
+                    (0..=1000_u64).prop_map(Time::from_nanos_since_unix_epoch),
                     num_requests,
                 ),
             )
@@ -431,7 +431,7 @@ proptest! {
 
         let mut timed_out_requests = q
             .time_out_requests(time)
-            .map(|request| RequestOrResponse::Request(request))
+            .map(RequestOrResponse::Request)
             .collect::<VecDeque<_>>();
 
         q.check_invariants();

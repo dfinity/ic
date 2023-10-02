@@ -44,7 +44,7 @@ fn potpourri() {
 
     let ptext_chunks = ptext
         .iter()
-        .map(|p| PlaintextChunks::from_scalar(p))
+        .map(PlaintextChunks::from_scalar)
         .collect::<Vec<_>>();
 
     let pk_and_chunks = pks
@@ -136,7 +136,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     // Plaintext, chunked:
     let plaintext_chunks: Vec<PlaintextChunks> = plaintexts
         .iter()
-        .map(|plaintext| PlaintextChunks::from_scalar(plaintext))
+        .map(PlaintextChunks::from_scalar)
         .collect();
     println!("Messages: {:#?}", plaintext_chunks);
 

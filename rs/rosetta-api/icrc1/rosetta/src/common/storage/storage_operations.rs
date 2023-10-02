@@ -407,7 +407,7 @@ where
                         subaccount: spender_subaccount,
                     },
                     amount: Tokens::new(amount),
-                    expected_allowance: expected_allowance.map(|ea| Tokens::new(ea)),
+                    expected_allowance: expected_allowance.map(Tokens::new),
                     expires_at: approval_expires_at,
                     fee: fee.map(Tokens::new),
                 },

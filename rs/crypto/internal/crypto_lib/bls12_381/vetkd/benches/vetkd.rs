@@ -102,7 +102,7 @@ fn vetkd_bench(c: &mut Criterion) {
             group.bench_function("EncryptedKeyShare::deserialize", |b| {
                 b.iter_batched(
                     || eks.serialize(),
-                    |bytes| EncryptedKeyShare::deserialize(bytes),
+                    EncryptedKeyShare::deserialize,
                     BatchSize::SmallInput,
                 )
             });
