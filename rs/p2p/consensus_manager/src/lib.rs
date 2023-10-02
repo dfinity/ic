@@ -22,7 +22,7 @@ use ic_interfaces::{
     },
     time_source::TimeSource,
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{ConnId, Transport};
@@ -56,11 +56,8 @@ const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(10);
 const BACKOFF_INTERVAL_MULTIPLIER: f64 = 1.1;
 const MAX_ELAPSED_TIME: Duration = Duration::from_secs(60 * 5); // 5 minutes
 
-/// Validated artifact pool on mainnet contains ~10k artifacts.
-/// Since the slot table mirrors the pool, we chose 50k slots for now.
-/// This number is not enforced, but will log errors if the number of slots
-/// used exceeds this number.
-const MAX_SLOTS: u64 = 50_000;
+// Used to log warnings if the slot table grows beyond the threshold.
+const SLOT_TABLE_THRESHOLD: u64 = 30_000;
 
 pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
     backoff::ExponentialBackoff {
@@ -877,12 +874,9 @@ struct SlotManager {
 
 impl SlotManager {
     fn new(log: ReplicaLogger, metrics: ConsensusManagerMetrics) -> Self {
-        metrics.free_slots.add(MAX_SLOTS as i64);
-        metrics.maximum_slots_total.inc_by(MAX_SLOTS);
-
         Self {
-            next_free_slot: MAX_SLOTS.into(),
-            free_slots: (0..MAX_SLOTS).map(AmountOf::from).collect(),
+            next_free_slot: 0.into(),
+            free_slots: vec![],
             log,
             metrics,
         }
@@ -900,15 +894,15 @@ impl SlotManager {
                 slot
             }
             None => {
-                error!(
-                    self.log,
-                    "Slot table exceeded the maximum configured slots = {}. Slots in use = {}.",
-                    MAX_SLOTS,
-                    self.next_free_slot
-                );
+                if self.next_free_slot.get() > SLOT_TABLE_THRESHOLD {
+                    warn!(
+                        self.log,
+                        "Slot table threshold exceeded. Slots in use = {}.", self.next_free_slot
+                    );
+                }
 
                 let new_slot = self.next_free_slot;
-                self.next_free_slot += new_slot.increment();
+                self.next_free_slot.inc_assign();
 
                 self.metrics.maximum_slots_total.inc();
 
