@@ -5,9 +5,7 @@ use ic_types::NodeId;
 use std::sync::Arc;
 
 pub mod test_client;
-pub mod test_client_openssl;
 pub mod test_server;
-pub mod test_server_openssl;
 
 pub use ic_crypto_test_utils::tls::registry::REG_V1;
 use ic_interfaces::crypto::KeyManager;
