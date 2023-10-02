@@ -3,7 +3,7 @@ use crate::artifact_pool::{ChangeResult, UnvalidatedArtifactEvent};
 use crate::time_source::TimeSource;
 use derive_more::From;
 use ic_types::artifact::{Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn};
-use ic_types::{artifact, chunkable, p2p, NodeId};
+use ic_types::{artifact, chunkable, p2p, Height, NodeId};
 
 /// Event loops/actors that implement a graceful shutdown on destruction implement this trait.
 /// This is useful when the the event loop/actor has multiple handles and a separate object
@@ -57,11 +57,8 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     /// If Consensus pool has delivered batches up to height 10, the filter will
     /// be 'height = 10' since this node only needs consensus artifacts
     /// with height > 10.
-    fn get_filter(&self) -> Artifact::Filter
-    where
-        Artifact::Filter: Default,
-    {
-        Default::default()
+    fn get_filter(&self) -> Height {
+        Height::default()
     }
 
     /// Get adverts of all validated artifacts by the filter. This filter is
@@ -76,10 +73,7 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     /// `Example`
     /// If the filter contains height = 10; adverts for all the validated
     /// artifacts with height > 10 will be returned by this function.
-    fn get_all_validated_by_filter(
-        &self,
-        _filter: &Artifact::Filter,
-    ) -> Vec<artifact::Advert<Artifact>> {
+    fn get_all_validated_by_filter(&self, _filter: &Height) -> Vec<artifact::Advert<Artifact>> {
         Vec::new()
     }
 

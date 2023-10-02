@@ -59,7 +59,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
+    artifact::{ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
     consensus::{ConsensusMessageAttribute, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
@@ -616,15 +616,13 @@ impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
 
     /// Return a filter that represents what artifacts are needed above the
     /// filter height.
-    fn get_filter(&self) -> ConsensusMessageFilter {
+    fn get_filter(&self) -> Height {
         let expected_batch_height = self.message_routing.expected_batch_height();
         assert!(
             expected_batch_height > Height::from(0),
             "Expected batch height must be 1 more higher"
         );
-        ConsensusMessageFilter {
-            height: expected_batch_height.decrement(),
-        }
+        expected_batch_height.decrement()
     }
 }
 

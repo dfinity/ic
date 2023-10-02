@@ -193,7 +193,10 @@ impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
             .cloned()
     }
 
-    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = dkg::Message>> {
+    fn get_all_validated_by_filter(
+        &self,
+        _filter: &Height,
+    ) -> Box<dyn Iterator<Item = dkg::Message>> {
         unimplemented!()
     }
 }

@@ -21,8 +21,8 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::ArtifactKind, artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
-    artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
+    artifact::ArtifactKind, artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact,
+    consensus::*, Height, SubnetId, Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::{marker::PhantomData, sync::Arc, time::Duration};
@@ -710,7 +710,7 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
     // above the given height filter.
     fn get_all_validated_by_filter(
         &self,
-        filter: &ConsensusMessageFilter,
+        filter: &Height,
     ) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let max_catch_up_height = self
             .validated
@@ -720,7 +720,7 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
             .unwrap();
         // Since random beacon of previous height is required, min_random_beacon_height
         // should be one less than the normal min height.
-        let min_random_beacon_height = max_catch_up_height.max(filter.height);
+        let min_random_beacon_height = max_catch_up_height.max(*filter);
         let min = min_random_beacon_height.increment();
         let max_finalized_height = self
             .validated
@@ -815,7 +815,7 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
             self.validated
                 .catch_up_package()
                 .get_by_height_range(HeightRange {
-                    min: max_catch_up_height.max(filter.height),
+                    min: max_catch_up_height.max(*filter),
                     max: max_catch_up_height,
                 })
                 .map(|x| x.into_message())
