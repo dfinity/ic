@@ -3,7 +3,6 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_tls_cert_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, RegistryVersion};
-use openssl::x509::X509;
 use std::sync::Arc;
 
 pub const REG_V1: RegistryVersion = RegistryVersion::new(1);
@@ -28,13 +27,6 @@ impl TlsRegistry {
             .add(&make_crypto_tls_cert_key(node_id), REG_V1, Some(cert))
             .expect("failed to add TLS cert to registry");
         self
-    }
-
-    pub fn with_cert_from_x509(self, node_id: NodeId, cert: X509) -> TlsRegistry {
-        let cert = X509PublicKeyCert {
-            certificate_der: cert.to_der().expect("could not DER encode certificate"),
-        };
-        self.add_cert(node_id, cert)
     }
 
     pub fn get(&self) -> Arc<FakeRegistryClient> {

@@ -1,12 +1,11 @@
 //! Utilities for building X.509 certificates for tests.
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use openssl::asn1::{Asn1Integer, Asn1Time};
 use openssl::bn::BigNum;
 use openssl::ec::{EcGroup, EcKey};
 use openssl::hash::MessageDigest;
 use openssl::nid::Nid;
-use openssl::pkey::{PKey, PKeyRef, Private};
+use openssl::pkey::{PKey, Private};
 use openssl::x509::extension::BasicConstraints;
 use openssl::x509::{X509Name, X509Ref, X509};
 
@@ -37,19 +36,6 @@ pub fn generate_ed25519_cert() -> (PKey<Private>, X509) {
     (key_pair, server_cert)
 }
 
-/// Generates a TlsPublicKeyCert certificate together with its private key.
-pub fn generate_ed25519_tlscert() -> (PKey<Private>, TlsPublicKeyCert) {
-    let key_pair = ed25519_key_pair();
-    let server_cert_x509 = generate_cert(&key_pair, MessageDigest::null());
-    let server_cert = TlsPublicKeyCert::new_from_der(
-        server_cert_x509
-            .to_der()
-            .expect("failed to DER encode server cert"),
-    )
-    .expect("error converting X509 to TlsPublicKeyCert");
-    (key_pair, server_cert)
-}
-
 /// Converts the `cert` into an `X509PublicKeyCert`.
 pub fn x509_public_key_cert(cert: &X509) -> X509PublicKeyCert {
     X509PublicKeyCert {
@@ -58,18 +44,12 @@ pub fn x509_public_key_cert(cert: &X509) -> X509PublicKeyCert {
 }
 
 /// DER encodes the `cert`.
-pub fn cert_to_der(cert: &X509Ref) -> Vec<u8> {
+fn cert_to_der(cert: &X509Ref) -> Vec<u8> {
     cert.to_der().expect("error converting cert to DER")
 }
 
-/// DER encodes the private `key`.
-pub fn private_key_to_der(key: &PKeyRef<Private>) -> Vec<u8> {
-    key.private_key_to_der()
-        .expect("error converting private key to DER")
-}
-
 /// Generates an X.509 certificate using the `key_pair`.
-pub fn generate_cert(key_pair: &PKey<Private>, digest: MessageDigest) -> X509 {
+fn generate_cert(key_pair: &PKey<Private>, digest: MessageDigest) -> X509 {
     CertWithPrivateKey::builder()
         .build(key_pair.clone(), digest)
         .x509()
@@ -311,21 +291,9 @@ impl CertWithPrivateKey {
         self.key_pair.clone()
     }
 
-    /// Returns a PEM encoding of the key pair.
-    pub fn key_pair_pem(&self) -> Vec<u8> {
-        self.key_pair
-            .private_key_to_pem_pkcs8()
-            .expect("unable to PEM encode private key")
-    }
-
     /// Returns the X.509 certificate.
     pub fn x509(&self) -> X509 {
         self.x509.clone()
-    }
-
-    /// Returns a PEM encoding of the X.509 certificate.
-    pub fn cert_pem(&self) -> Vec<u8> {
-        self.x509.to_pem().expect("unable to PEM encode cert")
     }
 
     /// Returns a DER encoding of the X.509 certificate.
