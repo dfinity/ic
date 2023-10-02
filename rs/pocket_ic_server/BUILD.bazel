@@ -27,6 +27,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:sha2",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
+    "@crate_index//:tracing-appender",
     "@crate_index//:tower-http",
     "@crate_index//:ic-cdk",
     "@crate_index//:base64",

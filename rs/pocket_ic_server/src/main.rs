@@ -30,15 +30,70 @@ use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_appender::non_blocking::WorkerGuard;
 
 const TTL_SEC: u64 = 60;
 
 // Command line arguments to PocketIC server.
 #[derive(Parser)]
 struct Args {
+    /// A common identifier for all clients that use this instance of a PocketIC-server. In
+    /// general, this is assumed to be the PID of the parent process of the test process. Thus, all
+    /// tests of a `cargo test`-invocation (re-)use the same PocketIC-server instance.
     #[clap(long)]
     pid: u32,
+
+    /// If provided, log files will be written to the specified directory. Note that, unless
+    /// --log-to-stdout is provided additionally, the logs will not appear on stdout.
+    #[clap(long, parse(from_os_str), value_hint = clap::ValueHint::FilePath)]
+    log_dir: Option<std::path::PathBuf>,
+
+    /// By default, logs are produced to stdout unless --log-dir is specified. If this flag is
+    /// provided, the logs are still produced on stdout.
+    ///
+    /// Log levels can be controlled by the RUST_LOG environment variable.
+    #[clap(long)]
+    log_to_stdout: bool,
+
+    /// If this option is provided *and* the RUST_LOG environment variable is *not* set, the log
+    /// level of the pocket-ic-server- and the tower-crate are set to the specified value.
+    ///
+    /// The RUST_LOG environment variable always takes precedence.
+    ///
+    /// In particular access logs at the REST-layer are only available if the log level is set to
+    /// `TRACE`. By default, rejections on the REST-layer are always logged, independent of the
+    /// specified log level. That is, unless the RUST_LOG environment variable specified a log
+    /// level different from `TRACE` for the axum-crate.
+    #[clap(long)]
+    log_level: Option<tracing::Level>,
+}
+
+impl Args {
+    fn validate(self) -> ValidatedArgs {
+        // XXX: Return error and use TryFrom
+        let log_dir = match self.log_dir {
+            Some(p) if p.is_dir() => Some(p),
+            Some(p) if !p.is_dir() => panic!("log-dir directory does not exist"),
+            _ => None,
+        };
+
+        let log_level = self.log_level.unwrap_or(tracing::Level::INFO);
+        let log_to_stdout = self.log_to_stdout || log_dir.is_none();
+
+        ValidatedArgs {
+            pid: self.pid,
+            log_to_stdout,
+            log_dir,
+            log_level,
+        }
+    }
+}
+
+struct ValidatedArgs {
+    pub pid: u32,
+    log_to_stdout: bool,
+    log_dir: Option<std::path::PathBuf>,
+    log_level: tracing::Level,
 }
 
 fn main() {
@@ -54,8 +109,11 @@ fn main() {
 }
 
 async fn start(runtime: Arc<Runtime>) {
-    setup_tracing();
-    let args = Args::parse();
+    let args = Args::parse().validate();
+    // If log-dir is specified, a background thread is started that writes logs into the files in
+    // batches. This guard ensures that at the end of the process execution, the buffer is flushed
+    // to disk.
+    let _guard = setup_tracing(&args);
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
     let mut new_port_file = match is_first_server(&port_file_path) {
@@ -149,17 +207,42 @@ async fn start(runtime: Arc<Runtime>) {
 }
 
 // Registers a global subscriber that collects tracing events and spans.
-fn setup_tracing() {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                // axum logs rejections from built-in extractors with the `axum::rejection`
-                // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
-                "pocket_ic_server=info,tower_http=info,axum::rejection=trace".into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+fn setup_tracing(args: &ValidatedArgs) -> Option<WorkerGuard> {
+    use tracing_subscriber::prelude::*;
+
+    let lvl = args.log_level;
+    let mut layers = Vec::new();
+
+    let filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+            // axum logs rejections from built-in extractors with the `axum::rejection`
+            // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
+            format!("pocket_ic_server={lvl},tower_http={lvl},axum::rejection=trace").into()
+        })
+        .boxed();
+    layers.push(filter_layer);
+
+    if args.log_to_stdout {
+        layers.push(tracing_subscriber::fmt::layer().boxed());
+    }
+
+    let guard = if let Some(p) = &args.log_dir {
+        let pid = args.pid;
+        let appender = tracing_appender::rolling::never(p, format!("pocket_ic_{pid}"));
+        let (non_blocking_appender, guard) = tracing_appender::non_blocking(appender);
+
+        layers.push(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking_appender)
+                .boxed(),
+        );
+        Some(guard)
+    } else {
+        None
+    };
+
+    tracing_subscriber::registry().with(layers).init();
+    guard
 }
 
 /// Returns the opened file if it was successfully created and is readable, writeable. Otherwise,
