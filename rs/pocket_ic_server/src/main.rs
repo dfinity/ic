@@ -9,8 +9,13 @@ use axum::{
     Json, Router, Server,
 };
 use clap::Parser;
+use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
-use pocket_ic::common::blob::{BinaryBlob, BlobCompression, BlobId};
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use pocket_ic::common::{
+    blob::{BinaryBlob, BlobCompression, BlobId},
+    rest::{ApiResponse, RawVerifyCanisterSigArg},
+};
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState, RouterExt},
     state::PocketIcApiStateBuilder,
@@ -88,6 +93,8 @@ async fn start(runtime: Arc<Runtime>) {
         // Get a blob store entry.
         .directory_route("/blobstore/:id", get(get_blob_store_entry))
         //
+        // verify signature
+        .directory_route("/verify_signature", post(verify_signature))
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
@@ -258,6 +265,41 @@ pub async fn list_checkpoints(
         .cloned()
         .collect::<Vec<String>>();
     Json(checkpoints)
+}
+
+pub async fn verify_signature(
+    axum::extract::Json(RawVerifyCanisterSigArg {
+        msg,
+        sig,
+        pubkey,
+        root_pubkey,
+    }): axum::extract::Json<RawVerifyCanisterSigArg>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    match public_key_bytes_from_der(&pubkey) {
+        Ok(pubkey) => match parse_threshold_sig_key_from_der(&root_pubkey) {
+            Ok(root_pubkey) => match verify(&msg, SignatureBytes(sig), pubkey, &root_pubkey) {
+                Ok(()) => (StatusCode::OK, Json(ApiResponse::Success(()))),
+                Err(err) => (
+                    StatusCode::NOT_ACCEPTABLE,
+                    Json(ApiResponse::Error {
+                        message: format!("Canister signature verification failed: {:?}", err),
+                    }),
+                ),
+            },
+            Err(err) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("Failed to parse DER encoded root public key: {:?}", err),
+                }),
+            ),
+        },
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("Failed to parse DER encoded public key: {:?}", err),
+            }),
+        ),
+    }
 }
 
 // -------------------------------------------------------------------------------------

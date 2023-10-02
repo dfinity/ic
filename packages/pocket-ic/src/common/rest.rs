@@ -165,6 +165,14 @@ impl From<Principal> for RawCanisterId {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct RawVerifyCanisterSigArg {
+    pub msg: Vec<u8>,
+    pub sig: Vec<u8>,
+    pub pubkey: Vec<u8>,
+    pub root_pubkey: Vec<u8>,
+}
+
 // By default, serde serializes Vec<u8> to a list of numbers, which is inefficient.
 // This enables serializing Vec<u8> to a compact base64 representation.
 #[allow(deprecated)]

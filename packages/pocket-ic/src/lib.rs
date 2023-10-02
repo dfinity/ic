@@ -11,6 +11,7 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
+use common::rest::RawVerifyCanisterSigArg;
 use ic_cdk::api::management_canister::{
     main::{CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument},
     provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
@@ -25,7 +26,7 @@ use std::{
 pub mod common;
 
 const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
-const PROCESSING_TIME_VALUE_MS: u64 = 30_000;
+const PROCESSING_TIME_VALUE_MS: u64 = 300_000;
 const LOCALHOST: &str = "127.0.0.1";
 
 pub struct PocketIc {
@@ -116,15 +117,46 @@ impl PocketIc {
         instances
     }
 
+    pub fn verify_canister_signature(
+        &self,
+        msg: Vec<u8>,
+        sig: Vec<u8>,
+        pubkey: Vec<u8>,
+        root_pubkey: Vec<u8>,
+    ) -> Result<(), String> {
+        let url = self.server_url.join("verify_signature").unwrap();
+        reqwest::blocking::Client::new()
+            .post(url)
+            .json(&RawVerifyCanisterSigArg {
+                msg,
+                sig,
+                pubkey,
+                root_pubkey,
+            })
+            .send()
+            .expect("Failed to get result")
+            .json()
+            .expect("Failed to get json")
+    }
+
     pub fn tick(&self) {
         let endpoint = "update/tick";
         self.post::<(), _>(endpoint, "");
+    }
+
+    pub fn root_key(&self) -> Vec<u8> {
+        let endpoint = "read/root_key";
+        self.post::<Vec<u8>, _>(endpoint, "")
     }
 
     pub fn get_time(&self) -> SystemTime {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint);
         SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
+    }
+
+    pub fn time(&self) -> SystemTime {
+        self.get_time()
     }
 
     pub fn set_time(&self, time: SystemTime) {
@@ -326,6 +358,17 @@ impl PocketIc {
         )
     }
 
+    pub fn canister_exists(&self, canister_id: CanisterId) -> bool {
+        let endpoint = "read/canister_exists";
+        let result: bool = self.post(
+            endpoint,
+            RawCanisterId {
+                canister_id: canister_id.as_slice().to_vec(),
+            },
+        );
+        result
+    }
+
     pub fn create_checkpoint(&self) {
         let endpoint = "update/create_checkpoint";
         self.post::<(), &str>(endpoint, "");
@@ -453,6 +496,37 @@ where
     Output: for<'a> ArgumentDecoder<'a>,
 {
     call_candid_as(env, canister_id, Principal::anonymous(), method, input)
+}
+
+/// Call a canister candid query method, anonymous.
+pub fn query_candid<Input, Output>(
+    env: &PocketIc,
+    canister_id: Principal,
+    method: &str,
+    input: Input,
+) -> Result<Output, CallError>
+where
+    Input: ArgumentEncoder,
+    Output: for<'a> ArgumentDecoder<'a>,
+{
+    query_candid_as(env, canister_id, Principal::anonymous(), method, input)
+}
+
+/// Call a canister candid query method, authenticated.
+pub fn query_candid_as<Input, Output>(
+    env: &PocketIc,
+    canister_id: Principal,
+    sender: Principal,
+    method: &str,
+    input: Input,
+) -> Result<Output, CallError>
+where
+    Input: ArgumentEncoder,
+    Output: for<'a> ArgumentDecoder<'a>,
+{
+    with_candid(input, |bytes| {
+        env.query_call(canister_id, sender, method, bytes)
+    })
 }
 
 /// A helper function that we use to implement both [`call_candid`] and
