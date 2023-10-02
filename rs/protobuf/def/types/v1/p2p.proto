@@ -45,22 +45,8 @@ enum P2PError {
 }
 
 message ArtifactFilter {
-  ConsensusMessageFilter consensus_filter = 1;
-  CertificationMessageFilter certification_message_filter = 3;
-  StateSyncFilter state_sync_filter = 4;
-  reserved 2;
-}
-
-message ConsensusMessageFilter {
-  uint64 height = 1;
-}
-
-message CertificationMessageFilter {
-  uint64 height = 1;
-}
-
-message StateSyncFilter {
-  uint64 height = 1;
+  uint64 height = 5;
+  reserved 1, 2, 3, 4;
 }
 
 message FileTreeSyncArtifact {

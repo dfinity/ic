@@ -29,6 +29,7 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::Height;
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -462,7 +463,10 @@ impl ValidatedPoolReader<EcdsaArtifact> for EcdsaPoolImpl {
         self.validated.as_pool_section().get(msg_id)
     }
 
-    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = EcdsaMessage>> {
+    fn get_all_validated_by_filter(
+        &self,
+        _filter: &Height,
+    ) -> Box<dyn Iterator<Item = EcdsaMessage>> {
         unimplemented!()
     }
 }

@@ -22,7 +22,6 @@ impl ArtifactKind for ConsensusArtifact {
     type Id = ConsensusMessageId;
     type Message = ConsensusMessage;
     type Attribute = ConsensusMessageAttribute;
-    type Filter = ConsensusMessageFilter;
 
     /// The function converts a `ConsensusMessage` into an advert for a
     /// `ConsensusArtifact`.
@@ -48,7 +47,6 @@ impl ArtifactKind for IngressArtifact {
     type Id = IngressMessageId;
     type Message = SignedIngress;
     type Attribute = ();
-    type Filter = ();
 
     /// The function converts a `SignedIngress` into an advert for an
     /// `IngressArtifact`.
@@ -72,7 +70,6 @@ impl ArtifactKind for CertificationArtifact {
     type Id = CertificationMessageId;
     type Message = CertificationMessage;
     type Attribute = ();
-    type Filter = CertificationMessageFilter;
 
     /// The function converts a `CertificationMessage` into an advert for a
     /// `CertificationArtifact`.
@@ -107,7 +104,6 @@ impl ArtifactKind for DkgArtifact {
     type Id = DkgMessageId;
     type Message = DkgMessage;
     type Attribute = DkgMessageAttribute;
-    type Filter = ();
 
     /// The function converts a `DkgMessage` into an advert for a
     /// `DkgArtifact`.
@@ -136,7 +132,6 @@ impl ArtifactKind for EcdsaArtifact {
     type Id = EcdsaMessageId;
     type Message = EcdsaMessage;
     type Attribute = EcdsaMessageAttribute;
-    type Filter = ();
 
     /// The function converts a `EcdsaMessage` into an advert for a
     /// `EcdsaArtifact`.
@@ -161,7 +156,6 @@ impl ArtifactKind for CanisterHttpArtifact {
     type Id = CanisterHttpResponseId;
     type Message = CanisterHttpResponseShare;
     type Attribute = CanisterHttpResponseAttribute;
-    type Filter = ();
 
     /// This function converts a `CanisterHttpResponseShare` into an advert for a
     /// `CanisterHttpArtifact`.

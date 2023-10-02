@@ -16,6 +16,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     single_chunked::*,
+    Height,
 };
 use std::sync::{Arc, RwLock};
 
@@ -59,15 +60,12 @@ impl<
     }
 
     /// The method returns the *Consensus* message filter.
-    fn get_filter(&self) -> ConsensusMessageFilter {
+    fn get_filter(&self) -> Height {
         self.priority_fn_and_filter.get_filter()
     }
 
     /// The method returns all adverts for validated *Consensus* artifacts.
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &ConsensusMessageFilter,
-    ) -> Vec<Advert<ConsensusArtifact>> {
+    fn get_all_validated_by_filter(&self, filter: &Height) -> Vec<Advert<ConsensusArtifact>> {
         self.pool
             .read()
             .unwrap()
@@ -190,15 +188,12 @@ impl<
     }
 
     /// The method returns the certification message filter.
-    fn get_filter(&self) -> CertificationMessageFilter {
+    fn get_filter(&self) -> Height {
         self.priority_fn_and_filter.get_filter()
     }
 
     /// The method returns all adverts for validated certification messages.
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &CertificationMessageFilter,
-    ) -> Vec<Advert<CertificationArtifact>> {
+    fn get_all_validated_by_filter(&self, filter: &Height) -> Vec<Advert<CertificationArtifact>> {
         self.pool
             .read()
             .unwrap()
