@@ -29,7 +29,7 @@ use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind, Priority, PriorityFn};
 use ic_types::NodeId;
 use phantom_newtype::AmountOf;
-use prometheus::{Histogram, IntCounter, IntGauge};
+use prometheus::{GaugeVec, Histogram, IntCounter, IntGauge};
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::{
@@ -77,6 +77,10 @@ pub(crate) struct ConsensusManagerMetrics {
     pub active_downloads: IntGauge,
     /// free slots in the slot table of the send side.
     pub free_slots: IntGauge,
+
+    // Slots in use per peer on receive side.
+    pub slots_in_use_per_peer: GaugeVec,
+
     /// The capacity of the slot table on the send side.
     pub maximum_slots_total: IntCounter,
 
@@ -131,6 +135,11 @@ impl ConsensusManagerMetrics {
             maximum_slots_total: metrics_registry.int_counter(
                 format!("{prefix}_manager_maximum_slots_total").as_str(),
                 "TODO.",
+            ),
+            slots_in_use_per_peer: metrics_registry.gauge_vec(
+                format!("{prefix}_manager_slots_in_use_per_peer").as_str(),
+                "TODO",
+                &["peer_id"],
             ),
             adverts_to_send_total: metrics_registry.int_counter(
                 format!("{prefix}_manager_adverts_to_send_total").as_str(),
@@ -411,6 +420,9 @@ where
         self.slot_table.retain(|node_id, _| {
             if !new_topology.is_member(node_id) {
                 nodes_leaving_topology.insert(*node_id);
+                self.metrics
+                    .slots_in_use_per_peer
+                    .remove_label_values(&[node_id.to_string().as_str()]);
                 false
             } else {
                 true
@@ -647,6 +659,7 @@ where
             }
             Entry::Vacant(empty_slot) => {
                 empty_slot.insert(new_slot_entry);
+                self.metrics.slots_in_use_per_peer.with_label_values(&[peer_id.to_string().as_str()]).inc();
                 (true, None)},
         };
 
