@@ -1,5 +1,5 @@
 {
-  "checksum": "344f4b27f4134e831c010822a85d0f96c0a023b438dd5671e35bc355956e5235",
+  "checksum": "b422f73a67e134f076cb5131d2605724452a7c05bf1b7bcb41f6753878033d34",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -27168,12 +27168,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -27207,12 +27222,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2021",
         "version": "0.4.3"
@@ -56657,13 +56687,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "webpki 0.22.1": {
+    "webpki 0.22.2": {
       "name": "webpki",
-      "version": "0.22.1",
+      "version": "0.22.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/webpki/0.22.1/download",
-          "sha256": "f0e74f82d49d545ad128049b7e88f6576df2da6b02e9ce565c6f533be576957e"
+          "url": "https://crates.io/api/v1/crates/webpki/0.22.2/download",
+          "sha256": "07ecc0cd7cac091bf682ec5efa18b1cff79d617b84181f38b3951dbe135f607f"
         }
       },
       "targets": [
@@ -56696,7 +56726,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.22.1"
+        "version": "0.22.2"
       },
       "license": null
     },
@@ -56728,7 +56758,7 @@
         "deps": {
           "common": [
             {
-              "id": "webpki 0.22.1",
+              "id": "webpki 0.22.2",
               "target": "webpki"
             }
           ],
