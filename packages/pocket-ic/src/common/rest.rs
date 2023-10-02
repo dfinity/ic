@@ -167,9 +167,13 @@ impl From<Principal> for RawCanisterId {
 
 #[derive(Serialize, Deserialize)]
 pub struct RawVerifyCanisterSigArg {
+    #[serde(with = "base64")]
     pub msg: Vec<u8>,
+    #[serde(with = "base64")]
     pub sig: Vec<u8>,
+    #[serde(with = "base64")]
     pub pubkey: Vec<u8>,
+    #[serde(with = "base64")]
     pub root_pubkey: Vec<u8>,
 }
 

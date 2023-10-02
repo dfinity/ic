@@ -14,7 +14,7 @@ use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use pocket_ic::common::{
     blob::{BinaryBlob, BlobCompression, BlobId},
-    rest::{ApiResponse, RawVerifyCanisterSigArg},
+    rest::RawVerifyCanisterSigArg,
 };
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState, RouterExt},
@@ -274,30 +274,33 @@ pub async fn verify_signature(
         pubkey,
         root_pubkey,
     }): axum::extract::Json<RawVerifyCanisterSigArg>,
-) -> (StatusCode, Json<ApiResponse<()>>) {
+) -> (StatusCode, Json<Result<(), String>>) {
     match public_key_bytes_from_der(&pubkey) {
         Ok(pubkey) => match parse_threshold_sig_key_from_der(&root_pubkey) {
             Ok(root_pubkey) => match verify(&msg, SignatureBytes(sig), pubkey, &root_pubkey) {
-                Ok(()) => (StatusCode::OK, Json(ApiResponse::Success(()))),
+                Ok(()) => (StatusCode::OK, Json(Ok(()))),
                 Err(err) => (
                     StatusCode::NOT_ACCEPTABLE,
-                    Json(ApiResponse::Error {
-                        message: format!("Canister signature verification failed: {:?}", err),
-                    }),
+                    Json(Err(format!(
+                        "Canister signature verification failed: {:?}",
+                        err
+                    ))),
                 ),
             },
             Err(err) => (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::Error {
-                    message: format!("Failed to parse DER encoded root public key: {:?}", err),
-                }),
+                Json(Err(format!(
+                    "Failed to parse DER encoded root public key: {:?}",
+                    err
+                ))),
             ),
         },
         Err(err) => (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::Error {
-                message: format!("Failed to parse DER encoded public key: {:?}", err),
-            }),
+            Json(Err(format!(
+                "Failed to parse DER encoded public key: {:?}",
+                err
+            ))),
         ),
     }
 }
