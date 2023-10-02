@@ -86,6 +86,15 @@ fn test_tick() {
 }
 
 #[test]
+fn test_canister_exists() {
+    let pic = PocketIc::new();
+    let canister_id = pic.create_canister(None);
+    assert!(pic.canister_exists(canister_id));
+    let nonexistent_canister_id = Principal::anonymous();
+    assert!(!pic.canister_exists(nonexistent_canister_id));
+}
+
+#[test]
 fn test_set_and_get_stable_memory_not_compressed() {
     let pic = PocketIc::new();
     let canister_id = pic.create_canister(None);

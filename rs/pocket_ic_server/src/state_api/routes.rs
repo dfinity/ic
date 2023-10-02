@@ -5,11 +5,11 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{InstanceState, OpOut, PocketIcApiState, UpdateReply};
-use crate::pocket_ic::Checkpoint;
 use crate::pocket_ic::{
-    AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, Query,
+    AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, Query, RootKey,
     SetStableMemory, SetTime, Tick,
 };
+use crate::pocket_ic::{CanisterExists, Checkpoint};
 use crate::{
     copy_dir,
     pocket_ic::{create_state_machine, PocketIc},
@@ -69,6 +69,8 @@ where
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
+        .directory_route("/canister_exists", post(handler_canister_exists))
+        .directory_route("/root_key", post(handler_root_key))
 }
 
 pub fn instance_update_routes<S>() -> Router<S>
@@ -266,6 +268,34 @@ impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterId>) {
     }
 }
 
+impl From<OpOut> for (StatusCode, ApiResponse<bool>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::Bool(res) => (StatusCode::OK, ApiResponse::Success(res)),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
+impl From<OpOut> for (StatusCode, ApiResponse<Vec<u8>>) {
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::Bytes(bytes) => (StatusCode::OK, ApiResponse::Success(bytes)),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------------------------------------------- //
 // Read handlers
 
@@ -346,6 +376,39 @@ pub async fn handler_get_stable_memory(
             }),
         ),
     }
+}
+
+pub async fn handler_canister_exists(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    axum::extract::Json(raw_canister_id): axum::extract::Json<RawCanisterId>,
+) -> (StatusCode, Json<ApiResponse<bool>>) {
+    let timeout = timeout_or_default(headers);
+    match CanisterId::try_from(raw_canister_id.canister_id) {
+        Ok(canister_id) => {
+            let op = CanisterExists { canister_id };
+            let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
+            (code, Json(res))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
+    }
+}
+
+pub async fn handler_root_key(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<ApiResponse<Vec<u8>>>) {
+    let timeout = timeout_or_default(headers);
+    let op = RootKey;
+    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(res))
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //

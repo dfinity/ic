@@ -8,6 +8,7 @@ use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
 use ic_ic00_types::CanisterInstallMode;
+use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::Cycles;
 use ic_state_machine_tests::StateMachine;
@@ -113,6 +114,22 @@ impl Operation for GetTime {
 
     fn id(&self) -> OpId {
         OpId("get_time".into())
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct RootKey;
+
+impl Operation for RootKey {
+    type TargetType = PocketIc;
+
+    fn compute(self, pic: &mut PocketIc) -> OpOut {
+        let bytes = pic.subnet.root_key();
+        OpOut::Bytes(bytes.into_bytes().to_vec())
+    }
+
+    fn id(&self) -> OpId {
+        OpId("root_key".to_string())
     }
 }
 
@@ -325,6 +342,29 @@ impl Operation for GetCyclesBalance {
 
     fn id(&self) -> OpId {
         OpId(format!("get_cycles_balance({})", self.canister_id))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CanisterExists {
+    pub canister_id: CanisterId,
+}
+
+impl Operation for CanisterExists {
+    type TargetType = PocketIc;
+    fn compute(self, pic: &mut PocketIc) -> OpOut {
+        let result = pic
+            .subnet
+            .state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .contains_key(&self.canister_id);
+        OpOut::Bool(result)
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("canister_exists({})", self.canister_id))
     }
 }
 
