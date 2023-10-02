@@ -6,6 +6,7 @@ use crate::OpId;
 use crate::Operation;
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
+use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_sha2::Sha256;
 use ic_ic00_types::CanisterInstallMode;
 use ic_interfaces_state_manager::StateReader;
@@ -119,8 +120,8 @@ impl Operation for RootKey {
     type TargetType = PocketIc;
 
     fn compute(self, pic: &mut PocketIc) -> OpOut {
-        let bytes = pic.subnet.root_key();
-        OpOut::Bytes(bytes.into_bytes().to_vec())
+        let bytes = threshold_sig_public_key_to_der(pic.subnet.root_key()).unwrap();
+        OpOut::Bytes(bytes)
     }
 
     fn id(&self) -> OpId {
