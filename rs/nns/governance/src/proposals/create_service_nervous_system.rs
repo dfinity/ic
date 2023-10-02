@@ -12,17 +12,6 @@ use ic_sns_swap::pb::v1::{
     self as sns_swap_pb, CfParticipant, NeuronsFundParticipationConstraints,
 };
 
-// TODO(NNS1-1919): Make this feature generally available by deleting this chunk
-// of code (and updating callers).
-#[cfg(feature = "test")]
-pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
-    true
-}
-#[cfg(not(feature = "test"))]
-pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
-    true
-}
-
 #[derive(Clone, Debug)]
 pub struct ExecutedCreateServiceNervousSystemProposal {
     pub current_timestamp_seconds: u64,

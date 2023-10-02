@@ -165,21 +165,6 @@ get_sns_canister_code_location() {
 
 ### Functions related to SNS deployments
 
-add_sns_wasms_allowed_principal() {
-    ensure_variable_set IC_ADMIN
-
-    local NNS_URL=$1 # with protocol and port (http://...:8080)
-    local NEURON_ID=$2
-    local PEM=$3
-    local PRINCIPAL_TO_ADD=$4
-
-    $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
-        propose-to-update-sns-deploy-whitelist \
-        --proposer "$NEURON_ID" \
-        --added-principals "$PRINCIPAL_TO_ADD" \
-        --summary "Updating deploy whitelist"
-}
-
 set_sns_wasms_allowed_subnets() {
     ensure_variable_set IC_ADMIN
 
@@ -222,43 +207,6 @@ set_default_subnets() {
         --proposer "$NEURON_ID" \
         --summary "Setting authorized subnetworks" \
         --subnets "$SUBNET_ID"
-}
-
-##: test_propose_to_open_sns_token_swap_pem
-## Decentralize an SNS with test parameters
-## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <SWAP_CANISTER_ID>
-##      NNS_URL: The url to the subnet running the NNS in your testnet.
-##      NEURON_ID: The neuron used to submit proposals (should have following to immediately pass)
-##      PEM: path to the pem file of a neuron controller (hotkey or owner)
-##      SWAP_CANISTER_ID: the id of the swap canister to decentralize
-test_propose_to_open_sns_token_swap_pem() {
-    ensure_variable_set IC_ADMIN
-
-    local NNS_URL=$1 # with protocol and port (http://...:8080)
-    local NEURON_ID=$2
-    local PEM=$3
-    local SWAP_ID=$4
-
-    NOW_PLUS_TWO_DAYS=$(($(date +%s) + 86400 + 86400))
-
-    # Min ICP = 50, Max = 500
-    # min per user 1 ICP, max 200
-    # 3 users minimum
-    $IC_ADMIN -s "$PEM" --nns-url "$NNS_URL" \
-        propose-to-open-sns-token-swap \
-        --min-participants 1 \
-        --min-icp-e8s 1000000000 \
-        --max-icp-e8s 3000000000000 \
-        --min-participant-icp-e8s 1000000000 \
-        --max-participant-icp-e8s 3000000000000 \
-        --swap-due-timestamp-seconds $NOW_PLUS_TWO_DAYS \
-        --sns-token-e8s 3000000000000 \
-        --target-swap-canister-id "$SWAP_ID" \
-        --neuron-basket-count 3000 \
-        --neuron-basket-dissolve-delay-interval-seconds 100 \
-        --proposal-title "Decentralize this SNS" \
-        --summary "Decentralize this SNS" \
-        --proposer "$NEURON_ID"
 }
 
 ##: nns_proposal_info

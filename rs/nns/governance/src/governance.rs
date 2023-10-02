@@ -39,10 +39,7 @@ use crate::{
         SettleNeuronsFundParticipationResponse, SwapBackgroundInformation, Tally, Topic,
         UpdateNodeProvider, Vote, WaitForQuietState,
     },
-    proposals::create_service_nervous_system::{
-        create_service_nervous_system_proposals_is_enabled,
-        ExecutedCreateServiceNervousSystemProposal,
-    },
+    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -61,7 +58,8 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -5068,6 +5066,11 @@ impl Governance {
                         e
                     ),
                 }
+            } else if update.nns_function == NnsFunction::UpdateAllowedPrincipals as i32 {
+                match IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED {
+                    true => return Ok(()),
+                    false => "UpdateAllowedPrincipals proposal is disabled".to_string(),
+                }
             } else {
                 return Ok(());
             }
@@ -5121,17 +5124,7 @@ impl Governance {
         &self,
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) -> Result<(), GovernanceError> {
-        // Requirement 0: This feature is enabled.
-        if !create_service_nervous_system_proposals_is_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "CreateServiceNervousSystem proposals are not supported yet. \
-                 You might want to try submitting an OpenSnsTokenSwap proposal instead."
-                    .to_string(),
-            ));
-        }
-
-        // Requirement 1: Must be able to convert to a valid SnsInitPayload.
+        // Must be able to convert to a valid SnsInitPayload.
         let conversion_result = SnsInitPayload::try_from(create_service_nervous_system.clone());
         if let Err(err) = conversion_result {
             return Err(GovernanceError::new_with_message(
@@ -5140,7 +5133,7 @@ impl Governance {
             ));
         }
 
-        // Requirement 2: Must be unique.
+        // Must be unique.
         let other_proposal_ids = self.select_open_proposal_ids(|action| {
             matches!(action, Action::CreateServiceNervousSystem(_))
         });
