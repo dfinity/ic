@@ -54,7 +54,8 @@ impl CanisterIdRange {
     /// Returns:
     /// * `self.start` if `previous_canister_id` is `None`.
     /// * `self.start` if `previous_canister_id < self.start`.
-    /// * `None` if `previous_canister_id >= self.end`.
+    /// * `None` if `previous_canister_id >= self.end`
+    ///    or the entire range of 64 bit integers is exhausted.
     /// * `previous_canister_id + 1` otherwise.
     pub fn generate_canister_id(
         &self,
@@ -77,9 +78,9 @@ impl CanisterIdRange {
             return None;
         }
 
-        Some(CanisterId::from(
-            canister_id_into_u64(previous_canister_id) + 1,
-        ))
+        canister_id_into_u64(previous_canister_id)
+            .checked_add(1)
+            .map(CanisterId::from)
     }
 }
 
