@@ -11,7 +11,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::{sync::RwLock, task::spawn_blocking, time};
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::spawn_blocking,
+    time,
+};
 use tracing::debug;
 
 // The maximum wait time for a computation to finish synchronously.
@@ -68,7 +72,7 @@ impl<T> Clone for PocketIcApiState<T> {
 
 struct InnerApiState<T> {
     // impl note: If locks are acquired on both fields, acquire first on instances, then on graph.
-    instances: RwLock<Vec<InstanceState<T>>>,
+    instances: RwLock<Vec<Mutex<InstanceState<T>>>>,
     graph: RwLock<HashMap<StateLabel, Computations>>,
     sync_wait_time: Duration,
 }
@@ -112,7 +116,7 @@ where
         let instances: Vec<_> = self
             .initial_instances
             .into_iter()
-            .map(InstanceState::Available)
+            .map(|inst| Mutex::new(InstanceState::Available(inst)))
             .collect();
         let instances = RwLock::new(instances);
 
@@ -298,28 +302,32 @@ where
 
     pub async fn add_instance(&self, instance: T) -> InstanceId {
         let mut instances = self.inner.instances.write().await;
-        instances.push(InstanceState::Available(instance));
+        instances.push(Mutex::new(InstanceState::Available(instance)));
         instances.len() - 1
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
         let mut instances = self.inner.instances.write().await;
-        instances[instance_id] = InstanceState::Deleted;
+        instances[instance_id] = Mutex::new(InstanceState::Deleted);
     }
 
     pub async fn list_instances(&self) -> Vec<InstanceState<()>> {
         let instances = self.inner.instances.read().await;
-        instances
-            .iter()
-            .map(|instance_state| match instance_state {
+        let mut res = vec![];
+
+        for instance_state in &*instances {
+            let guard = instance_state.lock().await;
+            let inst = match &*guard {
                 InstanceState::Busy { state_label, op_id } => InstanceState::Busy {
                     state_label: state_label.clone(),
                     op_id: op_id.clone(),
                 },
                 InstanceState::Available(_) => InstanceState::Available(()),
                 InstanceState::Deleted => InstanceState::Deleted,
-            })
-            .collect()
+            };
+            res.push(inst);
+        }
+        res
     }
 
     /// An operation bound to an instance (a Computation) can update the PocketIC state.
@@ -355,11 +363,12 @@ where
     {
         let sync_wait_time = sync_wait_time.unwrap_or(self.inner.sync_wait_time);
         let st = self.inner.clone();
-        let mut instances = st.instances.write().await;
+        let instances = st.instances.read().await;
         let (bg_task, busy_outcome) =
-            if let Some(instance_state) = instances.get(computation.instance_id) {
+            if let Some(instance_mutex) = instances.get(computation.instance_id) {
+                let mut instance_state = instance_mutex.lock().await;
                 // If this instance is busy, return the running op and initial state
-                match instance_state {
+                match &*instance_state {
                     InstanceState::Deleted => {
                         return Err(UpdateError {
                             message: "Instance was deleted".to_string(),
@@ -373,6 +382,8 @@ where
                         });
                     }
                     InstanceState::Available(pocket_ic) => {
+                        // move pocket_ic out
+
                         let state_label = pocket_ic.get_state_label();
                         let op_id = computation.op.id();
                         let busy = InstanceState::Busy {
@@ -380,7 +391,7 @@ where
                             op_id: op_id.clone(),
                         };
                         let InstanceState::Available(mut pocket_ic) =
-                            std::mem::replace(&mut instances[computation.instance_id], busy)
+                            std::mem::replace(&mut *instance_state, busy)
                         else {
                             unreachable!()
                         };
@@ -388,16 +399,7 @@ where
                         let op = computation.op;
                         let instance_id = computation.instance_id;
 
-                        // We schedule a blocking background task on the tokio runtime. Note that if all
-                        // blocking workers are busy, the task is put on a queue (which is what we want).
-                        //
-                        // Note: One issue here is that we drop the join handle "on the floor". Threads
-                        // that are not awaited upon before exiting the process are known to cause spurios
-                        // issues. This should not be a problem as the tokio Executor will wait
-                        // indefinitively for threads to return, unless a shutdown timeout is configured.
-                        //
-                        // See: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
-                        let bg_task = spawn_blocking({
+                        let bg_task = {
                             let op_id = op_id.clone();
                             let state_label = state_label.clone();
                             let st = self.inner.clone();
@@ -407,13 +409,12 @@ where
                                 let new_state_label = pocket_ic.get_state_label();
                                 debug!("Finished computation. Writing to graph.");
                                 // add result to graph
-                                let mut instances = st.instances.blocking_write();
+                                let instances = st.instances.blocking_read();
                                 let mut guard = st.graph.blocking_write();
 
-                                let _ = std::mem::replace(
-                                    &mut instances[instance_id],
-                                    InstanceState::Available(pocket_ic),
-                                );
+                                let mut instance_state = instances[instance_id].blocking_lock();
+                                *instance_state = InstanceState::Available(pocket_ic);
+
                                 let cached_computations =
                                     guard.entry(state_label.clone()).or_insert(HashMap::new());
                                 cached_computations
@@ -421,7 +422,7 @@ where
                                 debug!("Finished writing to graph");
                                 result
                             }
-                        });
+                        };
 
                         // cache miss: replace pocket_ic instance in the vector with Busy
                         (bg_task, UpdateReply::Started { state_label, op_id })
@@ -435,13 +436,24 @@ where
         // drop lock, otherwise we end up with a deadlock
         std::mem::drop(instances);
 
+        // We schedule a blocking background task on the tokio runtime. Note that if all
+        // blocking workers are busy, the task is put on a queue (which is what we want).
+        //
+        // Note: One issue here is that we drop the join handle "on the floor". Threads
+        // that are not awaited upon before exiting the process are known to cause spurios
+        // issues. This should not be a problem as the tokio Executor will wait
+        // indefinitively for threads to return, unless a shutdown timeout is configured.
+        //
+        // See: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
+        let bg_handle = spawn_blocking(bg_task);
+
         // if the operation returns "in time", we return the result, otherwise we indicate to the
         // client that the instance is busy.
         //
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(o) = time::timeout(sync_wait_time, bg_task).await {
+        if let Ok(o) = time::timeout(sync_wait_time, bg_handle).await {
             return Ok(UpdateReply::Output(o.expect("join failed!")));
         }
         Ok(busy_outcome)
