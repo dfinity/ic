@@ -177,8 +177,6 @@ bazel-build-fuzzers-archives:
         BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--jobs 8"
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   tags:
     - dfinity-ic
@@ -284,7 +282,7 @@ bazel-system-test-hourly:
     - .bazel-test-all
     - .rules-post-master
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly --jobs 8"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly"
   timeout: 120 minutes
 
 bazel-system-test-hotfix:
@@ -299,7 +297,7 @@ bazel-system-test-staging:
     - .bazel-test-all
     - .rules-rollout-pipeline-auto
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging --jobs 8"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging"
   allow_failure: true
 
 bazel-system-test-nightly:
