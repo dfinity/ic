@@ -325,26 +325,26 @@ pub async fn handler_query(
 
 pub async fn handler_get_time(
     State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
     Path(instance_id): Path<InstanceId>,
 ) -> (StatusCode, Json<ApiResponse<RawTime>>) {
+    let timeout = timeout_or_default(headers);
     let time_op = GetTime {};
-    // Note regarding timeouts: here we are optimistic and assume that we can response within the
-    // default timeout regardless of what was specified by the client.
-    let (code, response) = run_operation(api_state, instance_id, None, time_op).await;
+    let (code, response) = run_operation(api_state, instance_id, timeout, time_op).await;
     (code, Json(response))
 }
 
 pub async fn handler_get_cycles(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
     extract::Json(raw_canister_id): extract::Json<RawCanisterId>,
 ) -> (StatusCode, Json<ApiResponse<RawCycles>>) {
+    let timeout = timeout_or_default(headers);
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let get_op = GetCyclesBalance { canister_id };
-            // Note regarding timeouts: here we are optimistic and assume that we can response within the
-            // default timeout regardless of what was specified by the client.
-            let (code, response) = run_operation(api_state, instance_id, None, get_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, get_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -439,14 +439,14 @@ pub async fn handler_execute_ingress_message(
 pub async fn handler_set_time(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
     axum::extract::Json(time): axum::extract::Json<rest::RawTime>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
     let op = SetTime {
         time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
     };
-    // Note regarding timeouts: here we are optimistic and assume that we can response within the
-    // default timeout regardless of what was specified by the client.
-    let (code, response) = run_operation(api_state, instance_id, None, op).await;
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))
 }
 
