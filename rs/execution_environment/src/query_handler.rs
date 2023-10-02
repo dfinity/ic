@@ -74,9 +74,7 @@ fn get_latest_certified_state_and_data_certificate(
                     flatmap!(label("certified_data") => LabeledTree::Leaf(()))
                 )
             }),
-        // NOTE: "time" is added here to ensure that `read_certified_state`
-        // returns the certified state. This won't be necessary once non-existence
-        // proofs are implemented.
+        // We must always add the time path to comply with the IC spec.
         label("time") => LabeledTree::Leaf(())
     });
 
