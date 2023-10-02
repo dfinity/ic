@@ -103,24 +103,6 @@ upload_wasm_to_sns_wasm() {
         | grep proposal
 }
 
-deploy_new_sns() {
-    ensure_variable_set SNS_CLI
-
-    local SUBNET_WITH_WALLET_URL=$1
-    local WALLET_CANISTER=$2
-    local CONFIG_FILE=${3:-}
-
-    if [ -z "$CONFIG_FILE" ]; then
-        CONFIG_FILE=$NNS_TOOLS_DIR/sns_default_test_init_params.yml
-    fi
-
-    set +e
-    $SNS_CLI deploy --network "$SUBNET_WITH_WALLET_URL" \
-        --wallet-canister-override "$WALLET_CANISTER" \
-        --init-config-file "$CONFIG_FILE"
-    set -e
-}
-
 propose_new_sns() {
     ensure_variable_set SNS_CLI
 
@@ -145,21 +127,6 @@ propose_new_sns() {
     fi
 
     return 0
-}
-
-add_sns_wasms_allowed_principal() {
-    ensure_variable_set IC_ADMIN
-
-    local NNS_URL=$1 # with protocol and port (http://...:8080)
-    local NEURON_ID=$2
-    local PEM=$3
-    local PRINCIPAL_TO_ADD=$4
-
-    $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
-        propose-to-update-sns-deploy-whitelist \
-        --proposer "$NEURON_ID" \
-        --added-principals "$PRINCIPAL_TO_ADD" \
-        --summary "Updating deploy whitelist"
 }
 
 set_sns_wasms_allowed_subnets() {

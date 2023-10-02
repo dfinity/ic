@@ -178,7 +178,6 @@ export WALLET_CANISTER
 step 5 "Configure SNS-WASMs" || time (
 
     set_sns_wasms_allowed_subnets "$NNS_URL" "$NEURON_ID" "$PEM" "$NEW_SUBNET_ID"
-    add_sns_wasms_allowed_principal "$NNS_URL" "$NEURON_ID" "$PEM" "$WALLET_CANISTER"
 
     echo "Wait a moment for proposal execution..."
     sleep 5
