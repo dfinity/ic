@@ -6,8 +6,10 @@ from __future__ import annotations
 import atexit
 import os
 import pathlib
+import sys
 import tempfile
-from typing import List, Optional
+import time
+from typing import Callable, List, Optional, TypeVar
 
 import configargparse
 import invoke
@@ -16,6 +18,27 @@ from reproducibility import print_artifact_info
 CONTAINER_COMMAND = "sudo podman "
 SYS_DIR_PREFIX = "podman_sys_dir_"
 DEFAULT_TMP_PREFIX = "/tmp"
+
+ReturnType = TypeVar('ReturnType') # https://docs.python.org/3/library/typing.html#generics
+def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
+    """
+    Call the given `func`. If an exception is raised, print, and retry `num_retries` times.
+    Back off retries by sleeping for at least 5 secs + an exponential increase.
+    Exception is not caught on the last try.
+    """
+    BASE_BACKOFF_WAIT_SECS = 5
+    for i in range(num_retries):
+        try:
+            return func()
+        except Exception as e:
+            print(f"Exception occurred: {e}", file=sys.stderr)
+            print(f"Retries left: {num_retries - i}", file=sys.stderr)
+            wait_time_secs = BASE_BACKOFF_WAIT_SECS + i**2
+            print(f"Waiting for next retry (secs): {wait_time_secs}")
+            time.sleep(wait_time_secs) # 5, 6, 9, 14, 21, etc.
+
+    # Let the final try actually throw
+    return func()
 
 
 def build_container(container_cmd: str,
@@ -48,9 +71,10 @@ def build_container(container_cmd: str,
     # Context must go last
     cmd += f"{context_dir} "
     print(cmd)
-    invoke.run(cmd)  # Throws on failure
+    def build_func():
+        invoke.run(cmd)   # Throws on failure
+    retry(build_func)
     return image_tag
-
 
 def export_container_filesystem(container_cmd: str,
                                 image_tag: str,
