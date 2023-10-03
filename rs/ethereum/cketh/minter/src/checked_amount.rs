@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use minicbor;
 use rlp::RlpStream;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -5,6 +8,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::marker::PhantomData;
 use std::num::ParseIntError;
+use std::ops::Rem;
 
 /// `CheckedAmountOf<Unit>` provides a type-safe way to keep an amount of some `Unit`.
 /// In contrast to `AmountOf<Unit>`, all operations are checked and do not overflow.
@@ -28,6 +32,10 @@ use std::num::ParseIntError;
 /// //Checked multiplication by scalar
 /// assert_eq!(three_apples.checked_mul(2_u8), Some(Apples::from(6_u8)));
 /// assert_eq!(Apples::MAX.checked_mul(2_u8), None);
+///
+/// // Ceiling checked division by scalar
+/// assert_eq!(three_apples.checked_div_ceil(0_u8), None);
+/// assert_eq!(three_apples.checked_div_ceil(2_u8), Some(Apples::TWO));
 /// ```
 pub struct CheckedAmountOf<Unit>(ethnum::u256, PhantomData<Unit>);
 
@@ -63,12 +71,20 @@ impl<Unit> CheckedAmountOf<Unit> {
         Self::from_inner(ethnum::u256::from_be_bytes(bytes))
     }
 
+    pub fn to_be_bytes(self) -> [u8; 32] {
+        self.0.to_be_bytes()
+    }
+
     pub fn checked_add(self, other: Self) -> Option<Self> {
         self.0.checked_add(other.0).map(Self::from_inner)
     }
 
     pub fn checked_increment(&self) -> Option<Self> {
         self.checked_add(Self::ONE)
+    }
+
+    pub fn checked_decrement(&self) -> Option<Self> {
+        self.checked_sub(Self::ONE)
     }
 
     pub fn checked_sub(self, other: Self) -> Option<Self> {
@@ -79,6 +95,19 @@ impl<Unit> CheckedAmountOf<Unit> {
         self.0
             .checked_mul(other.into())
             .map(|res| Self(res, PhantomData))
+    }
+
+    pub fn checked_div_ceil<T: Into<ethnum::u256>>(self, rhs: T) -> Option<Self> {
+        let rhs = rhs.into();
+        if rhs == ethnum::u256::ZERO {
+            return None;
+        }
+        let (quotient, remainder) = (self.0.div_euclid(rhs), self.0.rem(&rhs));
+        if remainder == ethnum::u256::ZERO {
+            Some(Self::from_inner(quotient))
+        } else {
+            Self::from_inner(quotient).checked_increment()
+        }
     }
 
     pub fn as_f64(&self) -> f64 {

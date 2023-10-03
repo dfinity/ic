@@ -95,6 +95,16 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
             .and_then(|alt_key| self.by_alt_key.get(alt_key))
     }
 
+    pub fn get_entry<Q: ?Sized>(&self, key: &Q) -> Option<(&AltKey, &V)>
+    where
+        Key: Borrow<Q>,
+        Q: Ord,
+    {
+        self.by_key
+            .get(key)
+            .and_then(|alt_key| self.by_alt_key.get(alt_key).map(|v| (alt_key, v)))
+    }
+
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
     where
         Key: Borrow<Q>,

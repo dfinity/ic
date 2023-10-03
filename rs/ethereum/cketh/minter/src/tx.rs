@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::address::Address;
 use crate::eth_rpc::{FeeHistory, Hash, Quantity};
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
@@ -230,6 +233,14 @@ impl Eip1559TransactionRequest {
         Hash(ic_crypto_sha3::Keccak256::hash(bytes))
     }
 
+    pub fn transaction_price(&self) -> TransactionPrice {
+        TransactionPrice {
+            gas_limit: self.gas_limit,
+            max_fee_per_gas: self.max_fee_per_gas,
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+        }
+    }
+
     pub async fn sign(self) -> Result<SignedEip1559TransactionRequest, String> {
         let hash = self.hash();
         let key_name = read_state(|s| s.ecdsa_key_name.clone());
@@ -294,6 +305,42 @@ impl TransactionPrice {
         self.max_fee_per_gas
             .checked_mul(self.gas_limit)
             .expect("ERROR: max_transaction_fee overflow")
+    }
+
+    /// Increase current transaction price by at least 10%
+    pub fn increase_by_10_percent(self) -> Self {
+        let plus_10_percent = |amount: Wei| {
+            amount
+                .checked_add(
+                    amount
+                        .checked_div_ceil(10_u8)
+                        .expect("BUG: must be Some() because divisor is non-zero"),
+                )
+                .unwrap_or(Wei::MAX)
+        };
+        Self {
+            gas_limit: self.gas_limit,
+            max_fee_per_gas: plus_10_percent(self.max_fee_per_gas),
+            max_priority_fee_per_gas: plus_10_percent(self.max_priority_fee_per_gas),
+        }
+    }
+
+    /// Returns true if the new transaction fee is higher than the current one
+    pub fn is_fee_increased(&self, new: &Self) -> bool {
+        self.max_fee_per_gas < new.max_fee_per_gas
+            || self.max_priority_fee_per_gas < new.max_priority_fee_per_gas
+    }
+
+    pub fn max(self, other: Self) -> Self {
+        use std::cmp::max;
+        Self {
+            gas_limit: max(self.gas_limit, other.gas_limit),
+            max_fee_per_gas: max(self.max_fee_per_gas, other.max_fee_per_gas),
+            max_priority_fee_per_gas: max(
+                self.max_priority_fee_per_gas,
+                other.max_priority_fee_per_gas,
+            ),
+        }
     }
 }
 

@@ -8,13 +8,15 @@ use ic_cketh_minter::endpoints::{
     Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
 use ic_cketh_minter::eth_logs::{report_transaction_error, ReceivedEthEventError};
-use ic_cketh_minter::eth_rpc::{FeeHistory, HttpOutcallResult};
+use ic_cketh_minter::eth_rpc::FeeHistory;
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
-use ic_cketh_minter::eth_rpc_client::EthRpcClient;
+use ic_cketh_minter::eth_rpc_client::{EthRpcClient, MultiCallError};
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
-use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, Wei};
+use ic_cketh_minter::numeric::{
+    BlockNumber, LedgerBurnIndex, LedgerMintIndex, TransactionCount, Wei,
+};
 use ic_cketh_minter::state::audit::{process_event, EventType};
 use ic_cketh_minter::state::{
     lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
@@ -24,8 +26,7 @@ use ic_cketh_minter::transactions::{
     create_transaction, CreateTransactionError, EthWithdrawalRequest,
 };
 use ic_cketh_minter::tx::{
-    estimate_transaction_price, ConfirmedEip1559Transaction, SignedEip1559TransactionRequest,
-    TransactionPrice,
+    estimate_transaction_price, ConfirmedEip1559Transaction, TransactionPrice,
 };
 use ic_cketh_minter::{
     eth_logs, eth_rpc, MINT_RETRY_DELAY, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL,
@@ -292,6 +293,10 @@ async fn process_retrieve_eth_requests() {
         }
     };
 
+    if read_state(|s| s.eth_transactions.nothing_to_process()) {
+        return;
+    }
+
     let transaction_price = estimate_transaction_price(&eth_fee_history().await);
     let max_transaction_fee = transaction_price.max_transaction_fee();
     log!(
@@ -299,13 +304,41 @@ async fn process_retrieve_eth_requests() {
         "[withdraw]: Estimated max transaction fee: {:?}",
         max_transaction_fee,
     );
-    // TODO FI-933: for re-submission re-evaluate prices of all transactions whose nonce is at least
-    // the value of eth_getTransactionCount at latest height. If needed resubmit transactions by
-    // bumping price and insert transactions into created_tx. They will be picked up when calling
-    // sign_and_send_transactions_batch in the same timer iteration.
+    resubmit_transactions_batch(&transaction_price).await;
     create_transactions_batch(transaction_price);
-    sign_and_send_transactions_batch().await;
+    sign_transactions_batch().await;
+    send_transactions_batch().await;
     finalize_transactions_batch().await;
+}
+
+async fn resubmit_transactions_batch(transaction_price: &TransactionPrice) {
+    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
+        return;
+    }
+    match latest_transaction_count().await {
+        Ok(latest_tx_count) => {
+            let transactions_to_resubmit = read_state(|s| {
+                s.eth_transactions
+                    .create_resubmit_transactions(latest_tx_count, transaction_price.clone())
+            });
+            for tx in transactions_to_resubmit {
+                match tx {
+                    Ok(resubmit_tx) => {
+                        log!(INFO, "[resubmit_transactions_batch]: transactions to resubmit {resubmit_tx:?}");
+                        mutate_state(|s| {
+                            s.eth_transactions.record_resubmit_transaction(resubmit_tx)
+                        });
+                    }
+                    Err(e) => {
+                        log!(INFO, "Failed to resubmit transaction: {e:?}");
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log!(INFO, "Failed to get latest transaction count: {e:?}");
+        }
+    }
 }
 
 fn create_transactions_batch(transaction_price: TransactionPrice) {
@@ -339,9 +372,52 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
     }
 }
 
-async fn sign_and_send_transactions_batch() {
-    let signed_transactions = sign_transactions_batch().await;
-    let results = send_transactions_batch(&signed_transactions).await;
+async fn sign_transactions_batch() {
+    let transactions_batch: Vec<_> = read_state(|s| {
+        s.eth_transactions
+            .created_transactions_iter()
+            .map(|(_nonce, _ledger_burn_index, tx)| tx)
+            .cloned()
+            .collect()
+    });
+    log!(DEBUG, "Signing transactions {transactions_batch:?}");
+    let results = join_all(transactions_batch.into_iter().map(|tx| tx.sign())).await;
+    let mut errors = Vec::new();
+    for result in results {
+        match result {
+            Ok(signed_tx) => {
+                mutate_state(|s| s.eth_transactions.record_signed_transaction(signed_tx))
+            }
+            Err(e) => errors.push(e),
+        }
+    }
+    if !errors.is_empty() {
+        // At this point there might be a gap in transaction nonces between signed transactions, e.g.,
+        // transactions 1,2,4,5 were signed, but 3 was not due to some unexpected error.
+        // This means that transactions 4 and 5 are currently stuck until transaction 3 is signed.
+        // However, we still proceed with transactions 4 and 5 since that way they might be mined faster
+        // once transaction 3 is sent on the next iteration. Otherwise, we would need to re-sign transactions 4 and 5
+        // and send them (together with transaction 3) on the next iteration.
+        log!(INFO, "Errors encountered during signing: {errors:?}");
+    }
+}
+async fn send_transactions_batch() {
+    let signed_transactions: Vec<_> = read_state(|s| {
+        s.eth_transactions
+            .signed_transactions_iter()
+            .map(|(_nonce, _index, tx)| tx)
+            .cloned()
+            .collect()
+    });
+
+    let rpc_client = read_state(EthRpcClient::from_state);
+    let results = join_all(
+        signed_transactions
+            .iter()
+            .map(|tx| rpc_client.eth_send_raw_transaction(tx.raw_transaction_hex())),
+    )
+    .await;
+
     for (signed_tx, result) in zip(signed_transactions, results) {
         log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
         match result {
@@ -366,49 +442,6 @@ async fn sign_and_send_transactions_batch() {
             }
         };
     }
-}
-
-async fn sign_transactions_batch() -> Vec<SignedEip1559TransactionRequest> {
-    let transactions_batch: Vec<_> = read_state(|s| {
-        s.eth_transactions
-            .created_transactions_iter()
-            .map(|(_nonce, _ledger_burn_index, tx)| tx)
-            .cloned()
-            .collect()
-    });
-    log!(DEBUG, "Signing transactions {transactions_batch:?}");
-    let results = join_all(transactions_batch.into_iter().map(|tx| tx.sign())).await;
-    let mut errors = Vec::new();
-    let mut signed_transactions = Vec::with_capacity(results.len());
-    for result in results {
-        match result {
-            Ok(signed_tx) => signed_transactions.push(signed_tx),
-            Err(e) => errors.push(e),
-        }
-    }
-    if !errors.is_empty() {
-        // At this point there might be a gap in transaction nonces between signed transactions, e.g.,
-        // transactions 1,2,4,5 were signed, but 3 was not due to some unexpected error.
-        // This means that transactions 4 and 5 are currently stuck until transaction 3 is signed.
-        // However, we still proceed with transactions 4 and 5 since that way they might be mined faster
-        // once transaction 3 is sent on the next iteration. Otherwise, we would need to re-sign transactions 4 and 5
-        // and send them (together with transaction 3) on the next iteration.
-        log!(INFO, "Errors encountered during signing: {errors:?}");
-    }
-    log!(DEBUG, "Signed transactions {signed_transactions:?}");
-    signed_transactions
-}
-
-async fn send_transactions_batch(
-    signed_transactions: &[SignedEip1559TransactionRequest],
-) -> Vec<HttpOutcallResult<JsonRpcResult<SendRawTransactionResult>>> {
-    let rpc_client = read_state(EthRpcClient::from_state);
-    join_all(
-        signed_transactions
-            .iter()
-            .map(|tx| rpc_client.eth_send_raw_transaction(tx.raw_transaction_hex())),
-    )
-    .await
 }
 
 // TODO FI-942: currently finalized transaction just means that it was mined in some block.
@@ -604,6 +637,18 @@ async fn eth_fee_history() -> FeeHistory {
         .await
         .expect("HTTP call failed")
         .unwrap()
+}
+
+async fn latest_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>> {
+    use eth_rpc::{BlockSpec, BlockTag};
+    use ic_cketh_minter::eth_rpc_client::requests::GetTransactionCountParams;
+    read_state(EthRpcClient::from_state)
+        .eth_get_transaction_count(GetTransactionCountParams {
+            address: Address::from_pubkey(&lazy_call_ecdsa_public_key().await),
+            block: BlockSpec::Tag(BlockTag::Latest),
+        })
+        .await
+        .reduce_with_min_by_key(|transaction_count| *transaction_count)
 }
 
 #[update]

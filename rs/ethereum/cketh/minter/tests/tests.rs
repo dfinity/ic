@@ -100,8 +100,6 @@ fn should_deposit_and_withdraw() {
         "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string(),
     );
 
-    cketh.env.tick();
-
     let block_index = Decode!(&assert_reply(
         cketh
             .env
@@ -643,13 +641,12 @@ impl CkEthSetup {
     pub fn withdrawal_step(&self) {
         self.env
             .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
-        self.env.tick();
     }
 
     pub fn wait_and_validate_withdrawal(&mut self, transaction_hash: String, block_index: u64) {
         assert_eq!(self.retrieve_eth_status(block_index), Pending);
-
         self.withdrawal_step();
+        tick_until_next_http_request(&self.env, "eth_feeHistory");
         self.handle_rpc_call(
             "https://rpc.ankr.com/eth",
             "eth_feeHistory",

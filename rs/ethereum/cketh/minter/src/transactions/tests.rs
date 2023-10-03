@@ -16,8 +16,8 @@ mod eth_transactions {
     mod record_withdrawal_request {
         use super::*;
         use crate::transactions::tests::{
-            confirmed_transaction, create_and_record_transaction, expect_panic_with_message,
-            sign_transaction, transaction_price,
+            confirmed_transaction, create_and_record_signed_transaction,
+            create_and_record_transaction, expect_panic_with_message, transaction_price,
         };
 
         #[test]
@@ -56,14 +56,19 @@ mod eth_transactions {
                 "duplicate ledger burn index",
             );
 
-            let sent_tx = sign_transaction(created_tx);
-            transactions.record_sent_transaction(sent_tx.clone());
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
             expect_panic_with_message(
                 || transactions.record_withdrawal_request(withdrawal_request.clone()),
                 "duplicate ledger burn index",
             );
 
-            transactions.record_finalized_transaction(confirmed_transaction(sent_tx));
+            transactions.record_sent_transaction(signed_tx.clone());
+            expect_panic_with_message(
+                || transactions.record_withdrawal_request(withdrawal_request.clone()),
+                "duplicate ledger burn index",
+            );
+
+            transactions.record_finalized_transaction(confirmed_transaction(signed_tx));
             expect_panic_with_message(
                 || transactions.record_withdrawal_request(withdrawal_request.clone()),
                 "duplicate ledger burn index",
@@ -340,18 +345,104 @@ mod eth_transactions {
         }
     }
 
-    mod record_sent_transaction {
-        use super::*;
-        use crate::map::MultiKeyMap;
-        use crate::numeric::Wei;
+    mod record_signed_transaction {
+        use crate::numeric::{LedgerBurnIndex, TransactionNonce};
         use crate::transactions::tests::{
-            create_and_record_transaction, expect_panic_with_message, sign_transaction,
-            signed_transaction_with_nonce, transaction_price,
+            create_and_record_transaction, create_and_record_withdrawal_request,
+            expect_panic_with_message, sign_transaction, signed_transaction_with_nonce,
+            transaction_price,
         };
-        use std::iter;
+        use crate::transactions::EthTransactions;
 
         #[test]
         #[should_panic(expected = "missing created transaction")]
+        fn should_fail_when_created_transaction_not_found() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            transactions
+                .record_signed_transaction(signed_transaction_with_nonce(TransactionNonce::ZERO));
+        }
+
+        #[test]
+        fn should_record_signed_transactions() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            for i in 0..100 {
+                let ledger_burn_index = LedgerBurnIndex::new(15 + i);
+                let withdrawal_request =
+                    create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    transaction_price(),
+                );
+                let signed_tx = sign_transaction(created_tx);
+
+                transactions.record_signed_transaction(signed_tx.clone());
+
+                assert_eq!(transactions.created_transactions_iter().next(), None);
+                assert_eq!(
+                    transactions.signed_tx.get_alt(&ledger_burn_index),
+                    Some(&signed_tx)
+                );
+            }
+        }
+
+        #[test]
+        fn should_fail_when_signed_transaction_does_not_match_created_transaction() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+            let bad_tx = {
+                let mut tx_mismatch = created_tx.clone();
+                tx_mismatch.max_fee_per_gas =
+                    tx_mismatch.max_fee_per_gas.checked_increment().unwrap();
+                sign_transaction(tx_mismatch)
+            };
+
+            expect_panic_with_message(
+                || transactions.record_signed_transaction(bad_tx),
+                "mismatch",
+            );
+        }
+
+        #[test]
+        fn should_fail_to_re_sign_without_resubmit() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+            let signed_tx = sign_transaction(created_tx);
+            transactions.record_signed_transaction(signed_tx.clone());
+
+            expect_panic_with_message(
+                || transactions.record_signed_transaction(signed_tx),
+                "missing created transaction",
+            );
+        }
+    }
+
+    mod record_sent_transaction {
+        use super::*;
+        use crate::map::MultiKeyMap;
+        use crate::transactions::tests::{
+            create_and_record_signed_transaction, create_and_record_transaction,
+            create_and_record_withdrawal_request, dummy_signature, expect_panic_with_message,
+            signed_transaction_with_nonce, transaction_price,
+        };
+        use crate::tx::SignedEip1559TransactionRequest;
+
+        #[test]
+        #[should_panic(expected = "missing signed transaction")]
         fn should_fail_when_created_transaction_not_found() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             transactions
@@ -369,11 +460,12 @@ mod eth_transactions {
                 withdrawal_request,
                 transaction_price(),
             );
-            let signed_tx = sign_transaction(created_tx);
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
 
             transactions.record_sent_transaction(signed_tx.clone());
 
             assert_eq!(transactions.created_transactions_iter().next(), None);
+            assert_eq!(transactions.signed_transactions_iter().next(), None);
             assert_eq!(
                 transactions.sent_tx,
                 MultiKeyMap::from_iter(vec![(
@@ -385,7 +477,7 @@ mod eth_transactions {
         }
 
         #[test]
-        fn should_fail_when_first_sent_transaction_does_not_match_created_transaction() {
+        fn should_fail_when_first_sent_transaction_does_not_match_signed_transaction() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let ledger_burn_index = LedgerBurnIndex::new(15);
             let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
@@ -395,20 +487,308 @@ mod eth_transactions {
                 withdrawal_request,
                 transaction_price(),
             );
+            let signed_tx =
+                create_and_record_signed_transaction(&mut transactions, created_tx.clone());
             //TODO FI-933: turn this into a proptest to generate an arbitrary transaction
             let wrong_signed_tx = {
-                let mut wrong_transaction = created_tx.clone();
-                wrong_transaction.max_priority_fee_per_gas = wrong_transaction
-                    .max_priority_fee_per_gas
-                    .checked_add(Wei::ONE)
-                    .unwrap();
-                assert_ne!(wrong_transaction, created_tx);
-                sign_transaction(wrong_transaction)
+                let mut wrong_sig = dummy_signature();
+                wrong_sig.signature_y_parity = !wrong_sig.signature_y_parity;
+                SignedEip1559TransactionRequest::from((created_tx, wrong_sig))
             };
+            assert_ne!(signed_tx, wrong_signed_tx);
 
             expect_panic_with_message(
                 || transactions.record_sent_transaction(wrong_signed_tx.clone()),
-                "mismatch between sent transaction and created transaction",
+                "mismatch between sent transaction and signed transaction",
+            );
+        }
+
+        #[test]
+        fn should_fail_to_resend_without_resubmit() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            transactions.record_sent_transaction(signed_tx.clone());
+
+            expect_panic_with_message(
+                || transactions.record_sent_transaction(signed_tx),
+                "missing signed transaction",
+            );
+        }
+    }
+
+    mod create_resubmit_transactions {
+        use crate::eth_rpc::Quantity;
+        use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
+        use crate::transactions::tests::{
+            create_and_record_signed_transaction, create_and_record_transaction,
+            create_and_record_withdrawal_request, transaction_price, withdrawal_request_with_index,
+        };
+        use crate::transactions::{EthTransactions, ResubmitTransaction, ResubmitTransactionError};
+        use crate::tx::{Eip1559TransactionRequest, TransactionPrice};
+
+        #[test]
+        fn should_be_empty_when_no_sent_transactions() {
+            let transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let resubmitted_txs = transactions
+                .create_resubmit_transactions(TransactionCount::ZERO, transaction_price());
+
+            assert_eq!(resubmitted_txs, vec![]);
+        }
+
+        #[test]
+        fn should_be_empty_when_all_sent_transactions_already_mined() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let initial_price = transaction_price();
+            let higher_new_price = TransactionPrice {
+                max_fee_per_gas: initial_price.max_fee_per_gas.checked_increment().unwrap(),
+                ..initial_price
+            };
+            for num_tx in 0..100_u64 {
+                let withdrawal_request =
+                    withdrawal_request_with_index(LedgerBurnIndex::new(15 + num_tx));
+                transactions.record_withdrawal_request(withdrawal_request.clone());
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    initial_price.clone(),
+                );
+                let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+                transactions.record_sent_transaction(signed_tx);
+
+                let resubmitted_txs = transactions.create_resubmit_transactions(
+                    TransactionCount::from(num_tx + 1),
+                    higher_new_price.clone(),
+                );
+
+                assert_eq!(resubmitted_txs, vec![]);
+            }
+        }
+
+        #[test]
+        fn should_resubmit_sent_transactions_as_is_when_new_price_not_higher() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let initial_price = transaction_price();
+            let mut sent_transactions = Vec::with_capacity(100);
+            for num_tx in 0..100_u64 {
+                let withdrawal_request = create_and_record_withdrawal_request(
+                    &mut transactions,
+                    LedgerBurnIndex::new(15 + num_tx),
+                );
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    initial_price.clone(),
+                );
+                let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+                transactions.record_sent_transaction(signed_tx.clone());
+                sent_transactions.push(signed_tx);
+            }
+
+            let resubmitted_txs = transactions
+                .create_resubmit_transactions(TransactionCount::from(10_u8), initial_price.clone());
+
+            //transactions with nonces 0..10 (exclusive) were mined
+            assert_eq!(
+                resubmitted_txs,
+                sent_transactions[10..]
+                    .iter()
+                    .map(|tx| Ok::<ResubmitTransaction, ResubmitTransactionError>(
+                        ResubmitTransaction::ToSend(tx.clone())
+                    ))
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        #[test]
+        fn should_resubmit_transaction_with_updated_price() {
+            let price_at_tx_creation = TransactionPrice {
+                gas_limit: Quantity::new(21_000),
+                max_fee_per_gas: Wei::from(11_u8),
+                max_priority_fee_per_gas: Wei::from(21_u8),
+            };
+            let tests = vec![
+                ParameterizedTest {
+                    price_at_tx_creation: price_at_tx_creation.clone(),
+                    price_at_tx_resubmission: TransactionPrice {
+                        max_fee_per_gas: price_at_tx_creation
+                            .max_fee_per_gas
+                            .checked_increment()
+                            .unwrap(),
+                        ..price_at_tx_creation.clone()
+                    },
+                    resubmitted_tx_max_fee_per_gas: Wei::from(13_u8), //10% increase of 11 rounded up
+                    resubmitted_tx_max_priority_fee_per_gas: Wei::from(24_u8), //10% increase of 21 rounded up
+                    resubmitted_tx_amount_deduction: Wei::from(2 * 21_000_u32), //The increase in max_fee_per_gas is 2, so with a gas limit of 21_000, the amount should be decreased by 42_000
+                },
+                ParameterizedTest {
+                    price_at_tx_creation: price_at_tx_creation.clone(),
+                    price_at_tx_resubmission: TransactionPrice {
+                        max_fee_per_gas: price_at_tx_creation
+                            .max_fee_per_gas
+                            .checked_mul(2_u8)
+                            .unwrap(),
+                        ..price_at_tx_creation.clone()
+                    },
+                    resubmitted_tx_max_fee_per_gas: Wei::from(22_u8), //new price because higher than 10% bump
+                    resubmitted_tx_max_priority_fee_per_gas: Wei::from(24_u8), //10% increase of 21 rounded up
+                    resubmitted_tx_amount_deduction: Wei::from(11 * 21_000_u32),
+                },
+                ParameterizedTest {
+                    price_at_tx_creation: price_at_tx_creation.clone(),
+                    price_at_tx_resubmission: TransactionPrice {
+                        max_fee_per_gas: price_at_tx_creation
+                            .max_fee_per_gas
+                            .checked_mul(2_u8)
+                            .unwrap(),
+                        max_priority_fee_per_gas: price_at_tx_creation
+                            .max_priority_fee_per_gas
+                            .checked_mul(2_u8)
+                            .unwrap(),
+                        ..price_at_tx_creation.clone()
+                    },
+                    resubmitted_tx_max_fee_per_gas: Wei::from(22_u8), //new price because higher than 10% bump
+                    resubmitted_tx_max_priority_fee_per_gas: Wei::from(42_u8), //new price because higher than 10% bump
+                    resubmitted_tx_amount_deduction: Wei::from(11 * 21_000_u32),
+                },
+            ];
+
+            for test in tests {
+                let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+                let ledger_burn_index = LedgerBurnIndex::new(15);
+                let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
+                transactions.record_withdrawal_request(withdrawal_request.clone());
+                let initial_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    test.price_at_tx_creation.clone(),
+                );
+                let signed_tx =
+                    create_and_record_signed_transaction(&mut transactions, initial_tx.clone());
+                transactions.record_sent_transaction(signed_tx);
+
+                let resubmitted_txs = transactions.create_resubmit_transactions(
+                    TransactionCount::ZERO,
+                    test.price_at_tx_resubmission.clone(),
+                );
+
+                let expected_resubmitted_tx = Eip1559TransactionRequest {
+                    max_fee_per_gas: test.resubmitted_tx_max_fee_per_gas,
+                    max_priority_fee_per_gas: test.resubmitted_tx_max_priority_fee_per_gas,
+                    amount: initial_tx
+                        .amount
+                        .checked_sub(test.resubmitted_tx_amount_deduction)
+                        .unwrap(),
+                    ..initial_tx
+                };
+                assert_eq!(
+                    resubmitted_txs,
+                    vec![Ok(ResubmitTransaction::ToSign(expected_resubmitted_tx))]
+                );
+            }
+        }
+
+        #[test]
+        fn should_resubmit_multiple_transactions() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let initial_price = TransactionPrice {
+                gas_limit: Quantity::new(21_000),
+                max_fee_per_gas: Wei::from(11_u8),
+                max_priority_fee_per_gas: Wei::from(21_u8),
+            };
+            for num_tx in 0..100_u64 {
+                let withdrawal_request = create_and_record_withdrawal_request(
+                    &mut transactions,
+                    LedgerBurnIndex::new(15 + num_tx),
+                );
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    initial_price.clone(),
+                );
+                let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+                transactions.record_sent_transaction(signed_tx);
+            }
+            let higher_price = TransactionPrice {
+                max_fee_per_gas: initial_price.max_fee_per_gas.checked_increment().unwrap(),
+                ..initial_price
+            };
+
+            let resubmitted_txs = transactions
+                .create_resubmit_transactions(TransactionCount::from(30_u8), higher_price.clone());
+            assert_eq!(resubmitted_txs.len(), 70);
+            for (i, resubmitted_tx) in resubmitted_txs
+                .into_iter()
+                .map(|res| res.unwrap())
+                .enumerate()
+            {
+                let initial_transaction = transactions
+                    .sent_tx
+                    .get_alt(&LedgerBurnIndex::new(15 + i as u64))
+                    .unwrap()[0]
+                    .transaction();
+                assert_eq!(
+                    resubmitted_tx,
+                    ResubmitTransaction::ToSign(Eip1559TransactionRequest {
+                        nonce: TransactionNonce::from(30_u8 + i as u8),
+                        max_fee_per_gas: Wei::from(13_u8),
+                        max_priority_fee_per_gas: Wei::from(24_u8),
+                        amount: initial_transaction
+                            .amount
+                            .checked_sub(Wei::from(2 * 21_000_u32))
+                            .unwrap(),
+                        ..initial_transaction.clone()
+                    })
+                );
+            }
+        }
+
+        struct ParameterizedTest {
+            price_at_tx_creation: TransactionPrice,
+            price_at_tx_resubmission: TransactionPrice,
+            resubmitted_tx_max_fee_per_gas: Wei,
+            resubmitted_tx_max_priority_fee_per_gas: Wei,
+            resubmitted_tx_amount_deduction: Wei,
+        }
+    }
+
+    mod record_resubmit_transaction {
+        use crate::eth_rpc::Quantity;
+        use crate::map::MultiKeyMap;
+        use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
+        use crate::transactions::tests::{
+            create_and_record_signed_transaction, create_and_record_transaction,
+            create_and_record_withdrawal_request, expect_panic_with_message, sign_transaction,
+            transaction_price,
+        };
+        use crate::transactions::{EthTransactions, ResubmitTransaction};
+        use crate::tx::{Eip1559TransactionRequest, TransactionPrice};
+        use std::iter;
+
+        #[test]
+        fn should_fail_when_no_sent_tx() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, LedgerBurnIndex::new(15));
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+
+            expect_panic_with_message(
+                || {
+                    transactions
+                        .record_resubmit_transaction(ResubmitTransaction::ToSign(created_tx))
+                },
+                "sent transaction not found",
             );
         }
 
@@ -416,13 +796,16 @@ mod eth_transactions {
         fn should_add_multiple_sent_transactions_for_same_nonce_with_different_fees() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let ledger_burn_index = LedgerBurnIndex::new(15);
-            let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
-            transactions.record_withdrawal_request(withdrawal_request.clone());
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
             let created_tx = create_and_record_transaction(
                 &mut transactions,
                 withdrawal_request,
                 transaction_price(),
             );
+            let first_sent_tx =
+                create_and_record_signed_transaction(&mut transactions, created_tx.clone());
+            transactions.record_sent_transaction(first_sent_tx.clone());
 
             let transaction_with_increasing_fees: Vec<_> = iter::repeat(created_tx)
                 .take(10)
@@ -433,36 +816,48 @@ mod eth_transactions {
                         .checked_add(Wei::from(index as u8))
                         .unwrap();
                     tx.amount = tx.amount.checked_sub(Wei::from(index as u8)).unwrap();
-                    sign_transaction(tx)
+                    tx
                 })
                 .collect();
 
             for (index, transaction) in transaction_with_increasing_fees.iter().enumerate() {
-                transactions.record_sent_transaction(transaction.clone());
+                transactions
+                    .record_resubmit_transaction(ResubmitTransaction::ToSign(transaction.clone()));
+                let signed_tx = sign_transaction(transaction.clone());
+                transactions.record_signed_transaction(signed_tx.clone());
+                transactions.record_sent_transaction(signed_tx);
                 assert_eq!(transactions.created_transactions_iter().next(), None);
                 assert_eq!(
                     transactions.sent_tx,
                     MultiKeyMap::from_iter(vec![(
                         TransactionNonce::ZERO,
                         ledger_burn_index,
-                        transaction_with_increasing_fees[0..=index].to_vec()
+                        vec![first_sent_tx.clone()]
+                            .into_iter()
+                            .chain(
+                                transaction_with_increasing_fees[0..=index]
+                                    .iter()
+                                    .map(|tx| sign_transaction(tx.clone()))
+                            )
+                            .collect()
                     )])
                 );
             }
         }
 
         #[test]
-        fn should_fail_to_add_sent_transaction_when_mismatch_with_already_sent() {
+        fn should_fail_when_mismatch_with_already_sent() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let ledger_burn_index = LedgerBurnIndex::new(15);
-            let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
-            transactions.record_withdrawal_request(withdrawal_request.clone());
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
             let created_tx = create_and_record_transaction(
                 &mut transactions,
                 withdrawal_request,
                 transaction_price(),
             );
-            let signed_tx = sign_transaction(created_tx.clone());
+            let signed_tx =
+                create_and_record_signed_transaction(&mut transactions, created_tx.clone());
             transactions.record_sent_transaction(signed_tx.clone());
 
             let wrong_resent_tx = {
@@ -473,20 +868,106 @@ mod eth_transactions {
             };
 
             expect_panic_with_message(
-                || transactions.record_sent_transaction(wrong_resent_tx.clone()),
+                || {
+                    transactions
+                        .record_resubmit_transaction(ResubmitTransaction::ToSend(wrong_resent_tx))
+                },
                 "mismatch between last sent transaction",
+            );
+        }
+
+        #[test]
+        fn should_replace_existing_resubmitted_transaction() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let initial_price = TransactionPrice {
+                gas_limit: Quantity::new(21_000),
+                max_fee_per_gas: Wei::from(11_u8),
+                max_priority_fee_per_gas: Wei::from(21_u8),
+            };
+            let resubmit_price_1 = TransactionPrice {
+                max_fee_per_gas: initial_price.max_fee_per_gas.checked_increment().unwrap(),
+                ..initial_price
+            };
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                initial_price.clone(),
+            );
+            let signed_tx =
+                create_and_record_signed_transaction(&mut transactions, created_tx.clone());
+            transactions.record_sent_transaction(signed_tx);
+
+            let resubmitted_txs_1 = transactions
+                .create_resubmit_transactions(TransactionCount::ZERO, resubmit_price_1.clone());
+            let resubmitted_tx1 = Eip1559TransactionRequest {
+                max_fee_per_gas: Wei::from(13_u8),
+                max_priority_fee_per_gas: Wei::from(24_u8),
+                amount: created_tx
+                    .amount
+                    .checked_sub(Wei::from(2 * 21_000_u32))
+                    .unwrap(),
+                ..created_tx.clone()
+            };
+            let expected_resubmitted_tx1 = ResubmitTransaction::ToSign(resubmitted_tx1.clone());
+            assert_eq!(
+                resubmitted_txs_1,
+                vec![Ok(expected_resubmitted_tx1.clone())]
+            );
+            transactions.record_resubmit_transaction(expected_resubmitted_tx1);
+            assert_eq!(
+                transactions.created_transactions_iter().collect::<Vec<_>>(),
+                vec![(
+                    &TransactionNonce::ZERO,
+                    &ledger_burn_index,
+                    &resubmitted_tx1
+                )]
+            );
+
+            let resubmit_price_2 = TransactionPrice {
+                max_fee_per_gas: initial_price.max_fee_per_gas.checked_mul(2_u8).unwrap(),
+                ..resubmit_price_1
+            };
+            let resubmitted_txs_2 =
+                transactions.create_resubmit_transactions(TransactionCount::ZERO, resubmit_price_2);
+            let resubmitted_tx2 = Eip1559TransactionRequest {
+                max_fee_per_gas: Wei::from(22_u8),
+                max_priority_fee_per_gas: Wei::from(24_u8),
+                amount: created_tx
+                    .amount
+                    .checked_sub(Wei::from(11 * 21_000_u32))
+                    .unwrap(),
+                ..created_tx
+            };
+            let expected_resubmitted_tx2 = ResubmitTransaction::ToSign(resubmitted_tx2.clone());
+            assert_eq!(
+                resubmitted_txs_2,
+                vec![Ok(expected_resubmitted_tx2.clone())]
+            );
+            transactions.record_resubmit_transaction(expected_resubmitted_tx2);
+            assert_eq!(
+                transactions.created_transactions_iter().collect::<Vec<_>>(),
+                vec![(
+                    &TransactionNonce::ZERO,
+                    &ledger_burn_index,
+                    &resubmitted_tx2
+                )]
             );
         }
     }
 
     mod record_finalized_transaction {
+        use crate::map::MultiKeyMap;
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
         use crate::transactions::tests::{
-            confirmed_transaction, create_and_record_transaction, dummy_signature,
+            confirmed_transaction, create_and_record_signed_transaction,
+            create_and_record_transaction, create_and_record_withdrawal_request, dummy_signature,
             expect_panic_with_message, sign_transaction, transaction_price,
             withdrawal_request_with_index,
         };
-        use crate::transactions::EthTransactions;
+        use crate::transactions::{EthTransactions, ResubmitTransaction};
         use crate::tx::SignedEip1559TransactionRequest;
 
         #[test]
@@ -501,7 +982,8 @@ mod eth_transactions {
                 transaction_price(),
             );
             let signed_tx =
-                SignedEip1559TransactionRequest::from((created_tx.clone(), dummy_signature()));
+                create_and_record_signed_transaction(&mut transactions, created_tx.clone());
+
             transactions.record_sent_transaction(signed_tx.clone());
 
             let confirmed_tx_with_wrong_nonce = {
@@ -535,14 +1017,14 @@ mod eth_transactions {
         fn should_record_finalized_transaction() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let ledger_burn_index = LedgerBurnIndex::new(15);
-            let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
-            transactions.record_withdrawal_request(withdrawal_request.clone());
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
             let created_tx = create_and_record_transaction(
                 &mut transactions,
                 withdrawal_request,
                 transaction_price(),
             );
-            let signed_tx = sign_transaction(created_tx);
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
             transactions.record_sent_transaction(signed_tx.clone());
 
             let confirmed_transaction = confirmed_transaction(signed_tx);
@@ -557,6 +1039,55 @@ mod eth_transactions {
                     &ledger_burn_index,
                     &confirmed_transaction
                 )]
+            );
+            assert_eq!(transactions.sent_transactions_iter().next(), None);
+        }
+
+        #[test]
+        fn should_allow_to_be_called_multiple_times_on_same_transaction() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            transactions.record_sent_transaction(signed_tx.clone());
+            transactions
+                .record_resubmit_transaction(ResubmitTransaction::ToSend(signed_tx.clone()));
+            transactions.record_sent_transaction(signed_tx.clone());
+            transactions
+                .record_resubmit_transaction(ResubmitTransaction::ToSend(signed_tx.clone()));
+            transactions.record_sent_transaction(signed_tx.clone());
+            assert_eq!(
+                transactions
+                    .sent_tx
+                    .get(&TransactionNonce::ZERO)
+                    .unwrap()
+                    .len(),
+                3
+            );
+            let sent_transactions: Vec<_> = transactions
+                .sent_transactions_iter()
+                .flat_map(|(_nonce, _index, txs)| txs)
+                .cloned()
+                .collect();
+
+            for sent_tx in sent_transactions {
+                let confirmed_tx = confirmed_transaction(sent_tx);
+                transactions.record_finalized_transaction(confirmed_tx);
+            }
+
+            assert_eq!(
+                transactions.finalized_tx,
+                MultiKeyMap::from_iter(vec![(
+                    TransactionNonce::ZERO,
+                    ledger_burn_index,
+                    confirmed_transaction(signed_tx)
+                )])
             );
             assert_eq!(transactions.sent_transactions_iter().next(), None);
         }
@@ -598,10 +1129,16 @@ mod eth_transactions {
             );
 
             let signed_tx = sign_transaction(created_tx);
-            transactions.record_sent_transaction(signed_tx.clone());
             let eth_transaction = EthTransaction {
                 transaction_hash: signed_tx.hash().to_string(),
             };
+            transactions.record_signed_transaction(signed_tx.clone());
+            assert_eq!(
+                transactions.transaction_status(&ledger_burn_index),
+                RetrieveEthStatus::TxSigned(eth_transaction.clone())
+            );
+
+            transactions.record_sent_transaction(signed_tx.clone());
             assert_eq!(
                 transactions.transaction_status(&ledger_burn_index),
                 RetrieveEthStatus::TxSent(eth_transaction.clone())
@@ -705,6 +1242,117 @@ mod create_transaction {
     }
 }
 
+mod withdrawal_flow {
+    use crate::numeric::TransactionNonce;
+    use crate::transactions::create_transaction;
+    use crate::transactions::tests::sign_transaction;
+    use crate::transactions::tests::withdrawal_flow::arbitrary::{
+        arb_checked_amount_of, arb_non_overflowing_transaction_price, arb_withdrawal_request,
+    };
+    use crate::transactions::EthTransactions;
+    use crate::transactions::EthereumNetwork;
+    use proptest::proptest;
+    use std::cell::RefCell;
+
+    #[test]
+    fn should_not_panic() {
+        let transactions = EthTransactions::new(TransactionNonce::ZERO);
+        //required because proptest closure cannot take mutable args.
+        let wrapped_txs = RefCell::new(transactions);
+
+        proptest!(|(request in arb_withdrawal_request())| {
+            wrapped_txs.borrow_mut().record_withdrawal_request(request)
+        });
+
+        proptest!(|(transaction_price in arb_non_overflowing_transaction_price(), transaction_count in arb_checked_amount_of())| {
+            let resubmit_txs = wrapped_txs.borrow().create_resubmit_transactions(transaction_count, transaction_price.clone());
+            for resubmit_tx in resubmit_txs.into_iter().flatten() {
+                wrapped_txs.borrow_mut().record_resubmit_transaction(resubmit_tx);
+            }
+
+            let withdrawal_requests = wrapped_txs.borrow().withdrawal_requests_batch(5);
+            for request in withdrawal_requests {
+                let nonce = wrapped_txs.borrow().next_transaction_nonce();
+                if let Ok(created_tx) = create_transaction(
+                    &request,
+                    nonce,
+                    transaction_price.clone(),
+                    EthereumNetwork::Sepolia,
+                ){
+                    wrapped_txs.borrow_mut().record_created_transaction(request, created_tx);
+                }
+            }
+
+            let created_txs: Vec<_> = wrapped_txs.borrow().created_transactions_iter().map(|(_nonce, _ledger_burn_index, tx)| tx)
+            .cloned()
+            .collect();
+            for created_tx in created_txs {
+                wrapped_txs.borrow_mut().record_signed_transaction(sign_transaction(created_tx));
+            }
+
+            let sent_txs: Vec<_> =  wrapped_txs.borrow().signed_transactions_iter().map(|(_nonce, _ledger_burn_index, tx)| tx)
+            .cloned()
+            .collect();
+            for sent_tx in sent_txs {
+                wrapped_txs.borrow_mut().record_sent_transaction(sent_tx);
+            }
+        });
+    }
+
+    mod arbitrary {
+        use crate::address::Address;
+        use crate::checked_amount::CheckedAmountOf;
+        use crate::eth_rpc::Quantity;
+        use crate::numeric::Wei;
+        use crate::transactions::EthWithdrawalRequest;
+        use crate::tx::TransactionPrice;
+        use phantom_newtype::Id;
+        use proptest::strategy::Strategy;
+
+        pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
+            use proptest::arbitrary::any;
+            use proptest::array::uniform32;
+            uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
+        }
+
+        fn arb_u64_id<Entity>() -> impl Strategy<Value = Id<Entity, u64>> {
+            use proptest::arbitrary::any;
+            any::<u64>().prop_map(Id::from)
+        }
+
+        fn arb_address() -> impl Strategy<Value = Address> {
+            use proptest::arbitrary::any;
+            use proptest::array::uniform20;
+            uniform20(any::<u8>()).prop_map(|bytes| Address::new(bytes))
+        }
+
+        pub fn arb_withdrawal_request() -> impl Strategy<Value = EthWithdrawalRequest> {
+            (arb_checked_amount_of(), arb_address(), arb_u64_id()).prop_map(
+                |(withdrawal_amount, destination, ledger_burn_index)| EthWithdrawalRequest {
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                },
+            )
+        }
+
+        pub fn arb_non_overflowing_transaction_price() -> impl Strategy<Value = TransactionPrice> {
+            use proptest::arbitrary::any;
+            (any::<u128>(), any::<u128>(), any::<u128>()).prop_map(
+                |(gas_limit, max_priority_fee_per_gas, max_fee_per_gas)| {
+                    let price = TransactionPrice {
+                        gas_limit: Quantity::new(gas_limit),
+                        max_fee_per_gas: Wei::new(max_fee_per_gas),
+                        max_priority_fee_per_gas: Wei::new(max_priority_fee_per_gas),
+                    };
+                    let _does_not_panic = price.max_transaction_fee();
+                    price
+                },
+            )
+        }
+    }
+}
+
 fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expected_message: &str) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
     let error = result.unwrap_err();
@@ -768,6 +1416,15 @@ fn transaction_price() -> TransactionPrice {
     }
 }
 
+fn create_and_record_withdrawal_request(
+    transactions: &mut EthTransactions,
+    ledger_burn_index: LedgerBurnIndex,
+) -> EthWithdrawalRequest {
+    let request = withdrawal_request_with_index(ledger_burn_index);
+    transactions.record_withdrawal_request(request.clone());
+    request
+}
+
 fn create_and_record_transaction(
     transactions: &mut EthTransactions,
     withdrawal_request: EthWithdrawalRequest,
@@ -787,6 +1444,15 @@ fn create_and_record_transaction(
         .get_alt(&burn_index)
         .unwrap()
         .clone()
+}
+
+fn create_and_record_signed_transaction(
+    transactions: &mut EthTransactions,
+    created_tx: Eip1559TransactionRequest,
+) -> SignedEip1559TransactionRequest {
+    let signed_tx = sign_transaction(created_tx);
+    transactions.record_signed_transaction(signed_tx.clone());
+    signed_tx
 }
 
 fn confirmed_transaction(
