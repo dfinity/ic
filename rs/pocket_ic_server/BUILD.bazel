@@ -25,6 +25,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:sha2",
+    "@crate_index//:time",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing-appender",
