@@ -255,7 +255,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     cycles_account_manager.refund_unused_execution_cycles(
         &mut system_state,
-        NumInstructions::from(5_000_000),
+        NumInstructions::from(1_000_000),
         NumInstructions::from(1_000_000),
         cycles,
         &no_op_counter,
@@ -263,41 +263,6 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         &no_op_logger(),
     );
     assert_eq!(system_state.balance(), initial_balance);
-}
-
-#[test]
-fn larger_instructions_left_value_doesnt_mint_cycles() {
-    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
-    let mut system_state = SystemStateBuilder::new().build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .build();
-
-    let initial_instructions_charged_for = NumInstructions::from(1_000_000);
-
-    let initial_balance = system_state.balance();
-
-    let cycles = cycles_account_manager
-        .prepay_execution_cycles(
-            &mut system_state,
-            NumBytes::from(0),
-            ComputeAllocation::default(),
-            initial_instructions_charged_for,
-            subnet_size,
-        )
-        .unwrap();
-
-    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
-    cycles_account_manager.refund_unused_execution_cycles(
-        &mut system_state,
-        initial_instructions_charged_for * 2,
-        initial_instructions_charged_for,
-        cycles,
-        &no_op_counter,
-        subnet_size,
-        &no_op_logger(),
-    );
-    assert!(system_state.balance() <= initial_balance);
 }
 
 #[test]

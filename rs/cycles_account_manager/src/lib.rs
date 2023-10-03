@@ -462,6 +462,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         log: &ReplicaLogger,
     ) {
+        debug_assert!(num_instructions <= num_instructions_initially_charged);
         if num_instructions > num_instructions_initially_charged {
             error_counter.inc();
             error!(
@@ -778,6 +779,7 @@ impl CyclesAccountManager {
     ) -> Cycles {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
         let transmitted_bytes = response.payload_size_bytes().get();
+        debug_assert!(transmitted_bytes <= max_expected_bytes);
         if max_expected_bytes < transmitted_bytes {
             error_counter.inc();
             error!(
