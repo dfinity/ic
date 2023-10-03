@@ -2340,34 +2340,6 @@ dependencies = [
 
 [[package]]
 name = "criterion"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b01d6de93b2b6c65e17c634a26653a29d107b3c98c607c765bf38d041531cd8f"
-dependencies = [
- "atty",
- "cast",
- "clap 2.34.0",
- "criterion-plot 0.4.5",
- "csv",
- "futures",
- "itertools 0.10.5",
- "lazy_static",
- "num-traits",
- "oorandom",
- "plotters",
- "rayon",
- "regex",
- "serde",
- "serde_cbor",
- "serde_derive",
- "serde_json",
- "tinytemplate",
- "tokio",
- "walkdir",
-]
-
-[[package]]
-name = "criterion"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2b12d017a929603d80db1831cd3a24082f8137ce19c69e6447f54f5fc8d692f"
@@ -2376,7 +2348,7 @@ dependencies = [
  "cast",
  "ciborium",
  "clap 4.4.5",
- "criterion-plot 0.5.0",
+ "criterion-plot",
  "futures",
  "is-terminal",
  "itertools 0.10.5",
@@ -2396,16 +2368,6 @@ dependencies = [
 
 [[package]]
 name = "criterion-plot"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2673cc8207403546f45f5fd319a974b1e6983ad1a3ee7e6041650013be041876"
-dependencies = [
- "cast",
- "itertools 0.10.5",
-]
-
-[[package]]
-name = "criterion-plot"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
@@ -2418,7 +2380,7 @@ dependencies = [
 name = "criterion-time"
 version = "0.8.0"
 dependencies = [
- "criterion 0.5.1",
+ "criterion",
  "libc",
 ]
 
@@ -3255,7 +3217,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "canister-test",
- "criterion 0.5.1",
+ "criterion",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-types",
@@ -3494,7 +3456,7 @@ dependencies = [
 name = "execution-environment-bench"
 version = "0.8.0"
 dependencies = [
- "criterion 0.5.1",
+ "criterion",
  "ic-config",
  "ic-constants",
  "ic-cycles-account-manager",
@@ -4698,7 +4660,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "clap 3.2.23",
- "criterion 0.5.1",
+ "criterion",
  "ic-config",
  "ic-constants",
  "ic-crypto-test-utils-canister-threshold-sigs",
@@ -4944,7 +4906,7 @@ dependencies = [
  "bitcoincore-rpc",
  "bitcoind",
  "clap 3.2.23",
- "criterion 0.5.1",
+ "criterion",
  "futures",
  "hashlink",
  "hex",
@@ -5421,7 +5383,7 @@ name = "ic-certification"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.5.1",
+ "criterion",
  "hex",
  "ic-base-types",
  "ic-certification-test-utils",
@@ -5648,7 +5610,7 @@ name = "ic-consensus"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.5.1",
+ "criterion",
  "ic-artifact-pool",
  "ic-btc-types-internal",
  "ic-config",
@@ -5795,7 +5757,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "clap 3.2.23",
- "criterion 0.3.6",
+ "criterion",
  "ed25519-consensus",
  "hex",
  "ic-adapter-metrics-server",
@@ -6127,7 +6089,7 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-type"
 version = "0.1.0"
 dependencies = [
- "criterion 0.5.1",
+ "criterion",
  "hex",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-test-utils-reproducible-rng",
@@ -6147,7 +6109,7 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-vetkd"
 version = "0.1.0"
 dependencies = [
- "criterion 0.5.1",
+ "criterion",
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-sha3",
@@ -6365,7 +6327,7 @@ version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
  "cached",
- "criterion 0.3.6",
+ "criterion",
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-seed",
@@ -6402,7 +6364,7 @@ version = "0.1.0"
 dependencies = [
  "assert_matches",
  "bip32",
- "criterion 0.5.1",
+ "criterion",
  "fe-derive",
  "hex",
  "hex-literal",
@@ -6900,7 +6862,7 @@ name = "ic-crypto-tree-hash"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.5.1",
+ "criterion",
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
@@ -7106,7 +7068,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
- "criterion 0.5.1",
+ "criterion",
  "embedders_bench",
  "ic-config",
  "ic-cycles-account-manager",
@@ -7167,7 +7129,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
- "criterion 0.5.1",
+ "criterion",
  "crossbeam-channel",
  "escargot",
  "execution-environment-bench",
@@ -7940,7 +7902,7 @@ name = "ic-ingress-manager"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.5.1",
+ "criterion",
  "ic-artifact-pool",
  "ic-config",
  "ic-constants",
@@ -8554,7 +8516,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
- "criterion 0.5.1",
+ "criterion",
  "csv",
  "cycles-minting-canister",
  "dfn_candid",
@@ -9192,7 +9154,7 @@ dependencies = [
  "axum",
  "bincode",
  "bytes",
- "criterion 0.3.6",
+ "criterion",
  "either",
  "futures",
  "http",
@@ -9618,7 +9580,7 @@ dependencies = [
  "base64 0.11.0",
  "canister-test",
  "clap 3.2.23",
- "criterion 0.5.1",
+ "criterion",
  "crossbeam-channel",
  "hex",
  "ic-artifact-pool",
@@ -9795,7 +9757,7 @@ name = "ic-replicated-state"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.5.1",
+ "criterion",
  "criterion-time",
  "cvt",
  "ic-base-types",
@@ -10511,7 +10473,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "bit-vec 0.6.3",
- "criterion 0.5.1",
+ "criterion",
  "criterion-time",
  "crossbeam-channel",
  "hex",
@@ -10926,7 +10888,7 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "bytes",
- "criterion 0.5.1",
+ "criterion",
  "futures",
  "h2",
  "http",
@@ -12741,7 +12703,7 @@ name = "memory_tracker"
 version = "0.8.0"
 dependencies = [
  "bit-vec 0.5.1",
- "criterion 0.5.1",
+ "criterion",
  "ic-config",
  "ic-logger",
  "ic-replicated-state",
@@ -15369,7 +15331,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
- "criterion 0.5.1",
+ "criterion",
  "dfn_candid",
  "dfn_core",
  "dfn_json",

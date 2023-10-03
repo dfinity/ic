@@ -54,7 +54,7 @@ tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-criterion = "0.3.4"
+criterion = "0.5"
 ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
