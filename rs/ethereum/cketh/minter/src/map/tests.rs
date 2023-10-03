@@ -10,9 +10,17 @@ fn should_insert_and_retrieve_by_key_and_alt_key() {
         .unwrap();
 
     assert_eq!(map.get(&PrimaryKey::new(1)), Some(&1));
+    assert_eq!(
+        map.get_entry(&PrimaryKey::new(1)),
+        Some((&AltKey::new('a'), &1))
+    );
     assert_eq!(map.get_alt(&AltKey::new('a')), Some(&1));
 
     assert_eq!(map.get(&PrimaryKey::new(2)), Some(&2));
+    assert_eq!(
+        map.get_entry(&PrimaryKey::new(2)),
+        Some((&AltKey::new('b'), &2))
+    );
     assert_eq!(map.get_alt(&AltKey::new('b')), Some(&2));
 }
 
