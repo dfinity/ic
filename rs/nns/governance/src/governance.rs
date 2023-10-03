@@ -7469,7 +7469,7 @@ impl Governance {
     /// On success, sets the proposal's sns_token_swap_lifecycle accord to
     /// Committed or Aborted
     ///
-    /// TODO[NNS1-2617]: Deprecate this function.
+    /// TODO[NNS1-2632]: Deprecate this function.
     pub async fn settle_community_fund_participation(
         &mut self,
         caller: PrincipalId,
