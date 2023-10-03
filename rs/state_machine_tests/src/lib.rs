@@ -258,8 +258,9 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 fn replica_logger() -> ReplicaLogger {
     use slog::Drain;
     let log_level = std::env::var("RUST_LOG")
-        .map(|level| Level::from_str(&level).unwrap())
-        .unwrap_or_else(|_| Level::Warning);
+        .ok()
+        .and_then(|level| Level::from_str(&level).ok())
+        .unwrap_or(Level::Warning);
 
     let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
         Box::new(stderr())
