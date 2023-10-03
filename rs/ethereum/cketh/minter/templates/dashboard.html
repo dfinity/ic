@@ -81,12 +81,38 @@
             width: 63ch;
             font-family: monospace;
         }
+
+        .warning-msg {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px 3px 3px 3px;
+        }
+        .warning-msg {
+            color: #9F6000;
+            background-color: #FEEFB3;
+        }
+        .fa {
+            display: inline-block;
+            font: inherit;
+            text-rendering: auto;
+        }
+        .fa-warning:before {
+            content: "\0026A0"
+        }
+
     </style>
 </head>
 
 <body>
     <div class="background">
         <div class="content">
+            <div class="warning-msg">
+                <i class="fa fa-warning"></i>
+                <strong>Work in progress</strong>: the minter is under active development and may be reinstalled
+                from scratch at any time, which implies losing any current state!<br/>
+                Please refer to the <a href="https://forum.dfinity.org/t/22819">forum post</a> for more information
+                or if you have any feedback.
+            </div>
             <h3>Metadata</h3>
             <table>
                 <tbody>
