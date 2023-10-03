@@ -2028,8 +2028,15 @@ impl SnsInitPayload {
 
         let intervals = &neurons_fund_participation_constraints.coefficient_intervals;
         for (prev_interval, interval) in intervals.iter().zip(intervals.iter().skip(1)) {
-            if prev_interval.to_direct_participation_icp_e8s
-                != interval.from_direct_participation_icp_e8s
+            interval
+                .validate()
+                .map_err(|err| {
+                    NeuronsFundParticipationConstraintsValidationError::LinearScalingCoefficientVecValidationError(
+                        LinearScalingCoefficientVecValidationError::LinearScalingCoefficientValidationError(err)
+                    ).to_string()
+                })?;
+            if prev_interval.to_direct_participation_icp_e8s.unwrap()
+                != interval.from_direct_participation_icp_e8s.unwrap()
             {
                 return NeuronsFundParticipationConstraintsValidationError::LinearScalingCoefficientVecValidationError(
                     LinearScalingCoefficientVecValidationError::LinearScalingCoefficientsUnordered(
@@ -2038,13 +2045,6 @@ impl SnsInitPayload {
                     )
                 ).into();
             }
-            interval
-                .validate()
-                .map_err(|err| {
-                    NeuronsFundParticipationConstraintsValidationError::LinearScalingCoefficientVecValidationError(
-                        LinearScalingCoefficientVecValidationError::LinearScalingCoefficientValidationError(err)
-                    ).to_string()
-                })?
         }
 
         Ok(())

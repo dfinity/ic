@@ -1,3 +1,7 @@
+use crate::neurons_fund::{
+    dec_to_u64, u64_to_dec, InvertibleFunction,
+    MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
+};
 use crate::{
     governance::manage_neuron_request::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
@@ -9,7 +13,7 @@ use crate::{
     migrations::maybe_run_migrations,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        create_service_nervous_system::LedgerParameters,
+        create_service_nervous_system::{LedgerParameters, SwapParameters},
         governance::{
             migration::{self, MigrationStatus},
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
@@ -29,7 +33,7 @@ use crate::{
         reward_node_provider::{RewardMode, RewardToAccount},
         settle_community_fund_participation, settle_neurons_fund_participation_request,
         settle_neurons_fund_participation_response,
-        settle_neurons_fund_participation_response::NeuronsFundNeuron,
+        settle_neurons_fund_participation_response::NeuronsFundNeuron as NeuronsFundNeuronPb,
         swap_background_information, Ballot, CreateServiceNervousSystem,
         DerivedProposalInformation, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceError, KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
@@ -60,13 +64,16 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    IS_MATCHED_FUNDING_ENABLED, IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED, LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
-use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, RestoreDappControllersRequest};
+use ic_sns_swap::pb::v1::{
+    self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints,
+    RestoreDappControllersRequest,
+};
 use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
@@ -79,6 +86,7 @@ use mockall::automock;
 use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
+use rust_decimal::Decimal;
 use std::{
     borrow::Cow,
     cmp::{max, Ordering},
@@ -93,7 +101,9 @@ use std::{
 use crate::neuron_store::NeuronStore;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
+use ic_nervous_system_governance::maturity_modulation::{
+    apply_maturity_modulation, BASIS_POINTS_PER_UNITY,
+};
 
 mod manage_neuron_request;
 pub mod test_data;
@@ -306,14 +316,14 @@ impl From<Result<Vec<sns_swap_pb::CfParticipant>, GovernanceError>>
                                 let hotkey_principal = hotkey_principal.clone();
                                 let nns_neuron_id = Some(neuron.nns_neuron_id);
                                 let amount_icp_e8s = Some(neuron.amount_icp_e8s);
-                                NeuronsFundNeuron {
+                                NeuronsFundNeuronPb {
                                     nns_neuron_id,
                                     amount_icp_e8s,
                                     hotkey_principal,
                                     is_capped: Some(false), // TODO[NNS1-2555]
                                 }
                             })
-                            .collect::<Vec<NeuronsFundNeuron>>()
+                            .collect::<Vec<NeuronsFundNeuronPb>>()
                     })
                     .collect();
                 settle_neurons_fund_participation_response::Result::Ok(
@@ -1545,6 +1555,186 @@ pub fn governance_minting_account() -> AccountIdentifier {
 
 pub fn neuron_subaccount(subaccount: Subaccount) -> AccountIdentifier {
     AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount))
+}
+
+/// Static information identifying this Swap from the p.o.v. of the Neurons' Fund.
+#[derive(Clone, Debug)]
+struct SwapParticipationLimits {
+    // TODO: Remove allow(unused).
+    #[allow(unused)]
+    pub min_direct_participation_icp_e8s: u64,
+    pub max_direct_participation_icp_e8s: u64,
+    pub max_participant_icp_e8s: u64,
+    pub min_participant_icp_e8s: u64,
+}
+
+#[derive(Debug)]
+pub enum SwapParametersError {
+    /// We expect this to never occur, and can ensure this, since the caller is Swap, and we control
+    /// the code that the Swap canisters run.
+    UnspecifiedField(String),
+}
+
+impl ToString for SwapParametersError {
+    fn to_string(&self) -> String {
+        let prefix = "Cannot extract data from SwapParameters: ";
+        match self {
+            Self::UnspecifiedField(field_name) => {
+                format!("{}field `{}` is not specified.", prefix, field_name,)
+            }
+        }
+    }
+}
+
+impl From<SwapParametersError> for GovernanceError {
+    fn from(swap_parameters_error: SwapParametersError) -> Self {
+        Self {
+            error_type: ErrorType::InvalidCommand as i32,
+            error_message: swap_parameters_error.to_string(),
+        }
+    }
+}
+
+impl SwapParticipationLimits {
+    fn try_from_swap_parameters(
+        swap_parameters: &SwapParameters,
+    ) -> Result<Self, SwapParametersError> {
+        // TODO[NNS1-2608]: Support min_direct_participation_icp_e8s and max_direct_participation_icp_e8s in
+        // CreateServiceNervousSystem.
+        let neurons_fund_investment_icp_e8s = swap_parameters
+            .neurons_fund_investment_icp
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("neurons_fund_investment_icp".to_string())
+            })?
+            .e8s
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("neurons_fund_investment_icp.e8s".to_string())
+            })?;
+        let min_direct_participation_icp_e8s = swap_parameters
+            .minimum_icp
+            .ok_or_else(|| SwapParametersError::UnspecifiedField("minimum_icp".to_string()))?
+            .e8s
+            .ok_or_else(|| SwapParametersError::UnspecifiedField("minimum_icp.e8s".to_string()))?
+            .saturating_sub(neurons_fund_investment_icp_e8s);
+        let max_direct_participation_icp_e8s = swap_parameters
+            .maximum_icp
+            .ok_or_else(|| SwapParametersError::UnspecifiedField("maximum_icp".to_string()))?
+            .e8s
+            .ok_or_else(|| SwapParametersError::UnspecifiedField("maximum_icp.e8s".to_string()))?
+            .saturating_sub(neurons_fund_investment_icp_e8s);
+        let min_participant_icp_e8s = swap_parameters
+            .minimum_participant_icp
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("minimum_participant_icp".to_string())
+            })?
+            .e8s
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("minimum_participant_icp.e8s".to_string())
+            })?;
+        let max_participant_icp_e8s = swap_parameters
+            .maximum_participant_icp
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("maximum_participant_icp".to_string())
+            })?
+            .e8s
+            .ok_or_else(|| {
+                SwapParametersError::UnspecifiedField("maximum_participant_icp.e8s".to_string())
+            })?;
+        Ok(Self {
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
+            min_participant_icp_e8s,
+            max_participant_icp_e8s,
+        })
+    }
+}
+
+/// Dynamic information for deciding how the Neurons' Fund should participate in an SNS Swap.
+/// TODO: Remove in follow-up MR
+#[allow(unused)]
+struct NeuronsFundSwapParticipation {
+    swap_params: SwapParticipationLimits,
+    neurons_fund_snapshot: NeuronsFundSnapshot,
+    ideal_match_function: Box<dyn InvertibleFunction>,
+    original_total_maturity_icp_e8s_equaivalent: u64,
+    max_intended_nf_contribution: Decimal,
+    max_total_maturity_icp_e8s_equaivalent: u64,
+}
+
+/// The Neurons' Fund should not participate in any SNS swap with more than this portion of its
+/// overall maturity.
+pub const MAX_NEURONS_FUND_PARTICIPATION_BASIS_POINTS: u64 = 1_000; // 10%
+
+impl NeuronsFundSwapParticipation {
+    /// In neurons_fund, tuples prepresent the ID, maturity ICP e8s equaivalent,
+    /// and controller Principal, resp.
+    pub fn new(
+        swap_params: SwapParticipationLimits,
+        neurons_fund: BTreeSet<(NeuronId, u64, PrincipalId)>,
+        ideal_match_function: Box<dyn InvertibleFunction>,
+    ) -> Result<Self, String> {
+        let max_intended_nf_contribution =
+            ideal_match_function.apply(swap_params.max_direct_participation_icp_e8s);
+        let original_total_maturity_icp_e8s_equaivalent = neurons_fund
+            .iter()
+            .map(|(_, maturity_e8s, _)| *maturity_e8s)
+            .fold(0_u64, |a, n| a.saturating_add(n));
+        let max_total_maturity_icp_e8s_equaivalent = original_total_maturity_icp_e8s_equaivalent
+            .saturating_mul(MAX_NEURONS_FUND_PARTICIPATION_BASIS_POINTS)
+            .saturating_div(BASIS_POINTS_PER_UNITY as u64);
+        let max_total_maturity_icp_e8s_equaivalent = u64::min(
+            max_total_maturity_icp_e8s_equaivalent,
+            MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
+        );
+        let neurons_fund_snapshot = NeuronsFundSnapshot::new(neurons_fund.into_iter().filter_map(
+            |(id, maturity_e8s_equivalent, controller)| {
+                let weight = u64_to_dec(maturity_e8s_equivalent)
+                    / u64_to_dec(max_total_maturity_icp_e8s_equaivalent);
+                let ideal_participation_amount_icp_e8s = match dec_to_u64(weight * max_intended_nf_contribution) {
+                    Ok(ideal_participation_amount_icp_e8s) => ideal_participation_amount_icp_e8s,
+                    Err(err) => {
+                        println!(
+                            "{}Error: Cannot compute ideal participation amount for Neurons' Fund neuron {:?}: {}",
+                            LOG_PREFIX, id, err,
+                        );
+                        return None;
+                    }
+                };
+                if ideal_participation_amount_icp_e8s < swap_params.min_participant_icp_e8s {
+                    // Do not include neurons that cannot participate under any circumstances.
+                    None
+                } else {
+                    let is_capped =
+                        ideal_participation_amount_icp_e8s > swap_params.max_participant_icp_e8s;
+                    // Reflect the exact participation amounts s.t. no additional capping is
+                    // needed outside this function.
+                    let amount_icp_e8s = u64::min(
+                        ideal_participation_amount_icp_e8s,
+                        swap_params.max_participant_icp_e8s,
+                    );
+                    Some(NeuronsFundNeuron {
+                        id,
+                        amount_icp_e8s,
+                        controller,
+                        is_capped,
+                    })
+                }
+            },
+        ));
+
+        Ok(Self {
+            swap_params,
+            neurons_fund_snapshot,
+            ideal_match_function,
+            original_total_maturity_icp_e8s_equaivalent,
+            max_intended_nf_contribution,
+            max_total_maturity_icp_e8s_equaivalent,
+        })
+    }
+
+    pub fn compute_constraints(&self) -> Result<NeuronsFundParticipationConstraints, String> {
+        todo!()
+    }
 }
 
 pub struct ValidatedSettleNeuronsFundParticipationRequest {
@@ -4551,20 +4741,6 @@ impl Governance {
                 "missing field swap_parameters",
             ))?;
 
-        let withdrawal_amount_e8s = *swap_parameters
-            .neurons_fund_investment_icp
-            .as_ref()
-            .ok_or(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "missing field swap_parameters.neurons_fund_investment_icp",
-            ))?
-            .e8s
-            .as_ref()
-            .ok_or(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "missing field swap_parameters.neurons_fund_investment_icp.e8s",
-            ))?;
-
         let max_icp_e8s = *swap_parameters
             .maximum_icp
             .as_ref()
@@ -4611,21 +4787,74 @@ impl Governance {
         let in_flight_commands = &self.heap_data.in_flight_commands;
         let is_neuron_inactive =
             |neuron: &Neuron| neuron.is_inactive(proposals, in_flight_commands);
-        let neurons_fund_participants = draw_funds_from_the_community_fund(
-            &mut self.neuron_store,
-            original_total_community_fund_maturity_e8s_equivalent,
-            withdrawal_amount_e8s,
-            &sns_swap_pb::Params {
-                max_icp_e8s,
-                min_participant_icp_e8s,
-                max_participant_icp_e8s,
-                ..Default::default()
-            },
-            is_neuron_inactive,
-        );
+        let neurons_fund_participants = if IS_MATCHED_FUNDING_ENABLED {
+            vec![]
+        } else {
+            let withdrawal_amount_e8s = *swap_parameters
+                .neurons_fund_investment_icp
+                .as_ref()
+                .ok_or(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "missing field swap_parameters.neurons_fund_investment_icp",
+                ))?
+                .e8s
+                .as_ref()
+                .ok_or(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "missing field swap_parameters.neurons_fund_investment_icp.e8s",
+                ))?;
+            draw_funds_from_the_community_fund(
+                &mut self.neuron_store,
+                original_total_community_fund_maturity_e8s_equivalent,
+                withdrawal_amount_e8s,
+                &sns_swap_pb::Params {
+                    max_icp_e8s,
+                    min_participant_icp_e8s,
+                    max_participant_icp_e8s,
+                    ..Default::default()
+                },
+                is_neuron_inactive,
+            )
+        };
 
-        // TOOD[NNS1-2591]: Compute and specify the Neuron's Fund participation constraints.
-        let neurons_fund_participation_constraints = None;
+        // TODO[NNS1-2569]: Skip this code unless the Neurons' Fund participation has been requested
+        // for this SNS and IS_MATCHED_FUNDING_ENABLED is enabled.
+        let neurons_fund_participation_constraints = if IS_MATCHED_FUNDING_ENABLED {
+            let swap_params = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .ok_or_else(|| {
+                    "CreateServiceNervousSystem.swap_parameters is not specified.".to_string()
+                })?;
+            let swap_params = SwapParticipationLimits::try_from_swap_parameters(swap_params)?;
+            let neurons_fund: BTreeSet<(NeuronId, u64, PrincipalId)> = self
+                .neuron_store
+                .list_active_neurons_fund_neurons_with_maturity_e8s_equivalent(is_neuron_inactive)
+                .into_iter()
+                .map(|(id, maturity, controller)| {
+                    let id = id
+                        .ok_or_else(|| "Detected a Neurons' Fund neuron without ID.".to_string())?;
+                    let controller = controller.ok_or_else(|| {
+                        "Detected a Neurons' Fund neuron without controller.".to_string()
+                    })?;
+                    Ok((id, maturity, controller))
+                })
+                .collect::<Result<BTreeSet<_>, String>>()?;
+            let participation = NeuronsFundSwapParticipation::new(
+                swap_params,
+                neurons_fund,
+                Box::from(crate::neurons_fund::SimpleLinearFunction {}),
+            )?;
+            let constraints = participation.compute_constraints()?;
+            draw_maturity_from_neurons_fund(
+                &mut self.neuron_store,
+                is_neuron_inactive,
+                participation.neurons_fund_snapshot,
+            )?;
+            Some(constraints)
+        } else {
+            None
+        };
 
         // Record the maturity deductions that we just made.
         match self.heap_data.proposals.get_mut(&proposal_id) {
@@ -8140,6 +8369,146 @@ fn draw_funds_from_the_community_fund(
     );
 
     result
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NeuronsFundNeuron {
+    pub id: NeuronId,
+    pub amount_icp_e8s: u64,
+    pub controller: PrincipalId,
+    pub is_capped: bool,
+}
+
+// A more efficient implementation of `NeuronsFundSnapshot` would maintain a set of neurons ordered
+// by maturity and hashed by IDs. Tha latter is more crucial, and the former would make the code
+// more involved, so we currently do not rely on the fact that `NeuronsFundNeuron`s are ordered by
+// maturity (but this would make sense in the future).
+impl Ord for NeuronsFundNeuron {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.amount_icp_e8s.cmp(&other.amount_icp_e8s)
+    }
+}
+
+impl PartialOrd for NeuronsFundNeuron {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.amount_icp_e8s.cmp(&other.amount_icp_e8s))
+    }
+}
+
+pub struct NeuronsFundSnapshot {
+    neurons: BTreeMap<NeuronId, NeuronsFundNeuron>,
+}
+
+impl NeuronsFundSnapshot {
+    pub fn new<I>(neurons: I) -> Self
+    where
+        I: IntoIterator<Item = NeuronsFundNeuron>,
+    {
+        let neurons = neurons.into_iter().map(|n| (n.id, n)).collect();
+        Self { neurons }
+    }
+
+    pub fn remove(&mut self, neuron_id: &NeuronId) -> Result<(), String> {
+        self.neurons
+            .remove_entry(neuron_id)
+            .ok_or_else(|| format!("Neuron {:?} not found.", neuron_id))
+            .map(|_| ())
+    }
+
+    pub fn neurons(&self) -> &BTreeMap<NeuronId, NeuronsFundNeuron> {
+        &self.neurons
+    }
+
+    /// Implements the `self - other` semantics for calculating Neurons' Fund refunds.
+    ///
+    /// Example:
+    /// self = { (N1, maturity=100), (N2, maturity=200), (N3, maturity=300) }
+    /// other = { (N1, maturity=60), (N3, maturity=300) }
+    /// result = Ok({ (N1, maturity=40), (N2, maturity=200), (N2, maturity=200) })
+    pub fn diff(&self, _other: &Self) -> Result<Self, String> {
+        todo!()
+    }
+}
+
+pub enum NeuronsFundAction {
+    DrawMaturity,
+    RefundMaturity,
+}
+
+impl NeuronsFundAction {
+    pub fn checked_apply(&self, left: u64, right: u64) -> Result<u64, String> {
+        match self {
+            Self::DrawMaturity => left.checked_sub(right).ok_or_else(|| "drawing".to_string()),
+            Self::RefundMaturity => left
+                .checked_add(right)
+                .ok_or_else(|| "refunding".to_string()),
+        }
+    }
+}
+
+fn apply_neurons_fund_snapshot(
+    neuron_store: &mut NeuronStore,
+    is_neuron_inactive: impl Fn(&Neuron) -> bool,
+    snapshot: NeuronsFundSnapshot,
+    action: NeuronsFundAction,
+) -> Result<(), String> {
+    let mut refund_errors = vec![];
+    for (neuron_id, neuron_delta) in snapshot.neurons().iter() {
+        let refund_result =
+            neuron_store.with_neuron_mut(neuron_id, &is_neuron_inactive, |nns_neuron| {
+                let old_nns_neuron_maturity_e8s = nns_neuron.maturity_e8s_equivalent;
+                let maturity_delta_e8s = neuron_delta.amount_icp_e8s;
+                nns_neuron.maturity_e8s_equivalent = action
+                    .checked_apply(old_nns_neuron_maturity_e8s, maturity_delta_e8s)
+                    .unwrap_or_else(|verb| {
+                        refund_errors.push(format!(
+                            "u64 overflow while {verb} maturity from {neuron_id:?} \
+                            (*kept* original maturity e8s = {old_nns_neuron_maturity_e8s}; \
+                            requested maturity delta e8s = {maturity_delta_e8s})."
+                        ));
+                        old_nns_neuron_maturity_e8s
+                    });
+            });
+        if let Err(with_neuron_mut_error) = refund_result {
+            refund_errors.push(with_neuron_mut_error.to_string());
+        }
+    }
+    if refund_errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Errors while mutating the Neurons' Fund:\n  - {}",
+            refund_errors.join("\n  - ")
+        ))
+    }
+}
+
+fn draw_maturity_from_neurons_fund(
+    neuron_store: &mut NeuronStore,
+    is_neuron_inactive: impl Fn(&Neuron) -> bool,
+    snapshot: NeuronsFundSnapshot,
+) -> Result<(), String> {
+    apply_neurons_fund_snapshot(
+        neuron_store,
+        is_neuron_inactive,
+        snapshot,
+        NeuronsFundAction::DrawMaturity,
+    )
+}
+
+// TODO[NNS1-2626]: Remove #[allow(unused)]
+#[allow(unused)]
+fn refund_maturity_from_neurons_fund(
+    neuron_store: &mut NeuronStore,
+    is_neuron_inactive: impl Fn(&Neuron) -> bool,
+    snapshot: NeuronsFundSnapshot,
+) -> Result<(), String> {
+    apply_neurons_fund_snapshot(
+        neuron_store,
+        is_neuron_inactive,
+        snapshot,
+        NeuronsFundAction::RefundMaturity,
+    )
 }
 
 /// Reverts mutations performed by draw_funds_from_the_community_fund.

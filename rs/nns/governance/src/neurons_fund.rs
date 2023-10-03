@@ -14,7 +14,14 @@ use rust_decimal_macros::dec;
 
 /// This is a theoretical limit which should be smaller than any realistic amount of maturity
 /// that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
-const MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S: u64 = 333_000 * E8;
+pub const MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S: u64 = 333_000 * E8;
+
+// The maximum number of intervals for scaling ideal Neurons' Fund participation down to effective
+// participation. Theoretically, this number should be greater than double the number of neurons
+// participating in the Neurons' Fund. Although the currently chosen value is quite high, it is
+// still significantly smaller than `usize::MAX`, allowing to reject an misformed
+// SnsInitPayload.coefficient_intervals structure with obviously too many elements.
+const MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN: usize = 100_000;
 
 /// The implmentation of `Decimal::from_u64` cannot fail.
 pub fn u64_to_dec(x: u64) -> Decimal {
@@ -162,12 +169,6 @@ impl TryFrom<LinearScalingCoefficient> for ValidatedLinearScalingCoefficient {
     }
 }
 
-pub struct ValidatedNeuronsFundParticipationConstraints {
-    pub min_direct_participation_threshold_icp_e8s: u64,
-    pub max_neurons_fund_participation_icp_e8s: u64,
-    pub coefficient_intervals: Vec<ValidatedLinearScalingCoefficient>,
-}
-
 enum MaxNeuronsFundParticipationValidationError {
     // This value must be specified.
     Unspecified,
@@ -217,13 +218,6 @@ impl ToString for MaxNeuronsFundParticipationValidationError {
     }
 }
 
-// The maximum number of intervals for scaling ideal Neurons' Fund participation down to effective
-// participation. Theoretically, this number should be greater than double the number of neurons
-// participating in the Neurons' Fund. Although the currently chosen value is quite high, it is
-// still significantly smaller than `usize::MAX`, allowing to reject an misformed
-// SnsInitPayload.coefficient_intervals structure with obviously too many elements.
-const MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN: usize = 100_000;
-
 #[derive(Debug)]
 pub enum LinearScalingCoefficientVecValidationError {
     LinearScalingCoefficientsOutOfRange(usize),
@@ -250,7 +244,7 @@ impl ToString for LinearScalingCoefficientVecValidationError {
             Self::LinearScalingCoefficientsUnordered(left, right) => {
                 format!(
                     "{}The intervals {:?} and {:?} are ordered incorrectly.",
-                    prefix, left, right,
+                    prefix, left, right
                 )
             }
             Self::IrregularLinearScalingCoefficients(interval) => {
@@ -283,7 +277,7 @@ impl ToString for NeuronsFundParticipationConstraintsValidationError {
         let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
         match self {
             Self::RelatedFieldUnspecified(related_field_name) => {
-                format!("{}{} must be specified.", prefix, related_field_name)
+                format!("{}{} must be specified.", prefix, related_field_name,)
             }
             Self::LinearScalingCoefficientVecValidationError(error) => {
                 format!("{}{}", prefix, error.to_string())
@@ -296,6 +290,12 @@ impl From<NeuronsFundParticipationConstraintsValidationError> for Result<(), Str
     fn from(value: NeuronsFundParticipationConstraintsValidationError) -> Self {
         Err(value.to_string())
     }
+}
+
+pub struct ValidatedNeuronsFundParticipationConstraints {
+    pub min_direct_participation_threshold_icp_e8s: u64,
+    pub max_neurons_fund_participation_icp_e8s: u64,
+    pub coefficient_intervals: Vec<ValidatedLinearScalingCoefficient>,
 }
 
 impl From<ValidatedNeuronsFundParticipationConstraints> for NeuronsFundParticipationConstraints {
