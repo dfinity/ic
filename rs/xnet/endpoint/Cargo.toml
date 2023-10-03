@@ -17,7 +17,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-types = { path = "../../types/types" }
 ic-xnet-hyper = { path = "../hyper" }
 ic-xnet-uri = { path = "../uri" }
-prometheus = { version = "0.12.0", features = ["process"] }
+prometheus = { workspace = true }
 serde = { version = "1.0.99", features = ["derive"] }
 serde_json = "1.0.40"
 slog = { version = "2.5.2", features = [

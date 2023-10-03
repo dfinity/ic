@@ -16,7 +16,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = "0.2.91"
-prometheus = { version = "0.12.0", features = ["process"] }
+prometheus = { workspace = true }
 prost = { workspace = true }
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"

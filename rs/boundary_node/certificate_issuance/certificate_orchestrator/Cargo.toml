@@ -23,7 +23,7 @@ ic-certified-map = "0.3.2"
 ic-stable-structures = { workspace = true }
 mockall = "0.11.3"
 priority-queue = { version = "1.3.0", features = ["serde"] }
-prometheus = "0.13.3"
+prometheus = { workspace = true }
 publicsuffix = "2.2.3"
 serde = "1.0.147"
 serde_cbor = "0.11.2"

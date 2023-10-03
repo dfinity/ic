@@ -16,7 +16,7 @@ mockall = "0.11.3"
 nix = { version = "0.26.1", features = ["signal"] }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
-prometheus = "0.13.3"
+prometheus = { workspace = true }
 serde = { version = "1.0.150", features = ["serde_derive"] }
 serde_json = "1.0.89"
 tempfile = "3.3.0"

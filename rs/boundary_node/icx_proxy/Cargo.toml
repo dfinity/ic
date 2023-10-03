@@ -41,7 +41,7 @@ ic-agent = { workspace = true, default-features = false, features = [
 ic-utils = { workspace = true, features = ["raw"] }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
-prometheus = "0.13.3"
+prometheus = { workspace = true }
 rustls = { version = "0.21", features = ["dangerous_configuration"] }
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1"

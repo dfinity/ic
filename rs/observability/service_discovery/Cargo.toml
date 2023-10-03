@@ -17,7 +17,7 @@ ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifac
 ic-types = { path = "../../types/types" }
 thiserror = "1.0"
 ic-metrics = { path = "../../monitoring/metrics" }
-prometheus = { version = "0.12.0", features = ["process"] }
+prometheus = { workspace = true }
 hyper = { version = "0.14.18", features = ["full"] }
 anyhow = "1.0.31"
 slog = { version = "2.5.2", features = ["nested-values"] }

@@ -41,7 +41,7 @@ ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 ic-types = { path = "../../types/types" }
 instant-acme = "0.3.2"
 mockall = "0.11.4"
-prometheus = "0.13.3"
+prometheus = { workspace = true }
 rand = "0.8.4"
 rcgen = "0.10.0"
 # same feature as in bazel

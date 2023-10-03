@@ -17,7 +17,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 futures = { workspace = true }
 h2 = "0.3.14"
 http = "0.2.8"
-prometheus = { version = "0.12.0", features = ["process"] }
+prometheus = { workspace = true }
 serde = { version = "1.0.99", features = ["derive"] }
 slog = { version = "2.5.2", features = [
     "nested-values",
