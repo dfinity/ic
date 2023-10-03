@@ -23,6 +23,9 @@ pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
 pub(crate) struct ExecutionEnvironmentMetrics {
     subnet_messages: HistogramVec,
     pub executions_aborted: IntCounter,
+    pub(crate) compute_allocation_in_install_code_total: IntCounter,
+    pub(crate) memory_allocation_in_install_code_total: IntCounter,
+    pub(crate) controller_in_update_settings_total: IntCounter,
 
     /// Critical error for responses above the maximum allowed size.
     pub(crate) response_cycles_refund_error: IntCounter,
@@ -61,7 +64,19 @@ impl ExecutionEnvironmentMetrics {
                 &["method_name", "outcome", "status"],
             ),
             executions_aborted: metrics_registry
-                .int_counter("executions_aborted", "Total number of aborted executios"),
+                .int_counter("executions_aborted", "Total number of aborted executions"),
+            compute_allocation_in_install_code_total: metrics_registry.int_counter(
+                "execution_compute_allocation_in_install_code_total",
+                "Total number of times compute allocation used in install_code requests",
+            ),
+            memory_allocation_in_install_code_total: metrics_registry.int_counter(
+                "execution_memory_allocation_in_install_code_total",
+                "Total number of times memory allocation used in install_code requests",
+            ),
+            controller_in_update_settings_total: metrics_registry.int_counter(
+                "execution_controller_in_update_settings_total",
+                "Total number of times controller used in update_settings requests",
+            ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
             execution_cycles_refund_error: metrics_registry
