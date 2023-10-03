@@ -114,7 +114,7 @@ impl Service<Request<Vec<u8>>> for CanisterReadStateService {
             Err(res) => {
                 error!(
                     self.log,
-                    "Effective canister ID is not attached to read state request. This is a bug."
+                    "Effective principal ID is not attached to read state request. This is a bug."
                 );
                 return Box::pin(async move { Ok(res) });
             }
@@ -297,11 +297,20 @@ fn verify_paths(
                     let ingress_status = state.get_ingress_status(&message_id);
                     if let Some(ingress_user_id) = ingress_status.user_id() {
                         if let Some(receiver) = ingress_status.receiver() {
-                            if ingress_user_id != *user || !targets.contains(&receiver) {
+                            if ingress_user_id != *user {
                                 return Err(HttpError {
                                     status: StatusCode::FORBIDDEN,
                                     message:
                                         "Request IDs must be for requests signed by the caller."
+                                            .to_string(),
+                                });
+                            }
+
+                            if !targets.contains(&receiver) {
+                                return Err(HttpError {
+                                    status: StatusCode::FORBIDDEN,
+                                    message:
+                                        "Request IDs must be for requests to canisters in the valid canister range of this subnet."
                                             .to_string(),
                                 });
                             }
