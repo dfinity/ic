@@ -1,7 +1,7 @@
 //! A custom, configurable TLS client that does not rely on the crypto
 //! implementation. It is purely for testing the server.
 #![allow(clippy::unwrap_used)]
-use crate::tls::x509_certificates::CertWithPrivateKey;
+use crate::x509_certificates::CertWithPrivateKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use openssl::pkey::{PKey, Private};

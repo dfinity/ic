@@ -98,6 +98,7 @@ members = [
   "rs/crypto/test_utils/canister_threshold_sigs",
   "rs/crypto/test_utils/metrics",
   "rs/crypto/test_utils/ni-dkg",
+  "rs/crypto/test_utils/tls",
   "rs/crypto/tls_interfaces",
   "rs/crypto/tls_interfaces/mocks",
   "rs/crypto/tree_hash",

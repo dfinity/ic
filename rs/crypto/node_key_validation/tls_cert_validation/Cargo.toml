@@ -20,6 +20,6 @@ x509-parser = { version = "0.14.0" }
 [dev-dependencies]
 assert_matches = "1.5.0"
 curve25519-dalek = "3.0.2"
-ic-crypto-test-utils = { path = "../../test_utils" }
+ic-crypto-test-utils-tls = { path = "../../test_utils/tls" }
 ic-crypto-test-utils-keys = { path = "../../test_utils/keys" }
 openssl = "0.10.55"

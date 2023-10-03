@@ -3,7 +3,7 @@
 mod tls_public_key_cert {
     use crate::{TlsPublicKeyCert, TlsPublicKeyCertCreationError};
     use assert_matches::assert_matches;
-    use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
+    use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
 
     #[test]
     fn should_create_certificate_from_valid_der() {
