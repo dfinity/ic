@@ -25,7 +25,7 @@ use ic_test_utilities::{assert_utils::assert_balance_equals, mock_time};
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
 use ic_types::canister_http::Transform;
 use ic_types::{
     canister_http::CanisterHttpMethod,
@@ -36,7 +36,7 @@ use ic_types::{
     CanisterId, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm};
+use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 use std::mem::size_of;
 
@@ -1570,6 +1570,58 @@ fn metrics_are_observed_for_subnet_messages() {
             test.metrics_registry(),
             "execution_subnet_message_duration_seconds"
         )
+    );
+}
+
+#[test]
+fn metrics_are_observed_for_using_deprecated_fields() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let payload = ic00::InstallCodeArgsV2::new(
+        ic00::CanisterInstallModeV2::Install,
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(1),
+        Some(100 * 1024 * 1024),
+        None,
+    );
+
+    test.subnet_message(Method::InstallCode, payload.encode())
+        .unwrap();
+
+    assert_eq!(
+        fetch_int_counter(
+            test.metrics_registry(),
+            "execution_compute_allocation_in_install_code_total"
+        ),
+        Some(1),
+    );
+    assert_eq!(
+        fetch_int_counter(
+            test.metrics_registry(),
+            "execution_memory_allocation_in_install_code_total"
+        ),
+        Some(1),
+    );
+
+    let payload = ic00::UpdateSettingsArgs::new(
+        canister_id,
+        ic00::CanisterSettingsArgsBuilder::new()
+            .with_controller(canister_id.into())
+            .build(),
+    );
+
+    test.subnet_message(Method::UpdateSettings, payload.encode())
+        .unwrap();
+    assert_eq!(
+        fetch_int_counter(
+            test.metrics_registry(),
+            "execution_controller_in_update_settings_total"
+        ),
+        Some(1),
     );
 }
 
