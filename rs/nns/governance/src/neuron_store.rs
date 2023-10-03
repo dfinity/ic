@@ -381,6 +381,22 @@ impl NeuronStore {
             .collect()
     }
 
+    /// List all neuron ids that are in the community fund.
+    pub fn list_active_neurons_fund_neurons_with_maturity_e8s_equivalent(
+        &self,
+        is_neuron_inactive: impl Fn(&Neuron) -> bool,
+    ) -> Vec<(Option<NeuronId>, u64, Option<PrincipalId>)> {
+        let filter = |n: &Neuron| {
+            !is_neuron_inactive(n)
+                && n.joined_community_fund_timestamp_seconds
+                    .unwrap_or_default()
+                    > 0
+        };
+        self.map_heap_neurons_filtered(filter, |n| (n.id, n.maturity_e8s_equivalent, n.controller))
+            .into_iter()
+            .collect()
+    }
+
     /// List all neuron ids whose neurons have staked maturity greater than 0.
     pub fn list_staked_maturity_neuron_ids(&self) -> Vec<NeuronId> {
         let filter = |n: &Neuron| n.staked_maturity_e8s_equivalent.unwrap_or_default() > 0;
