@@ -866,7 +866,7 @@ async fn settle_neurons_fund_participation_(
     request: SettleNeuronsFundParticipationRequest,
 ) -> SettleNeuronsFundParticipationResponse {
     governance_mut()
-        .settle_neurons_fund_participation(caller(), &request)
+        .settle_neurons_fund_participation(caller(), request)
         .await
 }
 
