@@ -103,7 +103,7 @@ impl Service<Request<Vec<u8>>> for SubnetReadStateService {
             Err(res) => {
                 error!(
                     self.log,
-                    "Effective canister ID is not attached to read state request. This is a bug."
+                    "Effective principal ID is not attached to read state request. This is a bug."
                 );
                 return Box::pin(async move { Ok(res) });
             }

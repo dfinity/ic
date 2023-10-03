@@ -210,9 +210,9 @@ pub(crate) async fn get_latest_certified_state(
         .map(|r| r.0)
 }
 
-/// Remove the effective canister id from the request parts.
-/// The effective canister id is added to the request during routing by looking at the url.
-/// Returns an BAD_REQUEST response if the effective canister id is not found in the request parts.
+/// Remove the effective principal id from the request parts.
+/// The effective principal id is added to the request during routing by looking at the url.
+/// Returns an BAD_REQUEST response if the effective principal id is not found in the request parts.
 pub(crate) fn remove_effective_principal_id(
     parts: &mut Parts,
 ) -> Result<PrincipalId, Response<Body>> {
