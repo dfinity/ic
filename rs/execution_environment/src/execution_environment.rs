@@ -1745,6 +1745,7 @@ impl ExecutionEnvironment {
                 state
             }
             CanisterCall::Ingress(ingress) => {
+                debug_assert!(refund.is_zero());
                 if !refund.is_zero() {
                     self.metrics.ingress_with_cycles_error.inc();
                     warn!(

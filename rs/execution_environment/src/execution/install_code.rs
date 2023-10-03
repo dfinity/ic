@@ -593,9 +593,14 @@ impl InstallCodeHelper {
             .instruction_limits
             .update(output.num_instructions_left);
 
+        debug_assert!(output
+            .wasm_result
+            .clone()
+            .map_or(true, |result| result.is_none()));
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {
+                debug_assert!(false);
                 round.counters.invalid_system_call_error.inc();
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
@@ -634,6 +639,7 @@ impl InstallCodeHelper {
                 round.hypervisor.subnet_id(),
                 round.log,
             ) {
+                debug_assert_eq!(err, HypervisorError::OutOfMemory);
                 match &err {
                     HypervisorError::WasmEngineError(err) => {
                         round.counters.state_changes_error.inc();

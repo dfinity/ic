@@ -134,6 +134,7 @@ impl ResponseHelper {
         //
         // Therefore, the cycles in the response must not exceed the cycles in
         // the request. Otherwise, there might be potentially malicious faults.
+        debug_assert!(response.refund <= original.callback.cycles_sent);
         let refund_for_sent_cycles = if response.refund > original.callback.cycles_sent {
             round.counters.response_cycles_refund_error.inc();
             error!(
@@ -226,6 +227,7 @@ impl ResponseHelper {
     ) -> Result<ResponseHelper, ExecuteMessageResult> {
         // If the call context was deleted (e.g. in uninstall), then do not execute anything.
         if call_context.is_deleted() {
+            debug_assert!(call_context.has_responded());
             if !call_context.has_responded() {
                 // This case is unreachable because `is_deleted() => has_responded()`
                 // is a critical invariant and should hold.
@@ -252,6 +254,7 @@ impl ResponseHelper {
         }
 
         // Validate that the canister has an `ExecutionState`.
+        debug_assert!(self.canister.execution_state.is_some());
         if self.canister.execution_state.is_none() {
             round.counters.invalid_canister_state_error.inc();
             error!(

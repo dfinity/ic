@@ -191,6 +191,7 @@ pub(crate) fn action_to_ingress_response(
         }),
         CallContextAction::AlreadyResponded => None,
     };
+    debug_assert!(refund_amount.is_zero());
     if !refund_amount.is_zero() {
         ingress_with_cycles_error.inc();
         warn!(
@@ -335,6 +336,7 @@ pub fn get_call_context_and_callback(
     logger: &ReplicaLogger,
     unexpected_response_error: &IntCounter,
 ) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
+    debug_assert_ne!(canister.status(), CanisterStatusType::Stopped);
     let call_context_manager = match canister.status() {
         CanisterStatusType::Stopped => {
             // A canister by definition can only be stopped when no open call contexts.
@@ -358,6 +360,7 @@ pub fn get_call_context_and_callback(
 
     let callback_id = response.originator_reply_callback;
 
+    debug_assert!(call_context_manager.peek_callback(callback_id).is_some());
     let callback = match call_context_manager.peek_callback(callback_id) {
         Some(callback) => callback.clone(),
         None => {
@@ -375,6 +378,7 @@ pub fn get_call_context_and_callback(
     };
 
     let call_context_id = callback.call_context_id;
+    debug_assert!(call_context_manager.call_context(call_context_id).is_some());
     let call_context = match call_context_manager.call_context(call_context_id) {
         Some(call_context) => call_context.clone(),
         None => {
@@ -477,6 +481,7 @@ pub fn apply_canister_state_changes(
                 system_state.canister_version += 1;
             }
             Err(err) => {
+                debug_assert_eq!(err, HypervisorError::OutOfMemory);
                 match &err {
                     HypervisorError::WasmEngineError(err) => {
                         state_changes_error.inc();
