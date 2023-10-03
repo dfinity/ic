@@ -180,7 +180,9 @@ fn start_server_initialization(
             tls_handshake.as_ref(),
         )
         .await;
-        *delegation_from_nns.write().unwrap() = loaded_delegation;
+        if let Some(delegation) = loaded_delegation {
+            *delegation_from_nns.write().unwrap() = Some(delegation);
+        }
         metrics
             .health_status_transitions_total
             .with_label_values(&[
@@ -235,6 +237,11 @@ fn create_port_file(path: PathBuf, port: u16) {
 }
 
 /// Creates HTTP server. The function returns only after a TCP listener is bound to a port.
+///
+/// The optional `delegation_from_nns` field is supposed to be used in tests
+/// to provide a way to "fake" delegations received from the NNS subnet
+/// without having to either mock all the related calls to the registry
+/// or actually make the calls.
 #[allow(clippy::too_many_arguments)]
 pub fn start_server(
     rt_handle: tokio::runtime::Handle,
@@ -257,6 +264,7 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
+    delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
 ) {
     let listen_addr = config.listen_addr;
@@ -275,7 +283,7 @@ pub fn start_server(
     }
     let metrics = HttpHandlerMetrics::new(metrics_registry);
 
-    let delegation_from_nns = Arc::new(RwLock::new(None));
+    let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
     let state_reader_executor = StateReaderExecutor::new(state_reader);
     let call_service = CallService::new_service(

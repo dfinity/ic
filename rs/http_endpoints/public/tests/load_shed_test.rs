@@ -53,6 +53,7 @@ fn test_load_shedding_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -209,6 +210,7 @@ fn test_load_shedding_read_state() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -326,6 +328,7 @@ fn test_load_shedding_pprof() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(mock_pprof),
     );
 
@@ -412,6 +415,7 @@ fn test_load_shedding_update_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 

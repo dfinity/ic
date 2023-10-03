@@ -64,6 +64,10 @@ MACRO_DEPENDENCIES = [
 BUILD_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/canister_client/sender",
+    "//rs/canonical_state",
+    "//rs/certification/test-utils",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager/mocks",

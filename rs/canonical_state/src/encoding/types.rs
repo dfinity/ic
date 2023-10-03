@@ -95,7 +95,7 @@ pub struct Response {
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Cycles {
     pub low: u64,
@@ -145,7 +145,7 @@ pub struct SystemMetadata {
     pub prev_state_hash: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct SubnetMetrics {
     /// The number of canisters on this subnet.
     pub num_canisters: u64,

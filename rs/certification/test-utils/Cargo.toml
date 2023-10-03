@@ -13,5 +13,5 @@ ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_d
 ic-types = { path = "../../types/types" }
 leb128 = "0.2.4"
 rand = "0.8.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_cbor = "0.11.1"

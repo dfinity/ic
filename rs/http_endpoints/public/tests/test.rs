@@ -5,10 +5,10 @@ pub mod common;
 
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
-    create_conn_and_send_request, dummy_timestamp, get_free_localhost_socket_addr,
-    start_http_endpoint, wait_for_status_healthy,
+    create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
+    dummy_timestamp, get_free_localhost_socket_addr, start_http_endpoint, wait_for_status_healthy,
 };
-use hyper::{Body, Client, Method, Request, StatusCode};
+use hyper::{body::to_bytes, Body, Client, Method, Request, StatusCode};
 use ic_agent::{
     agent::{
         http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, RejectResponse, UpdateBuilder,
@@ -19,24 +19,52 @@ use ic_agent::{
     identity::AnonymousIdentity,
     Agent, AgentError,
 };
+use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
+use ic_canister_client_sender::Sender;
+use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
+use ic_certification_test_utils::{
+    serialize_to_cbor, Certificate, CertificateBuilder, CertificateData,
+};
 use ic_config::http_handler::Config;
+use ic_crypto_tree_hash::{
+    flatmap, Label as CryptoTreeHashLabel, LabeledTree, MixedHashTree, Path,
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_registry_mocks::MockRegistryClient;
+use ic_interfaces_state_manager::CertifiedStateReader;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::Pprof;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
-use ic_test_utilities::{consensus::MockConsensusCache, mock_time, types::ids::subnet_test_id};
+use ic_replicated_state::ReplicatedState;
+use ic_test_utilities::{
+    consensus::MockConsensusCache,
+    mock_time,
+    state::ReplicatedStateBuilder,
+    types::ids::{canister_test_id, subnet_test_id, user_test_id},
+};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
-    consensus::{dkg::Dealings, Block, Payload, Rank},
-    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
-    messages::{Blob, HttpQueryResponse, HttpQueryResponseReply},
-    Height, RegistryVersion,
+    consensus::{
+        certification::{Certification, CertificationContent},
+        {dkg::Dealings, Block, Payload, Rank},
+    },
+    crypto::{
+        threshold_sig::{
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+            ThresholdSigPublicKey,
+        },
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
+    },
+    messages::{Blob, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply},
+    signature::ThresholdSignature,
+    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
 };
 use prost::Message;
+use serde_bytes::ByteBuf;
 use std::{
     net::TcpStream,
     sync::{
@@ -127,6 +155,7 @@ fn test_healthy_behind() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -170,6 +199,7 @@ fn test_unauthorized_controller() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -226,6 +256,7 @@ fn test_unauthorized_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -315,6 +346,7 @@ fn test_unauthorized_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -416,6 +448,7 @@ async fn test_connection_read_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -451,6 +484,7 @@ fn test_request_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -521,6 +555,7 @@ fn test_payload_too_large() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -572,6 +607,7 @@ fn test_request_too_slow() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -619,6 +655,7 @@ fn test_status_code_when_ingress_filter_fails() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -678,6 +715,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -729,6 +767,7 @@ fn test_too_long_paths_are_rejected() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -779,6 +818,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -821,4 +861,247 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
             ),
         }
     })
+}
+
+#[test]
+fn can_retrieve_subnet_metrics() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        max_request_size_bytes: 2048,
+        ..Default::default()
+    };
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    let subnet_id = subnet_test_id(1);
+
+    let expected_subnet_metrics = SubnetMetrics {
+        num_canisters: 100,
+        canister_state_bytes: 5 * 1024 * 1024,
+        consumed_cycles_total: Cycles {
+            low: 40_000_000_000,
+            high: Some(0),
+        },
+        update_transactions_total: 4235,
+    };
+
+    let delegation_from_nns = CertificateBuilder::new(CertificateData::SubnetData {
+        subnet_id,
+        canister_id_ranges: vec![(canister_test_id(0), canister_test_id(10))],
+    });
+
+    let (certificate, root_pk, _cbor) =
+        CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
+            CryptoTreeHashLabel::from("subnet") => LabeledTree::SubTree(flatmap![
+                CryptoTreeHashLabel::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                    CryptoTreeHashLabel::from("metrics") => LabeledTree::Leaf(serialize_to_cbor(&expected_subnet_metrics)),
+                ])
+            ]),
+        ])))
+        .with_delegation(delegation_from_nns)
+        .build();
+
+    let mock_certified_state = |certificate: Certificate| {
+        let hash_tree = certificate.clone().tree();
+
+        let state: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
+        let certification = Certification {
+            height: Height::from(1),
+            signed: Signed {
+                signature: ThresholdSignature {
+                    signer: NiDkgId {
+                        start_block_height: Height::from(0),
+                        dealer_subnet: subnet_test_id(0),
+                        dkg_tag: NiDkgTag::HighThreshold,
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    },
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(
+                        certificate.signature().to_vec(),
+                    )),
+                },
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    hash_tree.digest().to_vec(),
+                ))),
+            },
+        };
+
+        (state, hash_tree, certification)
+    };
+
+    let mut mock_state_manager = MockStateManager::new();
+    mock_state_manager
+        .expect_get_latest_state()
+        .returning(default_get_latest_state);
+
+    let cloned_certificate = certificate.clone();
+    mock_state_manager
+        .expect_read_certified_state()
+        .returning(move |_| Some(mock_certified_state(cloned_certificate.clone())));
+    mock_state_manager
+        .expect_latest_certified_height()
+        .returning(default_latest_certified_height);
+
+    let cloned_certificate = certificate.clone();
+    mock_state_manager
+        .expect_get_certified_state_reader()
+        .returning(move || {
+            struct FakeCertifiedStateReader(Arc<ReplicatedState>, MixedHashTree, Certification);
+
+            impl CertifiedStateReader for FakeCertifiedStateReader {
+                type State = ReplicatedState;
+
+                fn get_state(&self) -> &ReplicatedState {
+                    &self.0
+                }
+
+                fn read_certified_state(
+                    &self,
+                    _paths: &LabeledTree<()>,
+                ) -> Option<(MixedHashTree, Certification)> {
+                    Some((self.1.clone(), self.2.clone()))
+                }
+            }
+
+            let (state, hash_tree, certification) = mock_certified_state(certificate.clone());
+
+            Some(Box::new(FakeCertifiedStateReader(
+                state,
+                hash_tree,
+                certification,
+            )))
+        });
+
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    _ = start_http_endpoint(
+        rt.handle().clone(),
+        config.clone(),
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        cloned_certificate
+            .delegation()
+            .map(|d| CertificateDelegation {
+                subnet_id: d.subnet_id,
+                certificate: d.certificate,
+            }),
+        Arc::new(Pprof),
+    );
+
+    let subnet_id = subnet_test_id(1);
+
+    let request = |body: Vec<u8>| {
+        rt.block_on(async {
+            wait_for_status_healthy(&agent).await.unwrap();
+            let client = Client::new();
+
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "http://{}/api/v2/subnet/{}/read_state",
+                    addr, subnet_id,
+                ))
+                .header("Content-Type", "application/cbor")
+                .body(Body::from(body))
+                .expect("request builder");
+
+            client.request(req).await.unwrap()
+        })
+    };
+
+    let sender = Sender::from_principal_id(user_test_id(1).get());
+    let body = prepare_read_state(
+        &sender,
+        &[Path::new(vec![
+            CryptoTreeHashLabel::from("subnet"),
+            ByteBuf::from(subnet_id.get().to_vec()).into(),
+            CryptoTreeHashLabel::from("metrics"),
+        ])],
+        Blob(sender.get_principal_id().to_vec()),
+    )
+    .unwrap();
+
+    let mut response = request(body.as_ref().to_vec());
+    assert_eq!(StatusCode::OK, response.status());
+
+    let bytes = |body: &mut Body| rt.block_on(async { to_bytes(body).await });
+    let subnet_metrics = parse_subnet_read_state_response(
+        &subnet_id,
+        Some(&root_pk),
+        serde_cbor::from_slice(&bytes(response.body_mut()).unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(expected_subnet_metrics, subnet_metrics);
+}
+
+#[test]
+fn subnet_metrics_not_supported_via_canister_read_state() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        max_request_size_bytes: 2048,
+        ..Default::default()
+    };
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    _ = start_http_endpoint(
+        rt.handle().clone(),
+        config.clone(),
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        None,
+        Arc::new(Pprof),
+    );
+
+    let subnet_id = subnet_test_id(1);
+
+    let request = |body: Vec<u8>| {
+        rt.block_on(async {
+            wait_for_status_healthy(&agent).await.unwrap();
+            let client = Client::new();
+
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "http://{}/api/v2/canister/{}/read_state",
+                    addr, "223xb-saaaa-aaaaf-arlqa-cai",
+                ))
+                .header("Content-Type", "application/cbor")
+                .body(Body::from(body))
+                .expect("request builder");
+
+            client.request(req).await.unwrap()
+        })
+    };
+
+    let sender = Sender::from_principal_id(PrincipalId::new_anonymous());
+    let body = prepare_read_state(
+        &sender,
+        &[Path::new(vec![
+            CryptoTreeHashLabel::from("subnet"),
+            ByteBuf::from(subnet_id.get().to_vec()).into(),
+            CryptoTreeHashLabel::from("metrics"),
+        ])],
+        Blob(sender.get_principal_id().to_vec()),
+    )
+    .unwrap();
+
+    let response = request(body.as_ref().to_vec());
+    assert_eq!(StatusCode::NOT_FOUND, response.status());
 }

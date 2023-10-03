@@ -4,7 +4,9 @@ use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, CertifiedResponse, RegistryAtomicMutateRequest,
 };
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
+};
 use prost::Message;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -37,6 +39,11 @@ pub enum CertificationError {
     MultipleSubnetDelegationsNotAllowed,
     /// The canister id is not contained in the canister ranges the subnet is allowed to issue certifications for.
     CanisterIdOutOfRange,
+    /// The provided subnet id does not match the subnet id included in the delegation.
+    SubnetIdMismatch {
+        provided_subnet_id: SubnetId,
+        delegation_subnet_id: SubnetId,
+    },
 }
 
 #[derive(Deserialize)]
@@ -62,6 +69,13 @@ fn embed_certificate_error(err: CertificateValidationError) -> CertificationErro
         Cve::MalformedHashTree(err) => Ce::MalformedHashTree(err),
         Cve::MultipleSubnetDelegationsNotAllowed => Ce::MultipleSubnetDelegationsNotAllowed,
         Cve::CanisterIdOutOfRange => Ce::CanisterIdOutOfRange,
+        Cve::SubnetIdMismatch {
+            provided_subnet_id,
+            delegation_subnet_id,
+        } => Ce::SubnetIdMismatch {
+            provided_subnet_id,
+            delegation_subnet_id,
+        },
     }
 }
 
