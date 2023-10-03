@@ -41,7 +41,7 @@ tokio-util = { version = "0.7.4", features = ["codec", "time"] }
 tower = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.3", features = ["async_tokio"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
 ic-icos-sev = { path = "../../ic_os/sev" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
