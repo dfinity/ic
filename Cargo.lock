@@ -4207,34 +4207,9 @@ dependencies = [
 
 [[package]]
 name = "hex-literal"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d70693199b3cf4552f3fa720b54163927a3ebed2aef240efaf556033ab336a11"
-dependencies = [
- "hex-literal-impl",
- "proc-macro-hack",
-]
-
-[[package]]
-name = "hex-literal"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
-
-[[package]]
-name = "hex-literal"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
-
-[[package]]
-name = "hex-literal-impl"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59448fc2f82a5fb6907f78c3d69d843e82ff5b051923313cc4438cb0c7b745a8"
-dependencies = [
- "proc-macro-hack",
-]
 
 [[package]]
 name = "hex_lit"
@@ -5615,7 +5590,7 @@ dependencies = [
  "ethnum",
  "futures",
  "hex",
- "hex-literal 0.4.1",
+ "hex-literal",
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-canisters-http-types",
@@ -6429,7 +6404,7 @@ dependencies = [
  "criterion 0.5.1",
  "fe-derive",
  "hex",
- "hex-literal 0.3.4",
+ "hex-literal",
  "ic-crypto-internal-hmac",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-types",
@@ -8639,7 +8614,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "hex",
- "hex-literal 0.3.4",
+ "hex-literal",
  "ic-base-types",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
@@ -10756,7 +10731,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "ed25519-consensus",
- "hex-literal 0.2.2",
+ "hex-literal",
  "ic-artifact-pool",
  "ic-base-types",
  "ic-btc-types-internal",
@@ -11025,7 +11000,7 @@ dependencies = [
  "chrono",
  "derive_more 0.99.8-alpha.0",
  "hex",
- "hex-literal 0.2.2",
+ "hex-literal",
  "ic-base-types",
  "ic-btc-types-internal",
  "ic-constants",
@@ -11076,7 +11051,7 @@ name = "ic-universal-canister"
 version = "0.8.0"
 dependencies = [
  "candid",
- "hex-literal 0.2.2",
+ "hex-literal",
  "ic-crypto-sha2",
  "ic-types",
  "serde",

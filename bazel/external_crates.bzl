@@ -408,7 +408,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "hex-literal": crate.spec(
-                version = "^0.2.1",
+                version = "^0.4.1",
             ),
             "http": crate.spec(
                 version = "^0.2.9",

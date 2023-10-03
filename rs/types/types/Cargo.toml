@@ -38,7 +38,7 @@ chrono = "0.4"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-hex-literal = "0.2.1"
+hex-literal = "0.4.1"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-exhaustive-derive = { path = "../exhaustive_derive" }

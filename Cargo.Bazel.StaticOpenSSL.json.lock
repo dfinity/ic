@@ -1,5 +1,5 @@
 {
-  "checksum": "b422f73a67e134f076cb5131d2605724452a7c05bf1b7bcb41f6753878033d34",
+  "checksum": "24dc289a11cab40d962054319fb9e6d10f312138cae602c080e304e4087bd4d5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13340,7 +13340,7 @@
               "target": "hex"
             },
             {
-              "id": "hex-literal 0.2.2",
+              "id": "hex-literal 0.4.1",
               "target": "hex_literal"
             },
             {
@@ -20073,13 +20073,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "hex-literal 0.2.2": {
+    "hex-literal 0.4.1": {
       "name": "hex-literal",
-      "version": "0.2.2",
+      "version": "0.4.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/hex-literal/0.2.2/download",
-          "sha256": "d70693199b3cf4552f3fa720b54163927a3ebed2aef240efaf556033ab336a11"
+          "url": "https://crates.io/api/v1/crates/hex-literal/0.4.1/download",
+          "sha256": "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
         }
       },
       "targets": [
@@ -20098,60 +20098,8 @@
         "compile_data_glob": [
           "**"
         ],
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "hex-literal-impl 0.2.3",
-              "target": "hex_literal_impl"
-            },
-            {
-              "id": "proc-macro-hack 0.5.20+deprecated",
-              "target": "proc_macro_hack"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.2.2"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
-    "hex-literal-impl 0.2.3": {
-      "name": "hex-literal-impl",
-      "version": "0.2.3",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/hex-literal-impl/0.2.3/download",
-          "sha256": "59448fc2f82a5fb6907f78c3d69d843e82ff5b051923313cc4438cb0c7b745a8"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "hex_literal_impl",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "hex_literal_impl",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "proc-macro-hack 0.5.20+deprecated",
-              "target": "proc_macro_hack"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.2.3"
+        "edition": "2021",
+        "version": "0.4.1"
       },
       "license": "MIT OR Apache-2.0"
     },
