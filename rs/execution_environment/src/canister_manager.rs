@@ -40,8 +40,8 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time,
+    InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;
@@ -144,7 +144,6 @@ pub struct InstallCodeContext {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
-    pub query_allocation: QueryAllocation,
 }
 
 impl InstallCodeContext {
@@ -159,7 +158,6 @@ impl InstallCodeContext {
 pub enum InstallCodeContextError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),
-    QueryAllocation(InvalidQueryAllocationError),
     InvalidCanisterId(String),
 }
 
@@ -173,13 +171,6 @@ impl From<InstallCodeContextError> for UserError {
                     err.min(),
                     err.max(),
                     err.given()
-                ),
-            ),
-            InstallCodeContextError::QueryAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "QueryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
                 ),
             ),
             InstallCodeContextError::MemoryAllocation(err) => UserError::new(
@@ -203,12 +194,6 @@ impl From<InstallCodeContextError> for UserError {
 impl From<InvalidComputeAllocationError> for InstallCodeContextError {
     fn from(err: InvalidComputeAllocationError) -> Self {
         Self::ComputeAllocation(err)
-    }
-}
-
-impl From<InvalidQueryAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidQueryAllocationError) -> Self {
-        Self::QueryAllocation(err)
     }
 }
 
@@ -248,9 +233,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             None => None,
         };
 
-        // TODO(EXE-294): Query allocations are not supported and should be deleted.
-        let query_allocation = QueryAllocation::default();
-
         Ok(InstallCodeContext {
             origin,
             mode: args.mode,
@@ -259,7 +241,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             arg: args.arg,
             compute_allocation,
             memory_allocation,
-            query_allocation,
         })
     }
 }

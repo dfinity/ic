@@ -1870,10 +1870,6 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
-    #[clap(long)]
-    /// If set, it will update the canister's query allocation to this value.
-    /// See `QueryAllocation` for the semantics of this field.
-    query_allocation: Option<u64>,
 }
 
 #[async_trait]
@@ -1931,8 +1927,8 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            query_allocation: self.query_allocation.map(candid::Nat::from),
             authz_changes: vec![],
+            query_allocation: None,
         }
     }
 }
@@ -2050,10 +2046,6 @@ struct ProposeToAddNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
-    #[clap(long)]
-    /// If set, it will update the canister's query allocation to this value.
-    /// See `QueryAllocation` for the semantics of this field.
-    query_allocation: Option<u64>,
 }
 
 impl ProposalTitle for ProposeToAddNnsCanisterCmd {
@@ -2088,8 +2080,8 @@ impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
             initial_cycles: 1,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            query_allocation: self.query_allocation.map(candid::Nat::from),
             authz_changes: vec![],
+            query_allocation: None,
         }
     }
 }

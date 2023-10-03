@@ -67,7 +67,7 @@ use ic_types::{
     messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, QueryAllocation, SubnetId, Time, UserId,
+    NumInstructions, SubnetId, Time, UserId,
 };
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
@@ -163,11 +163,6 @@ impl InstallCodeContextBuilder {
         self
     }
 
-    pub fn query_allocation(mut self, query_allocation: QueryAllocation) -> Self {
-        self.ctx.query_allocation = query_allocation;
-        self
-    }
-
     pub fn mode(mut self, mode: CanisterInstallModeV2) -> Self {
         self.ctx.mode = mode;
         self
@@ -189,7 +184,6 @@ impl Default for InstallCodeContextBuilder {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
         }
     }
@@ -2448,13 +2442,11 @@ fn install_canister_with_query_allocation() {
             )
             .0
             .unwrap();
-        let query_allocation = QueryAllocation::try_from(50).unwrap();
         assert!(install_code(
             &canister_manager,
             InstallCodeContextBuilder::default()
                 .sender(sender)
                 .canister_id(canister_id)
-                .query_allocation(query_allocation)
                 .build(),
             &mut state,
             &mut round_limits,
@@ -3058,7 +3050,6 @@ fn failed_upgrade_hooks_consume_instructions() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3084,7 +3075,6 @@ fn failed_upgrade_hooks_consume_instructions() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Upgrade(None),
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3204,7 +3194,6 @@ fn failed_install_hooks_consume_instructions() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3323,7 +3312,6 @@ fn install_code_respects_instruction_limit() {
             compute_allocation: None,
             memory_allocation: None,
             mode: CanisterInstallModeV2::Install,
-            query_allocation: QueryAllocation::default(),
         },
         &mut state,
         &mut round_limits,
@@ -3355,7 +3343,6 @@ fn install_code_respects_instruction_limit() {
             compute_allocation: None,
             memory_allocation: None,
             mode: CanisterInstallModeV2::Install,
-            query_allocation: QueryAllocation::default(),
         },
         &mut state,
         &mut round_limits,
@@ -3381,7 +3368,6 @@ fn install_code_respects_instruction_limit() {
             compute_allocation: None,
             memory_allocation: None,
             mode: CanisterInstallModeV2::Upgrade(None),
-            query_allocation: QueryAllocation::default(),
         },
         &mut state,
         &mut round_limits,
@@ -3413,7 +3399,6 @@ fn install_code_respects_instruction_limit() {
             compute_allocation: None,
             memory_allocation: None,
             mode: CanisterInstallModeV2::Upgrade(None),
-            query_allocation: QueryAllocation::default(),
         },
         &mut state,
         &mut round_limits,
@@ -3648,7 +3633,6 @@ fn lower_memory_allocation_than_usage_fails() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3718,7 +3702,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3761,7 +3744,6 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3821,7 +3803,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3847,7 +3828,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Upgrade(None),
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -3895,7 +3875,6 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Upgrade(None),
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -4004,7 +3983,6 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -4056,7 +4034,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Install,
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
@@ -4093,7 +4070,6 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 compute_allocation: None,
                 memory_allocation: None,
                 mode: CanisterInstallModeV2::Upgrade(None),
-                query_allocation: QueryAllocation::default(),
             },
             &mut state,
             &mut round_limits,
