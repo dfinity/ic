@@ -4,6 +4,8 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
 };
+use ic_cketh_minter::address::Address;
+use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource, GetEventsResult};
 use ic_cketh_minter::endpoints::RetrieveEthStatus::Pending;
 use ic_cketh_minter::endpoints::{
     EthTransaction, RetrieveEthRequest, RetrieveEthStatus, RetrieveEthStatus::TxConfirmed,
@@ -27,6 +29,8 @@ use std::time::Duration;
 
 const CKETH_TRANSFER_FEE: u64 = 10;
 const MAX_TICKS: usize = 10;
+const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
+const DEFAULT_DEPOSIT_LOG_INDEX: u64 = 0x24;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -56,7 +60,10 @@ fn should_deposit_and_withdraw() {
     tick_until_next_http_request(&cketh.env, "eth_getLogs");
 
     let amount: u64 = 100_000_000_000_000_000; // 0.1 ETH
-    let from_address = "55654e7405fcb336386ea8f36954a211b2cda764";
+    let from_address: Address = "0x55654e7405fcb336386ea8f36954a211b2cda764"
+        .parse()
+        .unwrap();
+    let tx_hash = "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353".to_string();
 
     cketh.handle_rpc_call(
         "https://rpc.ankr.com/eth",
@@ -64,9 +71,8 @@ fn should_deposit_and_withdraw() {
         eth_get_logs(Some(EthLogEntry {
             encoded_principal: encoded_principal.clone(),
             amount,
-            from_address: from_address.to_string(),
-            transaction_hash: "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353"
-                .to_string(),
+            from_address,
+            transaction_hash: tx_hash.clone(),
         })),
     );
     cketh.handle_rpc_call(
@@ -75,9 +81,8 @@ fn should_deposit_and_withdraw() {
         eth_get_logs(Some(EthLogEntry {
             encoded_principal,
             amount,
-            from_address: from_address.to_string(),
-            transaction_hash: "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353"
-                .to_string(),
+            from_address,
+            transaction_hash: tx_hash.clone(),
         })),
     );
 
@@ -91,6 +96,31 @@ fn should_deposit_and_withdraw() {
     let balance = cketh.balance_of(caller);
     const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000;
     assert_eq!(balance, Nat::from(EXPECTED_BALANCE));
+
+    let events = cketh.get_all_events();
+    assert_contains_unique_event(
+        &events,
+        EventPayload::AcceptedDeposit {
+            transaction_hash: tx_hash.clone(),
+            block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
+            log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+            from_address: from_address.to_string(),
+            value: Nat::from(amount),
+            principal: caller,
+        },
+    );
+    assert_contains_unique_event(
+        &events,
+        EventPayload::MintedCkEth {
+            event_source: EventSource {
+                transaction_hash: tx_hash.clone(),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+            },
+            mint_block_index: Nat::from(0),
+        },
+    );
+
+    // Withdraw
 
     cketh.approve_minter(caller, EXPECTED_BALANCE, None);
 
@@ -148,7 +178,10 @@ fn should_block_blocked_addresses() {
     tick_until_next_http_request(&cketh.env, "eth_getLogs");
 
     let amount: u64 = 100_000_000_000_000_000; // 0.1 ETH
-    let from_address_blocked = "01e2919679362dFBC9ee1644Ba9C6da6D6245BB1";
+    let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
+        .parse()
+        .unwrap();
+    let tx_hash = "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f352".to_string();
 
     cketh.handle_rpc_call(
         "https://rpc.ankr.com/eth",
@@ -156,9 +189,8 @@ fn should_block_blocked_addresses() {
         eth_get_logs(Some(EthLogEntry {
             encoded_principal: encoded_principal.clone(),
             amount,
-            from_address: from_address_blocked.to_string(),
-            transaction_hash: "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f352"
-                .to_string(),
+            from_address: from_address_blocked,
+            transaction_hash: tx_hash.clone(),
         })),
     );
     cketh.handle_rpc_call(
@@ -167,9 +199,8 @@ fn should_block_blocked_addresses() {
         eth_get_logs(Some(EthLogEntry {
             encoded_principal: encoded_principal.clone(),
             amount,
-            from_address: from_address_blocked.to_string(),
-            transaction_hash: "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f352"
-                .to_string(),
+            from_address: from_address_blocked,
+            transaction_hash: tx_hash.to_string(),
         })),
     );
 
@@ -184,7 +215,23 @@ fn should_block_blocked_addresses() {
     let balance = cketh.balance_of(caller);
     assert_eq!(balance, Nat::from(0));
 
-    let from_address = "55654e7405fcb336386ea8f36954a211b2cda764";
+    let events = cketh.get_all_events();
+    assert_contains_unique_event(
+        &events,
+        EventPayload::InvalidDeposit {
+            event_source: EventSource {
+                transaction_hash: tx_hash.clone(),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+            },
+            reason: format!("blocked address {from_address_blocked}"),
+        },
+    );
+
+    let from_address: Address = "0x55654e7405fcb336386ea8f36954a211b2cda764"
+        .parse()
+        .unwrap();
+
+    let tx_hash = "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353".to_string();
 
     tick_until_next_http_request(&cketh.env, "eth_getLogs");
     cketh.handle_rpc_call(
@@ -193,9 +240,8 @@ fn should_block_blocked_addresses() {
         eth_get_logs(Some(EthLogEntry {
             encoded_principal: encoded_principal.clone(),
             amount,
-            from_address: from_address.to_string(),
-            transaction_hash: "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353"
-                .to_string(),
+            from_address,
+            transaction_hash: tx_hash.clone(),
         })),
     );
     cketh.handle_rpc_call(
@@ -204,9 +250,8 @@ fn should_block_blocked_addresses() {
         eth_get_logs(Some(EthLogEntry {
             encoded_principal,
             amount,
-            from_address: from_address.to_string(),
-            transaction_hash: "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353"
-                .to_string(),
+            from_address,
+            transaction_hash: tx_hash.clone(),
         })),
     );
 
@@ -234,6 +279,14 @@ fn should_block_blocked_addresses() {
 
     // Withdrawing to a blocked address should fail.
     assert!(cketh.env.await_ingress(message_id, MAX_TICKS).is_err());
+}
+
+fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {
+    match events.iter().filter(|e| e.payload == payload).count() {
+        0 => panic!("missing the event payload {payload:?} in audit log {events:?}"),
+        1 => (),
+        n => panic!("event payload {payload:?} appears {n} times in audit log {events:?}"),
+    }
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {
@@ -301,7 +354,7 @@ fn assert_has_header(req: &CanisterHttpRequestContext, name: &str, value: &str) 
 struct EthLogEntry {
     encoded_principal: String,
     amount: u64,
-    from_address: String,
+    from_address: Address,
     transaction_hash: String,
 }
 
@@ -312,13 +365,13 @@ fn eth_get_logs(log_entry: Option<EthLogEntry>) -> Vec<u8> {
         result = json!({
             "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
             "blockHash": "0x79cfe76d69337dae199e32c2b6b3d7c2668bfe71a05f303f95385e70031b9ef8",
-            "blockNumber": "0x9",
+            "blockNumber": format!("0x{:x}", DEFAULT_DEPOSIT_BLOCK_NUMBER),
             "data": amount_hex,
-            "logIndex": "0x24",
+            "logIndex": format!("0x{:x}", DEFAULT_DEPOSIT_LOG_INDEX),
             "removed": false,
             "topics": [
                 "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
-                format!("0x000000000000000000000000{}", log_entry.from_address),
+                format!("0x000000000000000000000000{}", hex::encode(log_entry.from_address.as_ref())),
                 log_entry.encoded_principal
             ],
             "transactionHash": log_entry.transaction_hash,
@@ -688,5 +741,37 @@ impl CkEthSetup {
                     "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
             },)
         );
+    }
+
+    fn get_events(&self, start: u64, length: u64) -> GetEventsResult {
+        use ic_cketh_minter::endpoints::events::GetEventsArg;
+
+        Decode!(
+            &assert_reply(
+                self.env
+                    .execute_ingress(
+                        self.minter_id,
+                        "get_events",
+                        Encode!(&GetEventsArg { start, length }).unwrap(),
+                    )
+                    .expect("failed to get minter info")
+            ),
+            GetEventsResult
+        )
+        .unwrap()
+    }
+
+    pub fn get_all_events(&self) -> Vec<Event> {
+        const FIRST_BATCH_SIZE: u64 = 100;
+        let GetEventsResult {
+            mut events,
+            total_event_count,
+        } = self.get_events(0, FIRST_BATCH_SIZE);
+        while events.len() < total_event_count as usize {
+            let mut next_batch =
+                self.get_events(events.len() as u64, total_event_count - events.len() as u64);
+            events.append(&mut next_batch.events);
+        }
+        events
     }
 }

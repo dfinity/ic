@@ -132,6 +132,55 @@ type WithdrawalError = variant {
     TemporarilyUnavailable : text;
 };
 
+type EventSource = record {
+    transaction_hash : text;
+    log_index : nat;
+};
+
+type Event = record {
+    timestamp : nat64;
+    payload : variant {
+        Init : InitArg;
+        Upgrade : UpgradeArg;
+        AcceptedDeposit : record {
+            transaction_hash : text;
+            block_number : nat;
+            log_index : nat;
+            from_address : text;
+            value : nat;
+            "principal" : principal;
+        };
+        InvalidDeposit : record {
+            event_source : EventSource;
+            reason : text;
+        };
+        MintedCkEth : record {
+            event_source: EventSource;
+            mint_block_index: nat;
+        };
+        SyncedToBlock : record {
+            block_number : nat;
+        };
+        AcceptedEthWithdrawalRequest : record {
+            withdrawal_amount : nat;
+            destination : text;
+            ledger_burn_index : nat;
+        };
+        SignedTx : record {
+            withdrawal_id : nat;
+            raw_tx : text;
+        };
+        SentTransaction : record {
+            withdrawal_id : nat;
+            transaction_hash : text;
+        };
+        FinalizedTransaction : record {
+            withdrawal_id : nat;
+            transaction_hash : text;
+        };
+    };
+};
+
 service : (MinterArg) -> {
     // Retrieve the Ethereum address controlled by the minter:
     // * Deposits will be transferred from the helper smart contract to this address
@@ -161,4 +210,8 @@ service : (MinterArg) -> {
     is_address_blocked : (text) -> (bool) query;
     // Retrieve the status of the minter canister.
     get_canister_status : () -> (CanisterStatusResponse);
+
+    // Retrive events from the minter's audit log.
+    // The endpoint can return fewer events than requested to bound the response size.
+    get_events : (record { start : nat64; length : nat64 }) -> (record { events : vec Event; total_event_count : nat64 }) query;
 }
