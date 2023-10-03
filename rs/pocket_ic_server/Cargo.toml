@@ -26,6 +26,7 @@ hex = "0.4.2"
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 clap = { version = "3.1.6", features = ["derive"] }
 sha2 = "0.9.3"
+time = "^0.3.20"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "^0.2.2"
