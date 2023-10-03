@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 candid = { workspace = true }
-hex-literal = "0.2.1"
+hex-literal = "0.4.1"
 serde = "1.0.115"
 universal-canister = { path = "../impl" }
 ic-types = { path = "../../types/types" }
