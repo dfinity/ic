@@ -1737,6 +1737,7 @@ impl NeuronsFundSwapParticipation {
     }
 }
 
+#[derive(Debug)]
 pub struct ValidatedSettleNeuronsFundParticipationRequest {
     pub request_str: String,
     pub nns_proposal_id: ProposalId,
