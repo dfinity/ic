@@ -26,7 +26,7 @@ mockall = "0.11.3"
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 pem = "1.1.0"
-prometheus = "0.13.3"
+prometheus = { workspace = true }
 rcgen = "0.10.0"
 reqwest = "0.11.13"
 serde = { version = "1.0.147", features = ["serde_derive"] }

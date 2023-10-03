@@ -11,7 +11,7 @@ ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
+prometheus = { workspace = true }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 thiserror = "1.0.37"

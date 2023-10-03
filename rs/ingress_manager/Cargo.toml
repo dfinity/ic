@@ -18,7 +18,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
-prometheus = { version = "0.12.0", features = ["process"] }
+prometheus = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

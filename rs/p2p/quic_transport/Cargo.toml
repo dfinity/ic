@@ -25,7 +25,7 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-peer-manager = { path = "../../p2p/peer_manager" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 phantom_newtype = { path = "../../phantom_newtype" }
-prometheus = { version = "0.12.0", features = ["process"] }
+prometheus = { workspace = true }
 quinn = { version = "0.10.2", features = ["ring"] }
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"

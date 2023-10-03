@@ -779,7 +779,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "prometheus": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.3",
                 features = [
                     "process",
                 ],
