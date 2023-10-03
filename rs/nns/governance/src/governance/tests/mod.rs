@@ -1055,6 +1055,7 @@ fn sum_cf_participants_e8s_nonempty() {
     );
 }
 
+// TODO[NNS1-2632]: Remove this test once `settle_community_fund_participation` is deprecated.
 mod settle_community_fund_participation_tests {
     use settle_community_fund_participation::{Aborted, Committed, Result};
 
@@ -1115,6 +1116,102 @@ mod settle_community_fund_participation_tests {
         ));
     }
 } // end mod settle_community_fund_participation_tests
+
+mod settle_neurons_fund_participation_request_tests {
+    use settle_neurons_fund_participation_request::{Aborted, Committed, Result};
+    use SettleNeuronsFundParticipationRequest;
+
+    use super::*;
+
+    lazy_static! {
+        static ref COMMITTED: SettleNeuronsFundParticipationRequest =
+            SettleNeuronsFundParticipationRequest {
+                nns_proposal_id: Some(7),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: Some(PrincipalId::new_user_test_id(672891)),
+                    total_direct_participation_icp_e8s: Some(100_000 * E8),
+                    total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
+                }))
+            };
+        static ref ABORTED: SettleNeuronsFundParticipationRequest =
+            SettleNeuronsFundParticipationRequest {
+                nns_proposal_id: Some(42),
+                result: Some(Result::Aborted(Aborted {}))
+            };
+    }
+
+    #[test]
+    fn ok() {
+        assert_is_ok!(ValidatedSettleNeuronsFundParticipationRequest::try_from(
+            COMMITTED.clone()
+        ));
+        assert_is_ok!(ValidatedSettleNeuronsFundParticipationRequest::try_from(
+            ABORTED.clone()
+        ));
+    }
+
+    #[test]
+    fn no_proposal_id() {
+        assert_is_err!(ValidatedSettleNeuronsFundParticipationRequest::try_from(
+            SettleNeuronsFundParticipationRequest {
+                nns_proposal_id: None,
+                ..COMMITTED.clone()
+            }
+        ));
+    }
+
+    #[test]
+    fn no_result() {
+        assert_is_err!(ValidatedSettleNeuronsFundParticipationRequest::try_from(
+            SettleNeuronsFundParticipationRequest {
+                result: None,
+                ..COMMITTED.clone()
+            }
+        ));
+    }
+
+    #[test]
+    fn no_sns_governance_canister_id() {
+        assert_is_err!(ValidatedSettleNeuronsFundParticipationRequest::try_from(
+            SettleNeuronsFundParticipationRequest {
+                nns_proposal_id: Some(7),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: None,
+                    total_direct_participation_icp_e8s: Some(100_000 * E8),
+                    total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
+                })),
+            }
+        ));
+    }
+
+    #[test]
+    fn no_total_direct_participation_icp_e8s() {
+        assert_is_err!(ValidatedSettleNeuronsFundParticipationRequest::try_from(
+            SettleNeuronsFundParticipationRequest {
+                nns_proposal_id: Some(7),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: Some(PrincipalId::new_user_test_id(672891)),
+                    total_direct_participation_icp_e8s: None,
+                    total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
+                })),
+            }
+        ));
+    }
+
+    #[test]
+    fn no_total_neurons_fund_participation_icp_e8s() {
+        assert_is_err!(ValidatedSettleNeuronsFundParticipationRequest::try_from(
+            SettleNeuronsFundParticipationRequest {
+                nns_proposal_id: Some(7),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: Some(PrincipalId::new_user_test_id(672891)),
+                    total_direct_participation_icp_e8s: Some(100_000 * E8),
+                    total_neurons_fund_participation_icp_e8s: None,
+                })),
+            }
+        ));
+    }
+} // end mod settle_neurons_fund_participation_request_tests
 
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use ic_nervous_system_proto::pb::v1 as pb;
