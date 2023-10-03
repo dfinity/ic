@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 # The package is deprecated, NET-1274.
 package(default_visibility = [
     "//rs/cup_explorer:__pkg__",
+    "//rs/http_endpoints/public:__pkg__",
     "//rs/nns/init:__pkg__",
     "//rs/orchestrator:__pkg__",
     "//rs/registry/admin:__pkg__",
@@ -17,6 +18,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/canister_client/sender",
+    "//rs/canonical_state",
     "//rs/certification",
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/tree_hash",

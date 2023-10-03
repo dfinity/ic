@@ -60,6 +60,10 @@ ic-backtrace = { path = "../../monitoring/backtrace" }
 [dev-dependencies]
 bytes = { workspace = true }
 ic-agent = { workspace = true }
+ic-canister-client = { path = "../../canister_client" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-canonical-state = { path = "../../canonical_state" }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }

@@ -1,5 +1,6 @@
 use ic_canister_client_sender::Sender;
-use ic_crypto_tree_hash::{LabeledTree, LookupStatus, Path};
+use ic_canonical_state::encoding::types::SubnetMetrics;
+use ic_crypto_tree_hash::{LabeledTree, LookupStatus, MixedHashTree, Path};
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
@@ -8,7 +9,7 @@ use ic_types::{
         SignedRequestBytes,
     },
     time::expiry_time_from_now,
-    CanisterId, Time,
+    CanisterId, SubnetId, Time,
 };
 use serde::Deserialize;
 use serde_cbor::value::Value as CBOR;
@@ -84,6 +85,46 @@ pub fn parse_read_state_response(
             .unwrap_or_else(RequestStatus::unknown),
         None => RequestStatus::unknown(),
     })
+}
+
+/// Given a CBOR response from a subnet `read_state` and a `subnet_id` extracts
+/// the `SubnetMetrics` if available.
+pub fn parse_subnet_read_state_response(
+    subnet_id: &SubnetId,
+    root_pk: Option<&ThresholdSigPublicKey>,
+    message: CBOR,
+) -> Result<SubnetMetrics, String> {
+    let response = serde_cbor::value::from_value::<HttpReadStateResponse>(message)
+        .map_err(|source| format!("decoding to HttpReadStateResponse failed: {}", source))?;
+
+    let certificate = match root_pk {
+        Some(pk) => ic_certification::verify_certificate_for_subnet_read_state(
+            &response.certificate,
+            subnet_id,
+            pk,
+        )
+        .map_err(|source| format!("verifying certificate failed: {}", source))?,
+        None => serde_cbor::from_slice(response.certificate.as_slice())
+            .map_err(|source| format!("decoding Certificate failed: {}", source))?,
+    };
+
+    let subnet_metrics_leaf =
+        match certificate
+            .tree
+            .lookup(&[&b"subnet"[..], subnet_id.get().as_ref(), &b"metrics"[..]])
+        {
+            LookupStatus::Found(subnet_metrics_leaf) => subnet_metrics_leaf.clone(),
+            LookupStatus::Absent | LookupStatus::Unknown => return Ok(SubnetMetrics::default()),
+        };
+
+    match subnet_metrics_leaf {
+        MixedHashTree::Leaf(bytes) => {
+            let subnet_metrics: SubnetMetrics = serde_cbor::from_slice(&bytes)
+                .map_err(|err| format!("deserializing subnet_metrics failed: {:?}", err))?;
+            Ok(subnet_metrics)
+        }
+        tree => Err(format!("Expected subnet metrics leaf but found {:?}", tree)),
+    }
 }
 
 /// Given a CBOR response from a `query`, extract the response.

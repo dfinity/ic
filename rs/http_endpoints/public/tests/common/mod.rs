@@ -403,6 +403,7 @@ pub fn start_http_endpoint(
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     registry_client: Arc<dyn RegistryClient>,
+    delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
 ) -> (
     IngressFilterHandle,
@@ -448,6 +449,7 @@ pub fn start_http_endpoint(
         consensus_cache,
         SubnetType::Application,
         MaliciousFlags::default(),
+        delegation_from_nns,
         pprof_collector,
     );
     (ingress_filter_handle, ingress_rx, query_exe_handler)

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -21,4 +21,9 @@ rust_library(
     crate_name = "ic_certification_test_utils",
     version = "0.1.0",
     deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "certification_test_utils_doc_test",
+    crate = ":test-utils",
 )
