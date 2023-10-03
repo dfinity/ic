@@ -4,10 +4,15 @@ use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, Address};
+use ic_cketh_minter::endpoints::events::{
+    Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
+};
 use ic_cketh_minter::endpoints::{
     Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
-use ic_cketh_minter::eth_logs::{report_transaction_error, ReceivedEthEventError};
+use ic_cketh_minter::eth_logs::{
+    report_transaction_error, EventSource, ReceivedEthEvent, ReceivedEthEventError,
+};
 use ic_cketh_minter::eth_rpc::FeeHistory;
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::{EthRpcClient, MultiCallError};
@@ -17,7 +22,7 @@ use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{
     BlockNumber, LedgerBurnIndex, LedgerMintIndex, TransactionCount, Wei,
 };
-use ic_cketh_minter::state::audit::{process_event, EventType};
+use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::{
     lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
 };
@@ -690,6 +695,106 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         None => lifecycle::post_upgrade(None),
     }
     setup_timers();
+}
+
+#[query]
+#[candid_method(query)]
+fn get_events(arg: GetEventsArg) -> GetEventsResult {
+    const MAX_EVENTS_PER_RESPONSE: u64 = 100;
+
+    fn map_event_source(
+        EventSource {
+            transaction_hash,
+            log_index,
+        }: EventSource,
+    ) -> CandidEventSource {
+        CandidEventSource {
+            transaction_hash: transaction_hash.to_string(),
+            log_index: log_index.into(),
+        }
+    }
+
+    fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
+        use ic_cketh_minter::endpoints::events::EventPayload as EP;
+        CandidEvent {
+            timestamp,
+            payload: match payload {
+                EventType::Init(args) => EP::Init(args),
+                EventType::Upgrade(args) => EP::Upgrade(args),
+                EventType::AcceptedDeposit(ReceivedEthEvent {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                }) => EP::AcceptedDeposit {
+                    transaction_hash: transaction_hash.to_string(),
+                    block_number: block_number.into(),
+                    log_index: log_index.into(),
+                    from_address: from_address.to_string(),
+                    value: value.into(),
+                    principal,
+                },
+                EventType::InvalidDeposit {
+                    event_source,
+                    reason,
+                } => EP::InvalidDeposit {
+                    event_source: map_event_source(event_source),
+                    reason,
+                },
+                EventType::MintedCkEth {
+                    event_source,
+                    mint_block_index,
+                } => EP::MintedCkEth {
+                    event_source: map_event_source(event_source),
+                    mint_block_index: mint_block_index.get().into(),
+                },
+                EventType::SyncedToBlock { block_number } => EP::SyncedToBlock {
+                    block_number: block_number.into(),
+                },
+                EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
+                    withdrawal_amount,
+                    destination,
+                    ledger_burn_index,
+                }) => EP::AcceptedEthWithdrawalRequest {
+                    withdrawal_amount: withdrawal_amount.into(),
+                    destination: destination.to_string(),
+                    ledger_burn_index: ledger_burn_index.get().into(),
+                },
+                EventType::SignedTx { withdrawal_id, tx } => EP::SignedTx {
+                    withdrawal_id: withdrawal_id.get().into(),
+                    raw_tx: tx.raw_transaction_hex(),
+                },
+                EventType::SentTransaction {
+                    withdrawal_id,
+                    txhash,
+                } => EP::SentTransaction {
+                    withdrawal_id: withdrawal_id.get().into(),
+                    transaction_hash: txhash.to_string(),
+                },
+                EventType::FinalizedTransaction {
+                    withdrawal_id,
+                    txhash,
+                } => EP::FinalizedTransaction {
+                    withdrawal_id: withdrawal_id.get().into(),
+                    transaction_hash: txhash.to_string(),
+                },
+            },
+        }
+    }
+
+    let events = storage::with_event_iter(|it| {
+        it.skip(arg.start as usize)
+            .take(arg.length.min(MAX_EVENTS_PER_RESPONSE) as usize)
+            .map(map_event)
+            .collect()
+    });
+
+    GetEventsResult {
+        events,
+        total_event_count: storage::total_event_count(),
+    }
 }
 
 #[query]

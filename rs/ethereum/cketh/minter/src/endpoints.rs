@@ -144,3 +144,75 @@ impl From<TransferFromError> for WithdrawalError {
         }
     }
 }
+
+pub mod events {
+    use crate::lifecycle::init::InitArg;
+    use crate::lifecycle::upgrade::UpgradeArg;
+    use candid::{CandidType, Deserialize, Nat, Principal};
+
+    #[derive(CandidType, Deserialize, Debug, Clone)]
+    pub struct GetEventsArg {
+        pub start: u64,
+        pub length: u64,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone)]
+    pub struct GetEventsResult {
+        pub events: Vec<Event>,
+        pub total_event_count: u64,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct Event {
+        pub timestamp: u64,
+        pub payload: EventPayload,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct EventSource {
+        pub transaction_hash: String,
+        pub log_index: Nat,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub enum EventPayload {
+        Init(InitArg),
+        Upgrade(UpgradeArg),
+        AcceptedDeposit {
+            transaction_hash: String,
+            block_number: Nat,
+            log_index: Nat,
+            from_address: String,
+            value: Nat,
+            principal: Principal,
+        },
+        InvalidDeposit {
+            event_source: EventSource,
+            reason: String,
+        },
+        MintedCkEth {
+            event_source: EventSource,
+            mint_block_index: Nat,
+        },
+        SyncedToBlock {
+            block_number: Nat,
+        },
+        AcceptedEthWithdrawalRequest {
+            withdrawal_amount: Nat,
+            destination: String,
+            ledger_burn_index: Nat,
+        },
+        SignedTx {
+            withdrawal_id: Nat,
+            raw_tx: String,
+        },
+        SentTransaction {
+            withdrawal_id: Nat,
+            transaction_hash: String,
+        },
+        FinalizedTransaction {
+            withdrawal_id: Nat,
+            transaction_hash: String,
+        },
+    }
+}

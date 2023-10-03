@@ -1,4 +1,4 @@
-pub use super::event::EventType;
+pub use super::event::{Event, EventType};
 use super::State;
 use crate::storage::record_event;
 

@@ -60,6 +60,11 @@ pub fn record_event(payload: EventType) {
         .expect("recording an event should succeed");
 }
 
+/// Returns the total number of events in the audit log.
+pub fn total_event_count() -> u64 {
+    EVENTS.with(|events| events.borrow().len())
+}
+
 pub fn with_event_iter<F, R>(f: F) -> R
 where
     F: for<'a> FnOnce(Box<dyn Iterator<Item = Event> + 'a>) -> R,
