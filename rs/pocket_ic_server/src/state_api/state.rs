@@ -16,7 +16,7 @@ use tokio::{
     task::spawn_blocking,
     time,
 };
-use tracing::debug;
+use tracing::trace;
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_millis(150);
@@ -361,78 +361,88 @@ where
     where
         S: Operation<TargetType = T> + Send + 'static,
     {
+        let op_id = computation.op.id().0;
+        trace!(
+            "update_with_timeout::start op_id={} instance_id={}",
+            op_id,
+            computation.instance_id
+        );
         let sync_wait_time = sync_wait_time.unwrap_or(self.inner.sync_wait_time);
         let st = self.inner.clone();
         let instances = st.instances.read().await;
-        let (bg_task, busy_outcome) =
-            if let Some(instance_mutex) = instances.get(computation.instance_id) {
-                let mut instance_state = instance_mutex.lock().await;
-                // If this instance is busy, return the running op and initial state
-                match &*instance_state {
-                    InstanceState::Deleted => {
-                        return Err(UpdateError {
-                            message: "Instance was deleted".to_string(),
-                        });
-                    }
-                    // TODO: cache lookup possible with this state_label and our own op_id
-                    InstanceState::Busy { state_label, op_id } => {
-                        return Ok(UpdateReply::Busy {
-                            state_label: state_label.clone(),
-                            op_id: op_id.clone(),
-                        });
-                    }
-                    InstanceState::Available(pocket_ic) => {
-                        // move pocket_ic out
-
-                        let state_label = pocket_ic.get_state_label();
-                        let op_id = computation.op.id();
-                        let busy = InstanceState::Busy {
-                            state_label: state_label.clone(),
-                            op_id: op_id.clone(),
-                        };
-                        let InstanceState::Available(mut pocket_ic) =
-                            std::mem::replace(&mut *instance_state, busy)
-                        else {
-                            unreachable!()
-                        };
-
-                        let op = computation.op;
-                        let instance_id = computation.instance_id;
-
-                        let bg_task = {
-                            let op_id = op_id.clone();
-                            let state_label = state_label.clone();
-                            let st = self.inner.clone();
-                            move || {
-                                debug!("Starting computation");
-                                let result = op.compute(&mut pocket_ic);
-                                let new_state_label = pocket_ic.get_state_label();
-                                debug!("Finished computation. Writing to graph.");
-                                // add result to graph
-                                let instances = st.instances.blocking_read();
-                                let mut guard = st.graph.blocking_write();
-
-                                let mut instance_state = instances[instance_id].blocking_lock();
-                                *instance_state = InstanceState::Available(pocket_ic);
-
-                                let cached_computations =
-                                    guard.entry(state_label.clone()).or_insert(HashMap::new());
-                                cached_computations
-                                    .insert(op_id.clone(), (new_state_label, result.clone()));
-                                debug!("Finished writing to graph");
-                                result
-                            }
-                        };
-
-                        // cache miss: replace pocket_ic instance in the vector with Busy
-                        (bg_task, UpdateReply::Started { state_label, op_id })
-                    }
+        let (bg_task, busy_outcome) = if let Some(instance_mutex) =
+            instances.get(computation.instance_id)
+        {
+            let mut instance_state = instance_mutex.lock().await;
+            // If this instance is busy, return the running op and initial state
+            match &*instance_state {
+                InstanceState::Deleted => {
+                    return Err(UpdateError {
+                        message: "Instance was deleted".to_string(),
+                    });
                 }
-            } else {
-                return Err(UpdateError {
-                    message: "Instance not found".to_string(),
-                });
-            };
+                // TODO: cache lookup possible with this state_label and our own op_id
+                InstanceState::Busy { state_label, op_id } => {
+                    return Ok(UpdateReply::Busy {
+                        state_label: state_label.clone(),
+                        op_id: op_id.clone(),
+                    });
+                }
+                InstanceState::Available(pocket_ic) => {
+                    // move pocket_ic out
+
+                    let state_label = pocket_ic.get_state_label();
+                    let op_id = computation.op.id();
+                    let busy = InstanceState::Busy {
+                        state_label: state_label.clone(),
+                        op_id: op_id.clone(),
+                    };
+                    let InstanceState::Available(mut pocket_ic) =
+                        std::mem::replace(&mut *instance_state, busy)
+                    else {
+                        unreachable!()
+                    };
+
+                    let op = computation.op;
+                    let instance_id = computation.instance_id;
+
+                    let bg_task = {
+                        let op_id = op_id.clone();
+                        let state_label = state_label.clone();
+                        let st = self.inner.clone();
+                        move || {
+                            trace!(
+                                "bg_task::start op_id={} instance_id={}",
+                                op_id.0,
+                                instance_id
+                            );
+                            let result = op.compute(&mut pocket_ic);
+                            let new_state_label = pocket_ic.get_state_label();
+                            // add result to graph
+                            let instances = st.instances.blocking_read();
+                            let mut guard = st.graph.blocking_write();
+
+                            let mut instance_state = instances[instance_id].blocking_lock();
+                            *instance_state = InstanceState::Available(pocket_ic);
+
+                            let cached_computations =
+                                guard.entry(state_label.clone()).or_insert(HashMap::new());
+                            cached_computations
+                                .insert(op_id.clone(), (new_state_label, result.clone()));
+                            trace!("bg_task::end op_id={} instance_id={}", op_id.0, instance_id);
+                            result
+                        }
+                    };
+
+                    // cache miss: replace pocket_ic instance in the vector with Busy
+                    (bg_task, UpdateReply::Started { state_label, op_id })
+                }
+            }
+        } else {
+            return Err(UpdateError {
+                message: "Instance not found".to_string(),
+            });
+        };
         // drop lock, otherwise we end up with a deadlock
         std::mem::drop(instances);
 
@@ -454,8 +464,19 @@ where
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
         if let Ok(o) = time::timeout(sync_wait_time, bg_handle).await {
+            trace!(
+                "update_with_timeout::synchronous op_id={} instance_id={}",
+                op_id,
+                computation.instance_id
+            );
             return Ok(UpdateReply::Output(o.expect("join failed!")));
         }
+
+        trace!(
+            "update_with_timeout::timeout op_id={} instance_id={}",
+            op_id,
+            computation.instance_id
+        );
         Ok(busy_outcome)
     }
 }

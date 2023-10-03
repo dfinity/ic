@@ -29,7 +29,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 use tracing_appender::non_blocking::WorkerGuard;
 
 const TTL_SEC: u64 = 60;
@@ -114,6 +114,7 @@ async fn start(runtime: Arc<Runtime>) {
     // batches. This guard ensures that at the end of the process execution, the buffer is flushed
     // to disk.
     let _guard = setup_tracing(&args);
+    trace!("(2) test trace message!");
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
     let mut new_port_file = match is_first_server(&port_file_path) {
