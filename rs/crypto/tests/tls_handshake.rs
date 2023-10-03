@@ -3,7 +3,7 @@ use crate::tls_utils::temp_crypto_component_with_tls_keys;
 use crate::tls_utils::test_client::{Client, ClientBuilder};
 use crate::tls_utils::test_server::{Server, ServerBuilder};
 use assert_matches::assert_matches;
-use ic_crypto_test_utils::tls::registry::TlsRegistry;
+use ic_crypto_test_utils_tls::registry::TlsRegistry;
 use ic_crypto_tls_interfaces::{
     AuthenticatedPeer, TlsClientHandshakeError, TlsServerHandshakeError,
 };
@@ -25,7 +25,7 @@ const CLIENT_ID_3: NodeId = NODE_5;
 
 mod handshakes {
     use super::*;
-    use ic_crypto_test_utils::tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
+    use ic_crypto_test_utils_tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
 
     #[test]
     fn should_perform_tls_handshake() {
@@ -168,8 +168,8 @@ mod server_allowing_all_nodes {
 
 mod server {
     use super::*;
-    use ic_crypto_test_utils::tls::custom_client::CustomClient;
-    use ic_crypto_test_utils::tls::x509_certificates::{
+    use ic_crypto_test_utils_tls::custom_client::CustomClient;
+    use ic_crypto_test_utils_tls::x509_certificates::{
         ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
     };
     use openssl::hash::MessageDigest;
@@ -741,7 +741,7 @@ mod server_without_client_auth {
     use super::*;
     use crate::tls_utils::test_server::Server;
     use crate::{matching_server_and_client, CLIENT_ID_1, SERVER_ID_1};
-    use ic_crypto_test_utils::tls::custom_client::CustomClient;
+    use ic_crypto_test_utils_tls::custom_client::CustomClient;
 
     #[test]
     fn should_perform_tls_handshake_without_server_asking_for_cert() {
@@ -780,8 +780,8 @@ mod server_without_client_auth {
 
 mod client {
     use super::*;
-    use ic_crypto_test_utils::tls::custom_server::CustomServer;
-    use ic_crypto_test_utils::tls::x509_certificates::{
+    use ic_crypto_test_utils_tls::custom_server::CustomServer;
+    use ic_crypto_test_utils_tls::x509_certificates::{
         ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
     };
     use openssl::hash::MessageDigest;

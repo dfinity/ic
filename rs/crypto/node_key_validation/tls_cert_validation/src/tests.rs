@@ -1,9 +1,9 @@
 use super::*;
 use assert_matches::assert_matches;
-use ic_crypto_test_utils::tls::x509_certificates::{
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
+use ic_crypto_test_utils_tls::x509_certificates::{
     ed25519_key_pair, prime256v1_key_pair, CertBuilder, CertWithPrivateKey,
 };
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::PrincipalId;
 use openssl::hash::MessageDigest;

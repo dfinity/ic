@@ -1,6 +1,6 @@
 use ic_canister_client::{Agent, HttpClient, Sender};
-use ic_crypto_test_utils::tls::custom_server::CustomServer;
-use ic_crypto_test_utils::tls::x509_certificates::CertWithPrivateKey;
+use ic_crypto_test_utils_tls::custom_server::CustomServer;
+use ic_crypto_test_utils_tls::x509_certificates::CertWithPrivateKey;
 use ic_types::CanisterId;
 use openssl::ssl::SslVersion;
 

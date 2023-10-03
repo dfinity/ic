@@ -71,6 +71,7 @@ ic-crypto-sha2 = { path = "sha2" }
 ic-crypto-tecdsa = { path = "tecdsa" }
 ic-crypto-temp-crypto = { path = "temp_crypto" }
 ic-crypto-test-utils = { path = "test_utils" }
+ic-crypto-test-utils-tls = { path = "test_utils/tls" }
 ic-crypto-test-utils-canister-sigs = { path = "test_utils/canister_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-csp = { path = "test_utils/csp" }

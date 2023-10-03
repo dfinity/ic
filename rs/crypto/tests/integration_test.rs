@@ -13,8 +13,8 @@ use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
-use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
+use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::crypto::{

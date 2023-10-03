@@ -66,6 +66,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils/tls",
     "//rs/crypto/test_utils/canister_sigs",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/keygen",
