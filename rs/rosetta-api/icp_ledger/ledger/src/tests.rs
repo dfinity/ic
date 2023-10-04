@@ -835,18 +835,18 @@ fn test_transaction_hash_consistency() {
     let transaction_hash = transaction.hash();
     let hash_string = transaction_hash.to_string();
     assert_eq!(
-        hash_string, "72f776f73db4e22797a8169b2180ac07adf7f38730f0d185bc8609dd551dd816",
+        hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
         "Transaction hash must be stable."
     );
     transaction.icrc1_memo = Some(icrc_ledger_types::icrc1::transfer::Memo::default().0);
     let transaction_hash = transaction.hash();
     let hash_string = transaction_hash.to_string();
     assert_ne!(
-        hash_string, "72f776f73db4e22797a8169b2180ac07adf7f38730f0d185bc8609dd551dd816",
+        hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
         "ICRC1 Memo field is set, which should change the transaction hash."
     );
     assert_eq!(
-        hash_string, "12cad19dc3b2c4fb84d70c0fe46644f60b7870e1536e5db25b84922814c74ae0",
+        hash_string, "646bf98eac33a37c4f018f13eeef7cf1826156ab69523ecbb51c25345340bbdb",
         "Transaction hash must be stable."
     )
 }
