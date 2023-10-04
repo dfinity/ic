@@ -8,20 +8,20 @@ use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload, SkipPreUpgrade}
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
-use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
+    canister_state::{execution_state::CustomSectionType, NextExecution, WASM_PAGE_SIZE_IN_BYTES},
+    testing::CanisterQueuesTesting,
+    CanisterStatus, ExportedFunctions, Global, NumWasmPages, PageIndex, PageMap,
 };
-use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities::assert_utils::assert_balance_equals;
+use ic_test_utilities::{
+    assert_utils::assert_balance_equals, wasmtime_instance::instructions_per_byte,
+};
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
     wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::fetch_int_counter;
-use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter, HistogramStats};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CanisterTask,
@@ -30,8 +30,10 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use proptest::prelude::*;
-use proptest::test_runner::{TestRng, TestRunner};
+use proptest::{
+    prelude::*,
+    test_runner::{TestRng, TestRunner},
+};
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::time::Duration;
@@ -548,7 +550,9 @@ fn ic0_stable_read_traps_if_out_of_bounds() {
 
 #[test]
 fn ic0_stable_read_handles_overflows() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(400_000_000_000)
+        .build();
     let wat = r#"
         (module
             (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
@@ -3295,7 +3299,7 @@ fn ic0_trap_preserves_some_cycles() {
         instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP.get()
             + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 })
-            + 12, /* trap data */
+            + instructions_per_byte(12), /* trap data */
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert_eq!(

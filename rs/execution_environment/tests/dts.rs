@@ -22,6 +22,11 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
+/// The amount of instructions required to process a single byte in a payload.
+/// This includes the cost of memory as well as time passing the payload
+/// from wasm sandbox to the replica execution environment.
+const INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR: u64 = 50;
+
 const DTS_WAT: &str = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -502,7 +507,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(30_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1041,9 +1046,10 @@ fn dts_long_running_install_and_update() {
         return;
     }
 
+    let slice_instruction_limit = 15_000_000;
     let env = dts_env(
         NumInstructions::from(100_000_000),
-        NumInstructions::from(1_000_000),
+        NumInstructions::from(slice_instruction_limit),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -1121,7 +1127,7 @@ fn dts_long_running_install_and_update() {
 
     for i in 0..30 {
         let work = wasm()
-            .instruction_counter_is_at_least(1_000_000)
+            .instruction_counter_is_at_least(slice_instruction_limit)
             .message_payload()
             .append_and_reply()
             .build();
@@ -1591,16 +1597,16 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
 
     let b = wasm()
         .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000 / INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR)
+        .stable64_fill(0, 0, 10_000 / INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR)
         .message_payload()
         .append_and_reply()
         .build();
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 10_000 / INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR)
+        .stable64_fill(0, 0, 10_000 / INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR)
         .call_simple(b_id, "update", call_args().other_side(b))
         .build();
 
