@@ -84,6 +84,7 @@ pub enum Operation {
     Burn {
         from: AccountIdentifier,
         amount: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
         spender: Option<AccountIdentifier>,
     },
     Mint {
@@ -93,9 +94,10 @@ pub enum Operation {
     Transfer {
         from: AccountIdentifier,
         to: AccountIdentifier,
-        spender: Option<AccountIdentifier>,
         amount: Tokens,
         fee: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        spender: Option<AccountIdentifier>,
     },
     Approve {
         from: AccountIdentifier,
@@ -1247,5 +1249,38 @@ impl FeatureFlags {
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self::const_default()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn transaction_hash() {
+        let expected_hash = "be31664ef154456aec5df2e4acc7f23a715ad8ea33ad9dbcbb7e6e90bc5a8b8f";
+
+        let transaction = Transaction {
+            operation: Operation::Transfer {
+                from: AccountIdentifier::from_str(
+                    "e7a879ea563d273c46dd28c1584eaa132fad6f3e316615b3eb657d067f3519b5",
+                )
+                .unwrap(),
+                to: AccountIdentifier::from_str(
+                    "207ec07185bedd0f2176ec2760057b8b7bc619a94d60e70fbc91af322a9f7e93",
+                )
+                .unwrap(),
+                amount: Tokens::from_e8s(11541900000),
+                fee: Tokens::from_e8s(10_000),
+                spender: None,
+            },
+            memo: Memo(5432845643782906771),
+            created_at_time: Some(TimeStamp::from_nanos_since_unix_epoch(1621901572293430780)),
+            icrc1_memo: None,
+        };
+
+        assert_eq!(expected_hash, transaction.hash().to_string());
     }
 }
