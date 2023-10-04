@@ -69,8 +69,6 @@ use ic_types::{
     replica_config::ReplicaConfig,
     NodeId, SubnetId,
 };
-use serde::{Deserialize, Serialize};
-
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
@@ -687,7 +685,7 @@ fn init_artifact_pools(
 // appear in the test module, but `TestArtifact` is used by
 // `P2PStateSyncClient` so these definitions are still required here.
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, PartialEq)]
 /// The artifact struct used by the testing framework.
 pub struct TestArtifact;
 /// The artifact message used by the testing framework.

@@ -29,10 +29,9 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::{v1 as pb, v1::artifact::Kind};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
-    hash::Hash,
     sync::Arc,
 };
 use strum_macros::{EnumIter, IntoStaticStr};
@@ -201,11 +200,15 @@ pub type PriorityFn<Id, Attribute> =
 pub type ArtifactPriorityFn =
     Box<dyn Fn(&ArtifactId, &ArtifactAttribute) -> Priority + Send + Sync + 'static>;
 
-pub trait ArtifactKind: 'static + Sized + Send + Serialize + DeserializeOwned {
+/// Related artifact sub-types (Message/Id/Attribute) are
+/// parameterized by a type variable, which is of `ArtifactKind` trait.
+/// It is mostly a convenience to pass around a collection of types
+/// instead of all of them individually.
+pub trait ArtifactKind: Sized {
     const TAG: ArtifactTag;
-    type Id: Clone + Eq + Hash + Send + Sync + Serialize + DeserializeOwned;
-    type Message: Send + Serialize + DeserializeOwned;
-    type Attribute: Send + Sync + Serialize + DeserializeOwned;
+    type Id;
+    type Message;
+    type Attribute;
 
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
