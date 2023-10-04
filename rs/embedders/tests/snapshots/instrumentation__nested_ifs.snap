@@ -33,7 +33,7 @@ expression: out
     i32.wrap_i64
     if ;; label = @1
       global.get 0
-      i64.const 7
+      i64.const 8
       i64.sub
       global.set 0
       local.get 0
@@ -65,7 +65,7 @@ expression: out
       end
     else
       global.get 0
-      i64.const 9
+      i64.const 10
       i64.sub
       global.set 0
       local.get 0
@@ -98,6 +98,10 @@ expression: out
         local.set 0
       end
     end
+    global.get 0
+    i64.const 1
+    i64.sub
+    global.set 0
     local.get 0
   )
   (func (;6;) (type 0) (param i64) (result i64)

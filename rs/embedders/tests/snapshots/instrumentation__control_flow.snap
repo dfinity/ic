@@ -35,7 +35,7 @@ expression: out
     block ;; label = @1
       loop ;; label = @2
         global.get 0
-        i64.const 4
+        i64.const 5
         i64.sub
         global.set 0
         global.get 0
@@ -49,7 +49,7 @@ expression: out
         i64.eq
         br_if 1 (;@1;)
         global.get 0
-        i64.const 7
+        i64.const 12
         i64.sub
         global.set 0
         local.get 0
@@ -78,7 +78,7 @@ expression: out
     local.set 1
     loop ;; label = @1
       global.get 0
-      i64.const 10
+      i64.const 15
       i64.sub
       global.set 0
       global.get 0
@@ -101,7 +101,7 @@ expression: out
   )
   (func (;8;) (type 0) (param i64)
     global.get 0
-    i64.const 4
+    i64.const 5
     i64.sub
     global.set 0
     global.get 0
@@ -115,14 +115,14 @@ expression: out
     i64.eq
     if ;; label = @1
       global.get 0
-      i64.const 2
+      i64.const 6
       i64.sub
       global.set 0
       i64.const 3
       call 5
     else
       global.get 0
-      i64.const 2
+      i64.const 6
       i64.sub
       global.set 0
       i64.const 5

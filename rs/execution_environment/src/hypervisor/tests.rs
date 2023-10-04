@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_cycles_account_manager::ResourceSaturation;
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload, SkipPreUpgrade};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
@@ -3277,8 +3278,10 @@ fn ic0_trap_preserves_some_cycles() {
             ;; globals must be exported to be accessible to hypervisor or persisted
             (global (export "g1") (mut i32) (i32.const -1))
             (global (export "g2") (mut i64) (i64.const -1))
+
             (func $func_that_traps
-            (call $ic_trap (i32.const 0) (i32.const 12)))
+                (call $ic_trap (i32.const 0) (i32.const 12))
+            )
 
             (memory $memory 1)
             (export "memory" (memory $memory))
@@ -3288,11 +3291,12 @@ fn ic0_trap_preserves_some_cycles() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
-    // The $func_that_traps call should be cheap:
-    // - call trap -- 21 instructions,
-    // - constants -- 2 instructions,
-    // - trap data -- 12 instructions.
-    let expected_executed_instructions = NumInstructions::from(21 + 2 + 12);
+    let expected_executed_instructions = NumInstructions::from(
+        instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
+            + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP.get()
+            + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 })
+            + 12, /* trap data */
+    );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert_eq!(
         test.executed_instructions(),
