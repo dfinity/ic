@@ -79,7 +79,6 @@ async fn start(runtime: Arc<Runtime>) {
     // If log-dir is specified, a background thread is started that writes logs into the files in
     // batches. This guard ensures that at the end of the process execution, the buffer is flushed
     // to disk.
-    let _guard = setup_tracing(&args);
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
     let mut new_port_file = match is_first_server(&port_file_path) {
@@ -89,6 +88,7 @@ async fn start(runtime: Arc<Runtime>) {
         }
     };
     // This process is the one to start PocketIC.
+    let _guard = setup_tracing(&args);
 
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default().build();
