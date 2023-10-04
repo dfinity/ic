@@ -70,9 +70,16 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     });
     let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
     let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let csys =
-        ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
-            .get();
+    let csys = match config.embedders_config.metering_type {
+        MeteringType::New => ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::MSG_REPLY_DATA_APPEND
+        .get() + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::MSG_REPLY
+        .get(),
+        MeteringType::Old => ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
+        .get() + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY
+        .get(),
+        MeteringType::None => 0,
+    }
+        ;
 
     let cd = if let MeteringType::New = config.embedders_config.metering_type {
         ic_config::subnet_config::SchedulerConfig::application_subnet()

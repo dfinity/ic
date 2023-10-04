@@ -12,7 +12,7 @@ use ic_types::{
 
 #[cfg(test)]
 mod test {
-    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
     use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -100,20 +100,19 @@ mod test {
         let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-        let call_msg_arg_data_copy_with_3_const = 4;
-        let expected_instructions = call_msg_arg_data_copy_with_3_const
-            + data_size
-            + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get();
+        let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+        let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
+
+        let expected_instructions = 3 * const_cost
+            + call_cost
+            + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+            + data_size;
         assert_eq!(instructions_used.get(), expected_instructions);
     }
 
     #[test]
     fn instruction_limit_traps() {
         let data_size = 1024;
-        let call_msg_arg_data_copy_with_3_const = 4;
-        let expected_instructions = call_msg_arg_data_copy_with_3_const
-            + data_size
-            + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get();
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_wat(
                 format!(
@@ -137,7 +136,7 @@ mod test {
                 vec![0; 1024],
                 user_test_id(24).get(),
             ))
-            .with_num_instructions((expected_instructions - 1).into())
+            .with_num_instructions(1000.into())
             .build();
 
         let result = instance.run(ic_types::methods::FuncRef::Method(
@@ -154,11 +153,12 @@ mod test {
     fn correctly_report_performance_counter() {
         let data_size = 1024;
 
-        let wasm_const = 1;
-        let wasm_call_msg_arg_data_copy_with_3_const = 1 + 3 * wasm_const;
-        let wasm_call_performance_counter_with_const = 1 + wasm_const;
-        let wasm_drop_const = 1 + wasm_const;
-        let wasm_global_set = 1;
+        let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+        let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
+        let drop_const_cost = instruction_to_cost_new(&wasmparser::Operator::Drop) + const_cost;
+        let global_set_cost =
+            instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
+
         // Note: the instrumentation is a stack machine, which counts and subtracts
         // the number of instructions for the whole block. The "dynamic" part of
         // System API calls gets added when the API is actually called.
@@ -172,22 +172,26 @@ mod test {
         // So, the first perf counter will catch the whole test func static part
         // + first data copy and performance counter dynamic part.
         // The second perf counter will catch on top the second data copy dynamic part.
-        let expected_instructions_counter1 = (wasm_call_msg_arg_data_copy_with_3_const
-                + data_size
-                + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get())
-                + wasm_drop_const
-                + wasm_call_performance_counter_with_const
-                + system_api_complexity::overhead::old::PERFORMANCE_COUNTER.get()
-                + wasm_global_set
-                + wasm_drop_const
-                + wasm_drop_const
-                + wasm_call_msg_arg_data_copy_with_3_const // No data size
-                + wasm_call_performance_counter_with_const
-                + wasm_global_set;
+        let expected_instructions_counter1 = 3 * const_cost
+            + call_cost
+            + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+            + data_size
+            + drop_const_cost
+            + const_cost
+            + call_cost
+            + system_api_complexity::overhead::new::PERFORMANCE_COUNTER.get()
+            + global_set_cost
+            + 2 * drop_const_cost
+            + 3 * const_cost
+            + call_cost
+            + const_cost
+            + call_cost
+            + global_set_cost;
         // Includes dynamic part for second data copy and performance counter calls
         let expected_instructions_counter2 = expected_instructions_counter1
-            + (data_size + system_api_complexity::overhead::old::MSG_ARG_DATA_COPY.get())
-            + system_api_complexity::overhead::old::PERFORMANCE_COUNTER.get();
+            + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+            + data_size
+            + system_api_complexity::overhead::new::PERFORMANCE_COUNTER.get();
         let expected_instructions = expected_instructions_counter2;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_wat(
@@ -369,16 +373,16 @@ mod test {
         let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-        let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-        let const_cost = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-        let drop_cost = instruction_to_cost(&wasmparser::Operator::Drop);
+        let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+        let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
+        let drop_cost = instruction_to_cost_new(&wasmparser::Operator::Drop);
 
-        let call_new_with_8_const = call_cost + 8 * const_cost;
-        let drop_with_call_perform = drop_cost + call_cost;
-        let expected_instructions = call_new_with_8_const
-            + drop_with_call_perform
-            + system_api_complexity::overhead::old::CALL_NEW.get()
-            + system_api_complexity::overhead::old::CALL_PERFORM.get();
+        let call_8_const_cost = call_cost + 8 * const_cost;
+        let drop_call_cost = drop_cost + call_cost;
+        let expected_instructions = call_8_const_cost
+            + system_api_complexity::overhead::new::CALL_NEW.get()
+            + drop_call_cost
+            + system_api_complexity::overhead::new::CALL_PERFORM.get();
         assert_eq!(instructions_used.get(), expected_instructions);
 
         let total_cpu_complexity = system_api.execution_complexity().cpu;

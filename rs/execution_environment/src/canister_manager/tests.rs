@@ -18,6 +18,7 @@ use ic_config::{
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
@@ -59,8 +60,8 @@ use ic_test_utilities::{
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
 use ic_test_utilities_execution_environment::{
-    get_reply, get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
-    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    assert_delta, get_reply, get_routing_table_with_specified_ids_allocation_range,
+    wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -113,6 +114,14 @@ lazy_static! {
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
     };
+    static ref DROP_MEMORY_GROW_CONST_COST: u64 =
+        instruction_to_cost_new(&wasmparser::Operator::Drop)
+            + instruction_to_cost_new(&wasmparser::Operator::MemoryGrow {
+                mem: 0,
+                mem_byte: 0,
+            })
+            + instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 });
+    static ref UNREACHABLE_COST: u64 = instruction_to_cost_new(&wasmparser::Operator::Unreachable);
 }
 
 fn canister_change_origin_from_canister(sender: &CanisterId) -> CanisterChangeOrigin {
@@ -4875,7 +4884,6 @@ fn cycles_correct_if_upgrade_succeeds() {
                 (drop (memory.grow (i32.const 1)))
                 (drop (memory.grow (i32.const 1)))
                 (drop (memory.grow (i32.const 1)))
-                (drop (i32.const 1))
             )
             (func (export "canister_pre_upgrade")
                 (drop (memory.grow (i32.const 1)))
@@ -4903,12 +4911,14 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
-    assert_eq!(
+
+    assert_delta!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            NumInstructions::from(6 + 14) + wasm_compilation_cost(&wasm),
+            NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size()
-        )
+        ),
+        Cycles::new(10)
     );
 
     let cycles_before = test.canister_state(id).system_state.balance();
@@ -4919,12 +4929,13 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.canister_state(id).system_state.balance(),
         cycles_before - execution_cost,
     );
-    assert_eq!(
+    assert_delta!(
         execution_cost,
         test.cycles_account_manager().execution_cost(
-            NumInstructions::from(18 + 24) + wasm_compilation_cost(&wasm),
+            NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size()
-        )
+        ),
+        Cycles::new(10)
     );
 }
 
@@ -5026,12 +5037,14 @@ fn cycles_correct_if_upgrade_fails_at_start() {
         test.canister_state(id).system_state.balance(),
         cycles_before - execution_cost,
     );
-    assert_eq!(
+    assert_delta!(
         execution_cost,
         test.cycles_account_manager().execution_cost(
-            NumInstructions::from(1 + 9) + wasm_compilation_cost(&wasm2),
+            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                + wasm_compilation_cost(&wasm2),
             test.subnet_size()
-        )
+        ),
+        Cycles::new(10)
     );
 }
 
@@ -5079,10 +5092,13 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         test.canister_state(id).system_state.balance(),
         cycles_before - execution_cost,
     );
-    assert_eq!(
+    assert_delta!(
         execution_cost,
-        test.cycles_account_manager()
-            .execution_cost(NumInstructions::from(10), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
+            test.subnet_size()
+        ),
+        Cycles::new(10)
     );
 }
 
@@ -5129,12 +5145,14 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
         test.canister_state(id).system_state.balance(),
         cycles_before - execution_cost,
     );
-    assert_eq!(
+    assert_delta!(
         execution_cost,
         test.cycles_account_manager().execution_cost(
-            NumInstructions::from(6 + 3 + 1) + wasm_compilation_cost(&wasm2),
+            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                + wasm_compilation_cost(&wasm2),
             test.subnet_size()
-        )
+        ),
+        Cycles::new(10)
     );
 }
 
@@ -5153,7 +5171,6 @@ fn cycles_correct_if_install_succeeds() {
                 (drop (memory.grow (i32.const 1)))
                 (drop (memory.grow (i32.const 1)))
                 (drop (memory.grow (i32.const 1)))
-                (drop (i32.const 1))
             )
             (start $start)
             (memory 0)
@@ -5168,12 +5185,13 @@ fn cycles_correct_if_install_succeeds() {
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
-    assert_eq!(
+    assert_delta!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            NumInstructions::from(6 + 14) + wasm_compilation_cost(&wasm),
+            NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size()
-        )
+        ),
+        Cycles::new(4)
     );
 }
 
@@ -5246,12 +5264,14 @@ fn cycles_correct_if_install_fails_at_start() {
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
-    assert_eq!(
+
+    assert_delta!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            NumInstructions::from(10) + wasm_compilation_cost(&wasm),
+            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size()
-        )
+        ),
+        Cycles::new(10)
     );
 }
 
@@ -5282,12 +5302,14 @@ fn cycles_correct_if_install_fails_at_init() {
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
-    assert_eq!(
+    assert_delta!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            NumInstructions::from(1 + 9) + wasm_compilation_cost(&wasm),
+            NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                + wasm_compilation_cost(&wasm),
             test.subnet_size()
-        )
+        ),
+        Cycles::new(10)
     );
 }
 

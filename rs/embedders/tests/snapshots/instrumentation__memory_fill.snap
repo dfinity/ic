@@ -18,7 +18,7 @@ expression: out
   (import "__" "stable_read_first_access" (func (;4;) (type 4)))
   (func (;5;) (type 0)
     global.get 0
-    i64.const 4
+    i64.const 103
     i64.sub
     global.set 0
     global.get 0

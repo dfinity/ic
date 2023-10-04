@@ -2165,3 +2165,42 @@ pub fn get_routing_table_with_specified_ids_allocation_range(
     routing_table.insert(subnets_allocation_range, subnet_id)?;
     Ok(routing_table)
 }
+
+/// Due to the `scale(cost) != scale(prepay) - scale(prepay - cost)`,
+/// we can't always compare the Cycles precisely.
+#[macro_export]
+macro_rules! assert_delta {
+    ($x:expr, $y:expr, $d:expr) => {
+        // As Cycles use saturating sub, we can't just subtract $x from $y
+        if !($x >= $y && $x - $y <= $d) && !($x < $y && $y - $x <= $d) {
+            assert_eq!($x, $y, "delta: `{:?}`", $d);
+        }
+    };
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn assert_delta() {
+        assert_delta!(Cycles::new(10), Cycles::new(10), Cycles::new(0));
+        assert_delta!(Cycles::new(0), Cycles::new(0), Cycles::new(0));
+        assert_delta!(Cycles::new(0), Cycles::new(0), Cycles::new(10));
+
+        assert_delta!(Cycles::new(0), Cycles::new(10), Cycles::new(10));
+        assert_delta!(Cycles::new(10), Cycles::new(0), Cycles::new(10));
+    }
+
+    #[test]
+    #[should_panic]
+    fn assert_delta_panics_x_lt_y() {
+        assert_delta!(Cycles::new(0), Cycles::new(10), Cycles::new(9));
+    }
+
+    #[test]
+    #[should_panic]
+    fn assert_delta_panics_x_gt_y() {
+        assert_delta!(Cycles::new(10), Cycles::new(0), Cycles::new(9));
+    }
+}

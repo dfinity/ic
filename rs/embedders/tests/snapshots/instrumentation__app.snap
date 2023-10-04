@@ -43,17 +43,13 @@ expression: out
     select
     local.set 2
     block ;; label = @1
-      global.get 0
-      i64.const 4
-      i64.sub
-      global.set 0
       local.get 0
       i32.const 1
       i32.lt_s
       br_if 0 (;@1;)
       loop ;; label = @2
         global.get 0
-        i64.const 15
+        i64.const 10
         i64.sub
         global.set 0
         global.get 0
@@ -92,6 +88,10 @@ expression: out
           i32.const 1
           drop
         end
+        global.get 0
+        i64.const 6
+        i64.sub
+        global.set 0
         i32.const 1
         i32.add
         local.tee 1
@@ -99,6 +99,10 @@ expression: out
         br_if 0 (;@2;)
       end
     end
+    global.get 0
+    i64.const 14
+    i64.sub
+    global.set 0
     local.get 2
     i32.const 97
     i32.mul
