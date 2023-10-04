@@ -307,8 +307,8 @@ where
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
-        let mut instances = self.inner.instances.write().await;
-        instances[instance_id] = Mutex::new(InstanceState::Deleted);
+        let instances = self.inner.instances.read().await;
+        *instances[instance_id].lock().await = InstanceState::Deleted;
     }
 
     pub async fn list_instances(&self) -> Vec<InstanceState<()>> {
