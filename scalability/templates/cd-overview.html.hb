@@ -71,13 +71,13 @@
     </p>
 
     <p>
-    Query calls: {{latest_approx_mainnet_node_query_performance}} queries/s
-    ({{latest_approx_mainnet_subnet_update_performance}} queries/s per node scaled up to {{num_app_nodes}} nodes in application subnetworks)
+    Query calls: {{latest_approx_mainnet_query_performance}} queries/s
+    ({{latest_approx_mainnet_node_query_performance}} queries/s per node scaled up to {{num_app_nodes}} nodes in application subnetworks)
     </p>
 
     <p>
-    Update calls: {{latest_approx_mainnet_subnet_update_performance}}  updates/s
-    ({{latest_approx_mainnet_node_query_performance}} updates/s per subnetwork scaled up to {{num_app_subnets}} application subnetworks)
+    Update calls: {{latest_approx_mainnet_update_performance}}  updates/s
+    ({{latest_approx_mainnet_subnet_update_performance}} updates/s per subnetwork scaled up to {{num_app_subnets}} application subnetworks)
     </p>
 
     <p>
