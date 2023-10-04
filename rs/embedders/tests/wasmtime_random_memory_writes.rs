@@ -16,6 +16,7 @@ use ic_test_utilities::{
     mock_time,
     state::SystemStateBuilder,
     types::ids::{call_context_test_id, user_test_id},
+    wasmtime_instance::instructions_per_byte,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::MemoryAllocation;
@@ -408,7 +409,6 @@ const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE_BYTES * TEST_NUM_PAGES;
 const TEST_NUM_PAGES: usize = 800;
 const TEST_NUM_WRITES: usize = 2000;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
-const BYTES_PER_INSTRUCTION: usize = 1;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
     wat::parse_str(wat).map(BinaryEncodedWasm::new)
@@ -674,7 +674,7 @@ mod tests {
                     + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
             assert_eq!(
                 instructions_executed.get(),
-                expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
+                expected_instructions + instructions_per_byte(num_bytes as u64)
             )
         });
     }
@@ -723,7 +723,8 @@ mod tests {
         //! or write, in addition to 7 instructions required for setup.
 
         use super::{
-            get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
+            get_num_instructions_consumed, instructions_per_byte, SubnetType, MAX_NUM_INSTRUCTIONS,
+            STABLE_OP_BYTES,
         };
         use ic_config::subnet_config::SchedulerConfig;
         use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
@@ -774,7 +775,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
                         .get()
-                    + STABLE_OP_BYTES
+                    + instructions_per_byte(STABLE_OP_BYTES)
             );
         }
 
@@ -795,7 +796,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::STABLE64_READ
                         .get()
-                    + STABLE_OP_BYTES
+                    + instructions_per_byte(STABLE_OP_BYTES)
             );
         }
 
@@ -835,7 +836,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
-                    + STABLE_OP_BYTES
+                    + instructions_per_byte(STABLE_OP_BYTES)
                     + SchedulerConfig::application_subnet()
                         .dirty_page_overhead
                         .get()
@@ -879,7 +880,7 @@ mod tests {
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
-                    + STABLE_OP_BYTES
+                    + instructions_per_byte(STABLE_OP_BYTES)
                     + SchedulerConfig::application_subnet()
                         .dirty_page_overhead
                         .get()
@@ -952,7 +953,7 @@ mod tests {
                     consumed_instructions - instructions_consumed_without_data;
                 assert_eq!(
                     (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
-                    (payload_size / BYTES_PER_INSTRUCTION)
+                    instructions_per_byte(payload_size as u64) as usize
                         - (dry_run_dirty_heap * dirty_heap_cost) as usize,
                 );
             }
@@ -973,7 +974,7 @@ mod tests {
 
                 assert_eq!(
                     (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
-                    (2 * payload_size / BYTES_PER_INSTRUCTION)
+                    instructions_per_byte(2 * payload_size as u64) as usize
                         - (dry_run_dirty_heap * dirty_heap_cost) as usize
                 );
             }

@@ -35,7 +35,7 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig:
     .feature_flags
     .wasm_native_stable_memory
 {
-    FlagStatus::Enabled => 2_670_000,
+    FlagStatus::Enabled => 2_694_000,
     FlagStatus::Disabled => 1_044_000,
 };
 
