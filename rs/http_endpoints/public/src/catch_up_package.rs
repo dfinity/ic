@@ -4,6 +4,7 @@ use crate::{
     body::BodyReceiverLayer, common, types::ApiReqType, EndpointService, HttpHandlerMetrics,
     LABEL_UNKNOWN,
 };
+use bytes::Bytes;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
@@ -68,7 +69,7 @@ fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     response
 }
 
-impl Service<Request<Vec<u8>>> for CatchUpPackageService {
+impl Service<Request<Bytes>> for CatchUpPackageService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -78,7 +79,7 @@ impl Service<Request<Vec<u8>>> for CatchUpPackageService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
+    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         self.metrics
             .request_body_size_bytes
             .with_label_values(&[ApiReqType::CatchUpPackage.into(), LABEL_UNKNOWN])

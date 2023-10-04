@@ -1,5 +1,6 @@
 use crate::common::{make_plaintext_response, poll_ready};
 use byte_unit::Byte;
+use bytes::Bytes;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_async_utils::{receive_body, BodyReceiveError};
@@ -47,7 +48,7 @@ pub(crate) struct BodyReceiverService<S> {
 impl<S> Service<Request<Body>> for BodyReceiverService<S>
 where
     S: Service<
-            Request<Vec<u8>>,
+            Request<Bytes>,
             Response = Response<Body>,
             Error = Infallible,
             Future = Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>>,

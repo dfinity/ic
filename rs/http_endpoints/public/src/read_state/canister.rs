@@ -8,6 +8,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus,
 };
+use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
@@ -81,7 +82,7 @@ impl CanisterReadStateService {
     }
 }
 
-impl Service<Request<Vec<u8>>> for CanisterReadStateService {
+impl Service<Request<Bytes>> for CanisterReadStateService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -91,7 +92,7 @@ impl Service<Request<Vec<u8>>> for CanisterReadStateService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
+    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         self.metrics
             .request_body_size_bytes
             .with_label_values(&[ApiReqType::ReadState.into(), LABEL_UNKNOWN])
@@ -123,7 +124,7 @@ impl Service<Request<Vec<u8>>> for CanisterReadStateService {
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
 
         let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
-            &SignedRequestBytes::from(body),
+            &SignedRequestBytes::from(body.to_vec()),
         ) {
             Ok(request) => request,
             Err(e) => {
