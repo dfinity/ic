@@ -6,6 +6,7 @@
 ///
 /// These issues will be resolved with Axum 0.7 along with Hyper 1.0, as hyper::Body will be going away.
 use byte_unit::Byte;
+use bytes::{Bytes, BytesMut};
 use derive_more::Display;
 use futures_util::StreamExt;
 use hyper::{body::HttpBody, Body};
@@ -24,14 +25,14 @@ impl Error for BodyReceiveError {}
 pub async fn receive_body_without_timeout(
     mut body: Body,
     max_request_body_size: Byte,
-) -> Result<Vec<u8>, BodyReceiveError> {
+) -> Result<Bytes, BodyReceiveError> {
     let body_size_hint = body.size_hint().lower() as usize;
     if Byte::from(body_size_hint) > max_request_body_size {
         return Err(BodyReceiveError::TooLarge(
             "Value of 'Content-length' header exceeds http body size limit.".to_string(),
         ));
     }
-    let mut received_body = Vec::<u8>::with_capacity(body_size_hint);
+    let mut received_body = BytesMut::with_capacity(body_size_hint);
     while let Some(chunk) = body.next().await {
         match chunk {
             Err(err) => {
@@ -47,18 +48,18 @@ pub async fn receive_body_without_timeout(
                         max_request_body_size
                     )));
                 }
-                received_body.append(&mut bytes.to_vec());
+                received_body.extend_from_slice(&bytes);
             }
         }
     }
-    Ok(received_body)
+    Ok(received_body.freeze())
 }
 
 pub async fn receive_body(
     body: Body,
     max_request_receive_duration: Duration,
     max_request_body_size: Byte,
-) -> Result<Vec<u8>, BodyReceiveError> {
+) -> Result<Bytes, BodyReceiveError> {
     match timeout(
         max_request_receive_duration,
         receive_body_without_timeout(body, max_request_body_size),
@@ -95,7 +96,7 @@ mod tests {
             receive_body(body, time_to_wait, max_request_size)
                 .await
                 .ok(),
-            Some(Vec::<u8>::from("hello world"))
+            Some(Bytes::from("hello world"))
         );
     }
 

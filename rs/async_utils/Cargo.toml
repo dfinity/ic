@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-stream = "0.3.4"
+bytes = { workspace = true }
 byte-unit = "4.0.14"
 derive_more = "0.99.17"
 futures = { workspace = true }
@@ -17,5 +18,4 @@ tonic = { workspace = true }
 tower = { workspace = true }
 
 [dev-dependencies]
-bytes = { workspace = true }
 rand = "0.8.3"

@@ -8,6 +8,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
     EndpointService, HttpHandlerMetrics, ReplicaHealthStatus,
 };
+use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use futures_util::FutureExt;
 use http::Request;
@@ -86,7 +87,7 @@ impl QueryService {
     }
 }
 
-impl Service<Request<Vec<u8>>> for QueryService {
+impl Service<Request<Bytes>> for QueryService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -96,7 +97,7 @@ impl Service<Request<Vec<u8>>> for QueryService {
         self.query_execution_service.poll_ready(cx)
     }
 
-    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
+    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         self.metrics
             .request_body_size_bytes
             .with_label_values(&[ApiReqType::Query.into(), LABEL_UNKNOWN])
@@ -115,7 +116,7 @@ impl Service<Request<Vec<u8>>> for QueryService {
 
         let (mut parts, body) = request.into_parts();
         let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
-            &SignedRequestBytes::from(body),
+            &SignedRequestBytes::from(body.to_vec()),
         ) {
             Ok(request) => request,
             Err(e) => {

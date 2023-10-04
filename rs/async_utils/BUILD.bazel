@@ -13,6 +13,7 @@ rust_library(
     deps = [
         "@crate_index//:async-stream",
         "@crate_index//:byte-unit",
+        "@crate_index//:bytes",
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:hyper",
@@ -26,7 +27,6 @@ rust_test(
     name = "async_utils_test",
     crate = ":async_utils",
     deps = [
-        "@crate_index//:bytes",
         "@crate_index//:rand_0_8_4",
     ],
 )

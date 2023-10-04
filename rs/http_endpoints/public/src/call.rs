@@ -10,6 +10,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService,
 };
+use bytes::Bytes;
 use crossbeam::channel::Sender;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
@@ -145,7 +146,7 @@ fn get_registry_data(
 }
 
 /// Handles a call to /api/v2/canister/../call
-impl Service<Request<Vec<u8>>> for CallService {
+impl Service<Request<Bytes>> for CallService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -155,7 +156,7 @@ impl Service<Request<Vec<u8>>> for CallService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
+    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         // Actual parsing.
         self.metrics
             .request_body_size_bytes
@@ -163,7 +164,7 @@ impl Service<Request<Vec<u8>>> for CallService {
             .observe(request.body().len() as f64);
 
         let (mut parts, body) = request.into_parts();
-        let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
+        let msg: SignedIngress = match SignedRequestBytes::from(body.to_vec()).try_into() {
             Ok(msg) => msg,
             Err(e) => {
                 let res = make_plaintext_response(

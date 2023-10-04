@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 askama = "0.11.1"
 async-trait = "0.1.68"
+bytes = { workspace = true }
 byte-unit = "4.0.14"
 crossbeam = "0.8.2"
 hex = "0.4.2"
@@ -58,7 +59,6 @@ url = "2.1.1"
 ic-backtrace = { path = "../../monitoring/backtrace" }
 
 [dev-dependencies]
-bytes = { workspace = true }
 ic-agent = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }

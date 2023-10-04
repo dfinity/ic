@@ -93,7 +93,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-use strum::IntoStaticStr;
+use strum::{Display, IntoStaticStr};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
@@ -534,29 +534,33 @@ async fn handshake_and_serve_connection(
                 .observe(connection_start_time.elapsed().as_secs_f64());
             return Ok(());
         }
-        Ok(ConnType::Secure(tls_stream)) => (
-            serve_connection_with_read_timeout(
-                tls_stream,
-                service,
-                config.connection_read_timeout_seconds,
-            )
-            .await,
-            "https",
-        ),
-        Ok(ConnType::Insecure(tcp_stream)) => (
-            serve_connection_with_read_timeout(
-                tcp_stream,
-                service,
-                config.connection_read_timeout_seconds,
-            )
-            .await,
-            "http",
-        ),
+        Ok(conn_type) => {
+            let conn_type_label = conn_type.to_string();
+            metrics
+                .connection_setup_duration
+                .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
+                .observe(connection_start_time.elapsed().as_secs_f64());
+            let conn_result = match conn_type {
+                ConnType::Secure(tls_stream) => {
+                    serve_connection_with_read_timeout(
+                        tls_stream,
+                        service,
+                        config.connection_read_timeout_seconds,
+                    )
+                    .await
+                }
+                ConnType::Insecure(tcp_stream) => {
+                    serve_connection_with_read_timeout(
+                        tcp_stream,
+                        service,
+                        config.connection_read_timeout_seconds,
+                    )
+                    .await
+                }
+            };
+            (conn_result, conn_type_label)
+        }
     };
-    metrics
-        .connection_setup_duration
-        .with_label_values(&[STATUS_SUCCESS, conn_type_label])
-        .observe(connection_start_time.elapsed().as_secs_f64());
     match connection_result {
         Err(err) => {
             info!(
@@ -567,19 +571,23 @@ async fn handshake_and_serve_connection(
             );
             metrics
                 .connection_duration
-                .with_label_values(&[STATUS_ERROR, conn_type_label])
+                .with_label_values(&[STATUS_ERROR, &conn_type_label])
                 .observe(connection_start_time.elapsed().as_secs_f64())
         }
         Ok(()) => metrics
             .connection_duration
-            .with_label_values(&[STATUS_SUCCESS, conn_type_label])
+            .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
             .observe(connection_start_time.elapsed().as_secs_f64()),
     }
     Ok(())
 }
 
+#[derive(Display)]
+#[strum(serialize_all = "snake_case")]
 enum ConnType {
+    #[strum(serialize = "secure")]
     Secure(Box<dyn TlsStream>),
+    #[strum(serialize = "insecure")]
     Insecure(TcpStream),
 }
 
