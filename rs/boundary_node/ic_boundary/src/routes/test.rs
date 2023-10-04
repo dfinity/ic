@@ -26,7 +26,7 @@ impl Proxy for ProxyRouter {
         _request_type: RequestType,
         _request: Request<Body>,
         _node: Node,
-        _canister_id: Principal,
+        _canister_id: CanisterId,
     ) -> Result<Response, ErrorCause> {
         Ok("test_response".into_response())
     }
@@ -34,7 +34,7 @@ impl Proxy for ProxyRouter {
 
 #[async_trait]
 impl Lookup for ProxyRouter {
-    async fn lookup(&self, _: &Principal) -> Result<Node, ErrorCause> {
+    async fn lookup(&self, _: &CanisterId) -> Result<Node, ErrorCause> {
         Ok(self.node.clone())
     }
 }
@@ -63,21 +63,15 @@ async fn test_status() -> Result<(), Error> {
         root_key: root_key.clone(),
     });
 
-    let (state_rootkey, state_health, state_lookup) = (
+    let (state_rootkey, state_health) = (
         proxy_router.clone() as Arc<dyn RootKey>,
         proxy_router.clone() as Arc<dyn Health>,
-        proxy_router.clone() as Arc<dyn Lookup>,
     );
 
-    let mut app = Router::new()
-        .route(
-            PATH_STATUS,
-            get(status).with_state((state_rootkey, state_health)),
-        )
-        .layer(middleware::from_fn_with_state(
-            state_lookup,
-            preprocess_request,
-        ));
+    let mut app = Router::new().route(
+        PATH_STATUS,
+        get(status).with_state((state_rootkey, state_health)),
+    );
 
     let request = Request::builder()
         .method("GET")
@@ -111,8 +105,10 @@ async fn test_query() -> Result<(), Error> {
         root_key,
     });
 
-    let state_lookup = state.clone() as Arc<dyn Lookup>;
-    let state_proxy = state.clone() as Arc<dyn Proxy>;
+    let (state_lookup, state_proxy) = (
+        state.clone() as Arc<dyn Lookup>,
+        state.clone() as Arc<dyn Proxy>,
+    );
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
     let canister_id = Principal::from_text("sxiki-5ygae-aq").unwrap();
@@ -145,12 +141,11 @@ async fn test_query() -> Result<(), Error> {
         .body(Body::from(body))
         .unwrap();
 
+    // here the middlewares are applied bottom->top
     let mut app = Router::new()
         .route(PATH_QUERY, post(handle_call).with_state(state_proxy))
-        .layer(middleware::from_fn_with_state(
-            state_lookup,
-            preprocess_request,
-        ));
+        .layer(middleware::from_fn_with_state(state_lookup, lookup_node))
+        .layer(middleware::from_fn(preprocess_request));
 
     let resp = app.call(request).await.unwrap();
 

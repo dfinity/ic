@@ -1,4 +1,5 @@
 use std::{
+    error::Error as StdError,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::{Duration, Instant},
@@ -21,7 +22,7 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use prometheus::{labels, Registry};
 use tower::ServiceBuilder;
-use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
 use tracing::info;
 
 #[cfg(feature = "tls")]
@@ -41,7 +42,10 @@ use crate::{
     },
     dns::DnsResolver,
     http::ReqwestClient,
-    metrics::{self, HttpMetricParams, MetricParams, WithMetrics, HTTP_DURATION_BUCKETS},
+    metrics::{
+        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, WithMetrics,
+        HTTP_DURATION_BUCKETS,
+    },
     nns::{Load, Loader},
     persist,
     rate_limiting::RateLimit,
@@ -70,6 +74,8 @@ const DAY: Duration = Duration::from_secs(24 * 3600);
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
+const MAX_REQUEST_BODY_SIZE: usize = 2 * MB;
+
 pub async fn main(cli: Cli) -> Result<(), Error> {
     tracing::subscriber::set_global_default(
         tracing_subscriber::fmt()
@@ -88,6 +94,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     let metrics_router = Router::new()
         .route("/metrics", get(metrics::metrics_handler))
+        .layer(
+            CompressionLayer::new()
+                .gzip(true)
+                .br(true)
+                .zstd(true)
+                .deflate(true),
+        )
         .with_state(metrics::MetricsHandlerArgs {
             registry: registry.clone(),
         });
@@ -102,27 +115,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // DNS
     let dns_resolver = DnsResolver::new(Arc::clone(&routing_table));
-    let dns_resolver = WithMetrics(
-        dns_resolver,
-        MetricParams::new_with_opts(
-            &registry,
-            "dns_resolve",
-            &["status", "server_name"],
-            Some(&[0.0001, 0.0005, 0.001]),
-        ),
-    );
 
     // TLS Verification
     let tls_verifier = TlsVerifier::new(Arc::clone(&routing_table));
-    let tls_verifier = WithMetrics(
-        tls_verifier,
-        MetricParams::new_with_opts(
-            &registry,
-            "verify_tls",
-            &["status", "server_name"],
-            Some(&[0.0001, 0.0005, 0.001]),
-        ),
-    );
 
     // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
@@ -141,18 +136,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .dns_resolver(Arc::new(dns_resolver))
         .build()
         .context("unable to build HTTP client")?;
-
-    let http_client = ReqwestClient(http_client);
-    let http_client = WithMetrics(
-        http_client,
-        MetricParams::new_with_opts(
-            &registry,
-            "http_request_out",
-            &["status", "method", "scheme", "host", "status_code"],
-            Some(HTTP_DURATION_BUCKETS),
-        ),
-    );
-    let http_client = Arc::new(http_client);
+    let http_client = Arc::new(ReqwestClient(http_client));
 
     // Registry Client
     let local_store = Arc::new(LocalStoreImpl::new(&cli.registry.local_store_path));
@@ -243,19 +227,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 post(routes::handle_call).with_state(p.clone())
             });
 
-            // Setup caching if configured
-            if let Some(cache_size) = cli.cache.cache_size_bytes {
+            // Add caching layer if configured
+            if let Some(v) = cli.cache.cache_size_bytes {
                 let cache = Cache::new(
-                    cache_size,
+                    v,
                     cli.cache.cache_max_item_size_bytes,
                     Duration::from_secs(cli.cache.cache_ttl_seconds),
                     cli.cache.cache_non_anonymous,
-                );
-
-                let cache = Arc::new(cache);
+                )?;
 
                 route = route.layer(middleware::from_fn_with_state(
-                    Arc::clone(&cache),
+                    Arc::new(cache),
                     cache_middleware,
                 ));
             }
@@ -287,29 +269,43 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             post(routes::handle_call).with_state(p.clone())
         });
 
-        let status_route = Router::new().route(routes::PATH_STATUS, {
-            get(routes::status).with_state((rk.clone(), h.clone()))
-        });
+        let status_route = Router::new()
+            .route(routes::PATH_STATUS, {
+                get(routes::status).with_state((rk.clone(), h.clone()))
+            })
+            .layer(middleware::from_fn_with_state(
+                HttpMetricParamsStatus::new(&registry),
+                metrics::metrics_middleware_status,
+            ))
+            .layer(middleware::from_fn(routes::postprocess_response));
 
-        query_route
-            .merge(call_route)
-            .merge(read_state_route)
-            .merge(status_route)
-            .layer(
-                ServiceBuilder::new()
-                    .set_x_request_id(MakeRequestUuid)
-                    .propagate_x_request_id()
-                    .layer(DefaultBodyLimit::max(2 * MB))
-                    .layer(middleware::from_fn_with_state(
-                        HttpMetricParams::new(&registry, "http_request_in"),
-                        metrics::with_metrics_middleware,
-                    ))
-                    .layer(middleware::from_fn_with_state(
-                        lk.clone(),
-                        routes::preprocess_request,
-                    ))
-                    .layer(middleware::from_fn(routes::postprocess_response)),
-            )
+        let proxy_routes = query_route.merge(call_route).merge(read_state_route).layer(
+            // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
+            // 1st layer wraps 2nd layer and so on
+            ServiceBuilder::new()
+                .layer(
+                    CompressionLayer::new()
+                        .gzip(true)
+                        .br(true)
+                        .zstd(true)
+                        .deflate(true),
+                )
+                .set_x_request_id(MakeRequestUuid)
+                .propagate_x_request_id()
+                .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
+                .layer(middleware::from_fn_with_state(
+                    HttpMetricParams::new(&registry, "http_request_in"),
+                    metrics::metrics_middleware,
+                ))
+                .layer(middleware::from_fn(routes::preprocess_request))
+                .layer(middleware::from_fn_with_state(
+                    lk.clone(),
+                    routes::lookup_node,
+                ))
+                .layer(middleware::from_fn(routes::postprocess_response)),
+        );
+
+        proxy_routes.merge(status_route)
     };
 
     #[cfg(feature = "tls")]
@@ -618,4 +614,18 @@ impl<L: Load, C: Configure> Run for ConfigurationRunner<L, C> {
 
         Ok(())
     }
+}
+
+// Process error chain trying to find given error type
+pub fn error_source<E: StdError + 'static>(error: &impl StdError) -> Option<&E> {
+    let mut source = error.source();
+    while let Some(err) = source {
+        if let Some(v) = err.downcast_ref() {
+            return Some(v);
+        }
+
+        source = err.source();
+    }
+
+    None
 }

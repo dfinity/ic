@@ -9,7 +9,7 @@ use tower_governor::{
     GovernorLayer,
 };
 
-use crate::routes::{ApiError, RequestContext};
+use crate::{routes::ApiError, snapshot::Node};
 
 pub struct RateLimit {
     requests_per_second: u32, // requests per second allowed
@@ -37,10 +37,7 @@ impl KeyExtractor for SubnetRateToken {
         // This should always work, because we extract the subnet id after preprocess_request puts it there.
         Ok(req
             .extensions()
-            .get::<RequestContext>()
-            .ok_or(GovernorError::UnableToExtractKey)?
-            .node
-            .as_ref()
+            .get::<Node>()
             .ok_or(GovernorError::UnableToExtractKey)?
             .subnet_id)
     }

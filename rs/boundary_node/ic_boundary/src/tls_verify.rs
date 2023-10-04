@@ -1,7 +1,4 @@
-use std::{
-    sync::Arc,
-    time::{Instant, SystemTime},
-};
+use std::{sync::Arc, time::SystemTime};
 
 use arc_swap::ArcSwapOption;
 use rustls::{
@@ -13,10 +10,7 @@ use x509_parser::{
     time::ASN1Time,
 };
 
-use crate::{
-    metrics::{MetricParams, WithMetrics},
-    snapshot::RoutingTable,
-};
+use crate::snapshot::RoutingTable;
 
 pub struct TlsVerifier {
     rt: Arc<ArcSwapOption<RoutingTable>>,
@@ -100,47 +94,6 @@ impl ServerCertVerifier for TlsVerifier {
         }
 
         Ok(ServerCertVerified::assertion())
-    }
-}
-
-impl<T: ServerCertVerifier> ServerCertVerifier for WithMetrics<T> {
-    fn verify_server_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
-        ocsp_response: &[u8],
-        now: SystemTime,
-    ) -> Result<ServerCertVerified, RustlsError> {
-        let start_time = Instant::now();
-
-        let out = self.0.verify_server_cert(
-            end_entity,
-            intermediates,
-            server_name,
-            scts,
-            ocsp_response,
-            now,
-        );
-
-        let status = if out.is_ok() { "ok" } else { "fail" };
-        let duration = start_time.elapsed().as_secs_f64();
-
-        let MetricParams {
-            counter, recorder, ..
-        } = &self.1;
-
-        let server_name = match server_name {
-            ServerName::DnsName(v) => v.as_ref(),
-            _ => "",
-        };
-        let labels = &[status, server_name];
-
-        counter.with_label_values(labels).inc();
-        recorder.with_label_values(labels).observe(duration);
-
-        out
     }
 }
 
