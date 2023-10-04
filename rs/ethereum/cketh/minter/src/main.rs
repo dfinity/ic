@@ -432,10 +432,16 @@ async fn send_transactions_batch() {
                         .record_sent_transaction(signed_tx)
                 });
             }
-            // TODO FI-933: in case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
-            // if the stuck transaction was mined in the meantime. In that case we should probably
-            // add the resubmitted transaction to sent_tx to keep a trace of it. It will be cleaned-up
-            // once the transaction is finalized.
+            Ok(JsonRpcResult::Result(tx_result)) if tx_result == SendRawTransactionResult::NonceTooLow => {
+                // In case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
+                // if the stuck transaction was mined in the meantime. In that case we
+                // add the resubmitted transaction to sent_tx to keep a trace of it.
+                // It will be cleaned-up once the transaction is finalized.
+                mutate_state(|s| {
+                    s.eth_transactions
+                        .record_sent_transaction(signed_tx)
+                });
+            }
             Ok(JsonRpcResult::Result(tx_result)) => log!(INFO,
                 "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
             ),
