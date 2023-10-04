@@ -1857,7 +1857,7 @@ impl Governance {
             .unwrap_or_default();
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(heap_neurons, neuron_indexes_migration),
+            neuron_store: NeuronStore::new(heap_neurons, None, neuron_indexes_migration),
             env,
             ledger,
             cmc,

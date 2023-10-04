@@ -538,6 +538,7 @@ fn craft_neuron_store(
                 (id, neuron)
             })
             .collect(),
+        None,
         Migration::default(),
     )
 }
@@ -548,7 +549,8 @@ fn assert_clean_refund(
     expected_neuron_store: &NeuronStore,
 ) {
     let original_id_to_neuron = neuron_store.clone_neurons();
-    let mut original_neuron_store = NeuronStore::new(original_id_to_neuron, Migration::default());
+    let mut original_neuron_store =
+        NeuronStore::new(original_id_to_neuron, None, Migration::default());
 
     let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let failed_refunds =
@@ -847,7 +849,7 @@ fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
 
 #[test]
 fn draw_funds_from_the_community_fund_trivial() {
-    let mut neuron_store = NeuronStore::new(btreemap! {}, Migration::default());
+    let mut neuron_store = NeuronStore::new(btreemap! {}, None, Migration::default());
     let original_total_community_fund_maturity_e8s_equivalent = 0;
 
     let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
@@ -863,13 +865,13 @@ fn draw_funds_from_the_community_fund_trivial() {
     assert_eq!(observed_cf_neurons, vec![]);
     assert_eq!(
         neuron_store,
-        NeuronStore::new(btreemap! {}, Migration::default())
+        NeuronStore::new(btreemap! {}, None, Migration::default())
     );
 
     assert_clean_refund(
         &mut neuron_store,
         &observed_cf_neurons,
-        &NeuronStore::new(btreemap! {}, Migration::default()),
+        &NeuronStore::new(btreemap! {}, None, Migration::default()),
     );
 }
 
@@ -2686,7 +2688,7 @@ mod cast_vote_and_cascade_follow {
         // Add a neuron without a ballot for neuron 6 to follow.
         add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
 
-        let mut neuron_store = NeuronStore::new(heap_neurons, Migration::default());
+        let mut neuron_store = NeuronStore::new(heap_neurons, None, Migration::default());
 
         Governance::cast_vote_and_cascade_follow(
             &ProposalId { id: 1 },

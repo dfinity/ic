@@ -172,27 +172,34 @@ pub struct NeuronStore {
     /// is saved and restored.
     ///
     /// (Topic, Followee) -> set of followers.
-    pub topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
+    topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
 
     /// Maps Principals to the Neuron IDs of all Neurons that have this
     /// Principal as their controller or as one of their hot keys
     ///
     /// This is a cached index and will be removed and recreated when the state
     /// is saved and restored.
-    pub principal_to_neuron_ids_index: HeapNeuronPrincipalIndex<NeuronId>,
+    principal_to_neuron_ids_index: HeapNeuronPrincipalIndex<NeuronId>,
 
     /// Set of all names given to Known Neurons, to prevent duplication.
     ///
     /// This set is cached and will be removed and recreated when the state is saved and restored.
-    pub known_neuron_name_set: HashSet<String>,
+    known_neuron_name_set: HashSet<String>,
 
     /// Neuron indexes migration state.
     indexes_migration: Migration,
 }
 
 impl NeuronStore {
-    pub fn new(heap_neurons: BTreeMap<u64, Neuron>, indexes_migration: Migration) -> Self {
-        let topic_followee_index = build_topic_followee_index(&heap_neurons);
+    pub fn new(
+        heap_neurons: BTreeMap<u64, Neuron>,
+        topic_followee_index: Option<HeapNeuronFollowingIndex<NeuronId, Topic>>,
+        indexes_migration: Migration,
+    ) -> Self {
+        // As an intermediate state, this may not be available post_upgrade.
+        let topic_followee_index =
+            topic_followee_index.unwrap_or_else(|| build_topic_followee_index(&heap_neurons));
+
         let principal_to_neuron_ids_index = build_principal_to_neuron_ids_index(&heap_neurons);
         let known_neuron_name_set = build_known_neuron_name_index(&heap_neurons);
 
@@ -212,6 +219,7 @@ impl NeuronStore {
                 .into_iter()
                 .map(|neuron| (neuron.id.unwrap().id, neuron))
                 .collect(),
+            None,
             Migration {
                 status: Some(MigrationStatus::Succeeded as i32),
                 failure_reason: None,

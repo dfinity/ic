@@ -1,10 +1,10 @@
 use super::*;
 use crate::{
     governance::{Governance, MockEnvironment},
-    pb::v1::Governance as GovernanceProto,
+    pb::v1::{neuron::Followees, Governance as GovernanceProto},
 };
 use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger};
-use maplit::{btreemap, hashset};
+use maplit::{btreemap, hashmap, hashset};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn simple_neuron(id: u64) -> Neuron {
@@ -33,6 +33,7 @@ fn test_batch_add_heap_neurons_to_stable_indexes_two_batches() {
             3 => simple_neuron(3),
             7 => simple_neuron(7),
         },
+        None,
         Migration::default(),
     );
 
@@ -55,6 +56,7 @@ fn test_batch_add_heap_neurons_to_stable_indexes_three_batches_last_empty() {
             7 => simple_neuron(7),
             12 => simple_neuron(12),
         },
+        None,
         Migration::default(),
     );
 
@@ -76,6 +78,7 @@ fn test_batch_add_heap_neurons_to_stable_indexes_three_batches_last_empty() {
 fn test_maybe_batch_add_heap_neurons_to_stable_indexes_succeed() {
     let mut neuron_store = NeuronStore::new(
         (0..10).map(|i| (i, simple_neuron(i))).collect(),
+        None,
         Migration::default(),
     );
 
@@ -93,6 +96,7 @@ fn test_maybe_batch_add_heap_neurons_to_stable_indexes_succeed() {
 fn test_maybe_batch_add_heap_neurons_to_stable_indexes_already_succeeded() {
     let mut neuron_store = NeuronStore::new(
         (0..10).map(|i| (i, simple_neuron(i))).collect(),
+        None,
         Migration {
             status: Some(MigrationStatus::Failed as i32),
             failure_reason: None,
@@ -114,6 +118,7 @@ fn test_maybe_batch_add_heap_neurons_to_stable_indexes_already_succeeded() {
 fn test_maybe_batch_add_heap_neurons_to_stable_indexes_already_failed() {
     let mut neuron_store = NeuronStore::new(
         (0..10).map(|i| (i, simple_neuron(i))).collect(),
+        None,
         Migration {
             status: Some(MigrationStatus::Succeeded as i32),
             failure_reason: None,
@@ -137,6 +142,7 @@ fn test_add_neuron_after_indexes_migration() {
         btreemap! {
             1 => simple_neuron(1),
         },
+        None,
         Migration {
             status: Some(MigrationStatus::Succeeded as i32),
             failure_reason: None,
@@ -163,6 +169,7 @@ fn test_add_neuron_during_indexes_migration_smaller_id() {
         (1..=(NEURON_INDEXES_MIGRATION_BATCH_SIZE as u64 + 1))
             .map(|i| (i * 2, simple_neuron(i * 2)))
             .collect(),
+        None,
         Migration::default(),
     );
 
@@ -200,6 +207,7 @@ fn test_remove_neuron_after_indexes_migration() {
         btreemap! {
             neuron.id.unwrap().id => neuron.clone(),
         },
+        None,
         Migration {
             status: Some(MigrationStatus::Succeeded as i32),
             failure_reason: None,
@@ -228,6 +236,7 @@ fn test_modify_neuron_after_indexes_migration() {
         btreemap! {
             neuron.id.unwrap().id => neuron.clone(),
         },
+        None,
         Migration {
             status: Some(MigrationStatus::Succeeded as i32),
             failure_reason: None,
@@ -271,6 +280,7 @@ fn test_add_neuron_during_indexes_migration() {
         (1..=(NEURON_INDEXES_MIGRATION_BATCH_SIZE as u64 + 1))
             .map(|i| (i, simple_neuron(i)))
             .collect(),
+        None,
         Migration::default(),
     );
 
@@ -326,6 +336,7 @@ fn test_remove_neuron_during_indexes_migration() {
         (1..=(NEURON_INDEXES_MIGRATION_BATCH_SIZE as u64 + 1))
             .map(|i| (i, simple_neuron(i)))
             .collect(),
+        None,
         Migration::default(),
     );
 
@@ -381,6 +392,7 @@ fn test_modify_neuron_during_indexes_migration() {
         (1..=(NEURON_INDEXES_MIGRATION_BATCH_SIZE as u64 + 1))
             .map(|i| (i, simple_neuron(i)))
             .collect(),
+        None,
         Migration::default(),
     );
 
@@ -454,6 +466,7 @@ fn test_maybe_batch_add_heap_neurons_to_stable_indexes_failure() {
             1 => neuron_1,
             2 => neuron_2.clone(),
         },
+        None,
         Migration::default(),
     );
 
@@ -488,7 +501,7 @@ fn test_batch_add_inactive_neurons_to_stable_memory() {
     // own thread.
 
     // Step 2: Call the code under test.
-    let mut neuron_store = NeuronStore::new(id_to_neuron, Migration::default());
+    let mut neuron_store = NeuronStore::new(id_to_neuron, None, Migration::default());
     let batch_result = neuron_store.batch_add_inactive_neurons_to_stable_memory(batch);
 
     // Step 3: Verify.
@@ -560,6 +573,7 @@ fn test_heap_range_with_begin_and_limit() {
             7 => simple_neuron(7),
             12 => simple_neuron(12),
         },
+        None,
         Migration::default(),
     );
 
@@ -691,4 +705,56 @@ fn test_with_neuron_mut_inactive_neuron() {
             );
         }
     }
+}
+
+#[test]
+fn test_neuron_store_builds_index_unless_provided() {
+    let mut neuron3 = simple_neuron(3);
+    neuron3.followees = hashmap! {
+        2 => Followees {
+            followees: vec![NeuronId { id: 1 }],
+        },
+        3 => Followees {
+            followees: vec![NeuronId { id: 2 }],
+        }
+    };
+    let mut neuron1 = simple_neuron(1);
+    neuron1.followees = hashmap! {
+        2 => Followees {
+            followees: vec![NeuronId { id: 1 }],
+        },
+        3 => Followees {
+            followees: vec![NeuronId { id: 2 }],
+        }
+    };
+    let neurons = btreemap! {
+        1 => neuron1,
+        3 => neuron3,
+        7 => simple_neuron(7),
+        12 => simple_neuron(12),
+    };
+    let neuron_store = NeuronStore::new(neurons.clone(), None, Migration::default());
+    assert_eq!(neuron_store.topic_followee_index.num_entries(), 4);
+    assert_eq!(
+        neuron_store
+            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(3).unwrap())
+            .into_iter()
+            .collect::<HashSet<_>>(),
+        hashset! {NeuronId { id: 3 }, NeuronId { id: 1 }}
+    );
+
+    let principal_to_neuron_ids_index = HeapNeuronFollowingIndex::new();
+
+    let neuron_store = NeuronStore::new(
+        neurons,
+        Some(principal_to_neuron_ids_index),
+        Migration::default(),
+    );
+
+    assert_eq!(neuron_store.topic_followee_index.num_entries(), 0);
+    assert_eq!(
+        neuron_store
+            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(3).unwrap()),
+        vec![]
+    );
 }

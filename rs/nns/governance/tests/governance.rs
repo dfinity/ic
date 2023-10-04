@@ -35,15 +35,15 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance::governance::get_node_provider_reward;
 use ic_nns_governance::{
     governance::{
-        test_data::CREATE_SERVICE_NERVOUS_SYSTEM, validate_proposal_title, Environment, Governance,
-        HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
-        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        get_node_provider_reward, test_data::CREATE_SERVICE_NERVOUS_SYSTEM,
+        validate_proposal_title, Environment, Governance, HeapGrowthPotential,
+        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
+        MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
+        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
@@ -11137,10 +11137,28 @@ async fn test_known_neurons() {
         .iter()
         .cloned()
         .collect();
-    assert_eq!(
-        expected_known_neuron_name_set,
-        gov.neuron_store.known_neuron_name_set
-    );
+
+    let known_neuron_name_set = gov
+        .neuron_store
+        .list_known_neuron_ids()
+        .into_iter()
+        .flat_map(|neuron_id| {
+            gov.neuron_store
+                .with_neuron(&neuron_id, |neuron| {
+                    neuron
+                        .known_neuron_data
+                        .as_ref()
+                        .map(|data| data.name.clone())
+                })
+                .unwrap()
+        })
+        .collect::<HashSet<_>>();
+
+    // Test that we have them all
+    assert_eq!(expected_known_neuron_name_set, known_neuron_name_set);
+    // Test that they're in the index
+    assert!(gov.neuron_store.contains_known_neuron_name("One"));
+    assert!(gov.neuron_store.contains_known_neuron_name("Zwei"));
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
