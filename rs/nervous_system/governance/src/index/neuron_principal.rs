@@ -1,9 +1,12 @@
 use ic_base_types::PrincipalId;
 use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap};
 use num_traits::bounds::LowerBounded;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashSet};
-use std::{clone::Clone, cmp::Ord, hash::Hash};
+use std::{
+    clone::Clone,
+    cmp::Ord,
+    collections::{btree_map::Entry, BTreeMap, HashSet},
+    hash::Hash,
+};
 
 /// An index to make it easy to look up neuron ids by principal id.
 pub trait NeuronPrincipalIndex<NeuronId> {

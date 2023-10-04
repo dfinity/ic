@@ -758,7 +758,7 @@ mod tests {
         };
         btree_map.insert(non_idle.id.unwrap().id, non_idle);
 
-        let neuron_store = NeuronStore::new(btree_map, Migration::default());
+        let neuron_store = NeuronStore::new(btree_map, None, Migration::default());
 
         STABLE_NEURON_STORE.with(|stable_neuron_store| {
             for neuron in idle_neurons {
@@ -802,7 +802,7 @@ mod tests {
         btree_map.get_mut(&2).unwrap().cached_neuron_stake_e8s += 1;
         btree_map.remove(&3);
 
-        let neuron_store = NeuronStore::new(btree_map, Migration::default());
+        let neuron_store = NeuronStore::new(btree_map, None, Migration::default());
 
         STABLE_NEURON_STORE.with(|stable_neuron_store| {
             for neuron in idle_neurons {

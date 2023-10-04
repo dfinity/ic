@@ -164,6 +164,21 @@ impl<NeuronId, Category> HeapNeuronFollowingIndex<NeuronId, Category> {
             category_to_followee_to_followers: BTreeMap::new(),
         }
     }
+
+    /// Returns the number of entries (category, followee, follower) in the index. This is for
+    /// validation purpose: this should be equal to the size of the followee collection within the
+    /// primary storage.
+    pub fn num_entries(&self) -> usize {
+        self.category_to_followee_to_followers
+            .values()
+            .map(|neuron_followers_map| {
+                neuron_followers_map
+                    .values()
+                    .map(|followers| followers.len())
+                    .sum::<usize>()
+            })
+            .sum()
+    }
 }
 
 impl<NeuronId, Category> NeuronFollowingIndex<NeuronId, Category>
