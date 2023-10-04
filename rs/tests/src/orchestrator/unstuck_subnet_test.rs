@@ -127,7 +127,7 @@ pub fn test(test_env: TestEnv) {
         sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
         sudo mv image.bin old-image.bin
-        sudo curl {} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500
+        sudo curl {} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
         sudo chmod --reference=old-image.bin image.bin
         sudo chown --reference=old-image.bin image.bin
         sudo rm old-image.bin
