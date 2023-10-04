@@ -12,6 +12,7 @@ use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
 use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH};
 use http_body::Body as HttpBody;
+use ic_types::messages::ReplicaHealthStatus;
 use prometheus::{
     register_histogram_vec_with_registry, register_int_counter_vec_with_registry, Encoder,
     HistogramOpts, HistogramVec, IntCounterVec, Registry, TextEncoder,
@@ -22,6 +23,7 @@ use tracing::info;
 use crate::{
     cache::CacheStatus,
     routes::{ErrorCause, RequestContext},
+    snapshot::Node,
 };
 
 const KB: f64 = 1024.0;
@@ -39,11 +41,13 @@ const LABELS_HTTP: &[&str] = &[
     "node_id",
     "error_cause",
     "cache_status",
+    "cache_bypass",
 ];
 
 // A wrapper for http::Body implementations that tracks the number of bytes sent
 pub struct MetricsBody<D, E> {
     inner: Pin<Box<dyn HttpBody<Data = D, Error = E> + Send + 'static>>,
+    // TODO see if we can make this FnOnce somehow
     callback: Box<dyn Fn(u64, Result<(), String>) + Send + 'static>,
     expected_size: Option<u64>,
     bytes_sent: u64,
@@ -199,7 +203,6 @@ pub struct HttpMetricParams {
     pub action: String,
     pub counter: IntCounterVec,
     pub durationer: HistogramVec,
-    pub durationer_full: HistogramVec,
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
 }
@@ -220,15 +223,6 @@ impl HttpMetricParams {
             durationer: register_histogram_vec_with_registry!(
                 format!("{action}_duration_sec"),
                 format!("Records the duration of {action} request processing in seconds"),
-                LABELS_HTTP,
-                HTTP_DURATION_BUCKETS.to_vec(),
-                registry
-            )
-            .unwrap(),
-
-            durationer_full: register_histogram_vec_with_registry!(
-                format!("{action}_duration_full_sec"),
-                format!("Records the full duration of {action} requests in seconds"),
                 LABELS_HTTP,
                 HTTP_DURATION_BUCKETS.to_vec(),
                 registry
@@ -256,8 +250,44 @@ impl HttpMetricParams {
     }
 }
 
-// for http calls through axum we do axum middleware instead of WithMetrics
-pub async fn with_metrics_middleware(
+#[derive(Clone)]
+pub struct HttpMetricParamsStatus {
+    pub counter: IntCounterVec,
+}
+
+impl HttpMetricParamsStatus {
+    pub fn new(registry: &Registry) -> Self {
+        Self {
+            counter: register_int_counter_vec_with_registry!(
+                format!("http_request_status_total"),
+                format!("Counts occurrences of status calls"),
+                &["health"],
+                registry
+            )
+            .unwrap(),
+        }
+    }
+}
+
+pub async fn metrics_middleware_status(
+    State(metric_params): State<HttpMetricParamsStatus>,
+    request: Request<Body>,
+    next: Next<Body>,
+) -> impl IntoResponse {
+    let response = next.run(request).await;
+    let health = format!(
+        "{:?}",
+        response.extensions().get::<ReplicaHealthStatus>().unwrap()
+    );
+
+    let HttpMetricParamsStatus { counter } = metric_params;
+    counter.with_label_values(&[health.as_str()]).inc();
+
+    response
+}
+
+// middleware to log and measure proxied requests
+pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
     request: Request<Body>,
@@ -275,37 +305,31 @@ pub async fn with_metrics_middleware(
     let proc_duration = start_time.elapsed().as_secs_f64();
 
     // Extract extensions
-    let request_ctx = response
+    let ctx = response
         .extensions()
         .get::<RequestContext>()
         .cloned()
         .unwrap_or_default();
 
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
-    let cache_status = response.extensions().get::<CacheStatus>().cloned();
+    let node = response.extensions().get::<Node>().cloned();
+    let cache_status = response
+        .extensions()
+        .get::<CacheStatus>()
+        .cloned()
+        .unwrap_or_default();
 
-    let request_type = request_ctx.request_type.to_string();
+    // Prepare fields
+    let request_type = ctx.request_type.to_string();
     let status_code = response.status();
-
-    let subnet_id = request_ctx
-        .node
-        .as_ref()
-        .map(|x| x.subnet_id.to_string())
-        .unwrap_or("unknown".to_string());
-
-    let node_id = request_ctx
-        .node
-        .as_ref()
-        .map(|x| x.id.to_string())
-        .unwrap_or("unknown".to_string());
-
-    let sender = request_ctx.sender.map(|x| x.to_string());
+    let sender = ctx.sender.map(|x| x.to_string());
+    let node_id = node.as_ref().map(|x| x.id.to_string());
+    let subnet_id = node.as_ref().map(|x| x.subnet_id.to_string());
 
     let HttpMetricParams {
         action,
         counter,
         durationer,
-        durationer_full,
         request_sizer,
         response_sizer,
     } = metric_params;
@@ -314,40 +338,41 @@ pub async fn with_metrics_middleware(
     let record_metrics = move |response_size: u64, body_result: Result<(), String>| {
         let full_duration = start_time.elapsed().as_secs_f64();
 
-        let cache_error = match &cache_status {
-            Some(CacheStatus::Error(e)) => Some(e.clone()),
-            _ => None,
-        };
-
-        let cache_status = &cache_status
-            .clone()
-            .map(|x| x.to_string())
-            .unwrap_or(CacheStatus::Skip.to_string());
-
         let (error_cause, error_details) = match &error_cause {
             Some(v) => (Some(v.to_string()), v.details()),
             None => (None, None),
         };
 
-        let error_cause_label = error_cause.clone().unwrap_or("none".to_string());
+        let cache_bypass_reason = match &cache_status {
+            CacheStatus::Bypass(v) => Some(v.to_string()),
+            _ => None,
+        };
 
+        // Prepare labels
+        // Otherwise "temporary value dropped" error occurs
+        let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
+        let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
+        let node_id_lbl = node_id.clone().unwrap_or("unknown".to_string());
+        let cache_status_lbl = &cache_status.to_string();
+        let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
+
+        // TODO Potential cardinality is about 8M which is a lot
+        // Check over a long period in PROD and measure
         let labels = &[
-            request_type.as_str(),
-            status_code.as_str(),
-            subnet_id.as_str(),
-            node_id.as_str(),
-            error_cause_label.as_str(),
-            cache_status.as_str(),
+            request_type.as_str(),            // x4
+            status_code.as_str(),             // x27 average
+            subnet_id_lbl.as_str(),           // x37 but since each node is in a single subnet -> x1
+            node_id_lbl.as_str(),             // x550
+            error_cause_lbl.as_str(),         // x15 but not sure if all errors would ever manifest
+            cache_status_lbl.as_str(),        // x4
+            cache_bypass_reason_lbl.as_str(), // x5 but since it relates only to BYPASS cache status -> total for 2 fields is x9
         ];
 
         counter.with_label_values(labels).inc();
         durationer.with_label_values(labels).observe(proc_duration);
-        durationer_full
-            .with_label_values(labels)
-            .observe(full_duration);
         request_sizer
             .with_label_values(labels)
-            .observe(request_ctx.request_size as f64);
+            .observe(ctx.request_size as f64);
         response_sizer
             .with_label_values(labels)
             .observe(response_size as f64);
@@ -355,25 +380,24 @@ pub async fn with_metrics_middleware(
         info!(
             action,
             request_id,
-            request_type = request_ctx.request_type.to_string(),
+            request_type = ctx.request_type.to_string(),
             error_cause,
             error_details,
             status = status_code.as_u16(),
             subnet_id,
             node_id,
-            canister_id = request_ctx.canister_id.map(|x| x.to_string()),
-            canister_id_cbor = request_ctx.canister_id_cbor.map(|x| x.to_string()),
+            canister_id = ctx.canister_id.map(|x| x.to_string()),
             sender,
-            method_name = request_ctx.method_name,
+            method_name = ctx.method_name,
             proc_duration,
             full_duration,
-            request_size = request_ctx.request_size,
+            request_size = ctx.request_size,
             response_size,
             body_error = body_result.err(),
-            cache_status,
-            cache_error,
-            nonce_len = request_ctx.nonce.clone().map(|x| x.len()),
-            arg_len = request_ctx.arg.clone().map(|x| x.len()),
+            %cache_status,
+            cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
+            nonce_len = ctx.nonce.clone().map(|x| x.len()),
+            arg_len = ctx.arg.clone().map(|x| x.len()),
         );
     };
 

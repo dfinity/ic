@@ -1188,6 +1188,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "trace",
                     "request-id",
                     "util",
+                    "compression-full",
                 ],
             ),
             "tower_governor": crate.spec(

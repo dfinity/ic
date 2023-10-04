@@ -1,5 +1,5 @@
 {
-  "checksum": "1e81d5d545d1640a1d902af3dd622bbd7107247db1a407af89d064e9fe983661",
+  "checksum": "a4f676f46dd2e80c2d56562adcb2e0a4031b1adbb6f4072b1d60ec94c5f5f2b9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2859,6 +2859,87 @@
         "version": "1.9.0"
       },
       "license": "Apache-2.0 OR MIT"
+    },
+    "async-compression 0.4.3": {
+      "name": "async-compression",
+      "version": "0.4.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/async-compression/0.4.3/download",
+          "sha256": "bb42b2197bf15ccb092b62c74515dbd8b86d0effd934795f6687c93b6e679a2c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_compression",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "async_compression",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "brotli",
+            "flate2",
+            "gzip",
+            "libzstd",
+            "tokio",
+            "zlib",
+            "zstd",
+            "zstd-safe"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "brotli 3.3.4",
+              "target": "brotli"
+            },
+            {
+              "id": "flate2 1.0.26",
+              "target": "flate2"
+            },
+            {
+              "id": "futures-core 0.3.28",
+              "target": "futures_core"
+            },
+            {
+              "id": "memchr 2.5.0",
+              "target": "memchr"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "tokio 1.32.0",
+              "target": "tokio"
+            },
+            {
+              "id": "zstd 0.12.4",
+              "target": "zstd",
+              "alias": "libzstd"
+            },
+            {
+              "id": "zstd-safe 6.0.5+zstd.1.5.4",
+              "target": "zstd_safe"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.4.3"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "async-io 1.13.0": {
       "name": "async-io",
@@ -51290,8 +51371,16 @@
         ],
         "crate_features": {
           "common": [
+            "async-compression",
+            "compression-br",
+            "compression-deflate",
+            "compression-full",
+            "compression-gzip",
+            "compression-zstd",
             "default",
             "request-id",
+            "tokio",
+            "tokio-util",
             "tower",
             "trace",
             "tracing",
@@ -51302,6 +51391,10 @@
         },
         "deps": {
           "common": [
+            {
+              "id": "async-compression 0.4.3",
+              "target": "async_compression"
+            },
             {
               "id": "bitflags 2.3.3",
               "target": "bitflags"
@@ -51333,6 +51426,14 @@
             {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
+            },
+            {
+              "id": "tokio 1.32.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-util 0.7.8",
+              "target": "tokio_util"
             },
             {
               "id": "tower 0.4.13",

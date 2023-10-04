@@ -16,7 +16,6 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::Service;
 
 use crate::persist::test::node;
-use crate::routes::RequestContext;
 
 async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiError> {
     Ok("foo".into_response())
@@ -31,11 +30,7 @@ async fn body_to_subnet_context(
     let subnet_id = String::from_utf8(body_vec.clone()).unwrap();
     let mut request = Request::from_parts(parts, hyper::Body::from(body_vec));
     let node = node(0, Principal::from_text(subnet_id).unwrap());
-    let ctx = RequestContext {
-        node: Some(node),
-        ..Default::default()
-    };
-    request.extensions_mut().insert(ctx);
+    request.extensions_mut().insert(node);
     let resp = next.run(request).await;
     Ok(resp)
 }

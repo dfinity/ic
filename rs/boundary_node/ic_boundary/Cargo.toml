@@ -66,7 +66,12 @@ tokio = { version = "1.32.0", features = ["full"] }
 tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
 tower = { workspace = true }
 tower_governor = "0.1"
-tower-http = { version = "0.4.3", features = ["trace", "request-id", "util"] }
+tower-http = { version = "0.4.4", features = [
+    "trace",
+    "request-id",
+    "util",
+    "compression-full",
+] }
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }
 url = "2.1.1"

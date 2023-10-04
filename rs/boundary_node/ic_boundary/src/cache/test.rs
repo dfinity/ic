@@ -61,12 +61,15 @@ async fn handler(request: Request<Body>) -> impl IntoResponse {
 
 #[tokio::test]
 async fn test_cache() -> Result<(), Error> {
+    // Check that we fail if item size >= max size
+    assert!(Cache::new(1024, 1024, Duration::from_secs(60), false).is_err());
+
     let cache = Cache::new(
         MAX_MEM_SIZE as u64,
         MAX_RESP_SIZE,
         Duration::from_secs(60),
         false,
-    );
+    )?;
     let cache = Arc::new(cache);
 
     let mut app = Router::new()
@@ -81,7 +84,7 @@ async fn test_cache() -> Result<(), Error> {
     let req = gen_request_with_params(CANISTER_1, false, 8, 0, false);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
-    assert_eq!(cs, CacheStatus::Skip);
+    assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::NonAnonymous));
 
     // Check cache hits and misses
     let req = gen_request(CANISTER_1, false);
@@ -109,7 +112,7 @@ async fn test_cache() -> Result<(), Error> {
     let req = gen_request(CANISTER_1, true);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
-    assert_eq!(cs, CacheStatus::Skip);
+    assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::Nonce));
 
     // Check Cache-Control
     for &v in SKIP_CACHE_DIRECTIVES.iter() {
@@ -118,7 +121,7 @@ async fn test_cache() -> Result<(), Error> {
             .insert(CACHE_CONTROL, HeaderValue::from_str(v).unwrap());
         let res = app.call(req).await.unwrap();
         let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
-        assert_eq!(cs, CacheStatus::Skip);
+        assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::CacheControl));
     }
 
     // Check cache flushing
@@ -146,7 +149,7 @@ async fn test_cache() -> Result<(), Error> {
     let req = gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE + 1, 0, true);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
-    assert_eq!(cs, CacheStatus::Skip);
+    assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::TooBig));
 
     // Check memory limits
     cache.clear().unwrap();

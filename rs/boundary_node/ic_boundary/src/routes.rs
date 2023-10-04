@@ -10,7 +10,7 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::{Body, StreamBody},
-    extract::{rejection::PathRejection, MatchedPath, Path, State},
+    extract::{MatchedPath, Path, State},
     http::{Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -21,7 +21,10 @@ use http::{
     header::{HeaderName, HeaderValue, CONTENT_TYPE},
     Method,
 };
-use ic_types::messages::{Blob, HttpStatusResponse, ReplicaHealthStatus};
+use ic_types::{
+    messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
+    CanisterId,
+};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use tower_governor::errors::GovernorError;
@@ -37,7 +40,12 @@ use {
     tokio::sync::RwLock,
 };
 
-use crate::{cache::CacheStatus, http::HttpClient, persist::Routes, snapshot::Node};
+use crate::{
+    cache::CacheStatus,
+    http::{reqwest_error_infer, HttpClient},
+    persist::Routes,
+    snapshot::Node,
+};
 
 // TODO which one to use?
 const IC_API_VERSION: &str = "0.18.0";
@@ -50,6 +58,9 @@ pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
+    HeaderName::from_static("x-ic-cache-bypass-reason");
 
 // Rust const/static concat is non-existent, so we have to repeat
 pub const PATH_STATUS: &str = "/api/v2/status";
@@ -89,7 +100,12 @@ pub enum ErrorCause {
     NoRoutingTable,
     SubnetNotFound,
     NoHealthyNodes,
-    ReplicaUnreachable(String),
+    ReplicaErrorDNS(String),
+    ReplicaErrorConnect,
+    ReplicaTimeout,
+    ReplicaTLSErrorOther(String),
+    ReplicaTLSErrorCert(String),
+    ReplicaErrorOther(String),
     TooManyRequests,
     Other(String),
 }
@@ -105,7 +121,12 @@ impl ErrorCause {
             Self::NoRoutingTable => StatusCode::INTERNAL_SERVER_ERROR,
             Self::SubnetNotFound => StatusCode::BAD_REQUEST, // TODO change to 404?
             Self::NoHealthyNodes => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::ReplicaUnreachable(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ReplicaErrorDNS(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ReplicaErrorConnect => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ReplicaTimeout => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ReplicaTLSErrorOther(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ReplicaTLSErrorCert(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ReplicaErrorOther(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
         }
     }
@@ -116,7 +137,10 @@ impl ErrorCause {
             Self::UnableToParseCBOR(x) => Some(x.clone()),
             Self::MalformedRequest(x) => Some(x.clone()),
             Self::MalformedResponse(x) => Some(x.clone()),
-            Self::ReplicaUnreachable(x) => Some(x.clone()),
+            Self::ReplicaErrorDNS(x) => Some(x.clone()),
+            Self::ReplicaTLSErrorOther(x) => Some(x.clone()),
+            Self::ReplicaTLSErrorCert(x) => Some(x.clone()),
+            Self::ReplicaErrorOther(x) => Some(x.clone()),
             _ => None,
         }
     }
@@ -133,7 +157,12 @@ impl fmt::Display for ErrorCause {
             Self::NoRoutingTable => write!(f, "no_routing_table"),
             Self::SubnetNotFound => write!(f, "subnet_not_found"),
             Self::NoHealthyNodes => write!(f, "no_healthy_nodes"),
-            Self::ReplicaUnreachable(_) => write!(f, "replica_unreachable"),
+            Self::ReplicaErrorDNS(_) => write!(f, "replica_error_dns"),
+            Self::ReplicaErrorConnect => write!(f, "replica_error_connect"),
+            Self::ReplicaTimeout => write!(f, "replica_timeout"),
+            Self::ReplicaTLSErrorOther(_) => write!(f, "replica_tls_error"),
+            Self::ReplicaTLSErrorCert(_) => write!(f, "replica_tls_error_cert"),
+            Self::ReplicaErrorOther(_) => write!(f, "replica_error_other"),
             Self::TooManyRequests => write!(f, "rate_limited"),
         }
     }
@@ -158,12 +187,10 @@ impl IntoResponse for ErrorCause {
 #[derive(Default, Clone)]
 pub struct RequestContext {
     pub request_type: RequestType,
-    pub canister_id: Option<Principal>,
-    pub node: Option<Node>,
     pub request_size: u32,
 
     // CBOR fields
-    pub canister_id_cbor: Option<Principal>,
+    pub canister_id: Option<Principal>,
     pub sender: Option<Principal>,
     pub method_name: Option<String>,
     pub nonce: Option<Vec<u8>>,
@@ -224,13 +251,13 @@ pub trait Proxy: Sync + Send {
         request_type: RequestType,
         request: Request<Body>,
         node: Node,
-        canister_id: Principal,
+        canister_id: CanisterId,
     ) -> Result<Response, ErrorCause>;
 }
 
 #[async_trait]
 pub trait Lookup: Sync + Send {
-    async fn lookup(&self, id: &Principal) -> Result<Node, ErrorCause>;
+    async fn lookup(&self, id: &CanisterId) -> Result<Node, ErrorCause>;
 }
 
 #[async_trait]
@@ -273,7 +300,7 @@ impl Proxy for ProxyRouter {
         request_type: RequestType,
         request: Request<Body>,
         node: Node,
-        canister_id: Principal,
+        canister_id: CanisterId,
     ) -> Result<Response, ErrorCause> {
         // Prepare the request
         let (parts, body) = request.into_parts();
@@ -294,7 +321,7 @@ impl Proxy for ProxyRouter {
             .http_client
             .execute(request)
             .await
-            .map_err(|e| ErrorCause::ReplicaUnreachable(format!("HTTP call failed: {e}")))?;
+            .map_err(reqwest_error_infer)?;
 
         // Convert Reqwest response into Axum one with body streaming
         let status = response.status();
@@ -310,12 +337,12 @@ impl Proxy for ProxyRouter {
 
 #[async_trait]
 impl Lookup for ProxyRouter {
-    async fn lookup(&self, id: &Principal) -> Result<Node, ErrorCause> {
+    async fn lookup(&self, canister_id: &CanisterId) -> Result<Node, ErrorCause> {
         let subnet = self
             .published_routes
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
-            .lookup(id.to_owned())
+            .lookup(canister_id.get_ref().0)
             .ok_or(ErrorCause::SubnetNotFound)?; // Requested canister route wasn't found
 
         // Pick random node
@@ -433,33 +460,23 @@ impl From<BoxError> for ApiError {
     }
 }
 
-// Preprocess the request before handing it over to handlers
+// Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
-    State(lk): State<Arc<dyn Lookup>>,
-    canister_id: Result<Path<String>, PathRejection>,
+    canister_id: Path<String>,
     matched_path: MatchedPath,
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Derive request type
+    // Derive request type, status call never ends up here
     let request_type = match matched_path.as_str() {
         PATH_QUERY => RequestType::Query,
         PATH_CALL => RequestType::Call,
         PATH_READ_STATE => RequestType::ReadState,
-        PATH_STATUS => RequestType::Status,
         _ => panic!("unknown path, should never happen"),
     };
 
-    // No preprocessing needed if it's a status request
-    if request_type == RequestType::Status {
-        return Ok(next.run(request).await);
-    }
-
-    // This is always Ok for non-status calls
-    let canister_id = canister_id.unwrap().0;
-
     // Decode canister_id from URL
-    let canister_id = Principal::from_text(canister_id).map_err(|err| {
+    let canister_id = CanisterId::from_str(&canister_id).map_err(|err| {
         ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
     })?;
 
@@ -475,17 +492,12 @@ pub async fn preprocess_request(
         .map_err(|err| ErrorCause::UnableToParseCBOR(err.to_string()))?;
     let content = envelope.content;
 
-    // Try to look up a target node using canister id
-    let node = Some(lk.lookup(&canister_id).await?);
-
     // Construct the context
     let ctx = RequestContext {
         request_type,
-        node,
         request_size: body.len() as u32,
-        canister_id: Some(canister_id),
         sender: Some(content.sender),
-        canister_id_cbor: content.canister_id,
+        canister_id: content.canister_id,
         method_name: content.method_name,
         ingress_expiry: content.ingress_expiry,
         arg: content.arg.map(|x| x.0),
@@ -495,18 +507,43 @@ pub async fn preprocess_request(
     // Reconstruct request back from parts
     let mut request = Request::from_parts(parts, hyper::Body::from(body));
 
-    // Inject context into request
+    // Inject variables into the request
     request.extensions_mut().insert(ctx.clone());
+    request.extensions_mut().insert(canister_id);
 
     // Pass request to the next processor
     let mut response = next.run(request).await;
 
     // Inject context into the response for access by other middleware
     response.extensions_mut().insert(ctx);
+    response.extensions_mut().insert(canister_id);
 
     Ok(response)
 }
 
+// Middleware: looks up the node in the routing table
+pub async fn lookup_node(
+    State(lk): State<Arc<dyn Lookup>>,
+    Extension(canister_id): Extension<CanisterId>,
+    mut request: Request<Body>,
+    next: Next<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    // Try to look up a target node using the canister id
+    let node = lk.lookup(&canister_id).await?;
+
+    // Inject node into request
+    request.extensions_mut().insert(node.clone());
+
+    // Pass request to the next processor
+    let mut response = next.run(request).await;
+
+    // Inject node into the response for access by other middleware
+    response.extensions_mut().insert(node);
+
+    Ok(response)
+}
+
+// Middleware: postprocess the response
 pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
     let mut response = next.run(request).await;
 
@@ -525,52 +562,58 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             HEADER_IC_CACHE,
             HeaderValue::from_str(v.to_string().as_str()).unwrap(),
         );
+
+        if let CacheStatus::Bypass(v) = v {
+            response.headers_mut().insert(
+                HEADER_IC_CACHE_BYPASS_REASON,
+                HeaderValue::from_str(v.to_string().as_str()).unwrap(),
+            );
+        }
     }
 
     response
 }
 
-// Handles IC status call
+// Handler: processess IC status call
 pub async fn status(
     State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
-) -> Result<impl IntoResponse, ApiError> {
-    let response = HttpStatusResponse {
+) -> impl IntoResponse {
+    let health = h.health().await;
+
+    let status = HttpStatusResponse {
         ic_api_version: IC_API_VERSION.to_string(),
         root_key: Some(rk.root_key().await.into()),
         impl_version: None,
         impl_hash: None,
-        replica_health_status: Some(h.health().await),
+        replica_health_status: Some(health),
         certified_height: None,
     };
 
+    // Serialize to CBOR
     let mut ser = serde_cbor::Serializer::new(Vec::new());
-    ser.self_describe()
-        .map_err(|_| ApiError::Unspecified(anyhow!("unable to add self-describe tag")))?;
-
-    response
-        .serialize(&mut ser)
-        .map_err(|_| ApiError::Unspecified(anyhow!("unable to serialize response to cbor")))?;
-
+    // These should not really fail, better to panic if something in serde changes which would cause them to fail
+    ser.self_describe().unwrap();
+    status.serialize(&mut ser).unwrap();
     let cbor = ser.into_inner();
 
-    Ok(cbor.into_response())
+    // Construct response and inject health status for middleware
+    let mut resp = cbor.into_response();
+    resp.extensions_mut().insert(health);
+    resp
 }
 
-// Unified handler for query/call/read_state calls
+// Handler: Unified handler for query/call/read_state calls
 pub async fn handle_call(
     State(p): State<Arc<dyn Proxy>>,
     Extension(ctx): Extension<RequestContext>,
+    Extension(canister_id): Extension<CanisterId>,
+    Extension(node): Extension<Node>,
     request: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Proxy the request
-    // node and canister_id will be Some() if we got here, otherwise preprocess_request() would refuse request earlier
+    // All variables are defined if we got here, otherwise upper layers would refuse request earlier
     let resp = p
-        .proxy(
-            ctx.request_type,
-            request,
-            ctx.node.clone().unwrap(),
-            ctx.canister_id.unwrap(),
-        )
+        .proxy(ctx.request_type, request, node, canister_id)
         .await?;
 
     Ok(resp)

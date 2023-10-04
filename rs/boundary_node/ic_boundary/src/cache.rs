@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc, time::Duration};
 
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use axum::{
     body::Body,
     extract::State,
@@ -51,9 +51,33 @@ where
     }
 }
 
+// Reason why the caching was skipped
 #[derive(Debug, Clone, PartialEq)]
+pub enum CacheBypassReason {
+    Nonce,
+    NonAnonymous,
+    CacheControl,
+    SizeUnknown,
+    TooBig,
+}
+
+impl fmt::Display for CacheBypassReason {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Nonce => write!(f, "nonce"),
+            Self::NonAnonymous => write!(f, "non_anonymous"),
+            Self::CacheControl => write!(f, "cache_control"),
+            Self::SizeUnknown => write!(f, "size_unknown"),
+            Self::TooBig => write!(f, "too_big"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum CacheStatus {
-    Skip,
+    #[default]
+    Disabled,
+    Bypass(CacheBypassReason),
     Hit,
     Miss,
     Error(String), // TODO remove if no errors manifest in prod
@@ -70,7 +94,8 @@ impl CacheStatus {
 impl fmt::Display for CacheStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Skip => write!(f, "SKIP"),
+            Self::Disabled => write!(f, "DISABLED"),
+            Self::Bypass(_) => write!(f, "BYPASS"),
             Self::Hit => write!(f, "HIT"),
             Self::Miss => write!(f, "MISS"),
             Self::Error(_) => write!(f, "ERROR"),
@@ -102,8 +127,14 @@ impl Cache {
         max_item_size: usize,
         ttl: Duration,
         cache_non_anonymous: bool,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        if max_item_size >= cache_size as usize {
+            return Err(anyhow!(
+                "Cache item size should be less than whole cache size"
+            ));
+        }
+
+        Ok(Self {
             cache: CacheBuilder::new(
                 // That's the recommended way of estimating it
                 (cache_size as usize) / AVG_CACHE_VALUE_SIZE * 10,
@@ -115,7 +146,7 @@ impl Cache {
             max_item_size,
             ttl,
             cache_non_anonymous,
-        }
+        })
     }
 
     // Stores the response components in the cache
@@ -210,21 +241,31 @@ pub async fn cache_middleware(
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Skip cache if there's a nonce
-    let mut skip = ctx.nonce.is_some();
-
-    // Skip non-anonymous requests if not configured to process them
-    skip |= Some(false) == ctx.is_anonymous() && !cache.cache_non_anonymous;
-
-    // Check if we have a Cache-Control header and if it asks us not to use cache
-    if let Some(v) = request.headers().get(CACHE_CONTROL) {
-        if let Ok(hdr) = v.to_str() {
-            skip |= SKIP_CACHE_DIRECTIVES.iter().any(|&x| hdr.contains(x));
+    let bypass_reason = (|| {
+        // Skip cache if there's a nonce
+        if ctx.nonce.is_some() {
+            return Some(CacheBypassReason::Nonce);
         }
-    }
 
-    if skip {
-        return Ok(CacheStatus::Skip.with_response(next.run(request).await));
+        // Skip non-anonymous requests if not configured to process them
+        if Some(false) == ctx.is_anonymous() && !cache.cache_non_anonymous {
+            return Some(CacheBypassReason::NonAnonymous);
+        }
+
+        // Check if we have a Cache-Control header and if it asks us not to use cache
+        if let Some(v) = request.headers().get(CACHE_CONTROL) {
+            if let Ok(hdr) = v.to_str() {
+                if SKIP_CACHE_DIRECTIVES.iter().any(|&x| hdr.contains(x)) {
+                    return Some(CacheBypassReason::CacheControl);
+                }
+            }
+        }
+
+        None
+    })();
+
+    if let Some(v) = bypass_reason {
+        return Ok(CacheStatus::Bypass(v).with_response(next.run(request).await));
     }
 
     // Try to look up the request in the cache
@@ -242,12 +283,14 @@ pub async fn cache_middleware(
     // Do not cache responses that have no known size (probably streaming etc)
     let body_size = match content_length {
         Some(v) => v,
-        None => return Ok(CacheStatus::Skip.with_response(response)),
+        None => {
+            return Ok(CacheStatus::Bypass(CacheBypassReason::SizeUnknown).with_response(response))
+        }
     };
 
     // Do not cache items larger than configured
     if body_size > cache.max_item_size {
-        return Ok(CacheStatus::Skip.with_response(response));
+        return Ok(CacheStatus::Bypass(CacheBypassReason::TooBig).with_response(response));
     }
 
     // Buffer entire response body to be able to cache it
