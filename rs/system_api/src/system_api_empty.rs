@@ -55,6 +55,9 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_msg_caller_copy(&self, _: u32, _: u32, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_msg_caller_copy_64(&self, _: u64, _: u64, _: u64, _: &mut [u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_msg_caller_size(&self) -> HypervisorResult<u32> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
@@ -62,6 +65,15 @@ impl SystemApi for SystemApiEmpty {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_arg_data_copy(&self, _: u32, _: u32, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_msg_arg_data_copy_64(
+        &self,
+        _: u64,
+        _: u64,
+        _: u64,
+        _: &mut [u8],
+    ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_method_name_size(&self) -> HypervisorResult<u32> {
@@ -76,10 +88,22 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_msg_method_name_copy_64(
+        &self,
+        _: u64,
+        _: u64,
+        _: u64,
+        _: &mut [u8],
+    ) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_accept_message(&mut self) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_reply_data_append(&mut self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_msg_reply_data_append_64(&mut self, _: u64, _: u64, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_reply(&mut self) -> HypervisorResult<()> {
@@ -91,6 +115,9 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_msg_reject(&mut self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_msg_reject_64(&mut self, _: u64, _: u64, _: &[u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<u32> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
@@ -99,6 +126,15 @@ impl SystemApi for SystemApiEmpty {
         _: u32,
         _: u32,
         _: u32,
+        _: &mut [u8],
+    ) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_msg_reject_msg_copy_64(
+        &self,
+        _: u64,
+        _: u64,
+        _: u64,
         _: &mut [u8],
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
@@ -115,10 +151,25 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_canister_self_copy_64(
+        &mut self,
+        _: u64,
+        _: u64,
+        _: u64,
+        _: &mut [u8],
+    ) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_debug_print(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_debug_print_64(&self, _: u64, _: u64, _: &[u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_trap(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_trap_64(&self, _: u64, _: u64, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_call_new(
@@ -135,7 +186,24 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_call_new_64(
+        &mut self,
+        _: u64,
+        _: u64,
+        _: u64,
+        _: u64,
+        _: u32,
+        _: u32,
+        _: u32,
+        _: u32,
+        _: &[u8],
+    ) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_call_data_append(&mut self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_call_data_append_64(&mut self, _: u64, _: u64, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_call_on_cleanup(&mut self, _: u32, _: u32) -> HypervisorResult<()> {
@@ -209,16 +277,25 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_canister_cycle_balance128(&self, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_canister_cycle_balance128_64(&self, _: u64, _: &mut [u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_msg_cycles_available(&self) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_cycles_available128(&self, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_msg_cycles_available128_64(&self, _: u64, _: &mut [u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_msg_cycles_refunded(&self) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_cycles_refunded128(&self, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_msg_cycles_refunded128_64(&self, _: u64, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_cycles_accept(&mut self, _: u64) -> HypervisorResult<u64> {
@@ -232,7 +309,18 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+    fn ic0_msg_cycles_accept128_64(
+        &mut self,
+        _: Cycles,
+        _: u64,
+        _: &mut [u8],
+    ) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn ic0_certified_data_set(&mut self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_certified_data_set_64(&mut self, _: u64, _: u64, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_data_certificate_present(&self) -> HypervisorResult<i32> {
@@ -246,6 +334,15 @@ impl SystemApi for SystemApiEmpty {
         _: u32,
         _: u32,
         _: u32,
+        _: &mut [u8],
+    ) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_data_certificate_copy_64(
+        &self,
+        _: u64,
+        _: u64,
+        _: u64,
         _: &mut [u8],
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
@@ -273,6 +370,9 @@ impl SystemApi for SystemApiEmpty {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_is_controller(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<u32> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_is_controller_64(&self, _: u64, _: u64, _: &[u8]) -> HypervisorResult<u32> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
 }
