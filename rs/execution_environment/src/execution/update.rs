@@ -328,7 +328,7 @@ impl UpdateHelper {
     }
 
     /// Finishes an update call execution that could have run multiple rounds
-    /// due to determnistic time slicing.
+    /// due to deterministic time slicing.
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
@@ -366,6 +366,7 @@ impl UpdateHelper {
                     clean_canister.canister_id(),
                     err,
                 );
+                // Perf counter: no need to update the call context, as it won't be saved.
                 return finish_err(
                     clean_canister,
                     output.num_instructions_left,
@@ -394,12 +395,25 @@ impl UpdateHelper {
             NumBytes::from(0)
         };
 
+        let instructions_used = NumInstructions::from(
+            original
+                .execution_parameters
+                .instruction_limits
+                .message()
+                .get()
+                .saturating_sub(output.num_instructions_left.get()),
+        );
         let action = self
             .canister
             .system_state
             .call_context_manager_mut()
             .unwrap()
-            .on_canister_result(self.call_context_id, None, output.wasm_result);
+            .on_canister_result(
+                self.call_context_id,
+                None,
+                output.wasm_result,
+                instructions_used,
+            );
 
         let response = action_to_response(
             &self.canister,
@@ -417,14 +431,6 @@ impl UpdateHelper {
             round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
-        );
-        let instructions_used = NumInstructions::from(
-            original
-                .execution_parameters
-                .instruction_limits
-                .message()
-                .get()
-                .saturating_sub(output.num_instructions_left.get()),
         );
         ExecuteMessageResult::Finished {
             canister: self.canister,

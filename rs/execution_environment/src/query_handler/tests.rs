@@ -2168,7 +2168,7 @@ fn composite_query_state_preserved_across_parallel_calls() {
     );
 
     // We use the global counter to count the number of composite queries we are executing (increment before each call).
-    // Since we have NUM_CANISTER caniters in total, we expect to have one less calls (from the first canister to all others).
+    // Since we have NUM_CANISTER canisters in total, we expect to have one less calls (from the first canister to all others).
     assert_eq!(
         output,
         Ok(WasmResult::Reply(vec![

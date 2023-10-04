@@ -421,6 +421,7 @@ impl CallContextManager {
         call_context_id: CallContextId,
         callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
+        instructions_used: NumInstructions,
     ) -> CallContextAction {
         enum OutstandingCalls {
             Yes,
@@ -445,6 +446,12 @@ impl CallContextManager {
             .call_contexts
             .get_mut(&call_context_id)
             .unwrap_or_else(|| panic!("no call context for id={} found", call_context_id));
+        // Update call context `instructions_executed += instructions_used`
+        context.instructions_executed = context
+            .instructions_executed
+            .get()
+            .saturating_add(instructions_used.get())
+            .into();
         let responded = if context.responded {
             Responded::Yes
         } else {

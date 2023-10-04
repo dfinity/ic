@@ -449,6 +449,7 @@ impl<'a> QueryContext<'a> {
                     call_context_id,
                     Some(callback_id),
                     Err(HypervisorError::WasmModuleNotFound),
+                    0.into(),
                 );
             return Ok((canister, call_origin, action));
         }
@@ -543,20 +544,26 @@ impl<'a> QueryContext<'a> {
             }
         };
 
+        let instructions_used = NumInstructions::from(
+            instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+        // TODO: RUN-759: Cover with a test once performance counter type 1 is implemented
         let action = canister
             .system_state
             .call_context_manager_mut()
             // This `unwrap()` cannot fail because we checked for the call
             // context manager in `get_call_context_and_callback()` call.
             .unwrap()
-            .on_canister_result(call_context_id, Some(callback_id), result);
+            .on_canister_result(
+                call_context_id,
+                Some(callback_id),
+                result,
+                instructions_used,
+            );
 
-        let instructions_executed = instruction_limit - instructions_left;
-        measurement_scope.add(
-            instructions_executed,
-            NumSlices::from(1),
-            NumMessages::from(1),
-        );
+        measurement_scope.add(instructions_used, NumSlices::from(1), NumMessages::from(1));
         Ok((canister, call_origin, action))
     }
 
