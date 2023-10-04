@@ -38,6 +38,7 @@ pub struct EthWithdrawalRequest {
 /// 5. For a given nonce (and burn index), at most one sent transaction is finalized.
 ///    The others sent transactions for that nonce were never mined and can be discarded.
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+// TODO FI-948: limit number of withdrawal_requests and pending transactions nonces
 pub struct EthTransactions {
     withdrawal_requests: VecDeque<EthWithdrawalRequest>,
     created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
@@ -391,7 +392,7 @@ impl EthTransactions {
     }
 
     pub fn withdrawal_requests_batch(&self, batch_size: usize) -> Vec<EthWithdrawalRequest> {
-        // TODO FI-933: maybe look ahead at the size of created_tx and adapt the batch size accordingly
+        // TODO FI-948: maybe look ahead at the size of created_tx and adapt the batch size accordingly
         // to ensure that at each state we do not process more that batch size
         self.withdrawal_requests_iter()
             .take(batch_size)

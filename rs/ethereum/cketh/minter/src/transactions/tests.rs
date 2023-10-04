@@ -346,6 +346,7 @@ mod eth_transactions {
     }
 
     mod record_signed_transaction {
+        use super::super::arbitrary::arb_signed_eip_1559_transaction_request_with_nonce;
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
         use crate::transactions::tests::{
             create_and_record_transaction, create_and_record_withdrawal_request,
@@ -353,6 +354,7 @@ mod eth_transactions {
             transaction_price,
         };
         use crate::transactions::EthTransactions;
+        use proptest::{prop_assume, proptest};
 
         #[test]
         #[should_panic(expected = "missing created transaction")]
@@ -386,28 +388,27 @@ mod eth_transactions {
             }
         }
 
-        #[test]
-        fn should_fail_when_signed_transaction_does_not_match_created_transaction() {
-            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let ledger_burn_index = LedgerBurnIndex::new(15);
-            let withdrawal_request =
-                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
-            let created_tx = create_and_record_transaction(
-                &mut transactions,
-                withdrawal_request,
-                transaction_price(),
-            );
-            let bad_tx = {
-                let mut tx_mismatch = created_tx.clone();
-                tx_mismatch.max_fee_per_gas =
-                    tx_mismatch.max_fee_per_gas.checked_increment().unwrap();
-                sign_transaction(tx_mismatch)
-            };
+        proptest! {
+            #[test]
+            fn should_fail_when_signed_transaction_does_not_match_created_transaction(
+                bad_tx in arb_signed_eip_1559_transaction_request_with_nonce(TransactionNonce::ZERO)
+            ) {
+                let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+                let ledger_burn_index = LedgerBurnIndex::new(15);
+                let withdrawal_request =
+                    create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    transaction_price(),
+                );
+                prop_assume!(bad_tx.transaction() != &created_tx);
 
-            expect_panic_with_message(
-                || transactions.record_signed_transaction(bad_tx),
-                "mismatch",
-            );
+                expect_panic_with_message(
+                    || transactions.record_signed_transaction(bad_tx),
+                    "mismatch",
+                );
+            }
         }
 
         #[test]
@@ -432,14 +433,15 @@ mod eth_transactions {
     }
 
     mod record_sent_transaction {
+        use super::super::arbitrary::arb_signed_eip_1559_transaction_request_with_nonce;
         use super::*;
         use crate::map::MultiKeyMap;
         use crate::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
-            create_and_record_withdrawal_request, dummy_signature, expect_panic_with_message,
+            create_and_record_withdrawal_request, expect_panic_with_message,
             signed_transaction_with_nonce, transaction_price,
         };
-        use crate::tx::SignedEip1559TransactionRequest;
+        use proptest::{prop_assume, proptest};
 
         #[test]
         #[should_panic(expected = "missing signed transaction")]
@@ -476,31 +478,29 @@ mod eth_transactions {
             );
         }
 
-        #[test]
-        fn should_fail_when_first_sent_transaction_does_not_match_signed_transaction() {
-            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let ledger_burn_index = LedgerBurnIndex::new(15);
-            let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
-            transactions.record_withdrawal_request(withdrawal_request.clone());
-            let created_tx = create_and_record_transaction(
-                &mut transactions,
-                withdrawal_request,
-                transaction_price(),
-            );
-            let signed_tx =
+        proptest! {
+            #[test]
+            fn should_fail_when_first_sent_transaction_does_not_match_signed_transaction(
+                wrong_signed_tx in arb_signed_eip_1559_transaction_request_with_nonce(TransactionNonce::ZERO)
+            ) {
+                let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+                let ledger_burn_index = LedgerBurnIndex::new(15);
+                let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
+                transactions.record_withdrawal_request(withdrawal_request.clone());
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    transaction_price(),
+                );
+                let signed_tx =
                 create_and_record_signed_transaction(&mut transactions, created_tx.clone());
-            //TODO FI-933: turn this into a proptest to generate an arbitrary transaction
-            let wrong_signed_tx = {
-                let mut wrong_sig = dummy_signature();
-                wrong_sig.signature_y_parity = !wrong_sig.signature_y_parity;
-                SignedEip1559TransactionRequest::from((created_tx, wrong_sig))
-            };
-            assert_ne!(signed_tx, wrong_signed_tx);
+                prop_assume!(signed_tx != wrong_signed_tx);
 
-            expect_panic_with_message(
-                || transactions.record_sent_transaction(wrong_signed_tx.clone()),
-                "mismatch between sent transaction and signed transaction",
-            );
+                expect_panic_with_message(
+                    || transactions.record_sent_transaction(wrong_signed_tx.clone()),
+                    "mismatch between sent transaction and signed transaction",
+                );
+            }
         }
 
         #[test]
@@ -760,6 +760,7 @@ mod eth_transactions {
     }
 
     mod record_resubmit_transaction {
+        use super::super::arbitrary::arb_signed_eip_1559_transaction_request_with_nonce;
         use crate::eth_rpc::Quantity;
         use crate::map::MultiKeyMap;
         use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
@@ -770,6 +771,7 @@ mod eth_transactions {
         };
         use crate::transactions::{EthTransactions, ResubmitTransaction};
         use crate::tx::{Eip1559TransactionRequest, TransactionPrice};
+        use proptest::{prop_assume, proptest};
         use std::iter;
 
         #[test]
@@ -845,35 +847,33 @@ mod eth_transactions {
             }
         }
 
-        #[test]
-        fn should_fail_when_mismatch_with_already_sent() {
-            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let ledger_burn_index = LedgerBurnIndex::new(15);
-            let withdrawal_request =
-                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
-            let created_tx = create_and_record_transaction(
-                &mut transactions,
-                withdrawal_request,
-                transaction_price(),
-            );
-            let signed_tx =
-                create_and_record_signed_transaction(&mut transactions, created_tx.clone());
-            transactions.record_sent_transaction(signed_tx.clone());
+        proptest! {
+            #[test]
+            fn should_fail_when_mismatch_with_already_sent(
+                wrong_resent_tx in arb_signed_eip_1559_transaction_request_with_nonce(TransactionNonce::ZERO)
+            ) {
+                let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+                let ledger_burn_index = LedgerBurnIndex::new(15);
+                let withdrawal_request =
+                    create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    transaction_price(),
+                );
+                let signed_tx =
+                    create_and_record_signed_transaction(&mut transactions, created_tx.clone());
+                transactions.record_sent_transaction(signed_tx.clone());
+                prop_assume!(signed_tx != wrong_resent_tx);
 
-            let wrong_resent_tx = {
-                let mut wrong_transaction = created_tx.clone();
-                wrong_transaction.data = vec![0x01];
-                assert_ne!(wrong_transaction, created_tx);
-                sign_transaction(wrong_transaction)
-            };
-
-            expect_panic_with_message(
-                || {
-                    transactions
-                        .record_resubmit_transaction(ResubmitTransaction::ToSend(wrong_resent_tx))
-                },
-                "mismatch between last sent transaction",
-            );
+                expect_panic_with_message(
+                    || {
+                        transactions
+                            .record_resubmit_transaction(ResubmitTransaction::ToSend(wrong_resent_tx))
+                    },
+                    "mismatch between last sent transaction",
+                );
+            }
         }
 
         #[test]
@@ -1243,12 +1243,12 @@ mod create_transaction {
 }
 
 mod withdrawal_flow {
+    use super::arbitrary::{
+        arb_checked_amount_of, arb_non_overflowing_transaction_price, arb_withdrawal_request,
+    };
     use crate::numeric::TransactionNonce;
     use crate::transactions::create_transaction;
     use crate::transactions::tests::sign_transaction;
-    use crate::transactions::tests::withdrawal_flow::arbitrary::{
-        arb_checked_amount_of, arb_non_overflowing_transaction_price, arb_withdrawal_request,
-    };
     use crate::transactions::EthTransactions;
     use crate::transactions::EthereumNetwork;
     use proptest::proptest;
@@ -1298,58 +1298,139 @@ mod withdrawal_flow {
             }
         });
     }
+}
 
-    mod arbitrary {
-        use crate::address::Address;
-        use crate::checked_amount::CheckedAmountOf;
-        use crate::eth_rpc::Quantity;
-        use crate::numeric::Wei;
-        use crate::transactions::EthWithdrawalRequest;
-        use crate::tx::TransactionPrice;
-        use phantom_newtype::Id;
-        use proptest::strategy::Strategy;
+mod arbitrary {
+    use crate::address::Address;
+    use crate::checked_amount::CheckedAmountOf;
+    use crate::eth_rpc::Quantity;
+    use crate::numeric::{TransactionNonce, Wei};
+    use crate::transactions::EthWithdrawalRequest;
+    use crate::tx::{
+        AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest,
+        SignedEip1559TransactionRequest, StorageKey, TransactionPrice,
+    };
+    use phantom_newtype::Id;
+    use proptest::strategy::Strategy;
 
-        pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
-            use proptest::arbitrary::any;
-            use proptest::array::uniform32;
-            uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
-        }
+    pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform32;
+        uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
+    }
 
-        fn arb_u64_id<Entity>() -> impl Strategy<Value = Id<Entity, u64>> {
-            use proptest::arbitrary::any;
-            any::<u64>().prop_map(Id::from)
-        }
+    fn arb_u64_id<Entity>() -> impl Strategy<Value = Id<Entity, u64>> {
+        use proptest::arbitrary::any;
+        any::<u64>().prop_map(Id::from)
+    }
 
-        fn arb_address() -> impl Strategy<Value = Address> {
-            use proptest::arbitrary::any;
-            use proptest::array::uniform20;
-            uniform20(any::<u8>()).prop_map(|bytes| Address::new(bytes))
-        }
+    fn arb_u256() -> impl Strategy<Value = ethnum::u256> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform32;
+        uniform32(any::<u8>()).prop_map(ethnum::u256::from_be_bytes)
+    }
 
-        pub fn arb_withdrawal_request() -> impl Strategy<Value = EthWithdrawalRequest> {
-            (arb_checked_amount_of(), arb_address(), arb_u64_id()).prop_map(
-                |(withdrawal_amount, destination, ledger_burn_index)| EthWithdrawalRequest {
-                    withdrawal_amount,
-                    destination,
-                    ledger_burn_index,
+    fn arb_address() -> impl Strategy<Value = Address> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform20;
+        uniform20(any::<u8>()).prop_map(|bytes| Address::new(bytes))
+    }
+
+    pub fn arb_withdrawal_request() -> impl Strategy<Value = EthWithdrawalRequest> {
+        (arb_checked_amount_of(), arb_address(), arb_u64_id()).prop_map(
+            |(withdrawal_amount, destination, ledger_burn_index)| EthWithdrawalRequest {
+                withdrawal_amount,
+                destination,
+                ledger_burn_index,
+            },
+        )
+    }
+
+    pub fn arb_non_overflowing_transaction_price() -> impl Strategy<Value = TransactionPrice> {
+        use proptest::arbitrary::any;
+        (any::<u128>(), any::<u128>(), any::<u128>()).prop_map(
+            |(gas_limit, max_priority_fee_per_gas, max_fee_per_gas)| {
+                let price = TransactionPrice {
+                    gas_limit: Quantity::new(gas_limit),
+                    max_fee_per_gas: Wei::new(max_fee_per_gas),
+                    max_priority_fee_per_gas: Wei::new(max_priority_fee_per_gas),
+                };
+                let _does_not_panic = price.max_transaction_fee();
+                price
+            },
+        )
+    }
+
+    fn arb_storage_key() -> impl Strategy<Value = StorageKey> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform32;
+        uniform32(any::<u8>()).prop_map(StorageKey)
+    }
+
+    fn arb_access_list_item() -> impl Strategy<Value = AccessListItem> {
+        use proptest::collection::vec;
+        (arb_address(), vec(arb_storage_key(), 0..100)).prop_map(|(address, storage_keys)| {
+            AccessListItem {
+                address,
+                storage_keys,
+            }
+        })
+    }
+
+    fn arb_access_list() -> impl Strategy<Value = AccessList> {
+        use proptest::collection::vec;
+        vec(arb_access_list_item(), 0..100).prop_map(AccessList)
+    }
+
+    pub fn arb_eip_1559_transaction_request() -> impl Strategy<Value = Eip1559TransactionRequest> {
+        use proptest::arbitrary::any;
+        use proptest::collection::vec;
+        (
+            any::<u64>(),
+            arb_checked_amount_of(),
+            arb_non_overflowing_transaction_price(),
+            arb_address(),
+            arb_checked_amount_of(),
+            vec(any::<u8>(), 0..100),
+            arb_access_list(),
+        )
+            .prop_map(
+                |(chain_id, nonce, transaction_price, destination, amount, data, access_list)| {
+                    Eip1559TransactionRequest {
+                        chain_id,
+                        nonce,
+                        max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
+                        max_fee_per_gas: transaction_price.max_fee_per_gas,
+                        gas_limit: transaction_price.gas_limit,
+                        destination,
+                        amount,
+                        data,
+                        access_list,
+                    }
                 },
             )
-        }
+    }
 
-        pub fn arb_non_overflowing_transaction_price() -> impl Strategy<Value = TransactionPrice> {
-            use proptest::arbitrary::any;
-            (any::<u128>(), any::<u128>(), any::<u128>()).prop_map(
-                |(gas_limit, max_priority_fee_per_gas, max_fee_per_gas)| {
-                    let price = TransactionPrice {
-                        gas_limit: Quantity::new(gas_limit),
-                        max_fee_per_gas: Wei::new(max_fee_per_gas),
-                        max_priority_fee_per_gas: Wei::new(max_priority_fee_per_gas),
-                    };
-                    let _does_not_panic = price.max_transaction_fee();
-                    price
-                },
-            )
-        }
+    fn arb_eip_1559_signature() -> impl Strategy<Value = Eip1559Signature> {
+        use proptest::arbitrary::any;
+        (any::<bool>(), arb_u256(), arb_u256()).prop_map(|(signature_y_parity, r, s)| {
+            Eip1559Signature {
+                signature_y_parity,
+                r,
+                s,
+            }
+        })
+    }
+
+    pub fn arb_signed_eip_1559_transaction_request_with_nonce(
+        nonce: TransactionNonce,
+    ) -> impl Strategy<Value = SignedEip1559TransactionRequest> {
+        (arb_eip_1559_transaction_request(), arb_eip_1559_signature()).prop_map(
+            move |(mut tx, sig)| {
+                tx.nonce = nonce;
+                SignedEip1559TransactionRequest::from((tx, sig))
+            },
+        )
     }
 }
 
