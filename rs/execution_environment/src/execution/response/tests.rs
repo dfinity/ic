@@ -2568,3 +2568,211 @@ fn cycles_balance_changes_applied_correctly() {
 
     assert!(a_balance_old + b_balance_old > a_balance_new + b_balance_new);
 }
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_ok_response() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A, B and C.
+    // The canister C is to keep the call context open even after the canister B response.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    let c_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B and C.
+    let wasm_payload = wasm()
+        .call_simple(b_id.get(), "update", call_args())
+        .call_simple(c_id.get(), "update", call_args())
+        .build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    test.induct_messages();
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(1));
+
+    // Make sure the `instructions_executed` is updated.
+    let instructions_executed_a_1 = call_context.instructions_executed();
+    assert!(instructions_executed_a_1 > 0.into());
+
+    // Execute canister B message.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute canister A on reply callback.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 3);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(2));
+
+    // Make sure the `instructions_executed` has increased.
+    let instructions_executed_a_2 = call_context.instructions_executed();
+    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_err_response() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A, B and C.
+    // The canister C is to keep the call context open even after the canister B response.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    let c_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B and C, the canister B on reply traps.
+    let wasm_payload = wasm()
+        .call_simple(b_id.get(), "update", call_args().on_reply(wasm().trap()))
+        .call_simple(c_id.get(), "update", call_args())
+        .build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    test.induct_messages();
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(1));
+
+    // Make sure the `instructions_executed` is updated.
+    let instructions_executed_a_1 = call_context.instructions_executed();
+    assert!(instructions_executed_a_1 > 0.into());
+
+    // Execute canister B message.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute canister A on reply callback.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was not ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(2));
+
+    // Make sure the `instructions_executed` has increased.
+    let instructions_executed_a_2 = call_context.instructions_executed();
+    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A, B and C.
+    // The canister C is to keep the call context open even after the canister B response.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    let c_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B and C, the canister B on reply traps.
+    let wasm_payload = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args().on_reply(wasm().trap()).on_cleanup(wasm()),
+        )
+        .call_simple(c_id.get(), "update", call_args())
+        .build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    test.induct_messages();
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(1));
+
+    // Make sure the `instructions_executed` is updated.
+    let instructions_executed_a_1 = call_context.instructions_executed();
+    assert!(instructions_executed_a_1 > 0.into());
+
+    // Execute canister B message.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute canister A on reply callback.
+    test.execute_message(a_id);
+    // The cleanup execution increases the canister version.
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 3);
+
+    // Make sure the execution was not ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(2));
+
+    // Make sure the `instructions_executed` has increased.
+    let instructions_executed_a_2 = call_context.instructions_executed();
+    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A, B and C.
+    // The canister C is to keep the call context open even after the canister B response.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    let c_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B and C, the canister B on reply and on cleanup trap.
+    let wasm_payload = wasm()
+        .call_simple(
+            b_id.get(),
+            "update",
+            call_args()
+                .on_reply(wasm().trap())
+                .on_cleanup(wasm().trap()),
+        )
+        .call_simple(c_id.get(), "update", call_args())
+        .build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    test.induct_messages();
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(1));
+
+    // Make sure the `instructions_executed` is updated.
+    let instructions_executed_a_1 = call_context.instructions_executed();
+    assert!(instructions_executed_a_1 > 0.into());
+
+    // Execute canister B message.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute canister A on reply callback.
+    test.execute_message(a_id);
+    // The cleanup traps, so the canister version is unchanged.
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was not ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(2));
+
+    // Make sure the `instructions_executed` has increased.
+    let instructions_executed_a_2 = call_context.instructions_executed();
+    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+}

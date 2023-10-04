@@ -501,12 +501,23 @@ impl ResponseHelper {
     ) -> ExecuteMessageResult {
         self.revert_subnet_memory_reservation(original, round_limits);
 
+        let instructions_used = NumInstructions::from(
+            original
+                .message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
         let action = self
             .canister
             .system_state
             .call_context_manager_mut()
             .unwrap()
-            .on_canister_result(original.call_context_id, Some(original.callback_id), result);
+            .on_canister_result(
+                original.call_context_id,
+                Some(original.callback_id),
+                result,
+                instructions_used,
+            );
         let response = action_to_response(
             &self.canister,
             action,
@@ -532,12 +543,6 @@ impl ResponseHelper {
             round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
-        );
-        let instructions_used = NumInstructions::from(
-            original
-                .message_instruction_limit
-                .get()
-                .saturating_sub(instructions_left.get()),
         );
 
         if self.refund_for_sent_cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {

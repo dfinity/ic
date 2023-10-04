@@ -13,8 +13,9 @@ use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
 };
-use ic_state_machine_tests::{Cycles, WasmResult};
+use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
 use ic_sys::PAGE_SIZE;
+use ic_types::messages::CallbackId;
 use ic_types::{NumInstructions, NumPages};
 use ic_universal_canister::{call_args, wasm};
 
@@ -798,4 +799,66 @@ fn stable_grow_returns_allocated_memory_on_error() {
         test.canister_state(canister_id).memory_usage(),
         initial_canister_memory
     );
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_ok_update() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A and B.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B.
+    let wasm_payload = wasm()
+        .call_simple(b_id.get(), "update", call_args())
+        .build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(1));
+
+    // Make sure the `instructions_executed` is updated.
+    let instructions_executed_a_1 = call_context.instructions_executed();
+    assert!(instructions_executed_a_1 > 0.into());
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_err_update() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A and B.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B and then traps.
+    let wasm_payload = wasm()
+        .call_simple(b_id.get(), "update", call_args())
+        .trap()
+        .build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Make sure the execution was not ok.
+    let call_context_manager = test
+        .canister_state(a_id)
+        .system_state
+        .call_context_manager()
+        .unwrap();
+    assert!(call_context_manager.call_contexts().is_empty());
 }

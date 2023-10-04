@@ -45,7 +45,7 @@ fn call_context_handling() {
     // Call context 3 was not responded and does not have outstanding calls,
     // so we should generate the response ourselves.
     assert_eq!(
-        call_context_manager.on_canister_result(call_context_id3, None, Ok(None)),
+        call_context_manager.on_canister_result(call_context_id3, None, Ok(None), 0.into()),
         CallContextAction::NoResponse {
             refund: Cycles::zero(),
         }
@@ -152,7 +152,8 @@ fn call_context_handling() {
         call_context_manager.on_canister_result(
             call_context_id1,
             Some(callback_id1),
-            Ok(Some(WasmResult::Reply(vec![1])))
+            Ok(Some(WasmResult::Reply(vec![1]))),
+            0.into()
         ),
         CallContextAction::Reply {
             payload: vec![1],
@@ -209,7 +210,8 @@ fn call_context_handling() {
         call_context_manager.on_canister_result(
             call_context_id2,
             Some(callback_id3),
-            Ok(Some(WasmResult::Reply(vec![])))
+            Ok(Some(WasmResult::Reply(vec![]))),
+            0.into()
         ),
         CallContextAction::Reply {
             payload: vec![],
@@ -239,7 +241,12 @@ fn call_context_handling() {
         }
     );
     assert_eq!(
-        call_context_manager.on_canister_result(call_context_id1, Some(callback_id2), Ok(None)),
+        call_context_manager.on_canister_result(
+            call_context_id1,
+            Some(callback_id2),
+            Ok(None),
+            0.into()
+        ),
         CallContextAction::AlreadyResponded
     );
 
@@ -286,5 +293,62 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
             .unwrap()
             .withdraw_cycles(Cycles::new(25)),
         Ok(())
+    );
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated() {
+    let mut call_context_manager = CallContextManager::default();
+    let call_context_id = call_context_manager.new_call_context(
+        CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(1)),
+        Cycles::zero(),
+        Time::from_nanos_since_unix_epoch(0),
+    );
+    // Register a callback, so the call context is not deleted in `on_canister_result()` later.
+    let _callback_id = call_context_manager.register_callback(Callback::new(
+        call_context_id,
+        None,
+        None,
+        Cycles::zero(),
+        Some(Cycles::new(42)),
+        Some(Cycles::new(84)),
+        WasmClosure::new(0, 1),
+        WasmClosure::new(2, 3),
+        None,
+    ));
+
+    // Finish a successful execution with 1K instructions.
+    assert_eq!(
+        call_context_manager.on_canister_result(call_context_id, None, Ok(None), 1_000.into()),
+        CallContextAction::NotYetResponded
+    );
+    assert_eq!(
+        call_context_manager
+            .call_contexts()
+            .get(&call_context_id)
+            .unwrap()
+            .instructions_executed,
+        1_000.into()
+    );
+
+    // Finish an unsuccessful execution with 2K instructions.
+    assert_eq!(
+        call_context_manager.on_canister_result(
+            call_context_id,
+            None,
+            Err(HypervisorError::InstructionLimitExceeded),
+            2_000.into()
+        ),
+        CallContextAction::NotYetResponded
+    );
+
+    // Now there should be 1K + 2K instructions_executed in the call context.
+    assert_eq!(
+        call_context_manager
+            .call_contexts()
+            .get(&call_context_id)
+            .unwrap()
+            .instructions_executed,
+        (1_000 + 2_000).into()
     );
 }
