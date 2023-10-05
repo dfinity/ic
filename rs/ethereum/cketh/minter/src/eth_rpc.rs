@@ -6,7 +6,7 @@ use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, TransactionNonce, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
@@ -167,68 +167,6 @@ impl std::str::FromStr for Hash {
 }
 
 impl HttpResponsePayload for Hash {}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Transaction {
-    /// The hash of the block containing the transaction.
-    /// None if the transaction is pending.
-    pub block_hash: Option<Hash>,
-
-    /// The number of the block containing the transaction.
-    /// None if the transaction is pending.
-    pub block_number: Option<BlockNumber>,
-
-    /// Gas provided by the sender.
-    pub gas: Quantity,
-
-    /// Gas price provided by the sender in Wei.
-    /// According to the spec this field is deprecated but required.
-    /// However, some providers do not include it.
-    pub gas_price: Option<Wei>,
-
-    /// The sender address.
-    pub from: Address,
-
-    /// The transaction hash.
-    pub hash: Hash,
-
-    /// The data send along with the transaction.
-    pub input: Data,
-
-    /// The number of transactions made by the sender prior to this one.
-    pub nonce: TransactionNonce,
-
-    /// The receiver address.
-    /// None if it's a contract creation transaction.
-    pub to: Option<Address>,
-
-    /// Integer of the transactions index position in the block.
-    /// None if the transaction is pending.
-    pub transaction_index: Option<Quantity>,
-
-    /// Value transferred in Wei.
-    pub value: Wei,
-}
-
-impl Transaction {
-    /// If the transaction was mined in a block returns the corresponding block hash,
-    /// block number and transaction index.
-    pub fn mined_in_block(&self) -> Option<(Hash, BlockNumber, Quantity)> {
-        match (self.block_hash, self.block_number, self.transaction_index) {
-            (Some(block_hash), Some(block_number), Some(transaction_index)) => {
-                Some((block_hash, block_number, transaction_index))
-            }
-            _ => None,
-        }
-    }
-}
-
-impl HttpResponsePayload for Transaction {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::Transaction)
-    }
-}
 
 /// Block tags.
 /// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
@@ -494,7 +432,6 @@ impl<T> JsonRpcResult<T> {
 pub enum ResponseTransform {
     Block,
     LogEntries,
-    Transaction,
     TransactionReceipt,
     FeeHistory,
     SendRawTransaction,
@@ -518,7 +455,6 @@ impl ResponseTransform {
         match self {
             Self::Block => redact_response::<Block>(body_bytes),
             Self::LogEntries => redact_response::<Vec<LogEntry>>(body_bytes),
-            Self::Transaction => redact_response::<Transaction>(body_bytes),
             Self::TransactionReceipt => redact_response::<TransactionReceipt>(body_bytes),
             Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
             Self::SendRawTransaction => {

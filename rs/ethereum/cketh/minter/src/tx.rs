@@ -119,7 +119,7 @@ pub struct SignedEip1559TransactionRequest {
     transaction: Eip1559TransactionRequest,
     #[n(1)]
     signature: Eip1559Signature,
-    // TODO FI-942: transaction hash should be computed only once
+    // TODO FI-984: transaction hash should be computed only once
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]

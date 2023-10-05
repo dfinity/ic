@@ -2,7 +2,7 @@ use crate::eth_rpc;
 use crate::eth_rpc::{
     are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam, Hash,
     HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult, LogEntry,
-    ResponseSizeEstimate, SendRawTransactionResult, Transaction,
+    ResponseSizeEstimate, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
@@ -149,20 +149,6 @@ impl EthRpcClient {
                     include_full_transactions: false,
                 },
                 ResponseSizeEstimate::new(6 * 1024),
-            )
-            .await;
-        results.reduce_with_equality()
-    }
-
-    pub async fn eth_get_transaction_by_hash(
-        &self,
-        tx_hash: Hash,
-    ) -> Result<Option<Transaction>, MultiCallError<Option<Transaction>>> {
-        let results: MultiCallResults<Option<Transaction>> = self
-            .parallel_call(
-                "eth_getTransactionByHash",
-                vec![tx_hash],
-                ResponseSizeEstimate::new(1200),
             )
             .await;
         results.reduce_with_equality()
