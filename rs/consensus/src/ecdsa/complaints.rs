@@ -968,7 +968,7 @@ impl<'a> Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecdsa::utils::test_utils::*;
+    use crate::ecdsa::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;

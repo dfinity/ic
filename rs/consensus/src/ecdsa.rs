@@ -210,6 +210,8 @@ pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
 pub(crate) mod signer;
 pub mod stats;
+#[cfg(test)]
+pub(crate) mod test_utils;
 pub(crate) mod utils;
 
 pub use payload_builder::make_bootstrap_summary;

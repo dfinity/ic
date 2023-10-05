@@ -21,15 +21,14 @@
 //! approach, similar to what we have been doing in verifying other kinds
 //! payloads.
 
-use super::payload_builder::{EcdsaPayloadError, InvalidChainCacheError, MembershipError};
+use super::payload_builder::EcdsaPayloadError;
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
-use super::utils::EcdsaBlockReaderImpl;
-use crate::consensus::metrics::timed_call;
-use crate::ecdsa::payload_builder::{
-    block_chain_cache, create_data_payload_helper, create_summary_payload,
-    get_ecdsa_config_if_enabled,
+use super::utils::{
+    block_chain_cache, get_ecdsa_config_if_enabled, EcdsaBlockReaderImpl, InvalidChainCacheError,
 };
+use crate::consensus::metrics::timed_call;
+use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::MegaKeyFromRegistryError;
@@ -116,23 +115,6 @@ fn from_registry_error(err: RegistryClientError) -> EcdsaValidationError {
     match err {
         RegistryClientError::DecodeError { .. } => PermanentError::RegistryClientError(err).into(),
         _ => TransientError::RegistryClientError(err).into(),
-    }
-}
-
-impl From<MembershipError> for EcdsaValidationError {
-    fn from(err: MembershipError) -> Self {
-        match err {
-            MembershipError::RegistryClientError(err) => from_registry_error(err),
-            MembershipError::MegaKeyFromRegistryError(MegaKeyFromRegistryError::RegistryError(
-                err,
-            )) => from_registry_error(err),
-            MembershipError::MegaKeyFromRegistryError(err) => {
-                PermanentError::MegaKeyFromRegistryError(err).into()
-            }
-            MembershipError::SubnetWithNoNodes(subnet_id, err) => {
-                PermanentError::SubnetWithNoNodes(subnet_id, err).into()
-            }
-        }
     }
 }
 
@@ -585,7 +567,7 @@ mod test {
             get_signing_requests, initiate_reshare_requests, update_completed_reshare_requests,
             update_ongoing_signatures, update_signature_agreements,
         },
-        utils::test_utils::*,
+        test_utils::*,
     };
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
     use ic_crypto_test_utils_canister_threshold_sigs::{

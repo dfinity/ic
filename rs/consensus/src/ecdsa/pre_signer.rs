@@ -1435,7 +1435,7 @@ mod tests {
     use std::ops::Deref;
 
     use super::*;
-    use crate::ecdsa::utils::test_utils::*;
+    use crate::ecdsa::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants,

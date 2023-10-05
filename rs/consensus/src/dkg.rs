@@ -4,8 +4,8 @@
 
 use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
 use crate::ecdsa::{
-    make_bootstrap_summary, payload_builder::get_ecdsa_config_if_enabled,
-    utils::inspect_ecdsa_initializations,
+    make_bootstrap_summary,
+    utils::{get_ecdsa_config_if_enabled, inspect_ecdsa_initializations},
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
