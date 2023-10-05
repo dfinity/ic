@@ -55,6 +55,7 @@ CANISTERS = {
     "cow_safety.wasm": "//rs/tests:src/cow_safety.wasm",
     "counter.wat": "//rs/workload_generator:src/counter.wat",
     "xrc-mock-canister.wasm": "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+    "bitcoin-mock-canister.wasm": "//rs/bitcoin/mock:bitcoin_canister_mock",
 }
 
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
