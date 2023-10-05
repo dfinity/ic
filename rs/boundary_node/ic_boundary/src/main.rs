@@ -12,6 +12,7 @@ mod core;
 mod dns;
 mod firewall;
 mod http;
+mod management;
 mod metrics;
 mod nns;
 mod persist;
