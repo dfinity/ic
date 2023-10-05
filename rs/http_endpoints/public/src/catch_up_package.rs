@@ -1,9 +1,6 @@
 //! Module that deals with requests to /_/catch_up_package
 
-use crate::{
-    body::BodyReceiverLayer, common, types::ApiReqType, EndpointService, HttpHandlerMetrics,
-    LABEL_UNKNOWN,
-};
+use crate::{common, types::ApiReqType, EndpointService, HttpHandlerMetrics, LABEL_UNKNOWN};
 use bytes::Bytes;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
@@ -33,7 +30,7 @@ impl CatchUpPackageService {
         metrics: HttpHandlerMetrics,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(
+        BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
                     config.max_catch_up_package_concurrent_requests,
@@ -42,12 +39,6 @@ impl CatchUpPackageService {
                     metrics,
                     consensus_pool_cache,
                 }),
-        );
-
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(BodyReceiverLayer::new(&config))
-                .service(base_service),
         )
     }
 }

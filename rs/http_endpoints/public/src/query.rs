@@ -1,7 +1,6 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    body::BodyReceiverLayer,
     common::{cbor_response, make_plaintext_response, remove_effective_principal_id},
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
@@ -62,7 +61,7 @@ impl QueryService {
         registry_client: Arc<dyn RegistryClient>,
         query_execution_service: QueryExecutionService,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(
+        BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
                     config.max_query_concurrent_requests,
@@ -78,11 +77,6 @@ impl QueryService {
                     registry_client,
                     query_execution_service,
                 }),
-        );
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(BodyReceiverLayer::new(&config))
-                .service(base_service),
         )
     }
 }

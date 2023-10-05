@@ -1,5 +1,6 @@
 //! Module that deals with requests to /api/v2/status
 use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService};
+use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::{Body, Response};
@@ -12,13 +13,15 @@ use ic_types::{
     replica_version::REPLICA_BINARY_HASH,
     ReplicaVersion, SubnetId,
 };
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::{
+    convert::Infallible,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
-    ServiceBuilder,
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
 // TODO(NET-776)
@@ -60,9 +63,9 @@ impl StatusService {
     }
 }
 
-impl Service<Request<Body>> for StatusService {
+impl Service<Request<Bytes>> for StatusService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
@@ -70,7 +73,7 @@ impl Service<Request<Body>> for StatusService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
+    fn call(&mut self, _unused: Request<Bytes>) -> Self::Future {
         let log = self.log.clone();
         let nns_subnet_id = self.nns_subnet_id;
         let replica_health_status = self.replica_health_status.clone();

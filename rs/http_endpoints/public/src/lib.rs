@@ -22,6 +22,7 @@ mod types;
 mod validator_executor;
 
 use crate::{
+    body::BodyReceiverLayer,
     call::CallService,
     catch_up_package::CatchUpPackageService,
     common::{
@@ -43,6 +44,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
 };
 use byte_unit::Byte;
+use bytes::Bytes;
 use crossbeam::{atomic::AtomicCell, channel::Sender};
 use http::method::Method;
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
@@ -113,7 +115,7 @@ pub(crate) struct HttpError {
     pub message: String,
 }
 
-pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>, BoxError>;
+pub(crate) type EndpointService = BoxCloneService<Request<Bytes>, Response<Body>, Infallible>;
 
 /// Struct that holds all endpoint services.
 #[derive(Clone)]
@@ -843,16 +845,14 @@ async fn make_router(
             );
         }
     };
-    let mut svc_per_conn = ServiceBuilder::new()
+    let svc_per_conn = ServiceBuilder::new()
         .load_shed()
         .timeout(Duration::from_secs(config.request_timeout_seconds))
+        .layer(BodyReceiverLayer::new(&config))
         .service(svc);
     (
         svc_per_conn
-            .ready()
-            .await
-            .expect("The load shedder must always be ready.")
-            .call(req)
+            .oneshot(req)
             .await
             .unwrap_or_else(|err| map_box_error_to_response(err)),
         timer,
