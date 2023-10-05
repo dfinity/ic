@@ -13,7 +13,8 @@ mod eth_rpc_client {
             providers,
             &[
                 RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
-                RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi)
+                RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
+                RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode)
             ]
         );
     }
