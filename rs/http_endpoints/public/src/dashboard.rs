@@ -7,17 +7,18 @@ use crate::{
     EndpointService,
 };
 use askama::Template;
+use bytes::Bytes;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
+use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
-    ServiceBuilder,
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
 // See build.rs
@@ -50,9 +51,9 @@ impl DashboardService {
     }
 }
 
-impl Service<Request<Body>> for DashboardService {
+impl Service<Request<Bytes>> for DashboardService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
 
@@ -60,7 +61,7 @@ impl Service<Request<Body>> for DashboardService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
+    fn call(&mut self, _unused: Request<Bytes>) -> Self::Future {
         use hyper::header;
         let http_config = self.config.clone();
         let subnet_type = self.subnet_type;

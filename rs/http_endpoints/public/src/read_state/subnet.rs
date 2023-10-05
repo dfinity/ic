@@ -1,6 +1,5 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    body::BodyReceiverLayer,
     common::{cbor_response, into_cbor, make_plaintext_response, remove_effective_principal_id},
     metrics::LABEL_UNKNOWN,
     state_reader_executor::StateReaderExecutor,
@@ -56,16 +55,11 @@ impl SubnetReadStateService {
             delegation_from_nns,
             state_reader_executor,
         };
-        let base_service = BoxCloneService::new(
+        BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
                     config.max_read_state_concurrent_requests,
                 ))
-                .service(base_service),
-        );
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(BodyReceiverLayer::new(&config))
                 .service(base_service),
         )
     }

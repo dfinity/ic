@@ -1,7 +1,6 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
 use crate::{
-    body::BodyReceiverLayer,
     common::{
         get_cors_headers, make_plaintext_response, make_response, remove_effective_principal_id,
     },
@@ -70,7 +69,7 @@ impl CallService {
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(
+        BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
                     config.max_call_concurrent_requests,
@@ -87,12 +86,6 @@ impl CallService {
                     ingress_filter,
                     node_id,
                 }),
-        );
-
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(BodyReceiverLayer::new(&config))
-                .service(base_service),
         )
     }
 }
@@ -241,7 +234,7 @@ impl Service<Request<Bytes>> for CallService {
         }
 
         let ingress_tx = self.ingress_tx.clone();
-        let mut ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.clone();
         let log = self.log.clone();
         let validator_executor = self.validator_executor.clone();
         let time_source = self.time_source.clone();
@@ -256,10 +249,7 @@ impl Service<Request<Bytes>> for CallService {
             }
 
             match ingress_filter
-                .ready()
-                .await
-                .expect("The service must always be able to process requests")
-                .call((provisional_whitelist, msg.content().clone()))
+                .oneshot((provisional_whitelist, msg.content().clone()))
                 .await
             {
                 Err(_) => panic!("Can't panic on Infallible"),

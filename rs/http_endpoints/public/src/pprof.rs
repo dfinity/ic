@@ -2,20 +2,20 @@ use crate::{
     common::{get_cors_headers, make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
     EndpointService,
 };
+use bytes::Bytes;
 use futures_util::Future;
 use http::{header, request::Parts, Request};
 use hyper::{self, Body, Response, StatusCode};
 use ic_pprof::{Error, PprofCollector};
 use std::{
     collections::HashMap,
+    convert::Infallible,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
-use tower::{
-    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service, ServiceBuilder,
-};
+use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
 
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
 /// Default CPU profile duration.
@@ -112,9 +112,9 @@ impl PprofHomeService {
     }
 }
 
-impl Service<Request<Body>> for PprofHomeService {
+impl Service<Request<Bytes>> for PprofHomeService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -122,7 +122,7 @@ impl Service<Request<Body>> for PprofHomeService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
+    fn call(&mut self, _unused: Request<Bytes>) -> Self::Future {
         let mut response = Response::new(Body::from(PPROF_HOME_HTML));
         *response.status_mut() = StatusCode::OK;
         *response.headers_mut() = get_cors_headers();
@@ -153,9 +153,9 @@ impl PprofProfileService {
     }
 }
 
-impl Service<Request<Body>> for PprofProfileService {
+impl Service<Request<Bytes>> for PprofProfileService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -172,7 +172,7 @@ impl Service<Request<Body>> for PprofProfileService {
     /// `frequency` and its accuracy are limited (on Linux) by the resolution of
     /// the software clock, which is 250Hz by default. See
     /// [`man 7 time`](https://linux.die.net/man/7/time) for details.
-    fn call(&mut self, body: Request<Body>) -> Self::Future {
+    fn call(&mut self, body: Request<Bytes>) -> Self::Future {
         let parts = body.into_parts().0;
         let collector = self.collector.clone();
 
@@ -206,9 +206,9 @@ impl PprofFlamegraphService {
     }
 }
 
-impl Service<Request<Body>> for PprofFlamegraphService {
+impl Service<Request<Bytes>> for PprofFlamegraphService {
     type Response = Response<Body>;
-    type Error = BoxError;
+    type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
@@ -216,7 +216,7 @@ impl Service<Request<Body>> for PprofFlamegraphService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, body: Request<Body>) -> Self::Future {
+    fn call(&mut self, body: Request<Bytes>) -> Self::Future {
         let parts = body.into_parts().0;
         let collector = self.collector.clone();
 
