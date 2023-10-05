@@ -628,7 +628,7 @@ where
         {
             Ok((response,)) => response,
             Err((code, message))
-                if code == RejectionCode::SysFatal && message.contains("body size limit") =>
+                if code == RejectionCode::SysFatal && message.contains("size limit") =>
             {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
