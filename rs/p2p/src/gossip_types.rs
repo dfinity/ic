@@ -38,7 +38,7 @@ pub(crate) struct GossipChunk {
 /// This is the message exchanged on the wire with other peers.  This
 /// enum is private to the gossip layer because lower layers like
 /// *Transport* do not need to interpret the content.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoStaticStr)]
+#[derive(Clone, Debug, IntoStaticStr)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum GossipMessage {
     /// The advert variant.

@@ -32,9 +32,8 @@ use ic_test_utilities::{
 };
 use ic_types::crypto::crypto_hash;
 use ic_types::{
-    artifact::{IngressMessageId, SignedIngress},
-    batch::ValidationContext,
-    CountBytes, Height, NumBytes, RegistryVersion,
+    artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress, CountBytes,
+    Height, NumBytes, RegistryVersion,
 };
 use proptest::prelude::*;
 use std::collections::HashSet;

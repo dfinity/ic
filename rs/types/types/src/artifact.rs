@@ -16,10 +16,15 @@
 use crate::{
     canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
     chunkable::{ArtifactChunk, ChunkId, ChunkableArtifact},
-    consensus::{certification::CertificationMessageHash, ConsensusMessageHash},
+    consensus::{
+        certification::{CertificationMessage, CertificationMessageHash},
+        dkg::Message as DkgMessage,
+        ecdsa::{EcdsaArtifactId, EcdsaMessage, EcdsaMessageAttribute},
+        ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHash,
+    },
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
-    messages::{HttpRequestError, MessageId, SignedRequestBytes},
+    messages::{HttpRequestError, MessageId, SignedIngress, SignedRequestBytes},
     p2p::GossipAdvert,
     CryptoHashOfState, Height, Time,
 };
@@ -35,17 +40,6 @@ use std::{
     sync::Arc,
 };
 use strum_macros::{EnumIter, IntoStaticStr};
-
-pub use crate::{
-    consensus::{
-        certification::CertificationMessage,
-        dkg::Message as DkgMessage,
-        ecdsa::{EcdsaArtifactId, EcdsaMessage, EcdsaMessageAttribute},
-        ConsensusMessage, ConsensusMessageAttribute,
-    },
-    messages::SignedIngress,
-    state_sync::FILE_GROUP_CHUNK_ID_OFFSET,
-};
 
 /// The artifact type
 #[derive(From, TryInto, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -63,7 +57,7 @@ pub enum Artifact {
 }
 
 /// Artifact attribute type.
-#[derive(From, TryInto, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(From, TryInto, Clone, Debug, PartialEq, Eq)]
 #[try_into(owned, ref, ref_mut)]
 pub enum ArtifactAttribute {
     ConsensusMessage(ConsensusMessageAttribute),
@@ -388,7 +382,7 @@ pub struct CertificationMessageId {
 /// Identifier of a DKG message.
 pub type DkgMessageId = CryptoHashOf<DkgMessage>;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DkgMessageAttribute {
     pub interval_start_height: Height,
 }

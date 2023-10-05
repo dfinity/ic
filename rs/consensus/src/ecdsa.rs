@@ -191,9 +191,9 @@ use ic_interfaces::{
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
+    artifact::{EcdsaMessageId, Priority, PriorityFn},
     artifact_kind::EcdsaArtifact,
-    consensus::ecdsa::{EcdsaBlockReader, RequestId},
+    consensus::ecdsa::{EcdsaBlockReader, EcdsaMessageAttribute, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
