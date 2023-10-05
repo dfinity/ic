@@ -9,7 +9,7 @@ use ic_ic00_types::{
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
     ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgsV2,
     Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SignWithECDSAArgs,
-    UninstallCodeArgs, UpdateSettingsArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -188,8 +188,18 @@ pub(super) fn resolve_destination(
                 EcdsaSubnetKind::OnlyHoldsKey,
             )
         }
-        Ok(Ic00Method::UploadChunk)
-        | Ok(Ic00Method::StoredChunks)
+        Ok(Ic00Method::UploadChunk) => {
+            let args = UploadChunkArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UploadChunk)
+                })
+        }
+        Ok(Ic00Method::StoredChunks)
         | Ok(Ic00Method::DeleteChunks)
         | Ok(Ic00Method::ClearChunkStore) => {
             Err(ResolveDestinationError::UserError(UserError::new(

@@ -2145,3 +2145,35 @@ pub enum QueryMethod {
     BitcoinGetUtxosQuery,
     BitcoinGetBalanceQuery,
 }
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+///     chunk: blob;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct UploadChunkArgs {
+    pub canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    pub chunk: Vec<u8>,
+}
+
+impl Payload<'_> for UploadChunkArgs {}
+
+impl UploadChunkArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::new(self.canister_id).unwrap()
+    }
+}
+
+/// Struct to be returned when uploading a Wasm chunk.
+/// `(record {
+///      hash: blob;
+/// })`
+#[derive(CandidType, Deserialize, Debug)]
+pub struct UploadChunkReply {
+    #[serde(with = "serde_bytes")]
+    pub hash: Vec<u8>,
+}
+
+impl Payload<'_> for UploadChunkReply {}

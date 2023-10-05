@@ -16,7 +16,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, InstallCodeArgsV2, Method as Ic00Method,
+    CanisterStatusType, InstallCodeArgsV2, Method as Ic00Method, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -24,12 +24,15 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase,
+    canister_state::system_state::{
+        wasm_chunk_store::{self, WasmChunkStore},
+        CyclesUseCase,
+    },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
-    page_map::PageAllocatorFileDescriptor, CallOrigin, CanisterState, CanisterStatus,
-    NetworkTopology, ReplicatedState, SchedulerState, SystemState,
+    page_map::PageAllocatorFileDescriptor,
+    CallOrigin, CanisterState, CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState,
+    SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::{
@@ -106,6 +109,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
+    pub(crate) wasm_chunk_store: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -120,6 +124,7 @@ impl CanisterMgrConfig {
         compute_capacity: usize,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
+        wasm_chunk_store: FlagStatus,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -131,6 +136,7 @@ impl CanisterMgrConfig {
             compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
                 as u64,
             rate_limiting_of_instructions,
+            wasm_chunk_store,
         }
     }
 }
@@ -367,6 +373,9 @@ impl CanisterManager {
                     ))
                 }
             },
+            Ok(Ic00Method::UploadChunk)  if self.config.wasm_chunk_store == FlagStatus::Enabled => {
+                Ok(())
+            }
             Ok(Ic00Method::UploadChunk) |
             Ok(Ic00Method::StoredChunks) |
             Ok(Ic00Method::DeleteChunks) |
@@ -1346,6 +1355,56 @@ impl CanisterManager {
             .canister_state(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))
     }
+
+    pub(crate) fn upload_chunk(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+        chunk: &[u8],
+        subnet_available_memory: &mut SubnetAvailableMemory,
+    ) -> Result<UploadChunkReply, CanisterManagerError> {
+        if self.config.wasm_chunk_store == FlagStatus::Disabled {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: "Wasm chunk store not enabled".to_string(),
+            });
+        }
+        validate_controller(canister, &sender)?;
+        match canister.memory_allocation() {
+            MemoryAllocation::Reserved(bytes) => {
+                if bytes < canister.memory_usage() + wasm_chunk_store::chunk_size() {
+                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                        memory_allocation_given: canister.memory_allocation(),
+                        memory_usage_needed: canister.memory_usage()
+                            + wasm_chunk_store::chunk_size(),
+                    });
+                }
+            }
+            MemoryAllocation::BestEffort => {
+                subnet_available_memory
+                    .try_decrement(
+                        wasm_chunk_store::chunk_size(),
+                        NumBytes::from(0),
+                        NumBytes::from(0),
+                    )
+                    .map_err(
+                        |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                            requested: wasm_chunk_store::chunk_size(),
+                            available: NumBytes::from(
+                                subnet_available_memory.get_execution_memory().max(0) as u64,
+                            ),
+                        },
+                    )?;
+            }
+        }
+        let hash = canister
+            .system_state
+            .wasm_chunk_store
+            .insert_chunk(chunk)
+            .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
+        Ok(UploadChunkReply {
+            hash: hash.to_vec(),
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1422,6 +1481,9 @@ pub(crate) enum CanisterManagerError {
         bytes: NumBytes,
         requested: Cycles,
         limit: Cycles,
+    },
+    WasmChunkStoreError {
+        message: String,
     },
 }
 
@@ -1643,6 +1705,14 @@ impl From<CanisterManagerError> for UserError {
                          The current limit ({}) would exceeded by {}.",
                         bytes, limit, requested - limit,
                     ),
+                )
+            }
+            WasmChunkStoreError { message } => {
+                Self::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!(
+                        "Error from Wasm chunk store: {}", message
+                    )
                 )
             }
         }

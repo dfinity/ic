@@ -30,7 +30,8 @@ use ic_ic00_types::{
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
     ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallCodeArgsV2, Method as Ic00Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    IC_00,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -336,6 +337,7 @@ impl ExecutionEnvironment {
             compute_capacity,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
+            config.wasm_chunk_store,
         );
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor),
@@ -1002,8 +1004,21 @@ impl ExecutionEnvironment {
                     msg.take_cycles(),
                 ))
             }
-            Ok(Ic00Method::UploadChunk)
-            | Ok(Ic00Method::StoredChunks)
+
+            Ok(Ic00Method::UploadChunk) => {
+                let res = match UploadChunkArgs::decode(payload) {
+                    Err(err) => Err(err),
+                    Ok(request) => self.upload_chunk(
+                        *msg.sender(),
+                        &mut state,
+                        request,
+                        &mut round_limits.subnet_available_memory,
+                    ),
+                };
+                Some((res, msg.take_cycles()))
+            }
+
+            Ok(Ic00Method::StoredChunks)
             | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore) => Some((
                 Err(UserError::new(
@@ -1481,6 +1496,20 @@ impl ExecutionEnvironment {
         self.canister_manager
             .add_cycles(sender, cycles, canister, provisional_whitelist)
             .map(|()| EmptyBlob.encode())
+            .map_err(|err| err.into())
+    }
+
+    fn upload_chunk(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: UploadChunkArgs,
+        subnet_available_memory: &mut SubnetAvailableMemory,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister_mut(args.get_canister_id(), state)?;
+        self.canister_manager
+            .upload_chunk(sender, canister, &args.chunk, subnet_available_memory)
+            .map(|reply| reply.encode())
             .map_err(|err| err.into())
     }
 

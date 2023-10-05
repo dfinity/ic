@@ -394,10 +394,12 @@ impl CanisterState {
 
     /// The amount of memory currently being used by the canister.
     ///
-    /// This only includes execution memory (heap, stable, globals, Wasm)
-    /// and canister history memory.
+    /// This only includes execution memory (heap, stable, globals, Wasm),
+    /// canister history memory and wasm chunk storage.
     pub fn memory_usage(&self) -> NumBytes {
-        self.execution_memory_usage() + self.canister_history_memory_usage()
+        self.execution_memory_usage()
+            + self.canister_history_memory_usage()
+            + self.wasm_chunk_store_memory_usage()
     }
 
     /// Returns the amount of execution memory (heap, stable, globals, Wasm)
@@ -424,6 +426,11 @@ impl CanisterState {
     /// Returns the amount of memory used by canister history in bytes.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
         self.system_state.canister_history_memory_usage()
+    }
+
+    /// Returns the memory usage of the wasm chunk store in bytes.
+    fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+        self.system_state.wasm_chunk_store.memory_usage()
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
