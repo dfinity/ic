@@ -2992,3 +2992,28 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         NominalCycles::from(test.canister_execution_cost(b_id))
     );
 }
+
+#[test]
+fn output_requests_on_application_subnets_update_subnet_available_memory_reserved() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(ONE_GIB)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_message_memory(ONE_GIB)
+        .with_manual_execution()
+        .with_initial_canister_cycles(1_000_000_000_000_000)
+        .build();
+    let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
+    test.canister_update_allocations_settings(canister_id, None, Some(1_000_000))
+        .unwrap();
+    test.ingress_raw(canister_id, "test", vec![]);
+    test.execute_message(canister_id);
+    let subnet_message_memory = test.subnet_available_memory().get_message_memory();
+    let system_state = &mut test.canister_state_mut(canister_id).system_state;
+    // There should be one reserved slot in the queues.
+    assert_eq!(1, system_state.queues().reserved_slots());
+    assert_eq!(
+        ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
+        subnet_message_memory
+    );
+    assert_correct_request(system_state, canister_id);
+}
