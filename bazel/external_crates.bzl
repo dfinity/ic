@@ -1206,6 +1206,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "tracing-appender": crate.spec(
                 version = "^0.2.2",
             ),
+            "tracing-slog": crate.spec(
+                version = "^0.2",
+            ),
             "tracing-subscriber": crate.spec(
                 version = "^0.3.11",
                 features = [

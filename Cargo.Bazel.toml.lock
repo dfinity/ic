@@ -2851,6 +2851,7 @@ dependencies = [
  "tower_governor",
  "tracing",
  "tracing-appender",
+ "tracing-slog",
  "tracing-subscriber",
  "trust-dns-resolver",
  "turmoil",
@@ -10072,6 +10073,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
 dependencies = [
  "serde",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-slog"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ffd12d2d54fb99df994fde4e3320959e32208420bfe375a664c5d8cd894a23b"
+dependencies = [
+ "once_cell",
+ "slog",
  "tracing-core",
 ]
 

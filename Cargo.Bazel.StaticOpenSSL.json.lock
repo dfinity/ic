@@ -1,5 +1,5 @@
 {
-  "checksum": "832dafe63d6d32e7105851fb5714b5850744d7031d299eaeb80beb0882332351",
+  "checksum": "b8b0288baa18aa4ce0ae3db279e9d3f4d2a43102120d30049ebc1359651d767a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14173,6 +14173,10 @@
             {
               "id": "tracing-appender 0.2.2",
               "target": "tracing_appender"
+            },
+            {
+              "id": "tracing-slog 0.2.0",
+              "target": "tracing_slog"
             },
             {
               "id": "tracing-subscriber 0.3.17",
@@ -52070,6 +52074,60 @@
         },
         "edition": "2018",
         "version": "0.1.3"
+      },
+      "license": "MIT"
+    },
+    "tracing-slog 0.2.0": {
+      "name": "tracing-slog",
+      "version": "0.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/tracing-slog/0.2.0/download",
+          "sha256": "6ffd12d2d54fb99df994fde4e3320959e32208420bfe375a664c5d8cd894a23b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_slog",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "tracing_slog",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "slog 2.7.0",
+              "target": "slog"
+            },
+            {
+              "id": "tracing-core 0.1.31",
+              "target": "tracing_core"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
       },
       "license": "MIT"
     },

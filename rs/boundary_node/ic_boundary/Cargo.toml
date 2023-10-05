@@ -73,6 +73,7 @@ tower-http = { version = "0.4.4", features = [
     "compression-full",
 ] }
 tracing = "0.1.35"
+tracing-slog = "0.2"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }
 url = "2.1.1"
 x509-parser = { version = "0.15.1", features = ["verify"] }
