@@ -18,54 +18,6 @@ fn check_response_normalization<O: HttpResponsePayload>(left: &str, right: &str)
 }
 
 #[test]
-fn tx_normalization() {
-    check_response_normalization::<Transaction>(
-        r#"{
-        "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-        "blockNumber": "0x3ca487",
-        "hash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-        "accessList": [],
-        "chainId": "0xaa36a7",
-        "from": "0xdd2851cdd40ae6536831558dd46db62fac7a844d",
-        "gas": "0xdafd",
-        "gasPrice": "0x59682f0e",
-        "input": "0xb214faa509efcdab00000000000100000000000000000000000000000000000000000000",
-        "maxFeePerGas": "0x59682f15",
-        "maxPriorityFeePerGas": "0x59682f00",
-        "nonce": "0x5",
-        "r": "0x83ca84982e3290257249525ee24b4e729fd4f4bbda73688841c88be33af12b13",
-        "s": "0x32fbc38e3c63e5ee4ac7d7ec7553e22ea959396304e60f0c630b572d4207f8c6",
-        "to": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-        "transactionIndex": "0x22",
-        "type": "0x2",
-        "v": "0x0",
-        "value": "0x2386f26fc10000"
-        }"#,
-        r#"{
-        "blockNumber": "0x3ca487",
-        "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-        "accessList": [],
-        "hash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-        "from": "0xdd2851cdd40ae6536831558dd46db62fac7a844d",
-        "chainId": "0xaa36a7",
-        "gasPrice": "0x59682f0e",
-        "gas": "0xdafd",
-        "maxFeePerGas": "0x59682f15",
-        "input": "0xb214faa509efcdab00000000000100000000000000000000000000000000000000000000",
-        "nonce": "0x5",
-        "maxPriorityFeePerGas": "0x59682f00",
-        "s": "0x32fbc38e3c63e5ee4ac7d7ec7553e22ea959396304e60f0c630b572d4207f8c6",
-        "to": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-        "value": "0x2386f26fc10000",
-        "transactionIndex": "0x22",
-        "r": "0x83ca84982e3290257249525ee24b4e729fd4f4bbda73688841c88be33af12b13",
-        "type": "0x2",
-        "v": "0x0"
-        }"#,
-    )
-}
-
-#[test]
 fn fee_history_normalization() {
     check_response_normalization::<FeeHistory>(
         r#"{
