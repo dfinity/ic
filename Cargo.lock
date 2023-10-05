@@ -15988,8 +15988,13 @@ dependencies = [
  "anyhow",
  "clap 4.4.5",
  "ipnet",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "serde_with",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]
