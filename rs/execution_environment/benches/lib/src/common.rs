@@ -2,6 +2,7 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
+use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
@@ -71,7 +72,7 @@ pub struct BenchmarkArgs {
 }
 
 /// Benchmark to run: name (id), WAT, expected number of instructions.
-pub struct Benchmark(pub &'static str, pub String, pub u64);
+pub struct Benchmark(pub String, pub String, pub u64);
 
 pub fn get_execution_args<W>(exec_env: &ExecutionEnvironment, wat: W) -> BenchmarkArgs
 where
@@ -248,7 +249,14 @@ where
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
-    let config = Config::default();
+    let config = Config {
+        embedders_config: EmbeddersConfig {
+            metering_type: MeteringType::New,
+            ..EmbeddersConfig::default()
+        },
+        ..Default::default()
+    };
+
     let metrics_registry = MetricsRegistry::new();
     let hypervisor = Arc::new(Hypervisor::new(
         config.clone(),

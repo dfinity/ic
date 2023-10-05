@@ -19,17 +19,17 @@ pub fn execute_update_bench(c: &mut Criterion) {
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
-            "baseline/empty test*",
+            "baseline/empty test*".into(),
             Module::Test.from_sections(("", "(drop (i32.const 0))")),
             2,
         ),
         common::Benchmark(
-            "baseline/empty loop",
+            "baseline/empty loop".into(),
             Module::Test.from_sections(("", Module::render_loop(LoopIterations::Mi, ""))),
             9_000_004,
         ),
         common::Benchmark(
-            "baseline/adds",
+            "baseline/adds".into(),
             Module::Test.from_sections((
                 "",
                 Module::render_loop(
@@ -40,37 +40,37 @@ pub fn execute_update_bench(c: &mut Criterion) {
             14_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_caller_size()",
+            "ic0_msg_caller_size()".into(),
             Module::Test.from_ic0("msg_caller_size", NoParams, Result::I32),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_caller_copy()/1B",
+            "ic0_msg_caller_copy()/1B".into(),
             Module::Test.from_ic0("msg_caller_copy", Params3(0, 0, 1), Result::No),
             14_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_caller_copy()/10B",
+            "ic0_msg_caller_copy()/10B".into(),
             Module::Test.from_ic0("msg_caller_copy", Params3(0, 0, 10), Result::No), // 10B max
             23_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_arg_data_size()",
+            "ic0_msg_arg_data_size()".into(),
             Module::Test.from_ic0("msg_arg_data_size", NoParams, Result::I32),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_arg_data_copy()/1B",
+            "ic0_msg_arg_data_copy()/1B".into(),
             Module::Test.from_ic0("msg_arg_data_copy", Params3(0, 0, 1), Result::No),
             34_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_arg_data_copy()/8K",
+            "ic0_msg_arg_data_copy()/8K".into(),
             Module::Test.from_ic0("msg_arg_data_copy", Params3(0, 0, 8192), Result::No),
             8_225_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_reply()*",
+            "ic0_msg_reply()*".into(),
             // We can reply just once
             Module::Test.from_sections(Module::sections(
                 LoopIterations::One,
@@ -81,17 +81,17 @@ pub fn execute_update_bench(c: &mut Criterion) {
             1,
         ),
         common::Benchmark(
-            "ic0_msg_reply_data_append()/1B",
+            "ic0_msg_reply_data_append()/1B".into(),
             Module::Test.from_ic0("msg_reply_data_append", Params2(0, 1), Result::No), // 2MiB max
             33_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_reply_data_append()/2B",
+            "ic0_msg_reply_data_append()/2B".into(),
             Module::Test.from_ic0("msg_reply_data_append", Params2(0, 2), Result::No), // 2MiB max
             34_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_reject()*",
+            "ic0_msg_reject()*".into(),
             // We can reject just once
             Module::Test.from_sections(Module::sections(
                 LoopIterations::One,
@@ -102,112 +102,112 @@ pub fn execute_update_bench(c: &mut Criterion) {
             23,
         ),
         common::Benchmark(
-            "ic0_canister_self_size()",
+            "ic0_canister_self_size()".into(),
             Module::Test.from_ic0("canister_self_size", NoParams, Result::I32),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_canister_self_copy()/1B",
+            "ic0_canister_self_copy()/1B".into(),
             Module::Test.from_ic0("canister_self_copy", Params3(0, 0, 1), Result::No),
             14_000_004,
         ),
         common::Benchmark(
-            "ic0_canister_self_copy()/10B",
+            "ic0_canister_self_copy()/10B".into(),
             Module::Test.from_ic0("canister_self_copy", Params3(0, 0, 10), Result::No), // 10B max
             23_000_004,
         ),
         common::Benchmark(
-            "ic0_debug_print()/1B",
+            "ic0_debug_print()/1B".into(),
             Module::Test.from_ic0("debug_print", Params2(0, 1), Result::No),
             113_000_004,
         ),
         common::Benchmark(
-            "ic0_debug_print()/64B",
+            "ic0_debug_print()/64B".into(),
             Module::Test.from_ic0("debug_print", Params2(0, 64), Result::No),
             176_000_004,
         ),
         common::Benchmark(
-            "ic0_call_new()",
+            "ic0_call_new()".into(),
             Module::CallNewLoop.from_sections(("", "")), // call_new in a loop is rendered by default
             46_000_004,
         ),
         common::Benchmark(
-            "call_new+ic0_call_data_append()/1B",
+            "call_new+ic0_call_data_append()/1B".into(),
             Module::CallNewLoop.from_ic0("call_data_append", Params2(0, 1), Result::No), // 2MiB max
             70_000_004,
         ),
         common::Benchmark(
-            "call_new+ic0_call_data_append()/8K",
+            "call_new+ic0_call_data_append()/8K".into(),
             Module::CallNewLoop.from_ic0("call_data_append", Params2(0, 8192), Result::No), // 2MiB max
             8_261_000_004,
         ),
         common::Benchmark(
-            "call_new+ic0_call_on_cleanup()",
+            "call_new+ic0_call_on_cleanup()".into(),
             Module::CallNewLoop.from_ic0("call_on_cleanup", Params2(33, 0), Result::No),
             49_000_004,
         ),
         common::Benchmark(
-            "call_new+ic0_call_cycles_add()",
+            "call_new+ic0_call_cycles_add()".into(),
             Module::CallNewLoop.from_ic0("call_cycles_add", Param1(100_i64), Result::No),
             48_000_004,
         ),
         common::Benchmark(
-            "call_new+ic0_call_cycles_add128()",
+            "call_new+ic0_call_cycles_add128()".into(),
             Module::CallNewLoop.from_ic0("call_cycles_add128", Params2(0_i64, 100_i64), Result::No),
             49_000_004,
         ),
         common::Benchmark(
-            "call_new+ic0_call_perform()",
+            "call_new+ic0_call_perform()".into(),
             Module::CallNewLoop.from_ic0("call_perform", NoParams, Result::I32),
             48_000_004,
         ),
         common::Benchmark(
-            "ic0_stable_size()",
+            "ic0_stable_size()".into(),
             Module::Test.from_ic0("stable_size", NoParams, Result::I32),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_stable_grow()",
+            "ic0_stable_grow()".into(),
             Module::Test.from_ic0("stable_grow", Param1(0), Result::I32),
             12_000_004,
         ),
         common::Benchmark(
-            "ic0_stable_read()/1B",
+            "ic0_stable_read()/1B".into(),
             Module::StableTest.from_ic0("stable_read", Params3(0, 0, 1), Result::No),
             34_000_007,
         ),
         common::Benchmark(
-            "ic0_stable_read()/8K",
+            "ic0_stable_read()/8K".into(),
             Module::StableTest.from_ic0("stable_read", Params3(0, 0, 8192), Result::No),
             8_225_000_007,
         ),
         common::Benchmark(
-            "ic0_stable_write()/1B",
+            "ic0_stable_write()/1B".into(),
             Module::StableTest.from_ic0("stable_write", Params3(0, 0, 1), Result::No),
             34_001_007,
         ),
         common::Benchmark(
-            "ic0_stable_write()/8K",
+            "ic0_stable_write()/8K".into(),
             Module::StableTest.from_ic0("stable_write", Params3(0, 0, 8192), Result::No),
             8_225_002_007,
         ),
         common::Benchmark(
-            "ic0_stable64_size()",
+            "ic0_stable64_size()".into(),
             Module::Test.from_ic0("stable64_size", NoParams, Result::I64),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_stable64_grow()",
-            Module::Test.from_ic0("stable64_grow", Param1(0_i64), Result::I64),
+            "ic0_stable64_grow()".into(),
+            Module::Test.from_ic0("stable64_grow", Param1(1_i64), Result::I64),
             12_000_004,
         ),
         common::Benchmark(
-            "ic0_stable64_read()/1B",
+            "ic0_stable64_read()/1B".into(),
             Module::StableTest.from_ic0("stable64_read", Params3(0_i64, 0_i64, 1_i64), Result::No),
             34_000_007,
         ),
         common::Benchmark(
-            "ic0_stable64_read()/8K",
+            "ic0_stable64_read()/8K".into(),
             Module::StableTest.from_ic0(
                 "stable64_read",
                 Params3(0_i64, 0_i64, 8192_i64),
@@ -216,12 +216,12 @@ pub fn execute_update_bench(c: &mut Criterion) {
             8_225_000_007,
         ),
         common::Benchmark(
-            "ic0_stable64_write()/1B",
+            "ic0_stable64_write()/1B".into(),
             Module::StableTest.from_ic0("stable64_write", Params3(0_i64, 0_i64, 1_i64), Result::No),
             34_001_007,
         ),
         common::Benchmark(
-            "ic0_stable64_write()/8K",
+            "ic0_stable64_write()/8K".into(),
             Module::StableTest.from_ic0(
                 "stable64_write",
                 Params3(0_i64, 0_i64, 8192_i64),
@@ -230,47 +230,47 @@ pub fn execute_update_bench(c: &mut Criterion) {
             8_225_002_007,
         ),
         common::Benchmark(
-            "ic0_time()",
+            "ic0_time()".into(),
             Module::Test.from_ic0("time", NoParams, Result::I64),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_global_timer_set()",
+            "ic0_global_timer_set()".into(),
             Module::Test.from_ic0("global_timer_set", Param1(0_i64), Result::I64),
             12_000_004,
         ),
         common::Benchmark(
-            "ic0_performance_counter()",
+            "ic0_performance_counter()".into(),
             Module::Test.from_ic0("performance_counter", Param1(0), Result::I64),
             212_000_004,
         ),
         common::Benchmark(
-            "ic0_canister_cycle_balance()",
+            "ic0_canister_cycle_balance()".into(),
             Module::Test.from_ic0("canister_cycle_balance", NoParams, Result::I64),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_canister_cycle_balance128()",
+            "ic0_canister_cycle_balance128()".into(),
             Module::Test.from_ic0("canister_cycle_balance128", Param1(0), Result::No),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_cycles_available()",
+            "ic0_msg_cycles_available()".into(),
             Module::Test.from_ic0("msg_cycles_available", NoParams, Result::I64),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_cycles_available128()",
+            "ic0_msg_cycles_available128()".into(),
             Module::Test.from_ic0("msg_cycles_available128", Param1(0), Result::No),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_cycles_accept()",
+            "ic0_msg_cycles_accept()".into(),
             Module::Test.from_ic0("msg_cycles_accept", Param1(1_i64), Result::I64),
             12_000_004,
         ),
         common::Benchmark(
-            "ic0_msg_cycles_accept128()",
+            "ic0_msg_cycles_accept128()".into(),
             Module::Test.from_ic0(
                 "msg_cycles_accept128",
                 Params3(1_i64, 2_i64, 3_i32),
@@ -279,32 +279,32 @@ pub fn execute_update_bench(c: &mut Criterion) {
             13_000_004,
         ),
         common::Benchmark(
-            "ic0_data_certificate_present()",
+            "ic0_data_certificate_present()".into(),
             Module::Test.from_ic0("data_certificate_present", NoParams, Result::I32),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_certified_data_set()/1B",
+            "ic0_certified_data_set()/1B".into(),
             Module::Test.from_ic0("certified_data_set", Params2(0, 1), Result::No),
             12_000_004,
         ),
         common::Benchmark(
-            "ic0_certified_data_set()/32B",
+            "ic0_certified_data_set()/32B".into(),
             Module::Test.from_ic0("certified_data_set", Params2(0, 32), Result::No), // 32B max
             12_000_004,
         ),
         common::Benchmark(
-            "ic0_canister_status()",
+            "ic0_canister_status()".into(),
             Module::Test.from_ic0("canister_status", NoParams, Result::I32),
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_mint_cycles()",
+            "ic0_mint_cycles()".into(),
             Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64),
             12_000_004,
         ),
         common::Benchmark(
-            "ic0_is_controller()",
+            "ic0_is_controller()".into(),
             Module::Test.from_ic0("is_controller", Params2(0, 29), Result::I32),
             905_000_004,
         ),

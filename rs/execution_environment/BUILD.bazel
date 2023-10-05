@@ -220,3 +220,11 @@ rust_bench(
         "//rs/types/types_test_utils",
     ] + BENCH_DEPENDENCIES,
 )
+
+rust_bench(
+    name = "wasm_instructions_bench",
+    srcs = ["benches/wasm_instructions.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+)
