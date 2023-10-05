@@ -5,19 +5,20 @@
 
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
-use super::utils::EcdsaBlockReaderImpl;
+use super::utils::{
+    block_chain_reader, get_ecdsa_config_if_enabled, get_enabled_signing_keys,
+    InvalidChainCacheError,
+};
 use crate::consensus::metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
-use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
-use ic_interfaces::{consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool};
+use ic_interfaces::ecdsa::EcdsaPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
-use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
@@ -121,7 +122,7 @@ impl From<ecdsa::TranscriptCastError> for EcdsaPayloadError {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum MembershipError {
+enum MembershipError {
     RegistryClientError(RegistryClientError),
     MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
@@ -143,16 +144,13 @@ impl From<MembershipError> for EcdsaPayloadError {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct InvalidChainCacheError(String);
-
 impl From<InvalidChainCacheError> for EcdsaPayloadError {
     fn from(err: InvalidChainCacheError) -> Self {
         EcdsaPayloadError::InvalidChainCacheError(err)
     }
 }
 
-/// Builds the the very first ecdsa summary block. This would trigger the subsequent
+/// Builds the very first ecdsa summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
 pub fn make_bootstrap_summary(
     subnet_id: SubnetId,
@@ -209,57 +207,6 @@ pub fn make_bootstrap_summary(
         }
     }
     Ok(Some(summary_payload))
-}
-
-/// Return [EcdsaConfig] if it is enabled for the given subnet.
-pub(crate) fn get_ecdsa_config_if_enabled(
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-    registry_client: &dyn RegistryClient,
-    log: &ReplicaLogger,
-) -> Result<Option<EcdsaConfig>, RegistryClientError> {
-    if let Some(mut ecdsa_config) = registry_client.get_ecdsa_config(subnet_id, registry_version)? {
-        if ecdsa_config.quadruples_to_create_in_advance == 0 {
-            warn!(
-                log,
-                "Wrong ecdsa_config: quadruples_to_create_in_advance is zero"
-            );
-        } else if ecdsa_config.key_ids.is_empty() {
-            // This means it is not enabled
-        } else if ecdsa_config.key_ids.len() > 1 {
-            warn!(
-                log,
-                "Wrong ecdsa_config: multiple key_ids is not yet supported. Pick the first one."
-            );
-            ecdsa_config.key_ids = vec![ecdsa_config.key_ids[0].clone()];
-            return Ok(Some(ecdsa_config));
-        } else {
-            return Ok(Some(ecdsa_config));
-        }
-    }
-    Ok(None)
-}
-
-/// Return ids of ECDSA keys of the given [EcdsaConfig] for which
-/// signing is enabled on the given subnet.
-pub(crate) fn get_enabled_signing_keys(
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-    registry_client: &dyn RegistryClient,
-    ecdsa_config: &EcdsaConfig,
-) -> Result<BTreeSet<EcdsaKeyId>, RegistryClientError> {
-    let signing_subnets = registry_client
-        .get_ecdsa_signing_subnets(registry_version)?
-        .unwrap_or_default();
-    Ok(ecdsa_config
-        .key_ids
-        .iter()
-        .cloned()
-        .filter(|key_id| match signing_subnets.get(key_id) {
-            Some(subnets) => subnets.contains(&subnet_id),
-            None => false,
-        })
-        .collect())
 }
 
 /// Creates a threshold ECDSA summary payload.
@@ -508,7 +455,7 @@ fn get_subnet_nodes_(
         .unwrap_or_default())
 }
 
-pub(crate) fn is_time_to_reshare_key_transcript(
+fn is_time_to_reshare_key_transcript(
     registry_client: &dyn RegistryClient,
     curr_registry_version: RegistryVersion,
     next_registry_version: RegistryVersion,
@@ -1468,61 +1415,11 @@ fn get_reshare_requests(
         .collect()
 }
 
-pub(crate) fn block_chain_reader(
-    pool_reader: &PoolReader<'_>,
-    summary_block: &Block,
-    parent_block: &Block,
-    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
-    log: &ReplicaLogger,
-) -> Result<EcdsaBlockReaderImpl, EcdsaPayloadError> {
-    // Resolve the transcript refs pointing into the parent chain,
-    // copy the resolved transcripts into the summary block.
-    block_chain_cache(pool_reader, summary_block, parent_block)
-        .map(EcdsaBlockReaderImpl::new)
-        .map_err(|err| {
-            warn!(
-                log,
-                "block_chain_reader(): failed to build chain cache: {:?}", err
-            );
-            if let Some(metrics) = ecdsa_payload_metrics {
-                metrics.payload_errors_inc("summary_invalid_chain_cache");
-            };
-            err.into()
-        })
-}
-
-/// Wrapper to build the chain cache and perform sanity checks on the returned chain
-pub fn block_chain_cache(
-    pool_reader: &PoolReader<'_>,
-    start: &Block,
-    end: &Block,
-) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
-    let chain = build_consensus_block_chain(pool_reader.pool(), start, end);
-    let expected_len = (end.height().get() - start.height().get() + 1) as usize;
-    let chain_len = chain.len();
-    if chain_len == expected_len {
-        Ok(chain)
-    } else {
-        Err(InvalidChainCacheError(format!(
-            "Invalid chain cache length: expected = {:?}, actual = {:?}, \
-             start = {:?}, end = {:?}, tip = {:?}, \
-             notarized_height = {:?}, finalized_height = {:?}, CUP height = {:?}",
-            expected_len,
-            chain_len,
-            start.height(),
-            end.height(),
-            chain.tip().height(),
-            pool_reader.get_notarized_height(),
-            pool_reader.get_finalized_height(),
-            pool_reader.get_catch_up_height()
-        )))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecdsa::utils::test_utils::*;
+    use crate::ecdsa::test_utils::*;
+    use crate::ecdsa::utils::block_chain_reader;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
@@ -1535,12 +1432,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
     use ic_protobuf::types::v1 as pb;
-    use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
-    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
     use ic_test_utilities::{
@@ -1560,7 +1452,6 @@ mod tests {
     };
     use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
-    use ic_types::subnet_id_into_protobuf;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
     use std::convert::TryInto;
@@ -1657,59 +1548,6 @@ mod tests {
         block_proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
         pool.advance_round_with_block(&block_proposal);
         block_proposal.content.as_ref().clone()
-    }
-
-    #[test]
-    fn test_get_enabled_signing_keys() {
-        let key_id1 = EcdsaKeyId::from_str("Secp256k1:some_key1").unwrap();
-        let key_id2 = EcdsaKeyId::from_str("Secp256k1:some_key2").unwrap();
-        let key_id3 = EcdsaKeyId::from_str("Secp256k1:some_key3").unwrap();
-        let ecdsa_config = EcdsaConfig {
-            key_ids: vec![key_id1.clone(), key_id2.clone()],
-            ..EcdsaConfig::default()
-        };
-        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
-        let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-        let subnet_id = subnet_test_id(1);
-
-        let add_key = |version, key_id, subnets| {
-            registry_data
-                .add(
-                    &make_ecdsa_signing_subnet_list_key(key_id),
-                    RegistryVersion::from(version),
-                    Some(EcdsaSigningSubnetList { subnets }),
-                )
-                .expect("failed to add subnets to registry");
-        };
-
-        add_key(1, &key_id1, vec![subnet_id_into_protobuf(subnet_id)]);
-        add_key(2, &key_id2, vec![subnet_id_into_protobuf(subnet_id)]);
-        add_key(2, &key_id3, vec![subnet_id_into_protobuf(subnet_id)]);
-        add_key(3, &key_id1, vec![]);
-        registry.update_to_latest_version();
-
-        let test_cases = vec![
-            (0, Ok(BTreeSet::new())),
-            (1, Ok(BTreeSet::from_iter(vec![key_id1.clone()]))),
-            (2, Ok(BTreeSet::from_iter(vec![key_id1, key_id2.clone()]))),
-            (3, Ok(BTreeSet::from_iter(vec![key_id2]))),
-            (
-                4,
-                Err(RegistryClientError::VersionNotAvailable {
-                    version: RegistryVersion::from(4),
-                }),
-            ),
-        ];
-
-        for (version, expected) in test_cases {
-            let result = get_enabled_signing_keys(
-                subnet_id,
-                RegistryVersion::from(version),
-                registry.as_ref(),
-                &ecdsa_config,
-            );
-            assert_eq!(result, expected);
-        }
     }
 
     #[test]
@@ -3829,66 +3667,6 @@ mod tests {
                 ecdsa::KeyTranscriptCreation::Begin
             );
             assert_matches!(payload_6.key_transcript.current, Some(_));
-        })
-    }
-
-    #[test]
-    fn test_get_ecdsa_config_if_enabled() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies {
-                registry,
-                registry_data_provider,
-                ..
-            } = dependencies(pool_config, 1);
-            let log = no_op_logger();
-            let subnet_id = subnet_test_id(1);
-            let node_ids = vec![node_test_id(0)];
-            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-            let ecdsa_config_malformed = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id.clone(), key_id.clone()],
-                ..EcdsaConfig::default()
-            };
-            let mut registry_version = RegistryVersion::from(10);
-
-            let update = |version: &mut RegistryVersion,
-                          config: &EcdsaConfig|
-             -> Result<Option<EcdsaConfig>, RegistryClientError> {
-                version.inc_assign();
-                let subnet_record = SubnetRecordBuilder::from(&node_ids)
-                    .with_ecdsa_config(config.clone())
-                    .build();
-                add_subnet_record(
-                    &registry_data_provider,
-                    version.get(),
-                    subnet_id,
-                    subnet_record,
-                );
-                registry.update_to_latest_version();
-                get_ecdsa_config_if_enabled(subnet_id, *version, registry.as_ref(), &log)
-            };
-
-            let res = update(&mut registry_version, &ecdsa_config_malformed);
-            let ecdsa_config_valid = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                ..EcdsaConfig::default()
-            };
-            assert_matches!(res, Ok(Some(config)) if config == ecdsa_config_valid);
-
-            let res = update(&mut registry_version, &ecdsa_config_valid);
-            assert_matches!(res, Ok(Some(config)) if config == ecdsa_config_valid);
-
-            let mut ecdsa_config_invalid = ecdsa_config_valid.clone();
-            ecdsa_config_invalid.quadruples_to_create_in_advance = 0;
-            let res = update(&mut registry_version, &ecdsa_config_invalid);
-            assert_matches!(res, Ok(None));
-
-            let mut ecdsa_config_invalid = ecdsa_config_valid;
-            ecdsa_config_invalid.key_ids = vec![];
-            let res = update(&mut registry_version, &ecdsa_config_invalid);
-            assert_matches!(res, Ok(None));
         })
     }
 }
