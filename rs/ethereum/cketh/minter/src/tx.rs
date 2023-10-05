@@ -3,6 +3,7 @@ mod tests;
 
 use crate::address::Address;
 use crate::eth_rpc::{FeeHistory, Hash, Quantity};
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
@@ -115,41 +116,46 @@ impl rlp::Encodable for Eip1559Signature {
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct SignedEip1559TransactionRequest {
     #[n(0)]
-    pub transaction: Eip1559TransactionRequest,
+    transaction: Eip1559TransactionRequest,
     #[n(1)]
-    pub signature: Eip1559Signature,
+    signature: Eip1559Signature,
+    // TODO FI-942: transaction hash should be computed only once
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub struct ConfirmedEip1559Transaction {
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+pub struct FinalizedEip1559Transaction {
+    #[n(0)]
     transaction: SignedEip1559TransactionRequest,
-    block_hash: Hash,
-    block_number: BlockNumber,
+    #[n(1)]
+    receipt: TransactionReceipt,
 }
 
-impl ConfirmedEip1559Transaction {
-    pub fn new(
-        transaction: SignedEip1559TransactionRequest,
-        block_hash: Hash,
-        block_number: BlockNumber,
-    ) -> Self {
-        Self {
-            transaction,
-            block_hash,
-            block_number,
-        }
+impl FinalizedEip1559Transaction {
+    pub fn destination(&self) -> &Address {
+        &self.transaction.transaction().destination
     }
 
-    pub fn signed_transaction(&self) -> &SignedEip1559TransactionRequest {
-        &self.transaction
+    pub fn block_number(&self) -> &BlockNumber {
+        &self.receipt.block_number
     }
 
-    pub fn transaction(&self) -> &Eip1559TransactionRequest {
-        &self.transaction.transaction
+    pub fn transaction_amount(&self) -> &Wei {
+        &self.transaction.transaction().amount
     }
 
-    pub fn block_number(&self) -> BlockNumber {
-        self.block_number
+    pub fn transaction_hash(&self) -> &Hash {
+        &self.receipt.transaction_hash
+    }
+
+    pub fn effective_transaction_fee(&self) -> Wei {
+        self.receipt
+            .effective_gas_price
+            .checked_mul(self.receipt.gas_used)
+            .expect("ERROR: overflow during transaction fee calculation")
+    }
+
+    pub fn transaction_status(&self) -> &TransactionStatus {
+        &self.receipt.status
     }
 }
 
@@ -197,6 +203,35 @@ impl SignedEip1559TransactionRequest {
 
     pub fn nonce(&self) -> TransactionNonce {
         self.transaction.nonce
+    }
+
+    pub fn try_finalize(
+        self,
+        receipt: TransactionReceipt,
+    ) -> Result<FinalizedEip1559Transaction, String> {
+        if self.hash() != receipt.transaction_hash {
+            return Err(format!(
+                "transaction hash mismatch: expected {}, got {}",
+                self.hash(),
+                receipt.transaction_hash
+            ));
+        }
+        if self.transaction.max_fee_per_gas < receipt.effective_gas_price {
+            return Err(format!(
+                "transaction max_fee_per_gas {} is smaller than effective_gas_price {}",
+                self.transaction.max_fee_per_gas, receipt.effective_gas_price
+            ));
+        }
+        if self.transaction.gas_limit < receipt.gas_used {
+            return Err(format!(
+                "transaction gas limit {} is smaller than gas used {}",
+                self.transaction.gas_limit, receipt.gas_used
+            ));
+        }
+        Ok(FinalizedEip1559Transaction {
+            transaction: self,
+            receipt,
+        })
     }
 }
 

@@ -272,6 +272,10 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     to_public_key(&response)
 }
 
+pub async fn minter_address() -> Address {
+    Address::from_pubkey(&lazy_call_ecdsa_public_key().await)
+}
+
 #[derive(Serialize, Deserialize, Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]
 pub enum TaskType {
     MintCkEth,

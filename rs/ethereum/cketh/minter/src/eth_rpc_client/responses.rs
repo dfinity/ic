@@ -1,45 +1,35 @@
-use crate::address::Address;
 use crate::eth_rpc::{Hash, HttpResponsePayload, Quantity, ResponseTransform};
 use crate::numeric::{BlockNumber, Wei};
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionReceipt {
     /// The hash of the block containing the transaction.
+    #[n(0)]
     pub block_hash: Hash,
 
     /// The number of the block containing the transaction.
+    #[n(1)]
     pub block_number: BlockNumber,
 
     /// The total base charge plus tip paid for each unit of gas
+    #[n(2)]
     pub effective_gas_price: Wei,
 
-    /// The address of the sender.
-    pub from: Address,
-
-    /// The address of the receiver.
-    /// `None` when the transaction is a contract creation transaction.
-    pub to: Option<Address>,
-
-    /// The contract address created if the transaction was a contract creation,
-    /// otherwise `None`.
-    pub contract_address: Option<Address>,
-
     /// The amount of gas used by this specific transaction alone
+    #[cbor(n(3), with = "crate::cbor::u256")]
     pub gas_used: Quantity,
 
     /// Status of the transaction.
+    #[n(4)]
     pub status: TransactionStatus,
 
     /// The hash of the transaction
+    #[n(5)]
     pub transaction_hash: Hash,
-
-    /// Index of the transaction within the block.
-    /// A Block has a limit of 30 million gas and a transaction costs at least 21_000 gas,
-    /// meaning that a block contains at most 1428 transactions, see
-    /// <https://ethereum.org/en/developers/docs/gas/#block-size>
-    pub transaction_index: Quantity,
 }
 
 impl HttpResponsePayload for TransactionReceipt {
@@ -48,10 +38,11 @@ impl HttpResponsePayload for TransactionReceipt {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
 #[serde(try_from = "ethnum::u256")]
 pub enum TransactionStatus {
     /// Transaction was mined and executed successfully.
+    #[n(0)]
     Success,
 
     /// Transaction was mined but execution failed (e.g., out-of-gas error).
@@ -59,6 +50,7 @@ pub enum TransactionStatus {
     /// Note that this is different from a transaction that is not mined at all: a failed transaction
     /// is part of the blockchain and the next transaction from the same sender should have an incremented
     /// transaction nonce.
+    #[n(1)]
     Failure,
 }
 
@@ -70,6 +62,15 @@ impl TryFrom<ethnum::u256> for TransactionStatus {
             ethnum::u256::ZERO => Ok(TransactionStatus::Failure),
             ethnum::u256::ONE => Ok(TransactionStatus::Success),
             _ => Err(format!("invalid transaction status: {}", value)),
+        }
+    }
+}
+
+impl Display for TransactionStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransactionStatus::Success => write!(f, "Success"),
+            TransactionStatus::Failure => write!(f, "Failure"),
         }
     }
 }

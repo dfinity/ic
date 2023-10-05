@@ -4,6 +4,7 @@ use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc::Hash;
+use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::{MintedEvent, State};
@@ -18,12 +19,14 @@ pub struct DashboardPendingTransaction {
     pub status: RetrieveEthStatus,
 }
 
-pub struct DashboardConfirmedTransaction {
+pub struct DashboardFinalizedTransaction {
     pub ledger_burn_index: LedgerBurnIndex,
     pub destination: Address,
     pub transaction_amount: Wei,
     pub block_number: BlockNumber,
     pub transaction_hash: Hash,
+    pub transaction_fee: Wei,
+    pub status: TransactionStatus,
 }
 
 #[derive(Template)]
@@ -42,7 +45,7 @@ pub struct DashboardTemplate {
     pub rejected_deposits: BTreeMap<EventSource, String>,
     pub withdrawal_requests: Vec<EthWithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
-    pub confirmed_transactions: Vec<DashboardConfirmedTransaction>,
+    pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
 }
 
 impl DashboardTemplate {
@@ -84,18 +87,20 @@ impl DashboardTemplate {
         pending_transactions
             .sort_unstable_by_key(|pending_tx| Reverse(pending_tx.ledger_burn_index));
 
-        let mut confirmed_transactions: Vec<_> = state
+        let mut finalized_transactions: Vec<_> = state
             .eth_transactions
             .finalized_transactions_iter()
-            .map(|(_tx_nonce, index, tx)| DashboardConfirmedTransaction {
+            .map(|(_tx_nonce, index, tx)| DashboardFinalizedTransaction {
                 ledger_burn_index: *index,
-                destination: tx.transaction().destination,
-                transaction_amount: tx.transaction().amount,
-                block_number: tx.block_number(),
-                transaction_hash: tx.signed_transaction().hash(),
+                destination: *tx.destination(),
+                transaction_amount: *tx.transaction_amount(),
+                block_number: *tx.block_number(),
+                transaction_hash: *tx.transaction_hash(),
+                transaction_fee: tx.effective_transaction_fee(),
+                status: *tx.transaction_status(),
             })
             .collect();
-        confirmed_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
+        finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
 
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
@@ -116,7 +121,7 @@ impl DashboardTemplate {
             rejected_deposits: state.invalid_events.clone(),
             withdrawal_requests,
             pending_transactions,
-            confirmed_transactions,
+            finalized_transactions,
         }
     }
 }

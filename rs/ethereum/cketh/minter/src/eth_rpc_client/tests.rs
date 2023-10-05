@@ -226,7 +226,6 @@ mod multi_call_results {
 }
 
 mod eth_get_transaction_receipt {
-    use crate::address::Address;
     use crate::eth_rpc::{Hash, Quantity};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::{BlockNumber, Wei};
@@ -264,16 +263,12 @@ mod eth_get_transaction_receipt {
                 .unwrap(),
                 block_number: BlockNumber::new(0x4132ec),
                 effective_gas_price: Wei::new(0xfefbee3e),
-                from: Address::from_str("0x1789f79e95324a47c5fd6693071188e82e9a3558").unwrap(),
-                to: Some(Address::from_str("0xdd2851cdd40ae6536831558dd46db62fac7a844d").unwrap()),
-                contract_address: None,
                 gas_used: Quantity::new(0x5208),
                 status: TransactionStatus::Success,
                 transaction_hash: Hash::from_str(
                     "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d"
                 )
                 .unwrap(),
-                transaction_index: Quantity::new(0x32)
             }
         )
     }
