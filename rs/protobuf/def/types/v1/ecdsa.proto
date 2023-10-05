@@ -217,3 +217,23 @@ message IDkgDealingSupport {
   bytes dealing_hash = 3;
   types.v1.BasicSignature sig_share = 4;
 }
+
+message EcdsaPrefix {
+  uint64 group_tag = 1;
+  uint64 meta_hash = 2;
+}
+
+message PrefixHashPair {
+  EcdsaPrefix prefix = 1;
+  bytes hash = 2;
+}
+
+message EcdsaArtifactId {
+  oneof kind {
+    PrefixHashPair dealing = 1;
+    PrefixHashPair dealing_support = 2;
+    PrefixHashPair sig_share = 3;
+    PrefixHashPair complaint = 4;
+    PrefixHashPair opening = 5;
+  }
+}

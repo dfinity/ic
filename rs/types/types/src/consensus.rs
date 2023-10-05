@@ -1062,6 +1062,72 @@ pub enum ConsensusMessageAttribute {
     CatchUpPackageShare(Height),
 }
 
+impl From<&ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
+    fn from(value: &ConsensusMessageAttribute) -> Self {
+        use pb::consensus_message_attribute::Kind;
+        let kind = match value.clone() {
+            ConsensusMessageAttribute::RandomBeacon(h) => Kind::RandomBeacon(h.get()),
+            ConsensusMessageAttribute::Finalization(hash, height) => {
+                Kind::Finalization(pb::FinalizationAttribute {
+                    block_hash: hash.get().0,
+                    height: height.get(),
+                })
+            }
+            ConsensusMessageAttribute::Notarization(hash, height) => {
+                Kind::Notarization(pb::NotarizationAttribute {
+                    block_hash: hash.get().0,
+                    height: height.get(),
+                })
+            }
+            ConsensusMessageAttribute::BlockProposal(r, h) => {
+                Kind::BlockProposal(pb::BlockProposalAttribute {
+                    rank: r.0,
+                    height: h.get(),
+                })
+            }
+            ConsensusMessageAttribute::RandomBeaconShare(h) => Kind::RandomBeaconShare(h.get()),
+            ConsensusMessageAttribute::NotarizationShare(h) => Kind::NotarizationShare(h.get()),
+            ConsensusMessageAttribute::FinalizationShare(h) => Kind::FinalizationShare(h.get()),
+            ConsensusMessageAttribute::RandomTape(h) => Kind::RandomTape(h.get()),
+            ConsensusMessageAttribute::RandomTapeShare(h) => Kind::RandomTapeShare(h.get()),
+            ConsensusMessageAttribute::CatchUpPackage(h) => Kind::Cup(h.get()),
+            ConsensusMessageAttribute::CatchUpPackageShare(h) => Kind::CupShare(h.get()),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::ConsensusMessageAttribute> for ConsensusMessageAttribute {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::ConsensusMessageAttribute) -> Result<Self, Self::Error> {
+        use pb::consensus_message_attribute::Kind;
+        let Some(kind) = value.kind.clone() else {
+            return Err(ProxyDecodeError::MissingField(
+                "ConsensusMessageAttribute::kind",
+            ));
+        };
+        Ok(match kind {
+            Kind::RandomBeacon(x) => Self::RandomBeacon(Height::new(x)),
+            Kind::Finalization(x) => Self::Finalization(
+                CryptoHashOf::new(CryptoHash(x.block_hash)),
+                Height::new(x.height),
+            ),
+            Kind::Notarization(x) => Self::Notarization(
+                CryptoHashOf::new(CryptoHash(x.block_hash)),
+                Height::new(x.height),
+            ),
+            Kind::BlockProposal(x) => Self::BlockProposal(Rank(x.rank), Height::new(x.height)),
+            Kind::RandomBeaconShare(x) => Self::RandomBeaconShare(Height::new(x)),
+            Kind::NotarizationShare(x) => Self::NotarizationShare(Height::new(x)),
+            Kind::FinalizationShare(x) => Self::FinalizationShare(Height::new(x)),
+            Kind::RandomTape(x) => Self::RandomTape(Height::new(x)),
+            Kind::RandomTapeShare(x) => Self::RandomTapeShare(Height::new(x)),
+            Kind::Cup(x) => Self::CatchUpPackage(Height::new(x)),
+            Kind::CupShare(x) => Self::CatchUpPackageShare(Height::new(x)),
+        })
+    }
+}
+
 /// Useful to compare equality by content, for example Signed<C,S> can be
 /// compared by equality on C.
 pub trait ContentEq {

@@ -2,7 +2,7 @@
 use crate::artifact::{ArtifactAttribute, ArtifactId};
 use crate::crypto::CryptoHash;
 use bincode::{deserialize, serialize};
-use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
@@ -83,7 +83,7 @@ pub fn build_default_gossip_config() -> GossipConfig {
 impl From<GossipAdvert> for pb::GossipAdvert {
     fn from(advert: GossipAdvert) -> Self {
         Self {
-            attribute: serialize(&advert.attribute).unwrap(),
+            attribute: Some((&advert.attribute).into()),
             size: advert.size as u64,
             artifact_id: serialize(&advert.artifact_id).unwrap(),
             integrity_hash: advert.integrity_hash.0,
@@ -91,12 +91,11 @@ impl From<GossipAdvert> for pb::GossipAdvert {
     }
 }
 
-// TODO(P2P-480)
 impl TryFrom<pb::GossipAdvert> for GossipAdvert {
     type Error = ProxyDecodeError;
     fn try_from(advert: pb::GossipAdvert) -> Result<Self, Self::Error> {
         Ok(Self {
-            attribute: deserialize(&advert.attribute)?,
+            attribute: try_from_option_field(advert.attribute.as_ref(), "GossipAdvert::attribute")?,
             size: advert.size as usize,
             artifact_id: deserialize(&advert.artifact_id)?,
             integrity_hash: CryptoHash(advert.integrity_hash),
