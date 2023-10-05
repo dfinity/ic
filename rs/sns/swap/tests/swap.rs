@@ -363,18 +363,18 @@ fn test_open_with_delay() {
     let timestamp_before_delay = START_TIMESTAMP_SECONDS + delay_seconds - 1;
     assert!(!swap.can_open(START_TIMESTAMP_SECONDS));
     assert!(!swap.can_open(timestamp_before_delay));
-    assert!(!swap.try_open_after_delay(timestamp_before_delay));
+    assert!(!swap.try_open(timestamp_before_delay));
     assert_eq!(swap.lifecycle(), Adopted);
 
     // Try opening after delay elapses, it should succeed.
     let timestamp_after_delay = START_TIMESTAMP_SECONDS + delay_seconds + 1;
     assert!(swap.can_open(timestamp_after_delay));
-    assert!(swap.try_open_after_delay(timestamp_after_delay));
+    assert!(swap.try_open(timestamp_after_delay));
     assert_eq!(swap.lifecycle(), Open);
 
     // Repeated opening fails.
     assert!(!swap.can_open(timestamp_after_delay));
-    assert!(!swap.try_open_after_delay(timestamp_after_delay));
+    assert!(!swap.try_open(timestamp_after_delay));
     assert_eq!(swap.lifecycle(), Open);
 }
 
@@ -820,7 +820,7 @@ fn test_scenario_happy() {
     assert_eq!(swap.sns_token_e8s().unwrap(), 200_000 * E8);
     // Cannot (re)-open, as already opened.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
-    assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS));
+    assert!(!swap.try_open(END_TIMESTAMP_SECONDS));
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
     assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
@@ -922,7 +922,7 @@ fn test_scenario_happy() {
     assert_eq!(swap.lifecycle(), Committed);
     // Should not be able to re-open after commit.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
-    assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS));
+    assert!(!swap.try_open(END_TIMESTAMP_SECONDS));
     // Check that buyer balances are correct. Total SNS balance is
     // 200k and total ICP is 2k.
     verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 900 * E8, 90000 * E8);
@@ -1572,10 +1572,10 @@ async fn test_finalize_swap_abort() {
     assert_eq!(swap.lifecycle(), Aborted);
     // Cannot open when aborted.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS + 1));
-    assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS + 1));
+    assert!(!swap.try_open(END_TIMESTAMP_SECONDS + 1));
 
     // We need to create a function to generate the clients, so we can get them
-    // †wice: once for when we call `finalize` and once for when we call
+    // twice: once for when we call `finalize` and once for when we call
     // `try_auto_finalize`
     fn get_clients() -> CanisterClients<
         SpySnsRootClient,
