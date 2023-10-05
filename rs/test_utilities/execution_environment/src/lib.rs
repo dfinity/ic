@@ -1843,6 +1843,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_wasm_chunk_store(mut self) -> Self {
+        self.execution_config.wasm_chunk_store = FlagStatus::Enabled;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self

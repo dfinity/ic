@@ -222,6 +222,9 @@ pub struct Config {
 
     /// Indicate whether query stats should be collected or not.
     pub query_stats_aggregation: FlagStatus,
+
+    /// Indicate whether the Wasm chunk store feature has been enabled or not.
+    pub wasm_chunk_store: FlagStatus,
 }
 
 impl Default for Config {
@@ -285,6 +288,7 @@ impl Default for Config {
             query_cache_capacity: QUERY_CACHE_CAPACITY,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
             query_stats_aggregation: FlagStatus::Disabled,
+            wasm_chunk_store: FlagStatus::Disabled,
         }
     }
 }

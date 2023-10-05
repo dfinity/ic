@@ -24,7 +24,7 @@ use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
-    Method, Payload, SkipPreUpgrade, UpdateSettingsArgs,
+    Method, Payload, SkipPreUpgrade, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -35,7 +35,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase,
+    canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::{self, TestPageAllocatorFileDescriptorImpl},
     testing::CanisterQueuesTesting,
@@ -277,6 +277,7 @@ fn canister_manager_config(
         100,
         rate_limiting_of_instructions,
         100,
+        FlagStatus::Enabled,
     )
 }
 
@@ -3909,11 +3910,30 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         )
         .build();
 
+    // Insert data to the chunk store to verify it is cleared on uninstall.
+    state
+        .canister_state_mut(&canister_test_id(0))
+        .unwrap()
+        .system_state
+        .wasm_chunk_store
+        .insert_chunk(&[0x41; 200])
+        .unwrap();
+
     assert!(state
         .canister_state(&canister_test_id(0))
         .unwrap()
         .execution_state
         .is_some());
+
+    assert_eq!(
+        state
+            .canister_state(&canister_test_id(0))
+            .unwrap()
+            .system_state
+            .wasm_chunk_store
+            .memory_usage(),
+        NumBytes::from(1024 * 1024)
+    );
 
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     canister_manager
@@ -3933,6 +3953,16 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             .execution_state,
         None
     );
+
+    assert_eq!(
+        state
+            .canister_state(&canister_test_id(0))
+            .unwrap()
+            .system_state
+            .wasm_chunk_store
+            .memory_usage(),
+        NumBytes::from(0)
+    )
 }
 
 #[test]
@@ -6697,5 +6727,308 @@ fn canister_status_contains_reserved_cycles_limit() {
     assert_eq!(
         status.settings().reserved_cycles_limit(),
         candid::Nat::from(42),
+    );
+}
+
+#[test]
+fn upload_chunk_works_from_white_list() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let chunk = vec![1, 2, 3, 4, 5];
+    let reply = UploadChunkReply {
+        hash: ic_crypto_sha2::Sha256::hash(&chunk).to_vec(),
+    }
+    .encode();
+
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+
+    assert_eq!(result, Ok(WasmResult::Reply(reply)));
+}
+
+#[test]
+fn upload_chunk_works_from_controller() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    test.set_controller(canister_id, uc.into()).unwrap();
+
+    let chunk = vec![1, 2, 3, 4, 5];
+    let reply = UploadChunkReply {
+        hash: ic_crypto_sha2::Sha256::hash(&chunk).to_vec(),
+    }
+    .encode();
+
+    let args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+
+    let upload_chunk = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::UploadChunk,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", upload_chunk);
+    assert_eq!(result, Ok(WasmResult::Reply(reply)));
+}
+
+#[test]
+fn upload_chunk_fails_from_non_controller() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    let chunk = vec![1, 2, 3, 4, 5];
+
+    let args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+
+    let upload_chunk = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::UploadChunk,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", upload_chunk);
+    let expected_err = format!(
+        "Only the controllers of the canister {} can control it.",
+        canister_id
+    );
+    match result {
+        Ok(WasmResult::Reject(reject)) => {
+            assert!(
+                reject.contains(&expected_err),
+                "Reject \"{reject}\" does not contain expected error \"{expected_err}\""
+            );
+        }
+        other => panic!("Expected reject, but got {:?}", other),
+    }
+}
+
+#[test]
+fn upload_chunk_fails_when_allocation_exceeded() {
+    /// Return the number of bytes of canister memory used from updating the
+    /// canister allocation settings.
+    fn history_memory_usage_from_one_settings_update() -> NumBytes {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+        let mut test = ExecutionTestBuilder::new().build();
+
+        let canister_id = test.create_canister(CYCLES);
+        // Reserve enough memory for just one chunk. Include an extra 40 KiB for canister history.
+        let chunk_size = wasm_chunk_store::chunk_size();
+        test.canister_update_allocations_settings(
+            canister_id,
+            None,
+            Some(chunk_size.get() + 40 * 1024),
+        )
+        .unwrap();
+
+        test.canister_state(canister_id).memory_usage()
+    }
+
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+    let memory_needed_for_history = history_memory_usage_from_one_settings_update();
+    // Reserve enough memory for just one chunk. Include an extra 40 KiB for canister history.
+    let chunk_size = wasm_chunk_store::chunk_size();
+    test.canister_update_allocations_settings(
+        canister_id,
+        None,
+        Some(chunk_size.get() + memory_needed_for_history.get()),
+    )
+    .unwrap();
+
+    // First chunk upload succeeds
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+
+    // Second chunk upload fails
+    let chunk = vec![4, 4];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    let error_code = result.unwrap_err().code();
+    assert_eq!(error_code, ErrorCode::InsufficientMemoryAllocation);
+}
+
+#[test]
+fn upload_chunk_fails_when_subnet_memory_exceeded() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    // Create subnet with only enough memory for one chunk.
+    let chunk_size = wasm_chunk_store::chunk_size();
+    let default_subnet_memory_reservation = Config::default().subnet_memory_reservation;
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store()
+        .with_subnet_execution_memory(
+            (default_subnet_memory_reservation.get() + chunk_size.get()) as i64,
+        )
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // First chunk upload succeeds
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+
+    // Second chunk upload fails
+    let chunk = vec![4, 4];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    let error_code = result.unwrap_err().code();
+    assert_eq!(error_code, ErrorCode::SubnetOversubscribed);
+}
+
+#[test]
+fn upload_chunk_counts_to_memory_usage() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let chunk_size = wasm_chunk_store::chunk_size();
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let initial_memory_usage = test.canister_state(canister_id).memory_usage();
+
+    // Check memory usage after one chunk uploaded.
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage(),
+        chunk_size + initial_memory_usage
+    );
+
+    // Check memory usage after two chunks uploaded.
+    let chunk = vec![4; 1000];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage(),
+        NumBytes::from(2 * chunk_size.get()) + initial_memory_usage
+    );
+
+    // Check memory usage after three chunks uploaded.
+    let chunk = vec![6; 1024 * 1024];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage(),
+        NumBytes::from(3 * chunk_size.get()) + initial_memory_usage
+    );
+}
+
+#[test]
+fn upload_chunk_fails_with_feature_disabled() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let chunk = vec![1, 2, 3, 4, 5];
+
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    let error_code = result.unwrap_err().code();
+    assert_eq!(error_code, ErrorCode::CanisterContractViolation);
+}
+
+#[test]
+fn uninstall_clears_wasm_chunk_store() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload a chunk
+    let chunk = vec![1, 2, 3, 4, 5];
+    let reply = UploadChunkReply {
+        hash: ic_crypto_sha2::Sha256::hash(&chunk).to_vec(),
+    }
+    .encode();
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert_eq!(result, Ok(WasmResult::Reply(reply)));
+
+    // Uninstall canister and check that chunk is gone.
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .wasm_chunk_store
+            .memory_usage(),
+        NumBytes::from(0)
     );
 }
