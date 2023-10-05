@@ -78,13 +78,6 @@ const MAX_REQUEST_BODY_SIZE: usize = 2 * MB;
 const MANAGEMENT_CANISTER_ID: &str = "aaaaa-aa";
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::fmt()
-            .json()
-            .flatten_event(true)
-            .finish(),
-    )?;
-
     // Metrics
     let registry: Registry = Registry::new_custom(
         Some(SERVICE_NAME.into()),
@@ -159,8 +152,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let registry_replicator = {
         // Notice no-op logger
         let logger = ic_logger::new_replica_logger(
-            slog::Logger::root(slog::Discard, slog::o!()), // logger
-            &ic_config::logger::Config::default(),         // config
+            slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
+            &ic_config::logger::Config::default(),                          // config
         );
 
         RegistryReplicator::new_with_clients(
