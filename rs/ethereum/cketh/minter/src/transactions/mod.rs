@@ -227,8 +227,7 @@ impl EthTransactions {
         // If transaction count at block height H is c > 0, then transactions with nonces
         // 0, 1, ..., c - 1 were mined. If transaction count is 0, then no transactions were mined.
         // The nonce of the first pending transaction is then exactly c.
-        let first_pending_tx_nonce =
-            TransactionNonce::from_be_bytes(latest_transaction_count.to_be_bytes());
+        let first_pending_tx_nonce: TransactionNonce = latest_transaction_count.change_units();
         let mut transactions_to_resubmit = Vec::new();
         for (nonce, burn_index, signed_tx) in self
             .sent_tx
@@ -328,8 +327,8 @@ impl EthTransactions {
         &self,
         finalized_transaction_count: &TransactionCount,
     ) -> BTreeMap<Hash, LedgerBurnIndex> {
-        let first_non_finalized_tx_nonce =
-            TransactionNonce::from_be_bytes(finalized_transaction_count.to_be_bytes());
+        let first_non_finalized_tx_nonce: TransactionNonce =
+            finalized_transaction_count.change_units();
         let mut transactions = BTreeMap::new();
         for (_nonce, index, sent_txs) in self
             .sent_tx

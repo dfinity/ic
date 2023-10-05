@@ -227,9 +227,9 @@ mod multi_call_results {
 }
 
 mod eth_get_transaction_receipt {
-    use crate::eth_rpc::{Hash, Quantity};
+    use crate::eth_rpc::Hash;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::numeric::{BlockNumber, Wei};
+    use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
     use assert_matches::assert_matches;
     use proptest::proptest;
     use std::str::FromStr;
@@ -263,8 +263,8 @@ mod eth_get_transaction_receipt {
                 )
                 .unwrap(),
                 block_number: BlockNumber::new(0x4132ec),
-                effective_gas_price: Wei::new(0xfefbee3e),
-                gas_used: Quantity::new(0x5208),
+                effective_gas_price: WeiPerGas::new(0xfefbee3e),
+                gas_used: GasAmount::new(0x5208),
                 status: TransactionStatus::Success,
                 transaction_hash: Hash::from_str(
                     "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d"

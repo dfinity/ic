@@ -1,4 +1,3 @@
-use crate::eth_rpc::into_nat;
 use crate::transactions::EthWithdrawalRequest;
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat};
@@ -18,7 +17,7 @@ pub struct Eip1559TransactionPrice {
 impl From<TransactionPrice> for Eip1559TransactionPrice {
     fn from(value: TransactionPrice) -> Self {
         Self {
-            gas_limit: into_nat(value.gas_limit),
+            gas_limit: value.gas_limit.into(),
             max_fee_per_gas: value.max_fee_per_gas.into(),
             max_priority_fee_per_gas: value.max_priority_fee_per_gas.into(),
             max_transaction_fee: value.max_transaction_fee().into(),

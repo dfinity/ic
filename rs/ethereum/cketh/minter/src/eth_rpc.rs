@@ -6,7 +6,7 @@ use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
@@ -354,9 +354,9 @@ pub struct FeeHistory {
     /// This includes the next block after the newest of the returned range,
     /// because this value can be derived from the newest block.
     /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<Wei>,
+    pub base_fee_per_gas: Vec<WeiPerGas>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-    pub reward: Vec<Vec<Wei>>,
+    pub reward: Vec<Vec<WeiPerGas>>,
 }
 
 impl HttpResponsePayload for FeeHistory {

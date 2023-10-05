@@ -9,6 +9,9 @@ use phantom_newtype::Id;
 pub enum WeiTag {}
 pub type Wei = CheckedAmountOf<WeiTag>;
 
+pub enum WeiPerGasUnit {}
+pub type WeiPerGas = CheckedAmountOf<WeiPerGasUnit>;
+
 pub fn wei_from_milli_ether(value: u128) -> Wei {
     const MILLI_ETHER: u64 = 1_000_000_000_000_000_000;
     Wei::new(value)
@@ -34,6 +37,10 @@ pub type TransactionCount = CheckedAmountOf<TransactionCountTag>;
 pub enum BlockNumberTag {}
 pub type BlockNumber = CheckedAmountOf<BlockNumberTag>;
 
+pub enum GasUnit {}
+/// The number of gas units attached to a transaction for execution.
+pub type GasAmount = CheckedAmountOf<GasUnit>;
+
 pub enum EthLogIndexTag {}
 pub type LogIndex = CheckedAmountOf<EthLogIndexTag>;
 pub enum BurnIndexTag {}
@@ -41,3 +48,10 @@ pub type LedgerBurnIndex = Id<BurnIndexTag, u64>;
 
 pub enum MintIndexTag {}
 pub type LedgerMintIndex = Id<MintIndexTag, u64>;
+
+impl CheckedAmountOf<WeiPerGasUnit> {
+    pub fn transaction_cost(self, gas: GasAmount) -> Option<Wei> {
+        self.checked_mul(gas.into_inner())
+            .map(|value| value.change_units())
+    }
+}

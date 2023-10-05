@@ -414,7 +414,7 @@ prop_compose! {
         nonce in arb_checked_amount_of(),
         max_priority_fee_per_gas in arb_checked_amount_of(),
         max_fee_per_gas in arb_checked_amount_of(),
-        gas_limit in arb_u256(),
+        gas_limit in arb_checked_amount_of(),
         destination in arb_address(),
         amount in arb_checked_amount_of(),
         data in pvec(any::<u8>(), 0..20),
