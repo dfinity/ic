@@ -7,7 +7,7 @@ edition = "2021"
 path = "src/lib.rs"
 
 [dependencies]
-base64 = "0.11.0"
+base64 = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-icrc1-index = { path = "../../rosetta-api/icrc1/index" }

@@ -30,7 +30,7 @@ lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 
-base64 = "0.13.0"
+base64 = { workspace = true }
 ic-certified-map = "0.3.1"
 ic-xrc-types = "1.0.0"
 prost = { workspace = true }

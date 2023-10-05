@@ -19,5 +19,5 @@ serde_json = "1.0.86"
 hex = "0.4"
 ic-certified-map = "0.3.1"
 rand = "0.8"
-base64 = "0.13"
+base64 = { workspace = true }
 sha256 = "1.0"

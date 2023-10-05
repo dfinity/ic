@@ -150,7 +150,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.4.0",
             ),
             "base64": crate.spec(
-                version = "^0.11.0",
+                version = "^0.13.1",
             ),
             "bech32": crate.spec(
                 version = "^0.9.0",

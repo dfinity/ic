@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-base64 = "0.11.0"
+base64 = { workspace = true }
 ic-crypto-ecdsa-secp256r1 = { path = "../../../../ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }

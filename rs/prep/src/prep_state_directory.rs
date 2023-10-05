@@ -70,7 +70,7 @@ fn parse_threshold_sig_key<P: AsRef<Path> + fmt::Debug>(pem_file: P) -> Result<V
         bail!("PEM file doesn't end with END PK block: {:?}", &pem_file);
     }
 
-    let decoded = base64::decode(&lines[1..n - 1].join(""))
+    let decoded = base64::decode(lines[1..n - 1].join(""))
         .with_context(|| format!("failed to decode base64 from: {:?}", &pem_file))?;
 
     Ok(decoded)

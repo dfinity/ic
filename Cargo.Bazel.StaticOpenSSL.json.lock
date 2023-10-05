@@ -1,5 +1,5 @@
 {
-  "checksum": "736ce7617084d8bc0f30e8a16c9b4edef8a312c003b3adacc480f72726419d53",
+  "checksum": "207446e6f03db5dced324bdf0696456ed4f457b2a1144cc9bf87c676b2feb432",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4390,43 +4390,6 @@
         "version": "0.4.0"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "base64 0.11.0": {
-      "name": "base64",
-      "version": "0.11.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/base64/0.11.0/download",
-          "sha256": "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "base64",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "base64",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.11.0"
-      },
-      "license": "MIT/Apache-2.0"
     },
     "base64 0.13.1": {
       "name": "base64",
@@ -13156,7 +13119,7 @@
               "target": "base32"
             },
             {
-              "id": "base64 0.11.0",
+              "id": "base64 0.13.1",
               "target": "base64"
             },
             {
@@ -27197,12 +27160,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -27236,12 +27214,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2021",
         "version": "0.4.3"

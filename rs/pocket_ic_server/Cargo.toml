@@ -32,7 +32,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "^0.2.2"
 tower-http = { version = "^0.4.4", features = ["trace", "request-id", "util"] }
 tempfile = "*"
-base64 = "0.11.0"
+base64 = { workspace = true }
 wat = "1.0.52"
 flate2 = "1.0.27"
 

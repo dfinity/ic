@@ -14,7 +14,7 @@ ic-async-utils = { path = "../../async_utils" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
-base64 = "0.11.0"
+base64 = { workspace = true }
 regex = "1.7.0"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.54"

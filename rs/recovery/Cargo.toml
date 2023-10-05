@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-base64 = "0.13.0"
+base64 = { workspace = true }
 clap = { version = "3.1.6", features = ["derive"] }
 futures = { workspace = true }
 hex = "0.4.2"
