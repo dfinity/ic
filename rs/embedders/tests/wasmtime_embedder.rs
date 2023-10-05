@@ -18,7 +18,7 @@ mod test {
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
     use ic_test_utilities::{
         universal_canister::{call_args, wasm},
-        wasmtime_instance::{instructions_per_byte, DEFAULT_NUM_INSTRUCTIONS},
+        wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS,
     };
     use ic_test_utilities_execution_environment::ExecutionTestBuilder;
     use ic_types::{methods::WasmClosure, NumBytes, PrincipalId};
@@ -106,7 +106,7 @@ mod test {
         let expected_instructions = 3 * const_cost
             + call_cost
             + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
-            + instructions_per_byte(data_size);
+            + data_size;
         assert_eq!(instructions_used.get(), expected_instructions);
     }
 
@@ -175,7 +175,7 @@ mod test {
         let expected_instructions_counter1 = 3 * const_cost
             + call_cost
             + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
-            + instructions_per_byte(data_size)
+            + data_size
             + drop_const_cost
             + const_cost
             + call_cost
@@ -190,7 +190,7 @@ mod test {
         // Includes dynamic part for second data copy and performance counter calls
         let expected_instructions_counter2 = expected_instructions_counter1
             + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
-            + instructions_per_byte(data_size)
+            + data_size
             + system_api_complexity::overhead::new::PERFORMANCE_COUNTER.get();
         let expected_instructions = expected_instructions_counter2;
         let mut instance = WasmtimeInstanceBuilder::new()
@@ -1340,10 +1340,7 @@ mod test {
         let err = instance.run(func_ref("test_dst")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
 
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(wat)
-            .with_num_instructions(250_000_000_000.into())
-            .build();
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
         let err = instance.run(func_ref("test_len")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
@@ -1381,7 +1378,6 @@ mod test {
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config.clone())
             .with_wat(wat)
-            .with_num_instructions(250_000_000_000.into())
             .build();
         let err = instance.run(func_ref("test_len")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
@@ -1580,10 +1576,7 @@ mod test {
         let err = instance.run(func_ref("test_dst")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(wat)
-            .with_num_instructions(250_000_000_000.into())
-            .build();
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
         let err = instance.run(func_ref("test_len")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
@@ -1620,7 +1613,6 @@ mod test {
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config.clone())
             .with_wat(wat)
-            .with_num_instructions(250_000_000_000.into())
             .build();
         let err = instance.run(func_ref("test_len")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));

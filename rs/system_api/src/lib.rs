@@ -52,11 +52,6 @@ const WASM_NATIVE_STABLE_MEMORY_ERROR: &str = "Stable memory cannot be accessed 
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 
-/// The amount of instructions required to process a single byte in a payload.
-/// This includes the cost of memory as well as time passing the payload
-/// from wasm sandbox to the replica execution environment.
-const INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR: u64 = 50;
-
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
     ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
@@ -1295,7 +1290,7 @@ impl SystemApi for SystemApiImpl {
         match self.sandbox_safe_system_state.subnet_type {
             SubnetType::System => NumInstructions::from(0),
             SubnetType::VerifiedApplication | SubnetType::Application => {
-                NumInstructions::from(INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR * num_bytes.get())
+                NumInstructions::from(num_bytes.get())
             }
         }
     }
