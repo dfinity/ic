@@ -73,6 +73,37 @@ pub enum ArtifactAttribute {
     Empty(()),
 }
 
+impl From<&ArtifactAttribute> for pb::ArtifactAttribute {
+    fn from(value: &ArtifactAttribute) -> Self {
+        use pb::artifact_attribute::Kind;
+        let kind = match value {
+            ArtifactAttribute::ConsensusMessage(x) => Kind::ConsensusMessage(x.into()),
+            ArtifactAttribute::DkgMessage(x) => Kind::DkgMessage(x.into()),
+            ArtifactAttribute::EcdsaMessage(x) => Kind::EcdsaMessage(x.into()),
+            ArtifactAttribute::CanisterHttpMessage(x) => Kind::CanisterHttp(x.into()),
+            ArtifactAttribute::Empty(_) => Kind::Empty(()),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::ArtifactAttribute> for ArtifactAttribute {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::ArtifactAttribute) -> Result<Self, Self::Error> {
+        use pb::artifact_attribute::Kind;
+        let Some(ref kind) = value.kind else {
+            return Err(ProxyDecodeError::MissingField("ArtifactAttribute::kind"));
+        };
+        Ok(match kind {
+            Kind::ConsensusMessage(x) => ArtifactAttribute::ConsensusMessage(x.try_into()?),
+            Kind::DkgMessage(x) => ArtifactAttribute::DkgMessage(x.into()),
+            Kind::EcdsaMessage(x) => ArtifactAttribute::EcdsaMessage(x.try_into()?),
+            Kind::CanisterHttp(x) => ArtifactAttribute::CanisterHttpMessage(x.into()),
+            Kind::Empty(_) => ArtifactAttribute::Empty(()),
+        })
+    }
+}
+
 /// Artifact identifier type.
 #[derive(From, TryInto, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[try_into(owned, ref, ref_mut)]
@@ -362,6 +393,22 @@ pub struct DkgMessageAttribute {
     pub interval_start_height: Height,
 }
 
+impl From<&DkgMessageAttribute> for pb::DkgMessageAttribute {
+    fn from(value: &DkgMessageAttribute) -> Self {
+        Self {
+            height: value.interval_start_height.get(),
+        }
+    }
+}
+
+impl From<&pb::DkgMessageAttribute> for DkgMessageAttribute {
+    fn from(value: &pb::DkgMessageAttribute) -> Self {
+        Self {
+            interval_start_height: Height::new(value.height),
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 
@@ -499,9 +546,6 @@ impl std::hash::Hash for StateSyncMessage {
         self.manifest.hash(state);
     }
 }
-
-// ------------------------------------------------------------------------------
-// FileTreeSync artifacts
 
 // ------------------------------------------------------------------------------
 // Conversions

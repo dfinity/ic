@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package types.v1;
 
+import "types/v1/artifact.proto";
 import "types/v1/canister_http.proto";
 import "types/v1/consensus.proto";
 import "types/v1/dkg.proto";
@@ -18,10 +19,11 @@ message GossipMessage {
 }
 
 message GossipAdvert {
-  bytes attribute = 1;
+  types.v1.ArtifactAttribute attribute = 5;
   uint64 size = 2;
   bytes artifact_id = 3;
   bytes integrity_hash = 4;
+  reserved 1;
 }
 
 message GossipChunkRequest {

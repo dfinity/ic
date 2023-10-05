@@ -55,6 +55,7 @@ use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformCo
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
+    types::v1 as pb,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -642,6 +643,28 @@ pub enum CanisterHttpResponseAttribute {
         CanisterHttpRequestId,
         CryptoHashOf<CanisterHttpResponse>,
     ),
+}
+
+impl From<&CanisterHttpResponseAttribute> for pb::CanisterHttpResponseAttribute {
+    fn from(value: &CanisterHttpResponseAttribute) -> Self {
+        match value {
+            CanisterHttpResponseAttribute::Share(v, id, hash) => Self {
+                registry_version: v.get(),
+                id: id.get(),
+                hash: hash.clone().get().0,
+            },
+        }
+    }
+}
+
+impl From<&pb::CanisterHttpResponseAttribute> for CanisterHttpResponseAttribute {
+    fn from(value: &pb::CanisterHttpResponseAttribute) -> Self {
+        CanisterHttpResponseAttribute::Share(
+            RegistryVersion::new(value.registry_version),
+            CanisterHttpRequestId::new(value.id),
+            CryptoHashOf::new(crate::crypto::CryptoHash(value.hash.clone())),
+        )
+    }
 }
 
 #[cfg(test)]

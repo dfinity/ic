@@ -743,6 +743,24 @@ impl EcdsaPrefix {
     }
 }
 
+impl From<&EcdsaPrefix> for pb::EcdsaPrefix {
+    fn from(value: &EcdsaPrefix) -> Self {
+        Self {
+            group_tag: value.group_tag,
+            meta_hash: value.meta_hash,
+        }
+    }
+}
+
+impl From<&pb::EcdsaPrefix> for EcdsaPrefix {
+    fn from(value: &pb::EcdsaPrefix) -> Self {
+        Self {
+            group_tag: value.group_tag,
+            meta_hash: value.meta_hash,
+        }
+    }
+}
+
 pub type EcdsaPrefixOf<T> = Id<T, EcdsaPrefix>;
 
 pub fn dealing_prefix(
@@ -1138,6 +1156,39 @@ pub enum EcdsaMessageAttribute {
     EcdsaSigShare(RequestId),
     EcdsaComplaint(IDkgTranscriptId),
     EcdsaOpening(IDkgTranscriptId),
+}
+
+impl From<&EcdsaMessageAttribute> for pb::EcdsaMessageAttribute {
+    fn from(value: &EcdsaMessageAttribute) -> Self {
+        use pb::ecdsa_message_attribute::Kind;
+        let kind = match value {
+            EcdsaMessageAttribute::EcdsaSignedDealing(id) => Kind::SignedDealing(id.into()),
+            EcdsaMessageAttribute::EcdsaDealingSupport(id) => Kind::DealingSupport(id.into()),
+            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::SigShare((*id).into()),
+            EcdsaMessageAttribute::EcdsaComplaint(id) => Kind::Complaint(id.into()),
+            EcdsaMessageAttribute::EcdsaOpening(id) => Kind::Opening(id.into()),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::EcdsaMessageAttribute> for EcdsaMessageAttribute {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaMessageAttribute) -> Result<Self, Self::Error> {
+        use pb::ecdsa_message_attribute::Kind;
+        let Some(kind) = &value.kind else {
+            return Err(ProxyDecodeError::MissingField(
+                "EcdsaMessageAttribute::kind",
+            ));
+        };
+        Ok(match &kind {
+            Kind::SignedDealing(id) => EcdsaMessageAttribute::EcdsaSignedDealing(id.try_into()?),
+            Kind::DealingSupport(id) => EcdsaMessageAttribute::EcdsaDealingSupport(id.try_into()?),
+            Kind::SigShare(id) => EcdsaMessageAttribute::EcdsaSigShare(id.try_into()?),
+            Kind::Complaint(id) => EcdsaMessageAttribute::EcdsaComplaint(id.try_into()?),
+            Kind::Opening(id) => EcdsaMessageAttribute::EcdsaOpening(id.try_into()?),
+        })
+    }
 }
 
 impl From<&EcdsaMessage> for EcdsaMessageAttribute {

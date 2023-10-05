@@ -110,9 +110,9 @@ impl From<GossipChunkRequest> for pb::GossipChunkRequest {
         Self {
             artifact_id: serialize(&gossip_chunk_request.artifact_id)
                 .expect("Local value serialization should succeed"),
+
             chunk_id: gossip_chunk_request.chunk_id.get(),
-            integrity_hash: serialize(&gossip_chunk_request.integrity_hash)
-                .expect("Local value serialization should succeed"),
+            integrity_hash: gossip_chunk_request.integrity_hash.0,
         }
     }
 }
@@ -126,7 +126,7 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
         Ok(Self {
             artifact_id: deserialize(&gossip_chunk_request.artifact_id)?,
             chunk_id: ChunkId::from(gossip_chunk_request.chunk_id),
-            integrity_hash: deserialize(&gossip_chunk_request.integrity_hash)?,
+            integrity_hash: CryptoHash(gossip_chunk_request.integrity_hash),
         })
     }
 }
