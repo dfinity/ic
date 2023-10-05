@@ -29,6 +29,7 @@ http = "0.2.6"
 http-body = "0.4"
 hyper = "0.14.18"
 hyper-rustls = "0.24.0"
+ic-btc-interface = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -39,6 +40,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 ic-types = { path = "../../types/types" }
+ic-ic00-types = { path = "../../types/ic00_types" }
 instant-acme = "0.3.2"
 mockall = "0.11.4"
 prometheus = { workspace = true }
