@@ -35,7 +35,7 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
     STABLE_BYTEMAP_MEMORY_NAME,
 ];
 
-const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(15_000);
+const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
 
@@ -1105,7 +1105,7 @@ fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
-fn new_wasm_function_complexity(body: &Body<'_>) -> Complexity {
+fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
     use Operator::*;
 
     let complexity = body
@@ -1259,27 +1259,6 @@ fn new_wasm_function_complexity(body: &Body<'_>) -> Complexity {
     Complexity(complexity)
 }
 
-fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
-    let complexity = body
-        .instructions
-        .iter()
-        .filter(|instruction| {
-            matches!(
-                instruction,
-                Operator::Block { .. }
-                    | Operator::Loop { .. }
-                    | Operator::If { .. }
-                    | Operator::Br { .. }
-                    | Operator::BrIf { .. }
-                    | Operator::BrTable { .. }
-                    | Operator::Call { .. }
-                    | Operator::CallIndirect { .. }
-            )
-        })
-        .count() as u64;
-    Complexity(complexity)
-}
-
 fn validate_code_section(
     module: &Module,
 ) -> Result<(NumInstructions, Complexity), WasmValidationError> {
@@ -1289,7 +1268,6 @@ fn validate_code_section(
     for (index, func_body) in module.code_sections.iter().enumerate() {
         let size = func_body.instructions.len();
         let complexity = wasm_function_complexity(func_body);
-        let new_complexity = new_wasm_function_complexity(func_body);
         if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
             return Err(WasmValidationError::FunctionComplexityTooHigh {
                 index,
@@ -1297,7 +1275,7 @@ fn validate_code_section(
                 allowed: WASM_FUNCTION_COMPLEXITY_LIMIT.0 as usize,
             });
         } else {
-            max_complexity = cmp::max(max_complexity, new_complexity);
+            max_complexity = cmp::max(max_complexity, complexity);
         }
 
         if size > WASM_FUNCTION_SIZE_LIMIT {
