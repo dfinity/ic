@@ -598,7 +598,7 @@ impl QueryResponseHash {
                     "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
                     "status".to_string() => String("replied".to_string()),
                     "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
-                    "reply".to_string() => Bytes(reply.arg.0.clone()),
+                    "reply".to_string() => Bytes(reply.representation_independent_hash().to_vec()),
                 }
             }
             HttpQueryResponse::Rejected {
@@ -676,6 +676,15 @@ pub struct NodeSignature {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HttpQueryResponseReply {
     pub arg: Blob,
+}
+
+impl HttpQueryResponseReply {
+    /// Returns the representation-independent hash.
+    pub fn representation_independent_hash(&self) -> [u8; 32] {
+        hash_of_map(&btreemap! {
+            "arg".to_string() => RawHttpRequestVal::Bytes(self.arg.0.clone()),
+        })
+    }
 }
 
 /// The response to a `read_state` request.
