@@ -80,7 +80,7 @@ pub use utils::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError
 ///       where for each receiver `r` the encryption is computed as follows:
 ///         * Compute Diffie-Hellman tuple: `DH_r := (IDKG_PK_r, EK, IDKG_PK_r * alpha)`
 ///         * Set associated data: `AD_dr` identifies protocol instance, identity of dealer and receiver
-///         * Hash `(h_0, h_1) := hash_to_scalars(DH_r, AD_dr)` (model in the paper as a random oracle, implemented using [`xmd`] and [`hash2curve`])
+///         * Hash `(h_0, h_1) := hash_to_scalars(DH_r, AD_dr)` (modeled in the paper as a random oracle, implemented using [`xmd`] and [`hash2curve`])
 ///         * `E_{IDKG_PK_r} [p(r), q(r)] := (h_0 + p(r), h_1 + q(r))`
 ///     * Construct a single dealing for all receivers: `Dealing_d := ((C_0, C_1), (EK, pop_ek, E_1, E_2, E_3, E_4))`
 ///     * Sign dealing: `signed_dealing_d := Dealing_d ||Sign_{node_signing_sk_d} [Dealing_d]`
@@ -189,7 +189,7 @@ pub use utils::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError
 ///     * `P(x) = P(d) * (d'-x)/(d'-d) + P(d') * (d-x)/(d-d')` and so
 ///     * `P(0) = P(d) * d'/(d'-d) + P(d') * d/(d-d')`
 ///
-/// [`hash2curve`]: ic_crypto_internal_threshold_sig_ecdsa::hash2curve
+/// [`hash2curve`]: ic_crypto_internal_threshold_sig_ecdsa
 /// [`IDkgTranscriptOperation::Random`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::Random
 /// [`IDkgTranscriptOperation::ReshareOfMasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::ReshareOfMasked
 /// [`MEGaCiphertextPair::encrypt`]: ic_crypto_internal_threshold_sig_ecdsa::MEGaCiphertextPair::encrypt
