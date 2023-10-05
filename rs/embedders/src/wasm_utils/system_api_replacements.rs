@@ -29,11 +29,6 @@ use crate::wasmtime_embedder::system_api_complexity::system_api;
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 
-/// The amount of instructions required to process a single byte in a payload.
-/// This includes the cost of memory as well as time passing the payload
-/// from wasm sandbox to the replica execution environment.
-const INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR: i64 = 50;
-
 pub(super) fn replacement_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
@@ -246,10 +241,6 @@ pub(super) fn replacement_functions(
                                 }
                             },
                             I64ExtendI32U,
-                            I64Const {
-                                value: INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR,
-                            },
-                            I64Mul,
                             I64Const {
                                 value: system_api::complexity_overhead_native!(
                                     STABLE_READ,
@@ -512,10 +503,6 @@ pub(super) fn replacement_functions(
                                     LocalGet { local_index: LEN }
                                 }
                             },
-                            I64Const {
-                                value: INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR,
-                            },
-                            I64Mul,
                             I64Const {
                                 value: system_api::complexity_overhead_native!(
                                     STABLE64_READ,
@@ -807,10 +794,6 @@ pub(super) fn replacement_functions(
                             },
                             I64ExtendI32U,
                             I64Const {
-                                value: INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR,
-                            },
-                            I64Mul,
-                            I64Const {
                                 value: system_api::complexity_overhead_native!(
                                     STABLE_WRITE,
                                     metering_type
@@ -1041,10 +1024,6 @@ pub(super) fn replacement_functions(
                                     LocalGet { local_index: LEN }
                                 }
                             },
-                            I64Const {
-                                value: INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR,
-                            },
-                            I64Mul,
                             I64Const {
                                 value: system_api::complexity_overhead_native!(
                                     STABLE64_WRITE,

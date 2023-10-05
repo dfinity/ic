@@ -27,11 +27,6 @@ use crate::{
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 
-pub fn instructions_per_byte(data_size: u64) -> u64 {
-    const INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR: u64 = 50;
-    data_size * INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR
-}
-
 pub struct WasmtimeInstanceBuilder {
     wasm: Vec<u8>,
     wat: String,
