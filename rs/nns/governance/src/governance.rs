@@ -10,7 +10,8 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData,
     },
     is_copy_inactive_neurons_to_stable_memory_enabled,
-    migrations::maybe_run_migrations,
+    migrations::{maybe_run_migrations, neuron_stable_indexes_building_is_enabled},
+    neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{LedgerParameters, SwapParameters},
@@ -1547,6 +1548,9 @@ pub struct Governance {
 
     /// The number of proposals after the last time GC was run.
     pub latest_gc_num_proposals: usize,
+
+    /// For validating neuron related data.
+    neuron_data_validator: NeuronDataValidator,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1855,6 +1859,7 @@ impl Governance {
             .as_ref()
             .and_then(|migrations| migrations.neuron_indexes_migration.clone())
             .unwrap_or_default();
+
         Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new(heap_neurons, neuron_indexes_migration),
@@ -1864,6 +1869,7 @@ impl Governance {
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
+            neuron_data_validator: NeuronDataValidator::new(),
         }
     }
 
@@ -6825,6 +6831,27 @@ impl Governance {
         ));
     }
 
+    fn maybe_run_validations(&mut self) {
+        // We do not run validations when any migration is in progress since the data might not be
+        // valid yet.
+        if !neuron_stable_indexes_building_is_enabled() {
+            return;
+        }
+        if self
+            .heap_data
+            .migrations
+            .as_ref()
+            .and_then(|migrations| migrations.neuron_indexes_migration.clone())
+            .unwrap_or_default()
+            .migration_status()
+            != MigrationStatus::Succeeded
+        {
+            return;
+        }
+        self.neuron_data_validator
+            .maybe_validate(self.env.now(), &self.neuron_store);
+    }
+
     /// Triggers a reward distribution event if enough time has passed since
     /// the last one. This is intended to be called by a cron
     /// process.
@@ -6888,6 +6915,7 @@ impl Governance {
         self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
         self.maybe_run_migrations();
+        self.maybe_run_validations();
     }
 
     fn should_copy_next_batch_of_inactive_neurons_to_stable_memory(&self) -> bool {
@@ -8127,6 +8155,10 @@ impl Governance {
             .saturating_sub(metrics.dissolved_neurons_e8s);
 
         metrics
+    }
+
+    pub fn neuron_data_validation_summary(&self) -> NeuronDataValidationSummary {
+        self.neuron_data_validator.summary()
     }
 }
 

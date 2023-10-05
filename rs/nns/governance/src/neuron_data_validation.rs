@@ -1,4 +1,3 @@
-#![allow(dead_code)] // TODO(NNS1-2413): remove after calling it in heartbeat.
 use crate::{
     neuron_store::{get_neuron_subaccount, NeuronStore, NeuronStoreError},
     pb::v1::{Neuron, Topic},
@@ -14,7 +13,6 @@ use std::{collections::VecDeque, marker::PhantomData};
 
 const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;
 
-// TODO(NNS1-2413): add actual issues found by validation.
 #[derive(Debug, PartialEq)]
 enum ValidationIssue {
     Unspecified,
@@ -58,22 +56,29 @@ enum ValidationIssue {
     },
 }
 
+/// A summary of neuron data validation.
+pub struct NeuronDataValidationSummary {
+    pub current_validation_started_time_seconds: Option<u64>,
+    pub current_issues_summary: Option<IssuesSummary>,
+    pub previous_issues_summary: Option<IssuesSummary>,
+}
+
+/// A summary of validation issues.
+pub struct IssuesSummary {
+    pub last_updated_time_seconds: u64,
+    // TODO(NNS1-2482): add more fields when we expose the summary through canister query method.
+}
+
 /// A validator for secondary neuron data, such as indexes. It can be called in heartbeat to perform
 /// a small chunk of the validation, while keeping track of its progress.
 pub struct NeuronDataValidator {
     state: State,
-    issues: Issues,
 }
 
-// TODO(NNS-2413): add a method to read the status of the in-progress/previous validation result.
 impl NeuronDataValidator {
-    pub fn new(now: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            state: State::Validating {
-                in_progress: ValidationInProgress::new(now),
-                previous_issues: None,
-            },
-            issues: Issues::new(now),
+            state: State::NotStarted,
         }
     }
 
@@ -81,46 +86,92 @@ impl NeuronDataValidator {
     /// heartbeat). Returns whether some computation intensive work has been done (so that the
     /// heartbeat method have a chance to early return after calling this method).
     pub fn maybe_validate(&mut self, now: u64, neuron_store: &NeuronStore) -> bool {
-        let should_restart = match &mut self.state {
-            State::Validated() => {
-                now > self.issues.updated_time_seconds + MAX_VALIDATION_AGE_SECONDS
+        let (should_start, issues) = match &mut self.state {
+            State::NotStarted => (true, None),
+            State::Validated(issues) => {
+                let validation_age_seconds = now.saturating_sub(issues.last_updated_time_seconds);
+                if validation_age_seconds > MAX_VALIDATION_AGE_SECONDS {
+                    (true, Some(std::mem::take(issues)))
+                } else {
+                    (false, None)
+                }
             }
-            State::Validating { .. } => false,
+            State::Validating { .. } => (false, None),
         };
 
-        if should_restart {
+        if should_start {
             self.state = State::Validating {
                 in_progress: ValidationInProgress::new(now),
-                previous_issues: Some(std::mem::replace(&mut self.issues, Issues::new(now))),
+                current_issues: Issues::new(now),
+                previous_issues: issues,
             };
         }
 
-        let validation_in_progress = match &mut self.state {
+        let (validation_in_progress, current_issues) = match &mut self.state {
+            State::NotStarted => return false,
             State::Validating {
                 in_progress,
+                current_issues,
                 previous_issues: _,
-            } => in_progress,
-            State::Validated() => return false,
+            } => (in_progress, current_issues),
+            State::Validated(_) => return false,
         };
 
-        let issues = validation_in_progress.validate_next_chunk(neuron_store);
-        self.issues.update(now, issues);
+        let new_issues = validation_in_progress.validate_next_chunk(neuron_store);
+        current_issues.update(now, new_issues);
 
         if validation_in_progress.is_done() {
-            self.state = State::Validated();
+            self.state = State::Validated(std::mem::take(current_issues));
         }
 
         true
+    }
+
+    // TODO(NNS1-2482): this method is just for testing before summary() is ready.
+    #[cfg(test)]
+    fn issues(&self) -> Vec<&ValidationIssue> {
+        match &self.state {
+            State::NotStarted => vec![],
+            State::Validating { current_issues, .. } => current_issues.issues.iter().collect(),
+            State::Validated(issues) => issues.issues.iter().collect(),
+        }
+    }
+
+    pub fn summary(&self) -> NeuronDataValidationSummary {
+        match &self.state {
+            State::NotStarted => NeuronDataValidationSummary {
+                current_issues_summary: None,
+                previous_issues_summary: None,
+                current_validation_started_time_seconds: None,
+            },
+            State::Validating {
+                in_progress,
+                current_issues,
+                previous_issues,
+            } => NeuronDataValidationSummary {
+                current_issues_summary: Some(current_issues.summary()),
+                previous_issues_summary: previous_issues.as_ref().map(|issues| issues.summary()),
+                current_validation_started_time_seconds: Some(in_progress.started_time_seconds),
+            },
+            State::Validated(issues) => NeuronDataValidationSummary {
+                current_issues_summary: Some(issues.summary()),
+                previous_issues_summary: None,
+                current_validation_started_time_seconds: None,
+            },
+        }
     }
 }
 
 /// Validation state.
 enum State {
+    // Validation has not started.
+    NotStarted,
     // No validation is in progress. Storing the validation issues found the last time.
-    Validated(),
+    Validated(Issues),
     // Validation in progress. Also storing the validation issues found the previous time if it exists.
     Validating {
         in_progress: ValidationInProgress,
+        current_issues: Issues,
         previous_issues: Option<Issues>,
     },
 }
@@ -137,26 +188,23 @@ struct ValidationInProgress {
 impl ValidationInProgress {
     fn new(now: u64) -> Self {
         let mut tasks: VecDeque<Box<dyn ValidationTask>> = VecDeque::new();
+
         tasks.push_back(Box::new(NeuronRangeValidationTask::<
             SubaccountIndexValidator,
-        >::new(DEFAULT_RANGE_VALIDATION_CHUNK_SIZE)));
+        >::new()));
         tasks.push_back(Box::new(CardinalitiesValidationTask::<
             SubaccountIndexValidator,
         >::new()));
 
         tasks.push_back(Box::new(
-            NeuronRangeValidationTask::<PrincipalIndexValidator>::new(
-                DEFAULT_RANGE_VALIDATION_CHUNK_SIZE,
-            ),
+            NeuronRangeValidationTask::<PrincipalIndexValidator>::new(),
         ));
         tasks.push_back(Box::new(CardinalitiesValidationTask::<
             PrincipalIndexValidator,
         >::new()));
 
         tasks.push_back(Box::new(
-            NeuronRangeValidationTask::<FollowingIndexValidator>::new(
-                DEFAULT_RANGE_VALIDATION_CHUNK_SIZE,
-            ),
+            NeuronRangeValidationTask::<FollowingIndexValidator>::new(),
         ));
         tasks.push_back(Box::new(CardinalitiesValidationTask::<
             FollowingIndexValidator,
@@ -164,7 +212,7 @@ impl ValidationInProgress {
 
         tasks.push_back(Box::new(NeuronRangeValidationTask::<
             KnownNeuronIndexValidator,
-        >::new(DEFAULT_RANGE_VALIDATION_CHUNK_SIZE)));
+        >::new()));
         tasks.push_back(Box::new(CardinalitiesValidationTask::<
             KnownNeuronIndexValidator,
         >::new()));
@@ -189,10 +237,10 @@ impl ValidationInProgress {
 }
 
 /// Validation issues.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 struct Issues {
-    updated_time_seconds: u64,
-    // TODO(NNS1-2413): define a 'summary' of issues, so that the memory needed for 'issues' won't
+    last_updated_time_seconds: u64,
+    // TODO(NNS1-2482): define a 'summary' of issues, so that the memory needed for 'issues' won't
     // be linear to the number of neurons.
     issues: Vec<ValidationIssue>,
 }
@@ -200,19 +248,25 @@ struct Issues {
 impl Issues {
     fn new(now: u64) -> Self {
         Self {
-            updated_time_seconds: now,
+            last_updated_time_seconds: now,
             issues: Vec::new(),
         }
     }
 
     fn update(&mut self, now: u64, mut issues: Vec<ValidationIssue>) {
-        self.updated_time_seconds = now;
+        self.last_updated_time_seconds = now;
         self.issues.append(&mut issues);
+    }
+
+    fn summary(&self) -> IssuesSummary {
+        IssuesSummary {
+            last_updated_time_seconds: self.last_updated_time_seconds,
+        }
     }
 }
 
 /// A validation task which can be composed of multiple tasks.
-trait ValidationTask {
+trait ValidationTask: Send + Sync {
     /// Whether the task has been done. If composed of multiple tasks, whether every subtask is done.
     fn is_done(&self) -> bool;
 
@@ -241,7 +295,7 @@ impl ValidationTask for VecDeque<Box<dyn ValidationTask>> {
 }
 
 trait CardinalityAndRangeValidator {
-    // TODO(NNS1-2413): define BATCH_SIZE.
+    const NEURON_RANGE_CHUNK_SIZE: usize = DEFAULT_RANGE_VALIDATION_CHUNK_SIZE;
 
     /// Validates the cardinalities of primary data and index to be equal.
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue>;
@@ -269,7 +323,7 @@ impl<Validator: CardinalityAndRangeValidator> CardinalitiesValidationTask<Valida
     }
 }
 
-impl<Validator: CardinalityAndRangeValidator> ValidationTask
+impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
     for CardinalitiesValidationTask<Validator>
 {
     fn is_done(&self) -> bool {
@@ -289,24 +343,22 @@ struct NeuronRangeValidationTask<Validator: CardinalityAndRangeValidator> {
     // PhantomData is needed so that NeuronRangeValidationTask can be associated with a Validator
     // type without containing such a member.
     _phantom: PhantomData<Validator>,
-    chunk_size: usize,
 }
 
 // TODO this is a randomly selected value, to be empirically tuned.
 const DEFAULT_RANGE_VALIDATION_CHUNK_SIZE: usize = 100;
 
 impl<Validator: CardinalityAndRangeValidator> NeuronRangeValidationTask<Validator> {
-    fn new(chunk_size: usize) -> Self {
+    fn new() -> Self {
         Self {
             // NeuronId cannot be 0.
             next_neuron_id: Some(NeuronId { id: 1 }),
             _phantom: PhantomData,
-            chunk_size,
         }
     }
 }
 
-impl<Validator: CardinalityAndRangeValidator> ValidationTask
+impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
     for NeuronRangeValidationTask<Validator>
 {
     fn is_done(&self) -> bool {
@@ -324,7 +376,7 @@ impl<Validator: CardinalityAndRangeValidator> ValidationTask
         neuron_store
             .heap_neurons()
             .range(next_neuron_id.id..)
-            .take(DEFAULT_RANGE_VALIDATION_CHUNK_SIZE)
+            .take(Validator::NEURON_RANGE_CHUNK_SIZE)
             .flat_map(|(neuron_id, _)| {
                 self.next_neuron_id = Some(NeuronId { id: neuron_id + 1 });
                 Validator::validate_primary_neuron_has_corresponding_index_entries(
@@ -728,7 +780,7 @@ mod tests {
             controller: Some(PrincipalId::new_user_test_id(1)),
             ..Default::default()
         }]);
-        let mut validation = NeuronDataValidator::new(0);
+        let mut validation = NeuronDataValidator::new();
 
         // Each index use 3 rounds and invalid neuron validator takes 2 rounds.
         for i in 0..14 {
@@ -857,13 +909,13 @@ mod tests {
             cached_neuron_stake_e8s: 1,
             ..next_test_neuron()
         }]);
-        let mut validator = NeuronDataValidator::new(0);
+        let mut validator = NeuronDataValidator::new();
         let mut now = 1;
         while validator.maybe_validate(now, &neuron_store) {
             now += 1;
         }
-        // TODO(NNS1-2413) validate from a pub method that returns issues summary.
-        assert_eq!(validator.issues.issues, vec![]);
+        // TODO(NNS1-2482) validate from a pub method that returns issues summary.
+        // assert_eq!(validator.issues.issues, vec![]);
     }
 
     #[test]
@@ -876,61 +928,61 @@ mod tests {
             .with(|indexes| indexes.borrow_mut().remove_neuron(&neuron))
             .unwrap();
 
-        let mut validator = NeuronDataValidator::new(0);
+        let mut validator = NeuronDataValidator::new();
         let mut now = 1;
         while validator.maybe_validate(now, &neuron_store) {
             now += 1;
         }
-        // TODO(NNS1-2413) validate from a pub method that returns issues summary.
-        let issues = validator.issues.issues;
+        // TODO(NNS1-2482) validate from a pub method that returns issues summary.
+        let issues = validator.issues();
         assert_eq!(issues.len(), 9);
         assert!(matches!(
-            issues[0],
+            *issues[0],
             ValidationIssue::SubaccountMissingFromIndex { neuron_id, subaccount: _ }
             if neuron_id == neuron.id.unwrap()
         ));
         assert_eq!(
-            issues[1],
+            *issues[1],
             ValidationIssue::SubaccountIndexCardinalityMismatch {
                 primary: 1,
                 index: 0
             }
         );
         assert!(matches!(
-            issues[2],
+            *issues[2],
             ValidationIssue::PrincipalIdMissingFromIndex { .. }
         ));
         assert_eq!(
-            issues[3],
+            *issues[3],
             ValidationIssue::PrincipalIndexCardinalityMismatch {
                 primary: 3,
                 index: 0
             }
         );
         assert!(matches!(
-            issues[4],
+            *issues[4],
             ValidationIssue::TopicFolloweePairsMissingFromIndex { .. }
         ));
         assert_eq!(
-            issues[5],
+            *issues[5],
             ValidationIssue::FollowingIndexCardinalityMismatch {
                 primary: 3,
                 index: 0
             }
         );
         assert!(matches!(
-            issues[6],
+            *issues[6],
             ValidationIssue::KnownNeuronMissingFromIndex { .. }
         ));
         assert_eq!(
-            issues[7],
+            *issues[7],
             ValidationIssue::KnownNeuronIndexCardinalityMismatch {
                 primary: 1,
                 index: 0
             }
         );
         assert_eq!(
-            issues[8],
+            *issues[8],
             ValidationIssue::InactiveNeuronCardinalityMismatch { heap: 1, stable: 0 }
         );
     }
