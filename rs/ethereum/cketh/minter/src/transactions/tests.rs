@@ -1,8 +1,8 @@
 use crate::address::Address;
-use crate::eth_rpc::{Hash, Quantity};
+use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
+use crate::numeric::{BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
 use crate::transactions::{
     create_transaction, EthTransactions, EthWithdrawalRequest, ResubmitTransaction,
 };
@@ -528,8 +528,9 @@ mod eth_transactions {
     }
 
     mod create_resubmit_transactions {
-        use crate::eth_rpc::Quantity;
-        use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
+        use crate::numeric::{
+            GasAmount, LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas,
+        };
         use crate::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, transaction_price, withdrawal_request_with_index,
@@ -613,9 +614,9 @@ mod eth_transactions {
         #[test]
         fn should_resubmit_transaction_with_updated_price() {
             let price_at_tx_creation = TransactionPrice {
-                gas_limit: Quantity::new(21_000),
-                max_fee_per_gas: Wei::from(11_u8),
-                max_priority_fee_per_gas: Wei::from(21_u8),
+                gas_limit: GasAmount::new(21_000),
+                max_fee_per_gas: WeiPerGas::from(11_u8),
+                max_priority_fee_per_gas: WeiPerGas::from(21_u8),
             };
             let tests = vec![
                 ParameterizedTest {
@@ -627,8 +628,8 @@ mod eth_transactions {
                             .unwrap(),
                         ..price_at_tx_creation.clone()
                     },
-                    resubmitted_tx_max_fee_per_gas: Wei::from(13_u8), //10% increase of 11 rounded up
-                    resubmitted_tx_max_priority_fee_per_gas: Wei::from(24_u8), //10% increase of 21 rounded up
+                    resubmitted_tx_max_fee_per_gas: WeiPerGas::from(13_u8), //10% increase of 11 rounded up
+                    resubmitted_tx_max_priority_fee_per_gas: WeiPerGas::from(24_u8), //10% increase of 21 rounded up
                     resubmitted_tx_amount_deduction: Wei::from(2 * 21_000_u32), //The increase in max_fee_per_gas is 2, so with a gas limit of 21_000, the amount should be decreased by 42_000
                 },
                 ParameterizedTest {
@@ -640,8 +641,8 @@ mod eth_transactions {
                             .unwrap(),
                         ..price_at_tx_creation.clone()
                     },
-                    resubmitted_tx_max_fee_per_gas: Wei::from(22_u8), //new price because higher than 10% bump
-                    resubmitted_tx_max_priority_fee_per_gas: Wei::from(24_u8), //10% increase of 21 rounded up
+                    resubmitted_tx_max_fee_per_gas: WeiPerGas::from(22_u8), //new price because higher than 10% bump
+                    resubmitted_tx_max_priority_fee_per_gas: WeiPerGas::from(24_u8), //10% increase of 21 rounded up
                     resubmitted_tx_amount_deduction: Wei::from(11 * 21_000_u32),
                 },
                 ParameterizedTest {
@@ -657,8 +658,8 @@ mod eth_transactions {
                             .unwrap(),
                         ..price_at_tx_creation.clone()
                     },
-                    resubmitted_tx_max_fee_per_gas: Wei::from(22_u8), //new price because higher than 10% bump
-                    resubmitted_tx_max_priority_fee_per_gas: Wei::from(42_u8), //new price because higher than 10% bump
+                    resubmitted_tx_max_fee_per_gas: WeiPerGas::from(22_u8), //new price because higher than 10% bump
+                    resubmitted_tx_max_priority_fee_per_gas: WeiPerGas::from(42_u8), //new price because higher than 10% bump
                     resubmitted_tx_amount_deduction: Wei::from(11 * 21_000_u32),
                 },
             ];
@@ -702,9 +703,9 @@ mod eth_transactions {
         fn should_resubmit_multiple_transactions() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let initial_price = TransactionPrice {
-                gas_limit: Quantity::new(21_000),
-                max_fee_per_gas: Wei::from(11_u8),
-                max_priority_fee_per_gas: Wei::from(21_u8),
+                gas_limit: GasAmount::new(21_000),
+                max_fee_per_gas: WeiPerGas::from(11_u8),
+                max_priority_fee_per_gas: WeiPerGas::from(21_u8),
             };
             for num_tx in 0..100_u64 {
                 let withdrawal_request = create_and_record_withdrawal_request(
@@ -741,8 +742,8 @@ mod eth_transactions {
                     resubmitted_tx,
                     ResubmitTransaction::ToSign(Eip1559TransactionRequest {
                         nonce: TransactionNonce::from(30_u8 + i as u8),
-                        max_fee_per_gas: Wei::from(13_u8),
-                        max_priority_fee_per_gas: Wei::from(24_u8),
+                        max_fee_per_gas: WeiPerGas::from(13_u8),
+                        max_priority_fee_per_gas: WeiPerGas::from(24_u8),
                         amount: initial_transaction
                             .amount
                             .checked_sub(Wei::from(2 * 21_000_u32))
@@ -756,17 +757,18 @@ mod eth_transactions {
         struct ParameterizedTest {
             price_at_tx_creation: TransactionPrice,
             price_at_tx_resubmission: TransactionPrice,
-            resubmitted_tx_max_fee_per_gas: Wei,
-            resubmitted_tx_max_priority_fee_per_gas: Wei,
+            resubmitted_tx_max_fee_per_gas: WeiPerGas,
+            resubmitted_tx_max_priority_fee_per_gas: WeiPerGas,
             resubmitted_tx_amount_deduction: Wei,
         }
     }
 
     mod record_resubmit_transaction {
         use super::super::arbitrary::arb_signed_eip_1559_transaction_request_with_nonce;
-        use crate::eth_rpc::Quantity;
         use crate::map::MultiKeyMap;
-        use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
+        use crate::numeric::{
+            GasAmount, LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas,
+        };
         use crate::transactions::tests::{
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, expect_panic_with_message, sign_transaction,
@@ -818,7 +820,7 @@ mod eth_transactions {
                 .map(|(index, mut tx)| {
                     tx.max_priority_fee_per_gas = tx
                         .max_priority_fee_per_gas
-                        .checked_add(Wei::from(index as u8))
+                        .checked_add(WeiPerGas::from(index as u8))
                         .unwrap();
                     tx.amount = tx.amount.checked_sub(Wei::from(index as u8)).unwrap();
                     tx
@@ -883,9 +885,9 @@ mod eth_transactions {
         fn should_replace_existing_resubmitted_transaction() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let initial_price = TransactionPrice {
-                gas_limit: Quantity::new(21_000),
-                max_fee_per_gas: Wei::from(11_u8),
-                max_priority_fee_per_gas: Wei::from(21_u8),
+                gas_limit: GasAmount::new(21_000),
+                max_fee_per_gas: WeiPerGas::from(11_u8),
+                max_priority_fee_per_gas: WeiPerGas::from(21_u8),
             };
             let resubmit_price_1 = TransactionPrice {
                 max_fee_per_gas: initial_price.max_fee_per_gas.checked_increment().unwrap(),
@@ -906,8 +908,8 @@ mod eth_transactions {
             let resubmitted_txs_1 = transactions
                 .create_resubmit_transactions(TransactionCount::ZERO, resubmit_price_1.clone());
             let resubmitted_tx1 = Eip1559TransactionRequest {
-                max_fee_per_gas: Wei::from(13_u8),
-                max_priority_fee_per_gas: Wei::from(24_u8),
+                max_fee_per_gas: WeiPerGas::from(13_u8),
+                max_priority_fee_per_gas: WeiPerGas::from(24_u8),
                 amount: created_tx
                     .amount
                     .checked_sub(Wei::from(2 * 21_000_u32))
@@ -936,8 +938,8 @@ mod eth_transactions {
             let resubmitted_txs_2 =
                 transactions.create_resubmit_transactions(TransactionCount::ZERO, resubmit_price_2);
             let resubmitted_tx2 = Eip1559TransactionRequest {
-                max_fee_per_gas: Wei::from(22_u8),
-                max_priority_fee_per_gas: Wei::from(24_u8),
+                max_fee_per_gas: WeiPerGas::from(22_u8),
+                max_priority_fee_per_gas: WeiPerGas::from(24_u8),
                 amount: created_tx
                     .amount
                     .checked_sub(Wei::from(11 * 21_000_u32))
@@ -1501,11 +1503,10 @@ mod withdrawal_flow {
     }
 }
 
-mod arbitrary {
+pub mod arbitrary {
     use crate::address::Address;
     use crate::checked_amount::CheckedAmountOf;
-    use crate::eth_rpc::Quantity;
-    use crate::numeric::{TransactionNonce, Wei};
+    use crate::numeric::{GasAmount, TransactionNonce, WeiPerGas};
     use crate::transactions::EthWithdrawalRequest;
     use crate::tx::{
         AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest,
@@ -1552,9 +1553,9 @@ mod arbitrary {
         (any::<u128>(), any::<u128>(), any::<u128>()).prop_map(
             |(gas_limit, max_priority_fee_per_gas, max_fee_per_gas)| {
                 let price = TransactionPrice {
-                    gas_limit: Quantity::new(gas_limit),
-                    max_fee_per_gas: Wei::new(max_fee_per_gas),
-                    max_priority_fee_per_gas: Wei::new(max_priority_fee_per_gas),
+                    gas_limit: GasAmount::new(gas_limit),
+                    max_fee_per_gas: WeiPerGas::new(max_fee_per_gas),
+                    max_priority_fee_per_gas: WeiPerGas::new(max_priority_fee_per_gas),
                 };
                 let _does_not_panic = price.max_transaction_fee();
                 price
@@ -1677,9 +1678,9 @@ fn eip_1559_transaction_request_with_nonce(nonce: TransactionNonce) -> Eip1559Tr
     Eip1559TransactionRequest {
         chain_id: SEPOLIA_TEST_CHAIN_ID,
         nonce,
-        max_priority_fee_per_gas: Wei::new(0x59682f00),
-        max_fee_per_gas: Wei::new(0x598653cd),
-        gas_limit: Quantity::new(56_511),
+        max_priority_fee_per_gas: WeiPerGas::new(0x59682f00),
+        max_fee_per_gas: WeiPerGas::new(0x598653cd),
+        gas_limit: GasAmount::new(56_511),
         destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
         amount: Wei::new(1_000_000_000_000_000),
         data: hex::decode(
@@ -1692,9 +1693,9 @@ fn eip_1559_transaction_request_with_nonce(nonce: TransactionNonce) -> Eip1559Tr
 
 fn transaction_price() -> TransactionPrice {
     TransactionPrice {
-        max_fee_per_gas: Wei::new(0x59682f32),
-        max_priority_fee_per_gas: Wei::new(0x59682f00),
-        gas_limit: Quantity::new(21_000),
+        max_fee_per_gas: WeiPerGas::new(0x59682f32),
+        max_priority_fee_per_gas: WeiPerGas::new(0x59682f00),
+        gas_limit: GasAmount::new(21_000),
     }
 }
 

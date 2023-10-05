@@ -233,8 +233,7 @@ fn address_display() {
 
 mod rlp_encoding {
     use crate::address::Address;
-    use crate::eth_rpc::Quantity;
-    use crate::numeric::{TransactionNonce, Wei};
+    use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
         AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     };
@@ -342,9 +341,9 @@ mod rlp_encoding {
         let transaction = Eip1559TransactionRequest {
             chain_id: SEPOLIA_TEST_CHAIN_ID,
             nonce: TransactionNonce::from(6_u8),
-            max_priority_fee_per_gas: Wei::new(0x59682f00),
-            max_fee_per_gas: Wei::new(0x598653cd),
-            gas_limit: Quantity::new(56_511),
+            max_priority_fee_per_gas: WeiPerGas::new(0x59682f00),
+            max_fee_per_gas: WeiPerGas::new(0x598653cd),
+            gas_limit: GasAmount::new(56_511),
             destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
             amount: Wei::new(1_000_000_000_000_000),
             data: hex::decode(
@@ -723,7 +722,7 @@ mod eth_get_block_by_number {
 
 mod eth_fee_history {
     use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
-    use crate::numeric::{BlockNumber, Wei};
+    use crate::numeric::{BlockNumber, WeiPerGas};
 
     #[test]
     fn should_serialize_fee_history_params_as_tuple() {
@@ -791,38 +790,38 @@ mod eth_fee_history {
             FeeHistory {
                 oldest_block: BlockNumber::new(0x10f73fc),
                 base_fee_per_gas: vec![
-                    Wei::new(0x729d3f3b3),
-                    Wei::new(0x766e503ea),
-                    Wei::new(0x75b51b620),
-                    Wei::new(0x74094f2b4),
-                    Wei::new(0x716724f03),
-                    Wei::new(0x73b467f76)
+                    WeiPerGas::new(0x729d3f3b3),
+                    WeiPerGas::new(0x766e503ea),
+                    WeiPerGas::new(0x75b51b620),
+                    WeiPerGas::new(0x74094f2b4),
+                    WeiPerGas::new(0x716724f03),
+                    WeiPerGas::new(0x73b467f76)
                 ],
                 reward: vec![
                     vec![
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x68e7780)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x68e7780)
                     ],
                     vec![
-                        Wei::new(0x55d4a80),
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x5f5e100)
+                        WeiPerGas::new(0x55d4a80),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100)
                     ],
                     vec![
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x5f5e100)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100)
                     ],
                     vec![
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x5f5e100)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100)
                     ],
                     vec![
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x5f5e100),
-                        Wei::new(0x180789e0)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x180789e0)
                     ]
                 ],
             }

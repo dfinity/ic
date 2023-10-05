@@ -2,9 +2,9 @@
 mod tests;
 
 use crate::address::Address;
-use crate::eth_rpc::{FeeHistory, Hash, Quantity};
+use crate::eth_rpc::{FeeHistory, Hash};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-use crate::numeric::{BlockNumber, TransactionNonce, Wei};
+use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
 use ic_crypto_ecdsa_secp256k1::RecoveryId;
@@ -72,11 +72,11 @@ pub struct Eip1559TransactionRequest {
     #[n(1)]
     pub nonce: TransactionNonce,
     #[n(2)]
-    pub max_priority_fee_per_gas: Wei,
+    pub max_priority_fee_per_gas: WeiPerGas,
     #[n(3)]
-    pub max_fee_per_gas: Wei,
-    #[cbor(n(4), with = "crate::cbor::u256")]
-    pub gas_limit: Quantity,
+    pub max_fee_per_gas: WeiPerGas,
+    #[n(4)]
+    pub gas_limit: GasAmount,
     #[n(5)]
     pub destination: Address,
     #[n(6)]
@@ -150,7 +150,7 @@ impl FinalizedEip1559Transaction {
     pub fn effective_transaction_fee(&self) -> Wei {
         self.receipt
             .effective_gas_price
-            .checked_mul(self.receipt.gas_used)
+            .transaction_cost(self.receipt.gas_used)
             .expect("ERROR: overflow during transaction fee calculation")
     }
 
@@ -251,7 +251,7 @@ impl Eip1559TransactionRequest {
         rlp.append(&self.nonce);
         rlp.append(&self.max_priority_fee_per_gas);
         rlp.append(&self.max_fee_per_gas);
-        encode_u256(rlp, self.gas_limit);
+        rlp.append(&self.gas_limit);
         rlp.append(&self.destination.as_ref());
         rlp.append(&self.amount);
         rlp.append(&self.data);
@@ -330,28 +330,28 @@ async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TransactionPrice {
-    pub gas_limit: Quantity,
-    pub max_fee_per_gas: Wei,
-    pub max_priority_fee_per_gas: Wei,
+    pub gas_limit: GasAmount,
+    pub max_fee_per_gas: WeiPerGas,
+    pub max_priority_fee_per_gas: WeiPerGas,
 }
 
 impl TransactionPrice {
     pub fn max_transaction_fee(&self) -> Wei {
         self.max_fee_per_gas
-            .checked_mul(self.gas_limit)
+            .transaction_cost(self.gas_limit)
             .expect("ERROR: max_transaction_fee overflow")
     }
 
     /// Increase current transaction price by at least 10%
     pub fn increase_by_10_percent(self) -> Self {
-        let plus_10_percent = |amount: Wei| {
+        let plus_10_percent = |amount: WeiPerGas| {
             amount
                 .checked_add(
                     amount
                         .checked_div_ceil(10_u8)
                         .expect("BUG: must be Some() because divisor is non-zero"),
                 )
-                .unwrap_or(Wei::MAX)
+                .unwrap_or(WeiPerGas::MAX)
         };
         Self {
             gas_limit: self.gas_limit,
@@ -367,14 +367,12 @@ impl TransactionPrice {
     }
 
     pub fn max(self, other: Self) -> Self {
-        use std::cmp::max;
         Self {
-            gas_limit: max(self.gas_limit, other.gas_limit),
-            max_fee_per_gas: max(self.max_fee_per_gas, other.max_fee_per_gas),
-            max_priority_fee_per_gas: max(
-                self.max_priority_fee_per_gas,
-                other.max_priority_fee_per_gas,
-            ),
+            gas_limit: self.gas_limit.max(other.gas_limit),
+            max_fee_per_gas: self.max_fee_per_gas.max(other.max_fee_per_gas),
+            max_priority_fee_per_gas: self
+                .max_priority_fee_per_gas
+                .max(other.max_priority_fee_per_gas),
         }
     }
 }
@@ -383,20 +381,17 @@ pub fn estimate_transaction_price(fee_history: &FeeHistory) -> TransactionPrice 
     // average value between the `minSuggestedMaxPriorityFeePerGas`
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
-    const MIN_MAX_PRIORITY_FEE_PER_GAS: Wei = Wei::new(1_500_000_000); //1.5 gwei
-    const TRANSACTION_GAS_LIMIT: Quantity = Quantity::new(21_000);
+    const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
+    const TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
     let base_fee_of_next_finalized_block = *fee_history
         .base_fee_per_gas
         .last()
         .expect("base_fee_per_gas should not be empty to be able to evaluate transaction price");
     let max_priority_fee_per_gas = {
-        let mut rewards: Vec<&Wei> = fee_history.reward.iter().flatten().collect();
+        let mut rewards: Vec<&WeiPerGas> = fee_history.reward.iter().flatten().collect();
         let historic_max_priority_fee_per_gas =
             **median(&mut rewards).expect("should be non-empty with rewards of the last 5 blocks");
-        std::cmp::max(
-            historic_max_priority_fee_per_gas,
-            MIN_MAX_PRIORITY_FEE_PER_GAS,
-        )
+        historic_max_priority_fee_per_gas.max(MIN_MAX_PRIORITY_FEE_PER_GAS)
     };
     let max_fee_per_gas = base_fee_of_next_finalized_block
         .checked_mul(2_u8)
