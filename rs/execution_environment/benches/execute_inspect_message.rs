@@ -14,22 +14,22 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
-            "ic0_msg_method_name_size()",
+            "ic0_msg_method_name_size()".into(),
             Module::InspectMessage.from_ic0("msg_method_name_size", NoParams, Result::I32),
             11_000_005,
         ),
         common::Benchmark(
-            "ic0_msg_method_name_copy()/1B",
+            "ic0_msg_method_name_copy()/1B".into(),
             Module::InspectMessage.from_ic0("msg_method_name_copy", Params3(0, 0, 1), Result::No),
             34_000_005,
         ),
         common::Benchmark(
-            "ic0_msg_method_name_copy()/30B",
+            "ic0_msg_method_name_copy()/30B".into(),
             Module::InspectMessage.from_ic0("msg_method_name_copy", Params3(0, 0, 20), Result::No),
             53_000_005,
         ),
         common::Benchmark(
-            "ic0_accept_message()*",
+            "ic0_accept_message()*".into(),
             Module::InspectMessage.from_sections(("", "")), // inspect_message accepts by default
             1,
         ),

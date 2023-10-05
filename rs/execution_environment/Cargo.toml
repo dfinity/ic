@@ -111,3 +111,7 @@ name = "execute_update"
 [[bench]]
 harness = false
 name = "scheduler"
+
+[[bench]]
+harness = false
+name = "wasm_instructions"
