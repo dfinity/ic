@@ -39,7 +39,7 @@ impl HttpResponsePayload for TransactionReceipt {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
-#[serde(try_from = "ethnum::u256")]
+#[serde(try_from = "ethnum::u256", into = "ethnum::u256")]
 pub enum TransactionStatus {
     /// Transaction was mined and executed successfully.
     #[n(0)]
@@ -52,6 +52,15 @@ pub enum TransactionStatus {
     /// transaction nonce.
     #[n(1)]
     Failure,
+}
+
+impl From<TransactionStatus> for ethnum::u256 {
+    fn from(value: TransactionStatus) -> Self {
+        match value {
+            TransactionStatus::Success => ethnum::u256::ONE,
+            TransactionStatus::Failure => ethnum::U256::ZERO,
+        }
+    }
 }
 
 impl TryFrom<ethnum::u256> for TransactionStatus {

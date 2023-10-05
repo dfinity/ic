@@ -37,7 +37,7 @@ impl MintedEvent {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,

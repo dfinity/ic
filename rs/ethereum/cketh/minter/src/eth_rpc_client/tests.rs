@@ -290,6 +290,19 @@ mod eth_get_transaction_receipt {
         assert_eq!(status, TransactionStatus::Failure);
     }
 
+    #[test]
+    fn should_deserialize_serialized_transaction_status() {
+        let status: TransactionStatus =
+            serde_json::from_str(&serde_json::to_string(&TransactionStatus::Success).unwrap())
+                .unwrap();
+        assert_eq!(status, TransactionStatus::Success);
+
+        let status: TransactionStatus =
+            serde_json::from_str(&serde_json::to_string(&TransactionStatus::Failure).unwrap())
+                .unwrap();
+        assert_eq!(status, TransactionStatus::Failure);
+    }
+
     proptest! {
         #[test]
         fn should_fail_deserializing_wrong_transaction_status(wrong_status in 2_u32..u32::MAX) {
