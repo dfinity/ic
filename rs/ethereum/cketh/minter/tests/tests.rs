@@ -430,32 +430,35 @@ fn eth_get_block_by_number() -> Vec<u8> {
     .expect("Failed to serialize JSON")
 }
 
-fn eth_get_transaction_by_hash() -> Vec<u8> {
+fn eth_get_transaction_receipt(transaction_hash: String) -> Vec<u8> {
     serde_json::to_vec(&json!({
     "jsonrpc":"2.0",
     "id":1,
     "result":{
-        "blockHash":"0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4",
-        "blockNumber":"0x4132ec",
-        "from":"0x1789f79e95324a47c5fd6693071188e82e9a3558",
-        "gas":"0x5208",
-        "gasPrice":"0xfefbee3e",
-        "maxFeePerGas":"0x1c67ee6f2",
-        "maxPriorityFeePerGas":"0x59682f00",
-        "hash":"0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d",
-        "input":"0x",
-        "nonce":"0x26",
-        "to":"0xdd2851cdd40ae6536831558dd46db62fac7a844d",
-        "transactionIndex":"0x32",
-        "value":"0x22f54f95d04470",
-        "type":"0x2",
-        "accessList":[],
-        "chainId":"0xaa36a7",
-        "v":"0x0",
-        "r":"0xb5a68353487d0d5c339dd85460cf43a1f3d36426a8b5429f350585f5a8dd37d8",
-        "s":"0x6b27b589c175e4418574e30419ec79fd04df69695cdf72f41616d2afefcd2247",
-        "yParity":"0x0"
-    }}))
+     "blockHash": "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4",
+        "blockNumber": "0x4132ec",
+        "contractAddress": null,
+        "cumulativeGasUsed": "0x8b2e10",
+        "effectiveGasPrice": "0xfefbee3e",
+        "from": "0x1789f79e95324a47c5fd6693071188e82e9a3558",
+        "gasUsed": "0x5208",
+        "logs": [],
+        "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "status": "0x1",
+        "to": "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0",
+        "transactionHash": transaction_hash,
+        "transactionIndex": "0x32",
+        "type": "0x2"
+        }}))
+    .expect("Failed to serialize JSON")
+}
+
+fn eth_get_transaction_count(count: u32) -> Vec<u8> {
+    let hex_count = format!("{:#x}", count);
+    serde_json::to_vec(&json!({
+    "jsonrpc":"2.0",
+    "id":1,
+    "result": hex_count}))
     .expect("Failed to serialize JSON")
 }
 
@@ -722,16 +725,30 @@ impl CkEthSetup {
             RetrieveEthStatus::TxSent(EthTransaction { transaction_hash })
         );
 
-        tick_until_next_http_request(&self.env, "eth_getTransactionByHash");
+        tick_until_next_http_request(&self.env, "eth_getTransactionCount");
         self.handle_rpc_call(
             "https://rpc.ankr.com/eth",
-            "eth_getTransactionByHash",
-            eth_get_transaction_by_hash(),
+            "eth_getTransactionCount",
+            eth_get_transaction_count(1),
         );
         self.handle_rpc_call(
             "https://cloudflare-eth.com",
-            "eth_getTransactionByHash",
-            eth_get_transaction_by_hash(),
+            "eth_getTransactionCount",
+            eth_get_transaction_count(1),
+        );
+
+        let transaction_hash =
+            "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
+        tick_until_next_http_request(&self.env, "eth_getTransactionReceipt");
+        self.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_getTransactionReceipt",
+            eth_get_transaction_receipt(transaction_hash.clone()),
+        );
+        self.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_getTransactionReceipt",
+            eth_get_transaction_receipt(transaction_hash.clone()),
         );
         let status = self.retrieve_eth_status(block_index);
         assert_eq!(

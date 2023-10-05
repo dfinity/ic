@@ -3,16 +3,18 @@ mod tests;
 
 use crate::address::Address;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus};
+use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::MultiKeyMap;
 use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
 use crate::tx::{
-    ConfirmedEip1559Transaction, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
     TransactionPrice,
 };
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 /// Ethereum withdrawal request issued by the user.
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
@@ -44,7 +46,7 @@ pub struct EthTransactions {
     created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
     signed_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, SignedEip1559TransactionRequest>,
     sent_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedEip1559TransactionRequest>>,
-    finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, ConfirmedEip1559Transaction>,
+    finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
     next_nonce: TransactionNonce,
 }
 
@@ -322,43 +324,55 @@ impl EthTransactions {
         );
     }
 
+    pub fn sent_transactions_to_finalize(
+        &self,
+        finalized_transaction_count: &TransactionCount,
+    ) -> BTreeMap<Hash, LedgerBurnIndex> {
+        let first_non_finalized_tx_nonce =
+            TransactionNonce::from_be_bytes(finalized_transaction_count.to_be_bytes());
+        let mut transactions = BTreeMap::new();
+        for (_nonce, index, sent_txs) in self
+            .sent_tx
+            .iter()
+            .filter(|(nonce, _burn_index, _signed_txs)| *nonce < &first_non_finalized_tx_nonce)
+        {
+            for sent_tx in sent_txs {
+                if let Some(prev_index) = transactions.insert(sent_tx.hash(), *index) {
+                    assert_eq!(prev_index, *index,
+                               "BUG: duplicate transaction hash {} for burn indices {prev_index} and {index}", sent_tx.hash());
+                }
+            }
+        }
+        transactions
+    }
+
     pub fn record_finalized_transaction(
         &mut self,
-        confirmed_transaction: ConfirmedEip1559Transaction,
+        ledger_burn_index: LedgerBurnIndex,
+        receipt: TransactionReceipt,
     ) {
-        let nonce = confirmed_transaction.transaction().nonce;
-        if let Some(already_finalized_tx) = self.finalized_tx.get(&nonce) {
-            assert_eq!(
-                already_finalized_tx, &confirmed_transaction,
-                "BUG: mismatch between already finalized transaction and the confirmed transaction"
-            );
-            return;
-        }
-        let sent_txs = self
+        let sent_tx = self
             .sent_tx
-            .get(&nonce)
-            .expect("BUG: missing sent transaction");
-        assert!(!sent_txs.is_empty(), "BUG: empty sent transactions");
-
-        assert!(sent_txs
+            .get_alt(&ledger_burn_index)
+            .expect("BUG: missing sent transactions")
             .iter()
-            .any(|tx| tx == confirmed_transaction.signed_transaction()),
-                "BUG: mismatch between sent transactions and the confirmed transaction. Sent: {sent_txs:?}, confirmed: {confirmed_transaction:?}");
+            .find(|sent_tx| sent_tx.hash() == receipt.transaction_hash)
+            .expect("ERROR: no transaction matching receipt");
+        let finalized_tx = sent_tx
+            .clone()
+            .try_finalize(receipt)
+            .expect("ERROR: invalid transaction receipt");
 
-        let (_nonce, index, _sent_txs) = self
-            .sent_tx
-            .remove_entry(&nonce)
-            .expect("BUG: missing sent transaction");
-
+        let nonce = sent_tx.nonce();
+        self.sent_tx.remove_entry(&nonce);
         Self::cleanup_failed_resubmitted_transactions(
             &mut self.created_tx,
             &mut self.signed_tx,
             &nonce,
         );
-
         assert_eq!(
             self.finalized_tx
-                .try_insert(nonce, index, confirmed_transaction),
+                .try_insert(nonce, ledger_burn_index, finalized_tx),
             Ok(())
         );
     }
@@ -385,7 +399,9 @@ impl EthTransactions {
         }
 
         if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
-            return RetrieveEthStatus::TxConfirmed(EthTransaction::from(tx.signed_transaction()));
+            return RetrieveEthStatus::TxConfirmed(EthTransaction {
+                transaction_hash: tx.transaction_hash().to_string(),
+            });
         }
 
         RetrieveEthStatus::NotFound
@@ -446,7 +462,7 @@ impl EthTransactions {
         Item = (
             &TransactionNonce,
             &LedgerBurnIndex,
-            &ConfirmedEip1559Transaction,
+            &FinalizedEip1559Transaction,
         ),
     > {
         self.finalized_tx.iter()

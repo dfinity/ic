@@ -15,6 +15,7 @@ use ic_cketh_minter::eth_logs::{
 };
 use ic_cketh_minter::eth_rpc::FeeHistory;
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
+use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
 use ic_cketh_minter::eth_rpc_client::{EthRpcClient, MultiCallError};
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::lifecycle::MinterArg;
@@ -26,20 +27,19 @@ use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::{
     lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
 };
-use ic_cketh_minter::storage;
 use ic_cketh_minter::transactions::{
     create_transaction, CreateTransactionError, EthWithdrawalRequest,
 };
-use ic_cketh_minter::tx::{
-    estimate_transaction_price, ConfirmedEip1559Transaction, TransactionPrice,
-};
+use ic_cketh_minter::tx::{estimate_transaction_price, TransactionPrice};
 use ic_cketh_minter::{
     eth_logs, eth_rpc, MINT_RETRY_DELAY, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL,
     SCRAPPING_ETH_LOGS_INTERVAL,
 };
+use ic_cketh_minter::{state, storage};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use std::cmp::{min, Ordering};
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter::zip;
 use std::str::FromStr;
 use std::time::Duration;
@@ -455,53 +455,73 @@ async fn send_transactions_batch() {
     }
 }
 
-// TODO FI-942: currently finalized transaction just means that it was mined in some block.
-// We should decide on whether a transaction was finalized by comparing the transaction nonce with
-// eth_getTransactionCount at finalized block height and if finalized retrieve the transaction receipt
-// to store with the transaction.
 async fn finalize_transactions_batch() {
-    let sent_transactions: Vec<_> = read_state(|s| {
-        s.eth_transactions
-            .sent_transactions_iter()
-            .flat_map(|(_nonce, _index, txs)| txs)
-            .cloned()
-            .collect()
-    });
-    let rpc_client = read_state(EthRpcClient::from_state);
-    let results = join_all(
-        sent_transactions
-            .iter()
-            .map(|tx| rpc_client.eth_get_transaction_by_hash(tx.hash())),
-    )
-    .await;
+    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
+        return;
+    }
 
-    for (sent_tx, result) in zip(sent_transactions, results) {
-        match result {
-            Ok(Some(tx)) => {
-                if let Some((block_hash, block_number, _transaction_index)) = tx.mined_in_block() {
-                    let confirmed_tx =
-                        ConfirmedEip1559Transaction::new(sent_tx, block_hash, block_number);
-                    log!(INFO, "Confirmed transaction: {confirmed_tx:?}");
-                    mutate_state(|s| {
-                        s.eth_transactions
-                            .record_finalized_transaction(confirmed_tx)
-                    });
-                } else {
-                    log!(
-                        DEBUG,
-                        "Transaction {sent_tx:?} found but not confirmed yet. Will retry later.",
-                    )
+    match finalized_transaction_count().await {
+        Ok(finalized_tx_count) => {
+            let txs_to_finalize = read_state(|s| {
+                s.eth_transactions
+                    .sent_transactions_to_finalize(&finalized_tx_count)
+            });
+            let expected_finalized_withdrawal_ids: BTreeSet<_> =
+                txs_to_finalize.values().cloned().collect();
+            let rpc_client = read_state(EthRpcClient::from_state);
+            let results = join_all(
+                txs_to_finalize
+                    .keys()
+                    .map(|hash| rpc_client.eth_get_transaction_receipt(*hash)),
+            )
+            .await;
+            let mut receipts: BTreeMap<LedgerBurnIndex, TransactionReceipt> = BTreeMap::new();
+            for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
+                match result {
+                    Ok(Some(receipt)) => {
+                        log!(DEBUG, "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}");
+                        match receipts.get(&withdrawal_id) {
+                            // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
+                            Some(existing_receipt) => {
+                                log!(INFO, "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later");
+                                return;
+                            }
+                            None => {
+                                receipts.insert(withdrawal_id, receipt);
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        log!(
+                            DEBUG,
+                            "Transaction {hash} for withdrawal ID {withdrawal_id} was not mined, it's probably a resubmitted transaction",
+                        )
+                    }
+                    Err(e) => {
+                        log!(
+                            INFO,
+                            "Failed to get transaction receipt for {hash} and withdrawal ID {withdrawal_id}: {e:?}. Will retry later",
+                        );
+                        return;
+                    }
                 }
             }
-            Ok(None) => log!(
-                DEBUG,
-                "Transaction {sent_tx:?} not found. Will retry later.",
-            ),
-            Err(e) => log!(
-                INFO,
-                "Failed to get transaction by hash {sent_tx:?}: {e:?}. Will retry later.",
-            ),
-        };
+            let actual_finalized_withdrawal_ids: BTreeSet<_> = receipts.keys().cloned().collect();
+            assert_eq!(
+                expected_finalized_withdrawal_ids, actual_finalized_withdrawal_ids,
+                "ERROR: unexpected transaction receipts for some withdrawal IDs"
+            );
+            for (withdrawal_id, receipt) in receipts {
+                mutate_state(|s| {
+                    s.eth_transactions
+                        .record_finalized_transaction(withdrawal_id, receipt)
+                });
+            }
+        }
+
+        Err(e) => {
+            log!(INFO, "Failed to get finalized transaction count: {e:?}");
+        }
     }
 }
 
@@ -518,8 +538,7 @@ fn pre_upgrade() {
 #[update]
 #[candid_method(update)]
 async fn minter_address() -> String {
-    let pubkey = lazy_call_ecdsa_public_key().await;
-    Address::from_pubkey(&pubkey).to_string()
+    state::minter_address().await.to_string()
 }
 
 #[query]
@@ -655,11 +674,24 @@ async fn latest_transaction_count() -> Result<TransactionCount, MultiCallError<T
     use ic_cketh_minter::eth_rpc_client::requests::GetTransactionCountParams;
     read_state(EthRpcClient::from_state)
         .eth_get_transaction_count(GetTransactionCountParams {
-            address: Address::from_pubkey(&lazy_call_ecdsa_public_key().await),
+            address: state::minter_address().await,
             block: BlockSpec::Tag(BlockTag::Latest),
         })
         .await
         .reduce_with_min_by_key(|transaction_count| *transaction_count)
+}
+
+async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
+{
+    use eth_rpc::{BlockSpec, BlockTag};
+    use ic_cketh_minter::eth_rpc_client::requests::GetTransactionCountParams;
+    read_state(EthRpcClient::from_state)
+        .eth_get_transaction_count(GetTransactionCountParams {
+            address: state::minter_address().await,
+            block: BlockSpec::Tag(BlockTag::Finalized),
+        })
+        .await
+        .reduce_with_equality()
 }
 
 #[update]

@@ -245,6 +245,7 @@
             </table>
             {% endif %}
 
+            {% if !withdrawal_requests.is_empty() %}
             <h3>Withdrawal Requests ckETH → ETH</h3>
             <table>
                 <thead>
@@ -264,7 +265,9 @@
                 {% endfor %}
                 </tbody>
             </table>
+            {% endif %}
 
+            {% if !pending_transactions.is_empty() %}
             <h3>Pending Transactions ckETH → ETH</h3>
             <table>
                 <thead>
@@ -286,30 +289,37 @@
                 {% endfor %}
                 </tbody>
             </table>
+            {% endif %}
 
-            <h3>Confirmed Transactions ckETH → ETH</h3>
+            {% if !finalized_transactions.is_empty() %}
+            <h3>Finalized Transactions ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>
                     <th>Ledger Burn Index</th>
                     <th>To</th>
                     <th>Value (Wei)</th>
+                    <th>Txn Fee (Wei)</th>
                     <th>Block</th>
                     <th>Txn Hash</th>
+                    <th>Status</th>
                 </tr>
                 </thead>
                 <tbody>
-                {% for tx in confirmed_transactions %}
+                {% for tx in finalized_transactions %}
                 <tr>
                     <td class="numeric">{{ tx.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(tx.destination) %}</td>
                     <td class="numeric">{{ tx.transaction_amount }}</td>
+                    <td class="numeric">{{ tx.transaction_fee }}</td>
                     <td class="numeric">{% call etherscan_block_link(tx.block_number) %}</td>
                     <td>{% call etherscan_tx_link(tx.transaction_hash) %}</td>
+                    <td>{{ tx.status }}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
+            {% endif %}
         </div>
     </div>
 

@@ -423,8 +423,8 @@ prop_compose! {
         s in arb_u256(),
         signature_y_parity in any::<bool>(),
     ) -> SignedEip1559TransactionRequest {
-        SignedEip1559TransactionRequest {
-            transaction: Eip1559TransactionRequest {
+        SignedEip1559TransactionRequest::from((
+             Eip1559TransactionRequest {
                 chain_id,
                 nonce,
                 max_priority_fee_per_gas,
@@ -435,12 +435,12 @@ prop_compose! {
                 data,
                 access_list,
             },
-            signature: Eip1559Signature {
+            Eip1559Signature {
                 r,
                 s,
                 signature_y_parity,
-            },
-        }
+            }
+        ))
     }
 }
 
