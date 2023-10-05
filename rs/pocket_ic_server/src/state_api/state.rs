@@ -6,13 +6,12 @@ use crate::InstanceId;
 use crate::{Computation, OpId, Operation};
 use base64;
 use ic_types::CanisterId;
+use ic_utils::thread::JoinOnDrop;
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, sync::Arc, thread::Builder as ThreadBuilder, time::Duration};
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::{mpsc, Mutex, RwLock},
     task::spawn_blocking,
     time,
 };
@@ -75,6 +74,11 @@ struct InnerApiState<T> {
     instances: RwLock<Vec<Mutex<InstanceState<T>>>>,
     graph: RwLock<HashMap<StateLabel, Computations>>,
     sync_wait_time: Duration,
+    // dropping the PocketIC instance might be an expensive operation (the state machine is
+    // deallocated, e.g.). Thus, we immediately mark the instance as deleted while sending the
+    // PocketIC instance to a background worker and drop it there.
+    drop_sender: mpsc::UnboundedSender<T>,
+    _drop_worker_handle: JoinOnDrop<()>,
 }
 
 pub struct PocketIcApiStateBuilder<T> {
@@ -84,7 +88,7 @@ pub struct PocketIcApiStateBuilder<T> {
 
 impl<T> PocketIcApiStateBuilder<T>
 where
-    T: HasStateLabel + Send,
+    T: HasStateLabel + Send + 'static,
 {
     pub fn new() -> Self {
         Default::default()
@@ -121,10 +125,23 @@ where
         let instances = RwLock::new(instances);
 
         let sync_wait_time = self.sync_wait_time.unwrap_or(DEFAULT_SYNC_WAIT_DURATION);
+
+        let (drop_sender, mut rx) = mpsc::unbounded_channel::<T>();
+        let drop_handle = ThreadBuilder::new()
+            .name("PocketIC GC Thread".into())
+            .spawn(move || {
+                while let Some(pocket_ic) = rx.blocking_recv() {
+                    std::mem::drop(pocket_ic);
+                }
+            })
+            .unwrap();
+
         let inner = Arc::new(InnerApiState {
             instances,
             graph,
             sync_wait_time,
+            drop_sender,
+            _drop_worker_handle: JoinOnDrop::new(drop_handle),
         });
         PocketIcApiState { inner }
     }
@@ -308,7 +325,12 @@ where
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
         let instances = self.inner.instances.read().await;
-        *instances[instance_id].lock().await = InstanceState::Deleted;
+        let mut instance_state = instances[instance_id].lock().await;
+        if let InstanceState::Available(pocket_ic) =
+            std::mem::replace(&mut *instance_state, InstanceState::Deleted)
+        {
+            self.inner.drop_sender.send(pocket_ic).unwrap();
+        }
     }
 
     pub async fn list_instances(&self) -> Vec<InstanceState<()>> {
@@ -421,14 +443,17 @@ where
                             // add result to graph
                             let instances = st.instances.blocking_read();
                             let mut guard = st.graph.blocking_write();
-
-                            let mut instance_state = instances[instance_id].blocking_lock();
-                            *instance_state = InstanceState::Available(pocket_ic);
-
                             let cached_computations =
                                 guard.entry(state_label.clone()).or_insert(HashMap::new());
                             cached_computations
                                 .insert(op_id.clone(), (new_state_label, result.clone()));
+
+                            let mut instance_state = instances[instance_id].blocking_lock();
+                            if let InstanceState::Deleted = &*instance_state {
+                                st.drop_sender.send(pocket_ic).unwrap();
+                            } else {
+                                *instance_state = InstanceState::Available(pocket_ic);
+                            }
                             trace!("bg_task::end op_id={} instance_id={}", op_id.0, instance_id);
                             result
                         }
