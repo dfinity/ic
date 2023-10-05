@@ -346,7 +346,7 @@ pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>,
     // Theorem). That is accomplished right after this.
     let mut result = vec![quotient; len as usize];
 
-    // Divy out the remainder: Starting from the last element, increment
+    // Divvy out the remainder: Starting from the last element, increment
     // elements by 1. The number of such increments performed here is remainder,
     // bringing our total back to the desired amount.
     assert!(
@@ -747,18 +747,19 @@ impl Swap {
     // --- state transition functions ------------------------------------------
     //
 
-    /// If the swap is ADOPTED, tries to open it (if the delay is elapsed).
+    /// Tries to transition the Swap Lifecycle to `Lifecycle::Open`.  
     /// Returns true if a transition was made, and false otherwise.
-    pub fn try_open_after_delay(&mut self, now_seconds: u64) -> bool {
-        if self.can_open(now_seconds) {
-            // set the purge_old_ticket last principal so that the routine can start
-            // in the next heartbeat
-            self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
-            self.update_derived_fields();
-            self.set_lifecycle(Lifecycle::Open);
-            return true;
+    pub fn try_open(&mut self, now_seconds: u64) -> bool {
+        if !self.can_open(now_seconds) {
+            return false;
         }
-        false
+        // set the purge_old_ticket last principal so that the routine can start
+        // in the next heartbeat
+        self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
+        self.update_derived_fields();
+        self.set_lifecycle(Lifecycle::Open);
+
+        true
     }
 
     /// Attempts to finalize the swap. If this function calls [`Self::finalize`],
@@ -888,9 +889,8 @@ impl Swap {
         r as u64
     }
 
-    /// If: lifecycle == OPEN && sufficient_participation && (swap_due || icp_target.is_reached())
-    ///
-    /// Then: lifecycle == COMMITTED
+    /// Tries to transition the Swap Lifecycle to `Lifecycle::Committed`.  
+    /// Returns true if a transition was made, and false otherwise.
     pub fn try_commit(&mut self, now_seconds: u64) -> bool {
         if !self.can_commit(now_seconds) {
             return false;
@@ -1003,12 +1003,8 @@ impl Swap {
         true
     }
 
-    /// If:
-    ///     lifecycle = OPEN
-    ///     && (swap_due || target_reached)
-    ///     && not sufficient_participation
-    ///
-    /// Then: lifecycle == ABORTED
+    /// Tries to transition the Swap Lifecycle to `Lifecycle::Aborted`.  
+    /// Returns true if a transition was made, and false otherwise.
     pub fn try_abort(&mut self, now_seconds: u64) -> bool {
         if !self.can_abort(now_seconds) {
             return false;
@@ -1069,14 +1065,14 @@ impl Swap {
             MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
         );
 
-        // Automatically transition the state
+        // Automatically transition the state. Only one state transition per heartbeat.
 
         // Auto-open the swap
-        if self.try_open_after_delay(heartbeat_start_seconds) {
+        if self.try_open(heartbeat_start_seconds) {
             log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
         }
         // Auto-commit the swap
-        if self.try_commit(heartbeat_start_seconds) {
+        else if self.try_commit(heartbeat_start_seconds) {
             log!(
                 INFO,
                 "Swap committed at timestamp {}",
@@ -2529,17 +2525,17 @@ impl Swap {
         NewSaleTicketResponse::ok(ticket)
     }
 
-    // Calls purge_old_tickets when needed.
-    //
-    // The conditions to call purge_old_tickets are the following:
-    // 1. there are more than `number_of_tickets_threshold` tickets
-    // 2. the `lifecycle` is `Open`
-    // 3. either there is an ongoing purge_old_tickets running or
-    //    10 minutes has passed since the last call
-    //
-    // Returns None if purge_old_tickets was not run, Some(false) if it was
-    // run but didn't complete, Some(true) if it was run and completed the
-    // check of all tickets.
+    /// Calls purge_old_tickets when needed.
+    ///
+    /// The conditions to call purge_old_tickets are the following:
+    /// 1. there are more than `number_of_tickets_threshold` tickets
+    /// 2. the `lifecycle` is `Open`
+    /// 3. either there is an ongoing purge_old_tickets running or
+    ///    10 minutes has passed since the last call
+    ///
+    /// Returns None if purge_old_tickets was not run, Some(false) if it was
+    /// run but didn't complete, Some(true) if it was run and completed the
+    /// check of all tickets.
     pub fn try_purge_old_tickets(
         &mut self,
         now_nanoseconds: impl Fn() -> u64,
@@ -2573,7 +2569,7 @@ impl Swap {
             || purge_old_tickets_last_completion_timestamp_nanoseconds + INTERVAL_NANOSECONDS
                 <= now_nanoseconds()
         {
-            match self.purge_old_tickets(
+            return match self.purge_old_tickets(
                 now_nanoseconds(),
                 purge_old_tickets_next_principal,
                 max_age_in_nanoseconds,
@@ -2585,7 +2581,7 @@ impl Swap {
                     // the next principal so that the next heartbeat can continue the
                     // work.
                     self.purge_old_tickets_next_principal = Some(new_next_principal);
-                    return Some(false);
+                    Some(false)
                 }
                 None => {
                     // If no principal is returned then purge_old_tickets has
@@ -2594,9 +2590,9 @@ impl Swap {
                     self.purge_old_tickets_next_principal = Some(first_principal_bytes);
                     self.purge_old_tickets_last_completion_timestamp_nanoseconds =
                         Some(now_nanoseconds());
-                    return Some(true);
+                    Some(true)
                 }
-            }
+            };
         }
         None
     }
@@ -2718,7 +2714,7 @@ impl Swap {
         Ok(())
     }
 
-    /// The parameter `now_seconds` is greater than or equal to end_timestamp_seconds.
+    /// The parameter `now_seconds` is greater than or equal to `swap_due_timestamp_seconds`.
     pub fn swap_due(&self, now_seconds: u64) -> bool {
         if let Some(params) = &self.params {
             return now_seconds >= params.swap_due_timestamp_seconds;
@@ -2726,28 +2722,28 @@ impl Swap {
         false
     }
 
-    /// The parameter `now_seconds` is greater than or equal to decentralization_sale_open_timestamp_seconds.
-    pub fn swap_opening_due(&self, now_seconds: u64) -> bool {
-        let swap_open_timestamp = self
-            .decentralization_sale_open_timestamp_seconds
-            .unwrap_or(now_seconds);
-        now_seconds >= swap_open_timestamp
-    }
-
     /// The minimum number of participants have been achieved, and the
     /// minimal total amount has been reached.
     pub fn sufficient_participation(&self) -> bool {
+        self.min_participation_reached() && self.min_icp_e8s_reached()
+    }
+
+    /// The minimum number of participants have been achieved.
+    pub fn min_participation_reached(&self) -> bool {
         if let Some(params) = &self.params {
-            if self.cf_participants.len().saturating_add(self.buyers.len())
-                < (params.min_participants as usize)
-            {
-                false
-            } else {
-                self.current_total_participation_e8s() >= params.min_icp_e8s
-            }
-        } else {
-            false
+            return self.cf_participants.len().saturating_add(self.buyers.len())
+                >= (params.min_participants as usize);
         }
+
+        false
+    }
+
+    pub fn min_icp_e8s_reached(&self) -> bool {
+        if let Some(params) = &self.params {
+            return self.current_total_participation_e8s() >= params.min_icp_e8s;
+        }
+
+        false
     }
 
     /// Returns the `IcpTargetProgress`, a structure summarizing the current progress in reaching
@@ -2774,15 +2770,28 @@ impl Swap {
 
     /// Returns true if the swap can be opened at the specified
     /// timestamp, and false otherwise.
+    ///
+    /// Conditions:
+    /// 1. The lifecycle of Swap is `Lifecycle::Adopted`
+    /// 2. The current timestamp is greater than or equal to `decentralization_sale_open_timestamp_seconds`
     pub fn can_open(&self, now_seconds: u64) -> bool {
         if self.lifecycle() != Lifecycle::Adopted {
             return false;
         }
-        self.swap_opening_due(now_seconds)
+
+        let swap_open_timestamp_seconds = self
+            .decentralization_sale_open_timestamp_seconds
+            .unwrap_or(now_seconds);
+        now_seconds >= swap_open_timestamp_seconds
     }
 
-    /// Returns true if the swap can be committed at the specified
+    /// Returns true if the Swap can be committed at the specified
     /// timestamp, and false otherwise.
+    ///
+    /// Conditions:
+    /// 1. The lifecycle of Swap is `Lifecycle::Open`
+    /// 2. There must be sufficient participation in the Swap
+    /// 3. Either the maximum ICP target has been reached, or the Swap is due
     pub fn can_commit(&self, now_seconds: u64) -> bool {
         if self.lifecycle() != Lifecycle::Open {
             return false;
@@ -2793,14 +2802,19 @@ impl Swap {
         if !self.sufficient_participation() {
             return false;
         }
+
         // If swap is due, or the target ICP has been reached, return true
         self.swap_due(now_seconds) || self.icp_target_progress().is_reached_or_exceeded()
     }
 
-    /// Returns true if the swap can be aborted at the specified
+    /// Returns true if the Swap can be aborted at the specified
     /// timestamp, and false otherwise.
+    ///
+    /// Conditions:
+    /// 1. The lifecycle of Swap is `Lifecycle::Open`
+    /// 2. The Swap has ended (either the Swap is due or the maximum ICP target was reached) and there
+    ///    has not been sufficient participation reached.
     pub fn can_abort(&self, now_seconds: u64) -> bool {
-        // We can only abort if the lifecycle is currently open
         if self.lifecycle() != Lifecycle::Open {
             return false;
         }
@@ -3306,11 +3320,11 @@ fn create_sns_neuron_basket_for_cf_participant(
 }
 
 impl Storable for Ticket {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<[u8]> {
         self.encode_to_vec().into()
     }
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Cannot decode ticket")
     }
 }

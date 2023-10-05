@@ -647,12 +647,10 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nervous_system_clients::canister_status::{
-        DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
-    };
     use ic_nervous_system_clients::{
         canister_status::{
             CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+            DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
         },
         management_canister_client::{
             MockManagementCanisterClient, MockManagementCanisterClientReply,

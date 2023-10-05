@@ -385,7 +385,7 @@ pub struct NeuronsFundParticipationConstraints {
 /// mapping the Neurons' Fund ideal-participation to effective-participation on a given
 /// linear (semi-open) interval. Say we have the following function for matching direct
 /// participants' contributions: `f: ICP e8s -> ICP e8s`; then the *ideal* Neuron's Fund
-/// participation amount corresponding to the direct participatio of `x` ICP e8s is
+/// participation amount corresponding to the direct participation of `x` ICP e8s is
 /// `f(x)`, while the Neuron's Fund *effective* participation amount is:
 /// ```
 /// g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
@@ -1542,7 +1542,7 @@ pub mod get_open_ticket_response {
         #[prost(message, optional, tag = "1")]
         pub ticket: ::core::option::Option<super::Ticket>,
     }
-    /// Request was not successful, and no ticket was creatd.
+    /// Request was not successful, and no ticket was created.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1637,7 +1637,7 @@ pub mod new_sale_ticket_response {
         #[prost(message, optional, tag = "1")]
         pub ticket: ::core::option::Option<super::Ticket>,
     }
-    /// Request was not successful, and no ticket was creatd.
+    /// Request was not successful, and no ticket was created.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1849,12 +1849,12 @@ pub struct ListSnsNeuronRecipesResponse {
     #[prost(message, repeated, tag = "1")]
     pub sns_neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
 }
-/// Request struct for the method `notfiy_payment_failure`
+/// Request struct for the method `notify_payment_failure`
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NotifyPaymentFailureRequest {}
-/// Response for the method `notfiy_payment_failure`
+/// Response for the method `notify_payment_failure`
 /// Returns the ticket if a ticket was found for the caller and the ticket
 /// was removed successfully. Returns None if no ticket was found for the caller.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

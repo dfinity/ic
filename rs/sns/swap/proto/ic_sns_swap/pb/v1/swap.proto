@@ -426,7 +426,7 @@ message NeuronsFundParticipationConstraints {
 // mapping the Neurons' Fund ideal-participation to effective-participation on a given
 // linear (semi-open) interval. Say we have the following function for matching direct
 // participants' contributions: `f: ICP e8s -> ICP e8s`; then the *ideal* Neuron's Fund
-// participation amount corresponding to the direct participatio of `x` ICP e8s is
+// participation amount corresponding to the direct participation of `x` ICP e8s is
 // `f(x)`, while the Neuron's Fund *effective* participation amount is:
 // ```
 // g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
@@ -1141,7 +1141,7 @@ message GetOpenTicketResponse {
     optional Ticket ticket = 1;
   }
 
-  // Request was not successful, and no ticket was creatd.
+  // Request was not successful, and no ticket was created.
   message Err {
     enum Type {
       TYPE_UNSPECIFIED = 0;
@@ -1177,7 +1177,7 @@ message NewSaleTicketResponse {
     Ticket ticket = 1;
   }
 
-  // Request was not successful, and no ticket was creatd.
+  // Request was not successful, and no ticket was created.
   message Err {
     message InvalidUserAmount {
       uint64 min_amount_icp_e8s_included = 1;
@@ -1306,10 +1306,10 @@ message ListSnsNeuronRecipesResponse {
   repeated SnsNeuronRecipe sns_neuron_recipes = 1;
 }
 
-// Request struct for the method `notfiy_payment_failure`
+// Request struct for the method `notify_payment_failure`
 message NotifyPaymentFailureRequest {}
 
-// Response for the method `notfiy_payment_failure`
+// Response for the method `notify_payment_failure`
 // Returns the ticket if a ticket was found for the caller and the ticket
 // was removed successfully. Returns None if no ticket was found for the caller.
 message NotifyPaymentFailureResponse {
