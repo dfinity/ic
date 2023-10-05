@@ -1026,8 +1026,8 @@ pub mod tests {
         types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::artifact::{DkgMessage, DkgMessageAttribute};
-    use ic_types::consensus::dkg::DealingContent;
+    use ic_types::artifact::DkgMessageAttribute;
+    use ic_types::consensus::dkg::{DealingContent, Message as DkgMessage};
     use ic_types::crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         {CryptoHash, CryptoHashOf},

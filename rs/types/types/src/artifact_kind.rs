@@ -3,17 +3,18 @@ use crate::{
     artifact::*,
     canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
     consensus::{
-        certification::CertificationMessageHash,
-        ecdsa::{ecdsa_msg_id, EcdsaMessageAttribute},
-        ConsensusMessageHashable,
+        certification::{CertificationMessage, CertificationMessageHash},
+        dkg::Message as DkgMessage,
+        ecdsa::{ecdsa_msg_id, EcdsaMessage, EcdsaMessageAttribute},
+        ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHashable,
     },
     crypto::crypto_hash,
+    messages::SignedIngress,
     CountBytes,
 };
-use serde::{Deserialize, Serialize};
 
 /// The `ArtifactKind` of *Consensus* messages.
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ConsensusArtifact;
 
 /// `ConsensusArtifact` implements the `ArtifactKind` trait.

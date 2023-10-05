@@ -5,7 +5,6 @@ use bincode::{deserialize, serialize};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_protobuf::types::v1 as pb;
-use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::time::Duration;
 
@@ -13,7 +12,7 @@ use std::time::Duration;
 /// in its artifact pool. The adverts of different artifact types may differ
 /// in their attributes. Upon the reception of an advert, a node can decide
 /// if and when to request the corresponding artifact from the sender.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GossipAdvert {
     pub attribute: ArtifactAttribute,
     pub size: usize,

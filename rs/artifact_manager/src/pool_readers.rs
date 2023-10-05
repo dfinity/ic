@@ -11,7 +11,10 @@ use ic_types::{
     canister_http::*,
     chunkable::*,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
+        certification::CertificationMessage,
+        dkg::Message as DkgMessage,
+        ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
+        ConsensusMessage, ConsensusMessageAttribute,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,

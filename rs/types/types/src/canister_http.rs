@@ -627,7 +627,7 @@ impl CountBytes for CanisterHttpResponseProof {
 ///
 /// The current implementation of the canister http feature only has a single type of
 /// artifact, which is shares and therefore needs an attribute.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterHttpResponseAttribute {
     /// Attributes of a [`CanisterHttpResponseShare`].
     ///

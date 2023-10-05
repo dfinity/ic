@@ -13,10 +13,9 @@ use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_types::{
-    artifact::SignedIngress,
     batch::{Batch, BatchMessages},
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::MessageId,
+    messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
 };

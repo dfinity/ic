@@ -19,12 +19,12 @@ use ic_interfaces::ecdsa::{
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::{ArtifactKind, EcdsaArtifactId, EcdsaMessageId};
+use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
     ecdsa::{
-        ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
-        EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
+        ecdsa_msg_id, EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType,
+        EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
     },
     CatchUpPackage,
 };

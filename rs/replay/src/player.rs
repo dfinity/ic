@@ -1297,8 +1297,9 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{consensus::fake::FakeSigner, types::ids::node_test_id};
     use ic_types::{
-        artifact::CertificationMessage,
-        consensus::certification::{CertificationContent, CertificationShare},
+        consensus::certification::{
+            CertificationContent, CertificationMessage, CertificationShare,
+        },
         crypto::{CryptoHash, Signed},
         signature::ThresholdSignatureShare,
     };

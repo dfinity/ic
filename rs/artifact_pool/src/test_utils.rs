@@ -18,12 +18,12 @@ use ic_test_utilities::{
     types::ids::node_test_id,
 };
 use ic_types::{
-    artifact::{ConsensusMessage, ConsensusMessageId},
+    artifact::ConsensusMessageId,
     consensus::{
-        dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessageHashable, Finalization,
-        FinalizationContent, FinalizationShare, Notarization, NotarizationContent,
-        NotarizationShare, RandomBeacon, RandomBeaconContent, RandomBeaconShare, RandomTape,
-        RandomTapeContent, RandomTapeShare,
+        dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessage,
+        ConsensusMessageHashable, Finalization, FinalizationContent, FinalizationShare,
+        Notarization, NotarizationContent, NotarizationShare, RandomBeacon, RandomBeaconContent,
+        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
     },
     crypto::{ThresholdSigShare, ThresholdSigShareOf},
     signature::*,

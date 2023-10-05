@@ -1,6 +1,6 @@
 use crate::{
-    artifact::{IngressMessageId, SignedIngress},
-    messages::{MessageId, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH},
+    artifact::IngressMessageId,
+    messages::{MessageId, SignedIngress, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, Time,
 };
 #[cfg(test)]

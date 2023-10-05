@@ -17,7 +17,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{artifact::CertificationMessage, Height, SubnetId};
+use ic_types::{consensus::certification::CertificationMessage, Height, SubnetId};
 use slog::{debug, info, warn, Logger};
 use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 

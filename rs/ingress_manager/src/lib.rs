@@ -24,10 +24,11 @@ use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry}
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
 use ic_types::{
-    artifact::{IngressMessageId, SignedIngress},
+    artifact::IngressMessageId,
     consensus::BlockPayload,
     crypto::CryptoHashOf,
     malicious_flags::MaliciousFlags,
+    messages::SignedIngress,
     time::{Time, UNIX_EPOCH},
     Height, RegistryVersion, SubnetId,
 };
