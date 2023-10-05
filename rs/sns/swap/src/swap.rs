@@ -895,7 +895,17 @@ impl Swap {
         if !self.can_commit(now_seconds) {
             return false;
         }
+        self.neuron_recipes = self
+            .create_sns_neuron_recipes()
+            .expect("Expected creation of SNS Neuron Recipes to succeed");
+        self.set_lifecycle(Lifecycle::Committed);
 
+        true
+    }
+
+    /// Create the SNS Neuron recipes for direct participants and Neurons' Fund
+    /// participants of the SNS token swap.
+    fn create_sns_neuron_recipes(&self) -> Result<Vec<SnsNeuronRecipe>, String> {
         // Safe as `params` must be specified in call to `open`.
         let params = self.params.as_ref().expect("Expected params to be set");
 
@@ -921,7 +931,6 @@ impl Swap {
         let total_participant_icp_e8s =
             NonZeroU64::try_from(self.current_total_participation_e8s())
                 .expect("participant_total_icp_e8s must be greater than 0");
-
         // Keep track of SNS tokens sold just to check that the amount
         // is correct at the end.
         let mut total_sns_tokens_sold_e8s: u64 = 0;
@@ -987,20 +996,17 @@ impl Swap {
                     total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
             }
         }
-        assert!(total_sns_tokens_sold_e8s <= params.sns_token_e8s);
+        assert!(total_sns_tokens_sold_e8s <= sns_being_offered_e8s);
         log!(
             INFO,
-            "Token swap committed; {} direct investors and {} community fund investors receive a total of {} out of {} (change {});",
+            "SNS Neuron Recipes Created; {} direct investors and {} community fund investors receive a total of {} out of {} (change {});",
 		    self.buyers.len(),
 		    self.cf_participants.len(),
 		    total_sns_tokens_sold_e8s,
-		    params.sns_token_e8s,
-		    params.sns_token_e8s - total_sns_tokens_sold_e8s
+		    sns_being_offered_e8s,
+		    sns_being_offered_e8s - total_sns_tokens_sold_e8s
         );
-        self.neuron_recipes = neurons;
-        self.set_lifecycle(Lifecycle::Committed);
-
-        true
+        Ok(neurons)
     }
 
     /// Tries to transition the Swap Lifecycle to `Lifecycle::Aborted`.  
