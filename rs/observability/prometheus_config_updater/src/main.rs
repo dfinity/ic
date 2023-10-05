@@ -35,7 +35,7 @@ pub struct JobParameters {
 fn main() -> Result<()> {
     let cli_args = CliArgs::parse().validate()?;
     let public_key = cli_args.public_key.map(|pk: String| {
-        let decoded = base64::decode(&pk).unwrap();
+        let decoded = base64::decode(pk).unwrap();
 
         parse_threshold_sig_key_from_der(&decoded)
             .map_err(|e| anyhow::format_err!("Failed to get nns_public_key: {}", e))

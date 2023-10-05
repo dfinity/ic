@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.31"
-base64 = "0.11"
+base64 = { workspace = true }
 clap = { version = "3.1.6", features = ["derive"] }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }

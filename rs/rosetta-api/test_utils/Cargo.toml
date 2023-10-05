@@ -5,7 +5,7 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
 [dependencies]
-base64 = "0.11"
+base64 = { workspace = true }
 hex = "0.4.2"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-rosetta-api = { path = "../" }

@@ -387,6 +387,7 @@ jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 pprof = { git = "https://github.com/tikv/pprof-rs", rev = "059d3c80395c74e9f82ca1f9cbb3c013acfffb75" }
 
 [workspace.dependencies]
+base64 = { version = "0.13.1" }
 bytes = "1.5.0"
 candid = { version = "0.9.5", features = ["parser"] }
 ciborium = "0.2.1"

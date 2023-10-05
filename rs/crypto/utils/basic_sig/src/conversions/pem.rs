@@ -79,7 +79,7 @@ pub fn pem_to_der(pem: &str, label: &str) -> io::Result<Vec<u8>> {
         )));
     }
 
-    base64::decode(&lines[start_line_index + 1..end_line_index].join(""))
+    base64::decode(lines[start_line_index + 1..end_line_index].join(""))
         .map_err(|err| invalid_data_err(format!("failed to decode base64: {}", err)))
 }
 

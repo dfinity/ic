@@ -202,7 +202,7 @@ impl std::fmt::Debug for CspSignature {
             Ed25519(data) => write!(f, "CspSignature::Ed25519({:?})", data),
             MultiBls12_381(data) => write!(f, "CspSignature::MultiBls12_381({:?})", data),
             ThresBls12_381(data) => write!(f, "CspSignature::ThresBls12_381({:?})", data),
-            RsaSha256(data) => write!(f, "CspSignature::RsaSha256({:?})", base64::encode(&data)),
+            RsaSha256(data) => write!(f, "CspSignature::RsaSha256({:?})", base64::encode(data)),
         }
     }
 }

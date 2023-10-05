@@ -36,7 +36,7 @@ pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey>
         ));
     }
 
-    let decoded = base64::decode(&lines[1..n - 1].join(""))
+    let decoded = base64::decode(lines[1..n - 1].join(""))
         .map_err(|err| invalid_data_err(format!("failed to decode base64: {}", err)))?;
 
     parse_threshold_sig_key_from_der(&decoded)

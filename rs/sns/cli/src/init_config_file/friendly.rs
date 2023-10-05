@@ -311,7 +311,7 @@ fn parse_image_path(
             image_path, err,
         )
     })?;
-    let image_content = base64::encode(&image_content);
+    let image_content = base64::encode(image_content);
     let base64_encoding = Some(format!("data:image/png;base64,{}", image_content));
     Ok(nervous_system_pb::Image { base64_encoding })
 }

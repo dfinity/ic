@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-base64 = "0.11.0"
+base64 = { workspace = true }
 hex = "0.4.2"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type"}
 ic-crypto-internal-types = { path = "../../types" }

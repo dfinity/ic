@@ -842,12 +842,6 @@ checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
 
 [[package]]
 name = "base64"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
-
-[[package]]
-name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
@@ -5607,7 +5601,7 @@ dependencies = [
 name = "ic-config"
 version = "0.8.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "ic-base-types",
  "ic-protobuf",
  "ic-registry-subnet-type",
@@ -5974,7 +5968,7 @@ name = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -5996,7 +5990,7 @@ name = "ic-crypto-internal-basic-sig-ecdsa-secp256r1"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -6019,7 +6013,7 @@ name = "ic-crypto-internal-basic-sig-ed25519"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "curve25519-dalek",
  "ed25519-consensus",
  "hex",
@@ -6049,7 +6043,7 @@ name = "ic-crypto-internal-basic-sig-iccsa"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "ic-certification 0.8.0",
  "ic-certification-test-utils",
@@ -6141,7 +6135,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "base64 0.11.0",
+ "base64 0.13.1",
  "chrono",
  "hex",
  "ic-adapter-metrics",
@@ -6290,7 +6284,7 @@ dependencies = [
 name = "ic-crypto-internal-multi-sig-bls12381"
 version = "0.8.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-test-vectors",
@@ -6332,7 +6326,7 @@ dependencies = [
 name = "ic-crypto-internal-test-vectors"
 version = "0.8.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "strum 0.23.0",
  "strum_macros 0.23.1",
@@ -6342,7 +6336,7 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-bls12381"
 version = "0.8.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "cached",
  "criterion",
  "hex",
@@ -6912,7 +6906,7 @@ name = "ic-crypto-utils-basic-sig"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "ed25519-consensus",
  "hex",
  "ic-base-types",
@@ -6927,7 +6921,7 @@ dependencies = [
 name = "ic-crypto-utils-threshold-sig"
 version = "0.8.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
@@ -6938,7 +6932,7 @@ dependencies = [
 name = "ic-crypto-utils-threshold-sig-der"
 version = "0.8.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "ic-crypto-internal-threshold-sig-bls12381-der",
  "ic-crypto-internal-types",
@@ -9100,7 +9094,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "chrono",
  "clap 3.2.23",
  "fs_extra",
@@ -9264,7 +9258,7 @@ name = "ic-regedit"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "base64 0.11.0",
+ "base64 0.13.1",
  "clap 3.2.23",
  "ic-base-types",
  "ic-crypto",
@@ -9598,7 +9592,7 @@ name = "ic-replica"
 version = "0.8.0"
 dependencies = [
  "assert_cmd",
- "base64 0.11.0",
+ "base64 0.13.1",
  "canister-test",
  "clap 3.2.23",
  "criterion",
@@ -9912,7 +9906,7 @@ dependencies = [
 name = "ic-rosetta-test-utils"
 version = "0.8.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "ic-canister-client-sender",
  "ic-rosetta-api",
@@ -9967,7 +9961,7 @@ name = "ic-sns-cli"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "base64 0.11.0",
+ "base64 0.13.1",
  "candid",
  "clap 3.2.23",
  "hex",
@@ -10071,7 +10065,7 @@ dependencies = [
 name = "ic-sns-init"
 version = "0.1.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "candid",
  "ic-base-types",
  "ic-icrc1-index",
@@ -10550,7 +10544,7 @@ name = "ic-state-sync-manager"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.11.0",
+ "base64 0.13.1",
  "bytes",
  "futures",
  "ic-async-utils",
@@ -10991,7 +10985,7 @@ name = "ic-types"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "bincode",
  "candid",
  "chrono",
@@ -11109,7 +11103,7 @@ name = "ic-validator"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "base64 0.11.0",
+ "base64 0.13.1",
  "hex",
  "ic-constants",
  "ic-crypto-interfaces-sig-verification",
@@ -11499,7 +11493,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "base64 0.11.0",
+ "base64 0.13.1",
  "bytes",
  "candid",
  "clap 4.4.5",
@@ -11974,7 +11968,7 @@ dependencies = [
 name = "kv_store"
 version = "0.1.0"
 dependencies = [
- "base64 0.11.0",
+ "base64 0.13.1",
  "candid",
  "flate2",
  "ic-cdk",
@@ -13966,7 +13960,7 @@ name = "pocket-ic"
 version = "0.0.1"
 dependencies = [
  "async-trait",
- "base64 0.11.0",
+ "base64 0.13.1",
  "candid",
  "flate2",
  "hex",
@@ -13982,7 +13976,7 @@ name = "pocket-ic-server"
 version = "0.0.1"
 dependencies = [
  "axum",
- "base64 0.11.0",
+ "base64 0.13.1",
  "candid",
  "clap 3.2.23",
  "flate2",
@@ -14353,7 +14347,7 @@ name = "prometheus_config_updater"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.11.0",
+ "base64 0.13.1",
  "clap 3.2.23",
  "config_writer_common",
  "crossbeam",
@@ -16925,7 +16919,7 @@ dependencies = [
  "assert_matches",
  "async-recursion",
  "async-trait",
- "base64 0.11.0",
+ "base64 0.13.1",
  "bincode",
  "bitcoincore-rpc",
  "candid",

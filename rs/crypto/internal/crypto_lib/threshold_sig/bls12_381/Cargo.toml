@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-base64 = "0.11.0"
+base64 = { workspace = true }
 hex = "0.4"
 cached = { version = "0.41", default-features = false }
 parking_lot = "0.12.1"
