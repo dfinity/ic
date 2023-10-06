@@ -154,6 +154,9 @@ system_test(
             "//rs/sns/cli:sns",
             "//rs/tests:recovery/binaries",
             "//rs/tests/nns:secret_key.pem",
+            "@dfx",
+            "@idl2json",
+            "@sns_quill//:sns-quill",
         ],
     deps = [
         "//rs/tests",
