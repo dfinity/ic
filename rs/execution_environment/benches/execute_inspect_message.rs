@@ -5,8 +5,9 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::execution::inspect_message;
 
-use ic_execution_environment::ExecutionEnvironment;
+use ic_execution_environment::{ExecutionEnvironment, IngressFilterMetrics};
 use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 
@@ -66,6 +67,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 &network_topology,
                 &no_op_logger(),
                 exec_env.state_changes_error(),
+                &IngressFilterMetrics::new(&MetricsRegistry::new()),
             );
             assert_eq!(result, Ok(()), "Error executing inspect message method");
             assert_eq!(

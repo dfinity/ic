@@ -42,6 +42,7 @@ use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
+pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
 use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
 pub use scheduler::RoundSchedule;
@@ -170,6 +171,7 @@ impl ExecutionServices {
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
+            metrics_registry,
         );
         let anonymous_query_handler = AnonymousQueryHandler::new_service(
             query_scheduler,

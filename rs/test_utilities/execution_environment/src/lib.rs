@@ -16,8 +16,8 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     execute_canister, init_query_stats, CompilationCostHandling, ExecuteMessageResult,
-    ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+    ExecutionEnvironment, Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl,
+    InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
@@ -1429,6 +1429,7 @@ impl ExecutionTest {
             &ProvisionalWhitelist::new_empty(),
             ingress.content(),
             ExecutionMode::NonReplicated,
+            &IngressFilterMetrics::new(&MetricsRegistry::new()),
         )
     }
 

@@ -1,5 +1,5 @@
 use crate::query_handler::QueryScheduler;
-use crate::ExecutionEnvironment;
+use crate::{metrics::IngressFilterMetrics, ExecutionEnvironment, MetricsRegistry};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
 use ic_interfaces_state_manager::StateReader;
@@ -19,6 +19,7 @@ pub(crate) struct IngressFilter {
     exec_env: Arc<ExecutionEnvironment>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_scheduler: QueryScheduler,
+    metrics: Arc<IngressFilterMetrics>,
 }
 
 impl IngressFilter {
@@ -26,11 +27,13 @@ impl IngressFilter {
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
+        metrics_registry: &MetricsRegistry,
     ) -> IngressFilterService {
         BoxCloneService::new(Self {
             exec_env,
             state_reader,
             query_scheduler,
+            metrics: IngressFilterMetrics::new(metrics_registry).into(),
         })
     }
 }
@@ -51,6 +54,7 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
     ) -> Self::Future {
         let exec_env = Arc::clone(&self.exec_env);
         let state_reader = Arc::clone(&self.state_reader);
+        let metrics = Arc::clone(&self.metrics);
         let (tx, rx) = oneshot::channel();
         let canister_id = ingress.canister_id();
         self.query_scheduler.push(canister_id, move || {
@@ -62,6 +66,7 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
                     &provisional_whitelist,
                     &ingress,
                     ExecutionMode::NonReplicated,
+                    &metrics,
                 );
                 let _ = tx.send(Ok(v));
             }
