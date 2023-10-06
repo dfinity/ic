@@ -1177,7 +1177,7 @@ fn write_sh_lib(
     let sns_quill =
         fs::canonicalize(env.get_dependency_path("external/sns_quill/sns-quill")).unwrap();
     let idl2json = fs::canonicalize(env.get_dependency_path("external/idl2json/idl2json")).unwrap();
-    let dfx_home = fs::canonicalize(env.base_path());
+    let dfx_home = fs::canonicalize(env.base_path()).unwrap();
     fs::write(
         set_testnet_env_vars_sh_path.clone(),
         format!(
