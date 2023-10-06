@@ -1043,6 +1043,73 @@ pub enum ConsensusMessageHash {
     CatchUpPackageShare(CryptoHashOf<CatchUpPackageShare>),
 }
 
+impl From<&ConsensusMessageHash> for pb::ConsensusMessageHash {
+    fn from(value: &ConsensusMessageHash) -> Self {
+        use pb::consensus_message_hash::Kind;
+        let kind = match value.clone() {
+            ConsensusMessageHash::RandomBeacon(x) => Kind::RandomBeacon(x.get().0),
+            ConsensusMessageHash::Finalization(x) => Kind::Finalization(x.get().0),
+            ConsensusMessageHash::Notarization(x) => Kind::Notarization(x.get().0),
+            ConsensusMessageHash::BlockProposal(x) => Kind::BlockProposal(x.get().0),
+            ConsensusMessageHash::RandomBeaconShare(x) => Kind::RandomBeaconShare(x.get().0),
+            ConsensusMessageHash::NotarizationShare(x) => Kind::NotarizationShare(x.get().0),
+            ConsensusMessageHash::FinalizationShare(x) => Kind::FinalizationShare(x.get().0),
+            ConsensusMessageHash::RandomTape(x) => Kind::RandomTape(x.get().0),
+            ConsensusMessageHash::RandomTapeShare(x) => Kind::RandomTapeShare(x.get().0),
+            ConsensusMessageHash::CatchUpPackage(x) => Kind::CatchUpPackage(x.get().0),
+            ConsensusMessageHash::CatchUpPackageShare(x) => Kind::CatchUpPackageShare(x.get().0),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::ConsensusMessageHash) -> Result<Self, Self::Error> {
+        use pb::consensus_message_hash::Kind;
+        let kind = value
+            .kind
+            .clone()
+            .ok_or_else(|| ProxyDecodeError::MissingField("ConsensusMessageHash::kind"))?;
+
+        Ok(match kind {
+            Kind::RandomBeacon(x) => {
+                ConsensusMessageHash::RandomBeacon(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::Finalization(x) => {
+                ConsensusMessageHash::Finalization(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::Notarization(x) => {
+                ConsensusMessageHash::Notarization(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::BlockProposal(x) => {
+                ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::RandomBeaconShare(x) => {
+                ConsensusMessageHash::RandomBeaconShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::NotarizationShare(x) => {
+                ConsensusMessageHash::NotarizationShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::FinalizationShare(x) => {
+                ConsensusMessageHash::FinalizationShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::RandomTape(x) => {
+                ConsensusMessageHash::RandomTape(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::RandomTapeShare(x) => {
+                ConsensusMessageHash::RandomTapeShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::CatchUpPackage(x) => {
+                ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::CatchUpPackageShare(x) => {
+                ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+        })
+    }
+}
+
 /// ConsensusMessageAttribute has the same variants as [ConsensusMessage], but
 /// contains only the attributes for each variant. The attributes are the values
 /// that are used in the p2p layer to determine whether an artifact is
@@ -1090,8 +1157,8 @@ impl From<&ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
             ConsensusMessageAttribute::FinalizationShare(h) => Kind::FinalizationShare(h.get()),
             ConsensusMessageAttribute::RandomTape(h) => Kind::RandomTape(h.get()),
             ConsensusMessageAttribute::RandomTapeShare(h) => Kind::RandomTapeShare(h.get()),
-            ConsensusMessageAttribute::CatchUpPackage(h) => Kind::Cup(h.get()),
-            ConsensusMessageAttribute::CatchUpPackageShare(h) => Kind::CupShare(h.get()),
+            ConsensusMessageAttribute::CatchUpPackage(h) => Kind::CatchUpPackage(h.get()),
+            ConsensusMessageAttribute::CatchUpPackageShare(h) => Kind::CatchUpPackageShare(h.get()),
         };
         Self { kind: Some(kind) }
     }
@@ -1122,8 +1189,8 @@ impl TryFrom<&pb::ConsensusMessageAttribute> for ConsensusMessageAttribute {
             Kind::FinalizationShare(x) => Self::FinalizationShare(Height::new(x)),
             Kind::RandomTape(x) => Self::RandomTape(Height::new(x)),
             Kind::RandomTapeShare(x) => Self::RandomTapeShare(Height::new(x)),
-            Kind::Cup(x) => Self::CatchUpPackage(Height::new(x)),
-            Kind::CupShare(x) => Self::CatchUpPackageShare(Height::new(x)),
+            Kind::CatchUpPackage(x) => Self::CatchUpPackage(Height::new(x)),
+            Kind::CatchUpPackageShare(x) => Self::CatchUpPackageShare(Height::new(x)),
         })
     }
 }

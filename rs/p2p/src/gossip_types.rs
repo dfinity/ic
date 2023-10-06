@@ -1,5 +1,4 @@
 use crate::{P2PError, P2PErrorCode, P2PResult};
-use bincode::{deserialize, serialize};
 use ic_interfaces_transport::TransportChannelId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
 use ic_protobuf::types::v1 as pb;
@@ -108,9 +107,7 @@ impl From<GossipChunkRequest> for pb::GossipChunkRequest {
     /// equivalent.
     fn from(gossip_chunk_request: GossipChunkRequest) -> Self {
         Self {
-            artifact_id: serialize(&gossip_chunk_request.artifact_id)
-                .expect("Local value serialization should succeed"),
-
+            artifact_id: Some((&gossip_chunk_request.artifact_id).into()),
             chunk_id: gossip_chunk_request.chunk_id.get(),
             integrity_hash: gossip_chunk_request.integrity_hash.0,
         }
@@ -124,7 +121,10 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
     /// GossipChunkRequest.
     fn try_from(gossip_chunk_request: pb::GossipChunkRequest) -> Result<Self, Self::Error> {
         Ok(Self {
-            artifact_id: deserialize(&gossip_chunk_request.artifact_id)?,
+            artifact_id: try_from_option_field(
+                gossip_chunk_request.artifact_id.as_ref(),
+                "GossipChunkRequest",
+            )?,
             chunk_id: ChunkId::from(gossip_chunk_request.chunk_id),
             integrity_hash: CryptoHash(gossip_chunk_request.integrity_hash),
         })

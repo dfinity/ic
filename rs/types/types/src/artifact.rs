@@ -31,9 +31,9 @@ use crate::{
 use derive_more::{AsMut, AsRef, From, TryInto};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::{v1 as pb, v1::artifact::Kind};
+use ic_protobuf::{p2p::v1 as p2p_pb, proxy::try_from_option_field};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
@@ -110,6 +110,47 @@ pub enum ArtifactId {
     EcdsaMessage(EcdsaMessageId),
     FileTreeSync(FileTreeSyncId),
     StateSync(StateSyncArtifactId),
+}
+
+impl From<&ArtifactId> for pb::ArtifactId {
+    fn from(value: &ArtifactId) -> Self {
+        use pb::artifact_id::Kind;
+        let kind = match value {
+            ArtifactId::ConsensusMessage(x) => Kind::Consensus(x.into()),
+            ArtifactId::IngressMessage(x) => Kind::Ingress(x.into()),
+            ArtifactId::DkgMessage(x) => Kind::DkgMessage(x.clone().get().0),
+            ArtifactId::CertificationMessage(x) => Kind::Certification(x.into()),
+            ArtifactId::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
+            ArtifactId::CanisterHttpMessage(x) => Kind::CanisterHttp(x.clone().get().0),
+            ArtifactId::FileTreeSync(x) => Kind::FileTreeSync(x.clone()),
+            ArtifactId::StateSync(x) => Kind::StateSync(x.clone().into()),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::ArtifactId> for ArtifactId {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::ArtifactId) -> Result<Self, Self::Error> {
+        use pb::artifact_id::Kind;
+        let kind = value
+            .kind
+            .as_ref()
+            .ok_or_else(|| ProxyDecodeError::MissingField("ArtifactId::kind"))?;
+
+        Ok(match kind {
+            Kind::Consensus(x) => ArtifactId::ConsensusMessage(x.try_into()?),
+            Kind::Ingress(x) => ArtifactId::IngressMessage(x.try_into()?),
+            Kind::DkgMessage(x) => ArtifactId::DkgMessage(DkgMessageId::new(CryptoHash(x.clone()))),
+            Kind::Certification(x) => ArtifactId::CertificationMessage(x.try_into()?),
+            Kind::Ecdsa(x) => ArtifactId::EcdsaMessage(x.try_into()?),
+            Kind::CanisterHttp(x) => {
+                ArtifactId::CanisterHttpMessage(CanisterHttpResponseId::new(CryptoHash(x.clone())))
+            }
+            Kind::FileTreeSync(x) => ArtifactId::FileTreeSync(x.clone()),
+            Kind::StateSync(x) => ArtifactId::StateSync(x.clone().into()),
+        })
+    }
 }
 
 /// Artifact tags is used to select an artifact subtype when we do not have
@@ -319,6 +360,25 @@ pub struct ConsensusMessageId {
     pub height: Height,
 }
 
+impl From<&ConsensusMessageId> for pb::ConsensusMessageId {
+    fn from(value: &ConsensusMessageId) -> Self {
+        Self {
+            hash: Some(pb::ConsensusMessageHash::from(&value.hash)),
+            height: value.height.get(),
+        }
+    }
+}
+
+impl TryFrom<&pb::ConsensusMessageId> for ConsensusMessageId {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::ConsensusMessageId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: try_from_option_field(value.hash.as_ref(), "ConsensusMessageId::hash")?,
+            height: Height::new(value.height),
+        })
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Ingress artifacts
 
@@ -365,6 +425,25 @@ impl From<&IngressMessageId> for MessageId {
     }
 }
 
+impl From<&IngressMessageId> for pb::IngressMessageId {
+    fn from(value: &IngressMessageId) -> Self {
+        Self {
+            expiry: value.expiry.as_nanos_since_unix_epoch(),
+            message_id: value.message_id.as_bytes().to_vec(),
+        }
+    }
+}
+
+impl TryFrom<&pb::IngressMessageId> for IngressMessageId {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::IngressMessageId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            expiry: Time::from_nanos_since_unix_epoch(value.expiry),
+            message_id: value.message_id.as_slice().try_into()?,
+        })
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Certification artifacts
 
@@ -374,6 +453,25 @@ impl From<&IngressMessageId> for MessageId {
 pub struct CertificationMessageId {
     pub hash: CertificationMessageHash,
     pub height: Height,
+}
+
+impl From<&CertificationMessageId> for pb::CertificationMessageId {
+    fn from(value: &CertificationMessageId) -> Self {
+        Self {
+            hash: Some(pb::CertificationMessageHash::from(&value.hash)),
+            height: value.height.get(),
+        }
+    }
+}
+
+impl TryFrom<&pb::CertificationMessageId> for CertificationMessageId {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::CertificationMessageId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: try_from_option_field(value.hash.as_ref(), "CertificationMessageId::hash")?,
+            height: Height::new(value.height),
+        })
+    }
 }
 
 // -----------------------------------------------------------------------------

@@ -3,6 +3,7 @@ syntax = "proto3";
 package types.v1;
 
 import "google/protobuf/empty.proto";
+import "p2p/v1/state_sync_manager.proto";
 import "registry/subnet/v1/subnet.proto";
 import "types/v1/ecdsa.proto";
 
@@ -27,8 +28,8 @@ message ConsensusMessageAttribute {
     uint64 finalization_share = 7;
     uint64 random_tape = 8;
     uint64 random_tape_share = 9;
-    uint64 cup = 10;
-    uint64 cup_share = 11;
+    uint64 catch_up_package = 10;
+    uint64 catch_up_package_share = 11;
   }
 }
 
@@ -65,4 +66,55 @@ message CanisterHttpResponseAttribute {
   uint64 registry_version = 1;
   uint64 id = 2;
   bytes hash = 3; // cryptographic hash of [`CanisterHttpResponse`]
+}
+
+message ArtifactId {
+  oneof kind {
+    ConsensusMessageId consensus = 1;
+    IngressMessageId ingress = 2;
+    CertificationMessageId certification = 3;
+    bytes canister_http = 4;
+    bytes dkg_message = 5;
+    types.v1.EcdsaArtifactId ecdsa = 6;
+    string file_tree_sync = 7;
+    p2p.v1.StateSyncId state_sync = 9;
+  }
+}
+
+message ConsensusMessageId {
+  ConsensusMessageHash hash = 1;
+  uint64 height = 2;
+}
+
+message ConsensusMessageHash {
+  oneof kind {
+    bytes random_beacon = 1;
+    bytes finalization = 2;
+    bytes notarization = 3;
+    bytes block_proposal = 4;
+    bytes random_beacon_share = 5;
+    bytes notarization_share = 6;
+    bytes finalization_share = 7;
+    bytes random_tape = 8;
+    bytes random_tape_share = 9;
+    bytes catch_up_package = 10;
+    bytes catch_up_package_share = 11;
+  }
+}
+
+message IngressMessageId {
+  uint64 expiry = 1;
+  bytes message_id = 2;
+}
+
+message CertificationMessageId {
+  CertificationMessageHash hash = 1;
+  uint64 height = 2;
+}
+
+message CertificationMessageHash {
+  oneof kind {
+    bytes certification = 1;
+    bytes certification_share = 2;
+  }
 }
