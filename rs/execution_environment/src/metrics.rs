@@ -8,6 +8,34 @@ use ic_types::{
 use prometheus::{Histogram, IntCounter};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
+#[derive(Clone)]
+pub struct IngressFilterMetrics {
+    pub inspect_message_duration_seconds: Histogram,
+    pub inspect_message_instructions: Histogram,
+    pub inspect_message_count: IntCounter,
+}
+
+impl IngressFilterMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            inspect_message_duration_seconds: duration_histogram(
+                "execution_inspect_message_duration_seconds",
+                "The duration of executing a canister_inspect_message.",
+                metrics_registry,
+            ),
+            inspect_message_instructions: instructions_histogram(
+                "execution_inspect_message_instructions",
+                "The number of instructions executed in a canister_inspect_message.",
+                metrics_registry,
+            ),
+            inspect_message_count: metrics_registry.int_counter(
+                "execution_inspect_message_count",
+                "The total number of executed canister_inspect_messages.",
+            ),
+        }
+    }
+}
+
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
 
 pub(crate) struct QueryHandlerMetrics {

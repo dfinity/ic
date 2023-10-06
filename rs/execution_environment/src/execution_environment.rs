@@ -14,6 +14,7 @@ use crate::{
     },
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
+    metrics::IngressFilterMetrics,
     NonReplicatedQueryKind,
 };
 use candid::Encode;
@@ -1581,6 +1582,7 @@ impl ExecutionEnvironment {
         provisional_whitelist: &ProvisionalWhitelist,
         ingress: &SignedIngressContent,
         execution_mode: ExecutionMode,
+        metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
         let canister = |canister_id: CanisterId| -> Result<&CanisterState, UserError> {
             match state.canister_state(&canister_id) {
@@ -1676,6 +1678,7 @@ impl ExecutionEnvironment {
             &state.metadata.network_topology,
             &self.log,
             &self.metrics.state_changes_error,
+            metrics,
         )
         .1
     }

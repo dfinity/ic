@@ -1,5 +1,8 @@
-use crate::execution_environment::{as_round_instructions, RoundLimits};
 use crate::Hypervisor;
+use crate::{
+    execution_environment::{as_round_instructions, RoundLimits},
+    metrics::IngressFilterMetrics,
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionComplexity, SubnetAvailableMemory};
 use ic_logger::{fatal, ReplicaLogger};
@@ -25,6 +28,7 @@ pub fn execute_inspect_message(
     network_topology: &NetworkTopology,
     logger: &ReplicaLogger,
     state_changes_error: &IntCounter,
+    metrics: &IngressFilterMetrics,
 ) -> (NumInstructions, Result<(), UserError>) {
     let canister_id = canister.canister_id();
     let memory_usage = canister.memory_usage();
@@ -65,6 +69,7 @@ pub fn execute_inspect_message(
         // Ignore compute allocation
         compute_allocation_used: 0,
     };
+    let inspect_message_timer = metrics.inspect_message_duration_seconds.start_timer();
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(
         system_api,
         time,
@@ -77,6 +82,11 @@ pub fn execute_inspect_message(
         &mut round_limits,
         state_changes_error,
     );
+    drop(inspect_message_timer);
+    metrics.inspect_message_count.inc();
+    metrics
+        .inspect_message_instructions
+        .observe((message_instruction_limit.get() - output.num_instructions_left.get()) as f64);
     match output.wasm_result {
         Ok(maybe_wasm_result) => match maybe_wasm_result {
             None => (output.num_instructions_left, Ok(())),
