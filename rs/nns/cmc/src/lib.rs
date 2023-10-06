@@ -15,6 +15,9 @@ pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;
 pub const CREATE_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 4);
 pub const TOP_UP_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 2);
 
+/// Cycles penalty charged for sending bad requests that incur a lot of work.
+pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revisit fair pricing. Currently costs significantly more than an update call
+
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub enum ExchangeRateCanister {
     /// Enables the exchange rate canister with the given canister ID.
@@ -71,6 +74,26 @@ pub enum NotifyError {
     Other {
         error_code: u64,
         error_message: String,
+    },
+}
+
+/// Argument taken by create_canister endpoint
+#[derive(Default, Debug, Clone, CandidType, Deserialize, PartialEq, Eq)]
+pub struct CreateCanister {
+    pub subnet_type: Option<String>,
+    pub settings: Option<CanisterSettingsArgs>,
+}
+
+/// Error for create_canister endpoint
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum CreateCanisterError {
+    Refunded {
+        refund_amount: u128,
+        create_error: String,
+    },
+    RefundFailed {
+        create_error: String,
+        refund_error: String,
     },
 }
 
