@@ -226,6 +226,7 @@ where
                     }
                     table.arrival_queue.insert((now, key.clone()));
                     allowance.amount = amount;
+                    allowance.arrived_at = now;
                     let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
 
                     if expires_at != old_expiration {
