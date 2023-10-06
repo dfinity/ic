@@ -1,0 +1,15 @@
+[package]
+name = "guestos_tool"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "guestos_tool"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = {version = "^1"} 
+clap = {version = "^4", features = ["derive"]}
+itertools = {version = "^0.10.0"}
+regex = {version = "^1.3"}
+

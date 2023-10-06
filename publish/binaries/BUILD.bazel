@@ -6,6 +6,7 @@ LINUX_ONLY = [
     "sevctl",
     "vsock_guest",
     "vsock_host",
+    "guestos_tool",
 ]
 
 NO_STRIP = [
@@ -25,6 +26,7 @@ BINARIES = {
     "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
+    "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",

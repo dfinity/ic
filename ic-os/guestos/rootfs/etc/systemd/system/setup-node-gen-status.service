@@ -1,0 +1,11 @@
+[Unit]
+Description=Write node generation status
+After=node_exporter.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/guestos_tool set-hardware-gen-metric
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
