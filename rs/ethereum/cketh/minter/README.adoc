@@ -2,7 +2,17 @@
 
 A demonstration of the interactions described in this file is available link:https://www.youtube.com/watch?v=y_2im2V66k0[here].
 
-== Feedback
+WARNING: Please make sure to locate yourself in the right folder, if you want to interact with **ckSepoliaEth** locate yourself at: ``ic/rs/ethereum/cketh/testnet``
+
+==== What is Sepolia Testnet?
+
+link:https://moralis.io/sepolia-testnet-guide-what-is-the-sepolia-testnet/[Sepolia] is one of Ethereum's testnets.
+
+==== How do I get Seplia ETH?
+
+You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet].
+
+==== Feedback
 We would greatly appreciate any feedback you may have. Please feel free to reach out by leaving a comment in this link:https://forum.dfinity.org/t/cketh-a-canister-issued-ether-twin-token-on-the-ic/22819/1[forum post].
 
 == Deposit: SepoliaETH to ckSepoliaETH
@@ -44,6 +54,11 @@ WARNING: It's critical that the encoded IC principal is correct otherwise the fu
 
 Current sepolia helper contract address: `0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34`.
 
+You can check your ckSepliaEth balance using:
+```shell
+dfx canister --network ic call ledger icrc1_balance_of 'record {owner = principal "'"$(dfx identity get-principal)"'" }'
+```
+
 
 == Withdrawal: ckSepoliaETH to SepoliaETH
 
@@ -73,6 +88,8 @@ The first time a user wants to withdraw some ckSepoliaETH, two steps are needed:
 Note that the transaction will be made at the cost of the beneficiary meaning that the resulting received amount
 will be less than the specified withdrawal amount. 
 
+WARNING: The amount described below are expressed in *WEI*, you can use link:https://eth-converter.com/[this converter] to convert ETH to WEI.
+
 The exact fee deducted depends on the dynamic Ethereum transaction fees used at the time the transaction was created.
 Additional withdrawals could be made as long as the allowance from step 1 was not exhausted or did not time out.
 
@@ -82,10 +99,20 @@ Additional withdrawals could be made as long as the allowance from step 1 was no
 dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_WEI })"
 ```
 
+Example: If you want to approve the minter to spend 1 ETH (1_000_000_000_000_000_000 Wei)
+```shell
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000 })"
+```
+
 === Withdrawing
 
 The specified amount for the withdrawal must not be greater than the approved amount.
 
 ```shell
 dfx canister --network ic call minter withdraw_eth '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")'
+```
+
+Example: if you want to withdraw 0.15 ETH (150_000_000_000_000_000 Wei) to 0xAB586458E47f3e9D350e476fB7E294a57825A3f4:
+```shell
+dfx canister --network ic call minter withdraw_eth "(record {amount = 150_000_000_000_000_000; recipient = \"0xAB586458E47f3e9D350e476fB7E294a57825A3f4\"})"
 ```
