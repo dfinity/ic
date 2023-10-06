@@ -1233,9 +1233,9 @@ pub mod consensus_message_attribute {
         #[prost(uint64, tag = "9")]
         RandomTapeShare(u64),
         #[prost(uint64, tag = "10")]
-        Cup(u64),
+        CatchUpPackage(u64),
         #[prost(uint64, tag = "11")]
-        CupShare(u64),
+        CatchUpPackageShare(u64),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -1308,6 +1308,123 @@ pub struct CanisterHttpResponseAttribute {
     /// cryptographic hash of \[`CanisterHttpResponse`\]
     #[prost(bytes = "vec", tag = "3")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ArtifactId {
+    #[prost(oneof = "artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 9")]
+    pub kind: ::core::option::Option<artifact_id::Kind>,
+}
+/// Nested message and enum types in `ArtifactId`.
+pub mod artifact_id {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        Consensus(super::ConsensusMessageId),
+        #[prost(message, tag = "2")]
+        Ingress(super::IngressMessageId),
+        #[prost(message, tag = "3")]
+        Certification(super::CertificationMessageId),
+        #[prost(bytes, tag = "4")]
+        CanisterHttp(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "5")]
+        DkgMessage(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "6")]
+        Ecdsa(super::EcdsaArtifactId),
+        #[prost(string, tag = "7")]
+        FileTreeSync(::prost::alloc::string::String),
+        #[prost(message, tag = "9")]
+        StateSync(super::super::super::p2p::v1::StateSyncId),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageId {
+    #[prost(message, optional, tag = "1")]
+    pub hash: ::core::option::Option<ConsensusMessageHash>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageHash {
+    #[prost(
+        oneof = "consensus_message_hash::Kind",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
+    )]
+    pub kind: ::core::option::Option<consensus_message_hash::Kind>,
+}
+/// Nested message and enum types in `ConsensusMessageHash`.
+pub mod consensus_message_hash {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(bytes, tag = "1")]
+        RandomBeacon(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "2")]
+        Finalization(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "3")]
+        Notarization(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "4")]
+        BlockProposal(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "5")]
+        RandomBeaconShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "6")]
+        NotarizationShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "7")]
+        FinalizationShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "8")]
+        RandomTape(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "9")]
+        RandomTapeShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "10")]
+        CatchUpPackage(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "11")]
+        CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessageId {
+    #[prost(uint64, tag = "1")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "2")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageId {
+    #[prost(message, optional, tag = "1")]
+    pub hash: ::core::option::Option<CertificationMessageHash>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageHash {
+    #[prost(oneof = "certification_message_hash::Kind", tags = "1, 2")]
+    pub kind: ::core::option::Option<certification_message_hash::Kind>,
+}
+/// Nested message and enum types in `CertificationMessageHash`.
+pub mod certification_message_hash {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(bytes, tag = "1")]
+        Certification(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "2")]
+        CertificationShare(::prost::alloc::vec::Vec<u8>),
+    }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1478,8 +1595,8 @@ pub struct GossipAdvert {
     pub attribute: ::core::option::Option<ArtifactAttribute>,
     #[prost(uint64, tag = "2")]
     pub size: u64,
-    #[prost(bytes = "vec", tag = "3")]
-    pub artifact_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "6")]
+    pub artifact_id: ::core::option::Option<ArtifactId>,
     #[prost(bytes = "vec", tag = "4")]
     pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1487,8 +1604,8 @@ pub struct GossipAdvert {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GossipChunkRequest {
-    #[prost(bytes = "vec", tag = "1")]
-    pub artifact_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "4")]
+    pub artifact_id: ::core::option::Option<ArtifactId>,
     #[prost(uint32, tag = "2")]
     pub chunk_id: u32,
     #[prost(bytes = "vec", tag = "3")]

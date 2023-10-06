@@ -5,7 +5,7 @@ use crate::{
         Committee, CountBytes, HasCommittee, HasHeight, IsShare, ThresholdSignature,
         ThresholdSignatureShare,
     },
-    crypto::{CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
+    crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
     CryptoHashOfPartialState, Height,
 };
 #[cfg(test)]
@@ -113,6 +113,37 @@ pub enum CertificationMessageHash {
     /// CertificationShare captures the hash of a share of a certification
     /// created by a single replica
     CertificationShare(CryptoHashOf<CertificationShare>),
+}
+
+impl From<&CertificationMessageHash> for pb::CertificationMessageHash {
+    fn from(value: &CertificationMessageHash) -> Self {
+        use pb::certification_message_hash::Kind;
+        let kind = match value.clone() {
+            CertificationMessageHash::Certification(x) => Kind::Certification(x.get().0),
+            CertificationMessageHash::CertificationShare(x) => Kind::CertificationShare(x.get().0),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::CertificationMessageHash> for CertificationMessageHash {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::CertificationMessageHash) -> Result<Self, Self::Error> {
+        use pb::certification_message_hash::Kind;
+        let kind = value
+            .kind
+            .clone()
+            .ok_or_else(|| ProxyDecodeError::MissingField("CertificationMessageHash::kind"))?;
+
+        Ok(match kind {
+            Kind::Certification(x) => {
+                CertificationMessageHash::Certification(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::CertificationShare(x) => {
+                CertificationMessageHash::CertificationShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+        })
+    }
 }
 
 /// CertificationContent holds the data signed by certification

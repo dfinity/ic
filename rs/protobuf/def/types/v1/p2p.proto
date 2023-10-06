@@ -21,15 +21,16 @@ message GossipMessage {
 message GossipAdvert {
   types.v1.ArtifactAttribute attribute = 5;
   uint64 size = 2;
-  bytes artifact_id = 3;
+  types.v1.ArtifactId artifact_id = 6;
   bytes integrity_hash = 4;
-  reserved 1;
+  reserved 1, 3;
 }
 
 message GossipChunkRequest {
-  bytes artifact_id = 1;
+  types.v1.ArtifactId artifact_id = 4;
   uint32 chunk_id = 2;
   bytes integrity_hash = 3;
+  reserved 1;
 }
 
 message GossipChunk {
