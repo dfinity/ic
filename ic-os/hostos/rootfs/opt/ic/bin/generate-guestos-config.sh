@@ -141,7 +141,7 @@ TMP_MOUNT_DIR="/tmp/sev-guest-mount"
 BOOT_COMPONENTS_DIR="/tmp/sev-guest-boot-components"
 LOOP_DEVICE="/dev/loop0"
 GUESTOS_LOCATION="/dev/mapper/hostlvm-guestos"
-SEV_SNP_FILE="/var/run/SEV"
+SEV_SNP_FILE="/opt/ic/share/SEV"
 
 # Set up loop device and mount. Get the boot components
 mount_guestos_image_and_copy_files() {
