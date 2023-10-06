@@ -59,6 +59,10 @@ const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
 
+/// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
+/// This is the minimum amount needed for creating a canister as of October 2023.
+const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
+
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::new(None);
 }
@@ -1008,6 +1012,11 @@ fn notify_create_canister_() {
     over_async(candid_one, notify_create_canister)
 }
 
+#[export_name = "canister_update create_canister"]
+fn create_canister_() {
+    over_async(candid_one, create_canister)
+}
+
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1144,6 +1153,43 @@ async fn notify_create_canister(
             });
 
             result
+        }
+    }
+}
+
+#[candid_method(update, rename = "create_canister")]
+async fn create_canister(
+    CreateCanister {
+        settings,
+        subnet_type,
+    }: CreateCanister,
+) -> Result<CanisterId, CreateCanisterError> {
+    let cycles = dfn_core::api::msg_cycles_available();
+    if cycles < CREATE_CANISTER_MIN_CYCLES {
+        return Err(CreateCanisterError::Refunded {
+            refund_amount: cycles.into(),
+            create_error: "Insufficient cycles attached.".to_string(),
+        });
+    }
+
+    // will always succeed because only calls from canisters can have cycles attached
+    let calling_canister = caller().try_into().unwrap();
+
+    dfn_core::api::msg_cycles_accept(cycles);
+    match do_create_canister(caller(), cycles.into(), subnet_type, settings, false).await {
+        Ok(canister_id) => Ok(canister_id),
+        Err(create_error) => {
+            let refund_amount = cycles.saturating_sub(BAD_REQUEST_CYCLES_PENALTY as u64);
+            match deposit_cycles(calling_canister, refund_amount.into(), false).await {
+                Ok(()) => Err(CreateCanisterError::Refunded {
+                    refund_amount: refund_amount.into(),
+                    create_error,
+                }),
+                Err(refund_error) => Err(CreateCanisterError::RefundFailed {
+                    create_error,
+                    refund_error,
+                }),
+            }
         }
     }
 }
@@ -1411,13 +1457,13 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match create_canister(controller, cycles, subnet_type, settings).await {
+    match do_create_canister(controller, cycles, subnet_type, settings, true).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
         }
         Err(err) => {
-            let refund_block = refund(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            let refund_block = refund_icp(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err,
                 block_index: refund_block,
@@ -1440,13 +1486,13 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles).await {
+    match deposit_cycles(canister_id, cycles, true).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
         }
         Err(err) => {
-            let refund_block = refund(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
+            let refund_block = refund_icp(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err.to_string(),
                 block_index: refund_block,
@@ -1500,7 +1546,7 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
 /// minus the transaction fee (which is gone) and the fee for the
 /// action (which is burned). Returns the index of the block in which
 /// the refund was done.
-async fn refund(
+async fn refund_icp(
     from_subaccount: Subaccount,
     to: AccountIdentifier,
     amount: Tokens,
@@ -1556,8 +1602,14 @@ async fn refund(
     Ok(refund_block_index)
 }
 
-async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), String> {
-    ensure_balance(cycles)?;
+async fn deposit_cycles(
+    canister_id: CanisterId,
+    cycles: Cycles,
+    mint_cycles: bool,
+) -> Result<(), String> {
+    if mint_cycles {
+        ensure_balance(cycles)?;
+    }
 
     let res: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds_and_cleanup(
         IC_00,
@@ -1579,11 +1631,12 @@ async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), S
     Ok(())
 }
 
-async fn create_canister(
+async fn do_create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
     subnet_type: Option<String>,
     settings: Option<CanisterSettingsArgs>,
+    mint_cycles: bool,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -1617,7 +1670,7 @@ async fn create_canister(
 
     let mut last_err = None;
 
-    if !subnets.is_empty() {
+    if mint_cycles && !subnets.is_empty() {
         // TODO(NNS1-503): If CreateCanister fails, then we still have minted
         // these cycles.
         ensure_balance(cycles)?;
