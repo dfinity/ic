@@ -23,12 +23,13 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use prometheus::{labels, Registry};
+use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
 use tracing::info;
 
 #[cfg(feature = "tls")]
-use {axum::handler::Handler, instant_acme::LetsEncrypt, tokio::sync::RwLock};
+use {axum::handler::Handler, instant_acme::LetsEncrypt};
 
 use crate::{
     cache::{cache_middleware, Cache},
@@ -42,8 +43,8 @@ use crate::{
     http::ReqwestClient,
     management,
     metrics::{
-        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, WithMetrics,
-        HTTP_DURATION_BUCKETS,
+        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricsCache, MetricsRunner,
+        WithMetrics, HTTP_DURATION_BUCKETS,
     },
     nns::{Load, Loader},
     persist,
@@ -74,7 +75,7 @@ const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
 const MAX_REQUEST_BODY_SIZE: usize = 2 * MB;
-
+const METRICS_CACHE_CAPACITY: usize = 30 * MB;
 const MANAGEMENT_CANISTER_ID: &str = "aaaaa-aa";
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
@@ -85,19 +86,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             "service".into() => SERVICE_NAME.into(),
         }),
     )?;
-
-    let metrics_router = Router::new()
-        .route("/metrics", get(metrics::metrics_handler))
-        .layer(
-            CompressionLayer::new()
-                .gzip(true)
-                .br(true)
-                .zstd(true)
-                .deflate(true),
-        )
-        .with_state(metrics::MetricsHandlerArgs {
-            registry: registry.clone(),
-        });
 
     info!(
         msg = format!("Starting {SERVICE_NAME}"),
@@ -342,6 +330,27 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .serve(routers_https.clone().into_make_service())
         });
 
+    // Metrics
+    let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
+
+    let metrics_router = Router::new()
+        .route("/metrics", get(metrics::metrics_handler))
+        .layer(
+            CompressionLayer::new()
+                .gzip(true)
+                .br(true)
+                .zstd(true)
+                .deflate(true),
+        )
+        .with_state(metrics::MetricsHandlerArgs {
+            cache: metrics_cache.clone(),
+        });
+
+    let metrics_runner = WithThrottle(
+        MetricsRunner::new(metrics_cache, registry.clone()),
+        ThrottleParams::new(10 * SECOND),
+    );
+
     // Snapshots
     let snapshot_runner = SnapshotRunner::new(Arc::clone(&routing_table), registry_client);
     let snapshot_runner = WithMetrics(
@@ -390,6 +399,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Box::new(configuration_runner),
         Box::new(snapshot_runner),
         Box::new(check_runner),
+        Box::new(metrics_runner),
     ];
 
     TokioScope::scope_and_block(|s| {

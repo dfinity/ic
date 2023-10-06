@@ -1,27 +1,31 @@
-use std::{pin::Pin, time::Instant};
+use std::{pin::Pin, sync::Arc, time::Instant};
 
+use anyhow::Error;
+use async_trait::async_trait;
 use axum::{
     body::Body,
     extract::State,
-    http::{Request, StatusCode},
+    http::Request,
     middleware::Next,
     response::{IntoResponse, Response},
     Extension,
 };
 use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
-use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH};
+use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use http_body::Body as HttpBody;
 use ic_types::messages::ReplicaHealthStatus;
 use prometheus::{
     register_histogram_vec_with_registry, register_int_counter_vec_with_registry, Encoder,
     HistogramOpts, HistogramVec, IntCounterVec, Registry, TextEncoder,
 };
+use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
     cache::CacheStatus,
+    core::Run,
     routes::{ErrorCause, RequestContext},
     snapshot::Node,
 };
@@ -34,6 +38,9 @@ pub const HTTP_REQUEST_SIZE_BUCKETS: &[f64] =
 pub const HTTP_RESPONSE_SIZE_BUCKETS: &[f64] =
     &[1.0 * KB, 8.0 * KB, 64.0 * KB, 256.0 * KB, 512.0 * KB];
 
+// https://prometheus.io/docs/instrumenting/exposition_formats/#basic-info
+const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
+
 const LABELS_HTTP: &[&str] = &[
     "request_type",
     "status_code",
@@ -43,6 +50,51 @@ const LABELS_HTTP: &[&str] = &[
     "cache_status",
     "cache_bypass",
 ];
+
+pub struct MetricsCache {
+    buffer: Vec<u8>,
+}
+
+impl MetricsCache {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            // Preallocate a large enough vector, it'll be expanded if needed
+            buffer: Vec::with_capacity(capacity),
+        }
+    }
+}
+
+pub struct MetricsRunner {
+    cache: Arc<RwLock<MetricsCache>>,
+    registry: Registry,
+    encoder: TextEncoder,
+}
+
+// Snapshots & encodes the metrics for the handler to export
+impl MetricsRunner {
+    pub fn new(cache: Arc<RwLock<MetricsCache>>, registry: Registry) -> Self {
+        Self {
+            cache,
+            registry,
+            encoder: TextEncoder::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl Run for MetricsRunner {
+    async fn run(&mut self) -> Result<(), Error> {
+        // Get a snapshot of metrics
+        let metric_families = self.registry.gather();
+
+        // Take a write lock, trim the vector and encode the metrics into it
+        let mut cache = self.cache.write().await;
+        cache.buffer.clear();
+        self.encoder.encode(&metric_families, &mut cache.buffer)?;
+
+        Ok(())
+    }
+}
 
 // A wrapper for http::Body implementations that tracks the number of bytes sent
 pub struct MetricsBody<D, E> {
@@ -410,26 +462,16 @@ pub async fn metrics_middleware(
 
 #[derive(Clone)]
 pub struct MetricsHandlerArgs {
-    pub registry: Registry,
+    pub cache: Arc<RwLock<MetricsCache>>,
 }
 
+// Axum handler for /metrics endpoint
 pub async fn metrics_handler(
-    State(MetricsHandlerArgs { registry }): State<MetricsHandlerArgs>,
-) -> Response<Body> {
-    let metric_families = registry.gather();
-
-    let encoder = TextEncoder::new();
-
-    let mut metrics_text = Vec::new();
-    if encoder.encode(&metric_families, &mut metrics_text).is_err() {
-        return Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body("Internal Server Error".into())
-            .unwrap();
-    };
-
-    Response::builder()
-        .status(200)
-        .body(metrics_text.into())
-        .unwrap()
+    State(MetricsHandlerArgs { cache }): State<MetricsHandlerArgs>,
+) -> impl IntoResponse {
+    // Get a read lock and clone the buffer contents
+    (
+        [(CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
+        cache.read().await.buffer.clone(),
+    )
 }
