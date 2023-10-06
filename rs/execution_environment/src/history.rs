@@ -235,6 +235,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         MaxNumberOfCanistersReached => "Max Number of Canisters Reached",
         IngressHistoryFull => "Ingress History Full",
         CanisterInvalidController => "Canister Invalid Controller",
+        CanisterIdAlreadyExists => "Canister ID already exists",
         CanisterNotFound => "Canister Not Found",
         CanisterMethodNotFound => "Canister Method Not Found",
         CanisterFunctionNotFound => "Canister Function Not Found",

@@ -68,6 +68,7 @@ impl From<ErrorCode> for RejectCode {
             IngressMessageTimeout => SysTransient,
             CanisterQueueNotEmpty => SysTransient,
             IngressHistoryFull => SysTransient,
+            CanisterIdAlreadyExists => SysTransient,
             CanisterInvalidController => CanisterError,
             CanisterNotFound => DestinationInvalid,
             CanisterMethodNotFound => DestinationInvalid,
@@ -130,6 +131,7 @@ pub enum ErrorCode {
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
+    CanisterIdAlreadyExists = 205,
     CanisterNotFound = 301,
     CanisterMethodNotFound = 302,
     CanisterAlreadyInstalled = 303,
@@ -184,6 +186,7 @@ impl TryFrom<u64> for ErrorCode {
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
+            205 => Ok(ErrorCode::CanisterIdAlreadyExists),
             301 => Ok(ErrorCode::CanisterNotFound),
             302 => Ok(ErrorCode::CanisterMethodNotFound),
             303 => Ok(ErrorCode::CanisterAlreadyInstalled),
@@ -307,6 +310,7 @@ impl UserError {
             | ErrorCode::InsufficientMemoryAllocation
             | ErrorCode::InsufficientCyclesForCreateCanister
             | ErrorCode::SubnetNotFound
+            | ErrorCode::CanisterIdAlreadyExists
             | ErrorCode::CanisterNotHostedBySubnet
             | ErrorCode::CanisterOutOfCycles
             | ErrorCode::CanisterTrapped
