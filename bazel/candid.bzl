@@ -19,7 +19,7 @@ echo DID_PATH={did_path}
 
     ctx.actions.write(output = ctx.outputs.executable, content = script)
 
-    files = depset(direct = [check_did, ctx.file.did])
+    files = depset(direct = [check_did, ctx.file.did, ctx.file._git])
     runfiles = ctx.runfiles(files = files.to_list())
 
     return [
@@ -39,6 +39,7 @@ _did_git_test = rule(
     attrs = {
         "did": attr.label(allow_single_file = True),
         "_check_did": CHECK_DID,
+        "_git": attr.label(allow_single_file = True, default = "//:.git"),
     },
     test = True,
 )
