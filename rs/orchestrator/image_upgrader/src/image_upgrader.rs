@@ -166,7 +166,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             let duration = start_time.elapsed();
 
             if let Err(e) = download_result {
-                info!(self.log(), "{} failed in {:?}: {:?}", req, duration, e);
+                warn!(self.log(), "{} failed in {:?}: {:?}", req, duration, e);
                 error = UpgradeError::from(e);
             } else {
                 info!(self.log(), "{} processed in {:?}", req, duration);
