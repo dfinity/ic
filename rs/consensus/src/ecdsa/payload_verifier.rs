@@ -564,7 +564,8 @@ mod test {
     use super::*;
     use crate::ecdsa::{
         payload_builder::{
-            get_signing_requests, initiate_reshare_requests, update_completed_reshare_requests,
+            get_signing_requests,
+            resharing::{initiate_reshare_requests, update_completed_reshare_requests},
             update_ongoing_signatures, update_signature_agreements,
         },
         test_utils::*,
