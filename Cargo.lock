@@ -4017,6 +4017,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "guestos_tool"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.5",
+ "itertools 0.10.5",
+ "regex",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"

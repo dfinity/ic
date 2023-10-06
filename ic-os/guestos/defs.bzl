@@ -30,6 +30,7 @@ def image_deps(mode, malicious = False):
 
             # additional files to install
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
+            "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
             "//publish/binaries:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",
