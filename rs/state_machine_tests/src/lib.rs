@@ -69,7 +69,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::batch::{EpochStatsMessages, TotalCanisterQueryStats};
+use ic_types::batch::{QueryStatsPayload, TotalQueryStats};
 pub use ic_types::canister_http::CanisterHttpRequestContext;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
@@ -1792,7 +1792,7 @@ impl StateMachine {
     /// # Panics
     ///
     /// This function panics if the specified canister does not exist.
-    pub fn query_stats(&self, canister_id: &CanisterId) -> TotalCanisterQueryStats {
+    pub fn query_stats(&self, canister_id: &CanisterId) -> TotalQueryStats {
         let state = self.state_manager.get_latest_state().take();
         state
             .canister_state(canister_id)
@@ -1806,7 +1806,7 @@ impl StateMachine {
     pub fn set_query_stats(
         &mut self,
         canister_id: &CanisterId,
-        total_query_stats: TotalCanisterQueryStats,
+        total_query_stats: TotalQueryStats,
     ) {
         let (h, mut state) = self.state_manager.take_tip();
         state
@@ -1875,7 +1875,7 @@ impl StateMachine {
             .clone()
     }
 
-    pub fn deliver_query_stats(&self, query_stats: EpochStatsMessages) -> Height {
+    pub fn deliver_query_stats(&self, query_stats: QueryStatsPayload) -> Height {
         self.execute_payload(PayloadBuilder::new().with_query_stats(Some(query_stats)))
     }
 }
@@ -1921,7 +1921,7 @@ pub struct PayloadBuilder {
     ingress_messages: Vec<SignedIngress>,
     xnet_payload: XNetPayload,
     consensus_responses: Vec<Response>,
-    query_stats: Option<EpochStatsMessages>,
+    query_stats: Option<QueryStatsPayload>,
 }
 
 impl Default for PayloadBuilder {
@@ -1961,7 +1961,7 @@ impl PayloadBuilder {
         }
     }
 
-    pub fn with_query_stats(self, query_stats: Option<EpochStatsMessages>) -> Self {
+    pub fn with_query_stats(self, query_stats: Option<QueryStatsPayload>) -> Self {
         Self {
             query_stats,
             ..self

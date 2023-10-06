@@ -45,7 +45,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     artifact_kind::IngressArtifact,
-    batch::{BatchPayload, ReceivedEpochStats, ValidationContext},
+    batch::{BatchPayload, RawQueryStats, ValidationContext},
     consensus::{
         certification::{Certification, CertificationContent},
         dkg::Dealings,
@@ -207,7 +207,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
-            ReceivedEpochStats::default(),
+            RawQueryStats::default(),
         )),
     )
 }

@@ -20,7 +20,7 @@ use ic_replicated_state::{
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
-    batch::TotalCanisterQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
+    batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
     ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation, NumInstructions,
     PrincipalId,
 };
@@ -159,7 +159,7 @@ pub struct CanisterStateBits {
     pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
-    pub total_query_stats: TotalCanisterQueryStats,
+    pub total_query_stats: TotalQueryStats,
 }
 
 #[derive(Clone)]

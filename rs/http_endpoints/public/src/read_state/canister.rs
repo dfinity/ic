@@ -392,7 +392,7 @@ mod test {
         state::insert_dummy_canister,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
-    use ic_types::batch::ReceivedEpochStats;
+    use ic_types::batch::RawQueryStats;
     use ic_validator::CanisterIdSet;
     use std::collections::BTreeMap;
 
@@ -513,7 +513,7 @@ mod test {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
-            ReceivedEpochStats::default(),
+            RawQueryStats::default(),
         );
         assert_eq!(
             verify_paths(

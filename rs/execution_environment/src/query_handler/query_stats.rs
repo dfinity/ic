@@ -5,9 +5,10 @@ use ic_interfaces::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
-    batch::{EpochStats, QueryStatsPayload, ValidationContext},
+    batch::{CanisterQueryStats, LocalQueryStats, QueryStats, ValidationContext},
     CanisterId, Height, NumBytes, NumInstructions, QueryStatsEpoch,
 };
+use std::collections::BTreeMap;
 use std::sync::{Mutex, RwLock};
 
 pub fn init_query_stats(log: ReplicaLogger) -> (QueryStatsCollector, QueryStatsPayloadBuilderImpl) {
@@ -15,7 +16,7 @@ pub fn init_query_stats(log: ReplicaLogger) -> (QueryStatsCollector, QueryStatsP
     (
         QueryStatsCollector {
             log: log.clone(),
-            current_query_stats: Mutex::new(QueryStatsPayload::default()),
+            current_query_stats: Mutex::new(BTreeMap::new()),
             current_epoch: None,
             sender: tx,
         },
@@ -33,9 +34,9 @@ pub fn init_query_stats(log: ReplicaLogger) -> (QueryStatsCollector, QueryStatsP
 /// the payload builder interface.
 pub struct QueryStatsCollector {
     log: ReplicaLogger,
-    current_query_stats: Mutex<QueryStatsPayload>,
+    current_query_stats: Mutex<BTreeMap<CanisterId, QueryStats>>,
     current_epoch: Option<QueryStatsEpoch>,
-    sender: Sender<EpochStats>,
+    sender: Sender<LocalQueryStats>,
 }
 
 impl QueryStatsCollector {
@@ -54,9 +55,12 @@ impl QueryStatsCollector {
         let previous_stats = std::mem::take(&mut *state);
 
         // Epoch changed, send stats from previous epoch to block maker
-        match self.sender.try_send(EpochStats {
+        match self.sender.try_send(LocalQueryStats {
             epoch: previous_epoch,
-            stats: previous_stats.canister_stats.into_iter().collect(),
+            stats: previous_stats
+                .into_iter()
+                .map(|(canister_id, stats)| CanisterQueryStats { canister_id, stats })
+                .collect(),
         }) {
             Ok(()) => (),
             Err(TrySendError::Full(_)) => {
@@ -96,7 +100,7 @@ impl QueryStatsCollector {
         }
 
         let mut state = self.current_query_stats.lock().unwrap();
-        let stats_for_canister = state.canister_stats.entry(canister_id).or_default();
+        let stats_for_canister = state.entry(canister_id).or_default();
 
         stats_for_canister.num_calls = stats_for_canister.num_calls.saturating_add(1);
         stats_for_canister.num_instructions = stats_for_canister
@@ -113,8 +117,8 @@ impl QueryStatsCollector {
 
 pub struct QueryStatsPayloadBuilderImpl {
     log: ReplicaLogger,
-    current_epoch: RwLock<Option<EpochStats>>,
-    receiver: Receiver<EpochStats>,
+    current_epoch: RwLock<Option<LocalQueryStats>>,
+    receiver: Receiver<LocalQueryStats>,
 }
 
 impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
