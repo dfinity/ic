@@ -2607,7 +2607,7 @@ build-guestos-base-dev-sev:
         - ic-os/setupos/rootfs/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
+    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
     - |
       set -euo pipefail
 
