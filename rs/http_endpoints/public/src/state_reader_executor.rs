@@ -83,7 +83,7 @@ mod tests {
     use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{mock_time, state::ReplicatedStateBuilder, types::ids::subnet_test_id};
     use ic_types::{
-        batch::ReceivedEpochStats,
+        batch::RawQueryStats,
         consensus::certification::{Certification, CertificationContent},
         crypto::{
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -109,7 +109,7 @@ mod tests {
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
-                        ReceivedEpochStats::default(),
+                        RawQueryStats::default(),
                     )),
                 )
             });

@@ -11,7 +11,7 @@ use ic_replicated_state::{
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
-use ic_types::batch::ReceivedEpochStats;
+use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
@@ -178,10 +178,10 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
 
     let stats = checkpoint_layout.stats().deserialize()?;
     let query_stats = if let Some(query_stats) = stats.query_stats {
-        ReceivedEpochStats::try_from(query_stats)
+        RawQueryStats::try_from(query_stats)
             .map_err(|err| into_checkpoint_error("QueryStats".into(), err))?
     } else {
-        ReceivedEpochStats::default()
+        RawQueryStats::default()
     };
 
     let canister_states = {

@@ -49,7 +49,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         consumed_cycles_since_replica_started_by_use_cases: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
-        total_query_stats: TotalCanisterQueryStats::default(),
+        total_query_stats: TotalQueryStats::default(),
     }
 }
 

@@ -81,7 +81,7 @@ impl StateMachine for StateMachineImpl {
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch.messages.query_stats {
-            deliver_query_stats(&self.log, query_stats, &mut state, batch.batch_number);
+            deliver_query_stats(query_stats, &mut state, batch.batch_number, &self.log);
         }
 
         if batch.time >= state.metadata.batch_time {

@@ -168,10 +168,11 @@ message XNetPayload {
 }
 
 message QueryStatsPayload {
-  repeated QueryStatsPayloadInner canister_stats = 1;
+  reserved 1;
+  repeated CanisterQueryStats canister_stats = 2;
 }
 
-message QueryStatsPayloadInner {
+message CanisterQueryStats {
   types.v1.CanisterId canister_id = 1;
   uint32 num_calls = 2;
   uint64 num_instructions = 3;

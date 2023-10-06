@@ -38,8 +38,7 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::batch::{
-    CanisterQueryStats, EpochStatsMessages, QueryStatsMessage, ReceivedEpochStats,
-    TotalCanisterQueryStats,
+    CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
@@ -529,7 +528,7 @@ fn query_stats_are_persisted() {
         let (curr_height, mut state) = state_manager.take_tip();
 
         let epoch = epoch_from_height(curr_height);
-        let test_query_stats: CanisterQueryStats = CanisterQueryStats {
+        let test_query_stats: QueryStats = QueryStats {
             num_calls: 1337,
             num_instructions: 100000,
             ingress_payload_size: 100001,
@@ -542,7 +541,7 @@ fn query_stats_are_persisted() {
         let mut stats = BTreeMap::new();
         stats.insert(canister_id, inner);
 
-        state.epoch_query_stats = ReceivedEpochStats {
+        state.epoch_query_stats = RawQueryStats {
             epoch: Some(epoch),
             stats,
         };
@@ -5016,7 +5015,7 @@ fn query_stats_are_collected() {
     ] {
         env.set_query_stats(
             canister,
-            TotalCanisterQueryStats {
+            TotalQueryStats {
                 num_calls: INITIAL_VALUES,
                 num_instructions: INITIAL_VALUES,
                 ingress_payload_size: INITIAL_VALUES,
@@ -5045,9 +5044,9 @@ fn query_stats_are_collected() {
 
         // Append query stats the first time each node is a block maker.
         if i < NUM_NODES {
-            stats.push(QueryStatsMessage {
+            stats.push(CanisterQueryStats {
                 canister_id: test_canister_id,
-                stats: CanisterQueryStats {
+                stats: QueryStats {
                     num_calls: if i < NUM_MALICIOUS {
                         1337 // "Malicious" nodes send too large values, but that should not affect what is being charged
                     } else {
@@ -5062,9 +5061,9 @@ fn query_stats_are_collected() {
             // This canister does not exist in the replicated state.
             // We simply want to make sure nothing crashes in the case where we have stats for a canister
             // that does not exist (e.g. it got uninstalled).
-            stats.push(QueryStatsMessage {
+            stats.push(CanisterQueryStats {
                 canister_id: uninstalled_canister,
-                stats: CanisterQueryStats {
+                stats: QueryStats {
                     num_calls: 1,
                     num_instructions: 2,
                     ingress_payload_size: 3,
@@ -5074,9 +5073,9 @@ fn query_stats_are_collected() {
 
             if i < NUM_MALICIOUS {
                 // Simulate malicious nodes sending stats for a canister that does not execute any queries
-                stats.push(QueryStatsMessage {
+                stats.push(CanisterQueryStats {
                     canister_id: malicious_overreporting,
-                    stats: CanisterQueryStats {
+                    stats: QueryStats {
                         num_calls: 1,
                         num_instructions: 2,
                         ingress_payload_size: 3,
@@ -5085,9 +5084,9 @@ fn query_stats_are_collected() {
                 });
             } else {
                 // Simulate malicious nodes not sending (under-reporting) stats for a canister that does execute queries
-                stats.push(QueryStatsMessage {
+                stats.push(CanisterQueryStats {
                     canister_id: malicious_underreporting,
-                    stats: CanisterQueryStats {
+                    stats: QueryStats {
                         num_calls: 1,
                         num_instructions: 2,
                         ingress_payload_size: 3,
@@ -5097,7 +5096,7 @@ fn query_stats_are_collected() {
             }
         }
 
-        let height = env.deliver_query_stats(EpochStatsMessages {
+        let height = env.deliver_query_stats(QueryStatsPayload {
             proposer: proposers[i % NUM_NODES],
             stats,
             epoch: epoch_from_height(Height::from(i as u64)),

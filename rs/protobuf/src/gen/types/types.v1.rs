@@ -1135,13 +1135,13 @@ pub struct XNetPayload {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryStatsPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub canister_stats: ::prost::alloc::vec::Vec<QueryStatsPayloadInner>,
+    #[prost(message, repeated, tag = "2")]
+    pub canister_stats: ::prost::alloc::vec::Vec<CanisterQueryStats>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryStatsPayloadInner {
+pub struct CanisterQueryStats {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(uint32, tag = "2")]

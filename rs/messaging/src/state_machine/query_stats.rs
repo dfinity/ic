@@ -1,7 +1,7 @@
 use ic_base_types::CanisterId;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::batch::{CanisterQueryStats, EpochStatsMessages, ReceivedEpochStats};
+use ic_types::batch::{QueryStats, QueryStatsPayload, RawQueryStats};
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::{epoch_from_height, Height};
 use std::collections::BTreeMap;
@@ -16,10 +16,10 @@ use std::collections::BTreeMap;
 ///   the value is close to those of honest nodes.
 ///
 /// This function does not check the first property. This has to be done by the caller.
-fn aggregate_canister_query_stats(stats: Vec<&CanisterQueryStats>) -> CanisterQueryStats {
-    fn get_median<T: Default + Ord + Copy, F>(stats: &Vec<&CanisterQueryStats>, f: F) -> T
+fn aggregate_query_stats(stats: Vec<&QueryStats>) -> QueryStats {
+    fn get_median<T: Default + Ord + Copy, F>(stats: &Vec<&QueryStats>, f: F) -> T
     where
-        F: FnMut(&&CanisterQueryStats) -> T,
+        F: FnMut(&&QueryStats) -> T,
     {
         let mut values: Vec<T> = stats.iter().map(f).collect();
         values.sort();
@@ -27,7 +27,7 @@ fn aggregate_canister_query_stats(stats: Vec<&CanisterQueryStats>) -> CanisterQu
     }
 
     // Take the median for each of the values in stats
-    CanisterQueryStats {
+    QueryStats {
         num_calls: get_median(&stats, |stats| stats.num_calls),
         num_instructions: get_median(&stats, |stats| stats.num_instructions),
         ingress_payload_size: get_median(&stats, |stats| stats.ingress_payload_size),
@@ -37,10 +37,10 @@ fn aggregate_canister_query_stats(stats: Vec<&CanisterQueryStats>) -> CanisterQu
 
 /// Aggregate given query stats and into each canister's state.
 fn apply_query_stats_to_canister(
-    logger: &ReplicaLogger,
+    aggregated_stats: &QueryStats,
     canister_id: CanisterId,
-    aggregated_stats: &CanisterQueryStats,
     state: &mut ReplicatedState,
+    logger: &ReplicaLogger,
 ) {
     // Note that the use of the number of nodes in the subnet like this does not handle the case that
     // the number of machines in the subnet might have changed throughout an epoch.
@@ -67,10 +67,10 @@ fn apply_query_stats_to_canister(
 /// and on a new epoch aggregate currently stored stats into
 /// the canister query stats.
 pub fn deliver_query_stats(
-    logger: &ReplicaLogger,
-    query_stats: &EpochStatsMessages,
+    query_stats: &QueryStatsPayload,
     state: &mut ReplicatedState,
     height: Height,
+    logger: &ReplicaLogger,
 ) {
     let epoch = epoch_from_height(height);
 
@@ -92,10 +92,10 @@ pub fn deliver_query_stats(
                         let need_stats_from = num_nodes - get_faults_tolerated(num_nodes);
                         if inner.len() >= need_stats_from {
                             // Aggregate data
-                            let individual_stats: Vec<&CanisterQueryStats> =
+                            let individual_stats: Vec<&QueryStats> =
                                 inner.iter().map(|(_, stats)| stats).collect();
 
-                            let aggregated_stats = aggregate_canister_query_stats(individual_stats);
+                            let aggregated_stats = aggregate_query_stats(individual_stats);
                             query_stats_to_be_applied.push((*canister_id, aggregated_stats));
                         }
                     }
@@ -103,17 +103,17 @@ pub fn deliver_query_stats(
                     // For each canister, apply the aggregated stats
                     for (canister_id, aggregated_stats) in query_stats_to_be_applied {
                         apply_query_stats_to_canister(
-                            logger,
-                            canister_id,
                             &aggregated_stats,
+                            canister_id,
                             state,
+                            logger,
                         );
                     }
                 }
             }
         }
 
-        state.epoch_query_stats = ReceivedEpochStats {
+        state.epoch_query_stats = RawQueryStats {
             epoch: Some(epoch),
             stats: BTreeMap::new(),
         };
@@ -127,7 +127,7 @@ pub fn deliver_query_stats(
             .or_default()
             .insert(
                 query_stats.proposer,
-                CanisterQueryStats {
+                QueryStats {
                     num_calls: message.stats.num_calls,
                     num_instructions: message.stats.num_instructions,
                     ingress_payload_size: message.stats.ingress_payload_size,

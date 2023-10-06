@@ -1,25 +1,46 @@
+//! Type definitions for the QueryStats feature
+//!
+//! QueryStats functions as follows:
+//!
+//! Queries are served locally by a single node, using the certified state.
+//! Unlike updates, queries are read only and can not modify the state, which
+//! makes accounting for resources that queries consume difficult.
+//! To get a measurement of how much resources are used by non-replicated query calls,
+//! each node locally accumulates [`QueryStats`] for each canister in a fixed interval
+//! of certified heights called the [`QueryStatsEpoch`].
+//!
+//! After an epoch has passed, the collected [`LocalQueryStats`] are sent to the
+//! consensus layer.
+//! Consensus will include the statistics as a [`QueryStatsPayload`] in a block.
+//! It may split the stats for different canisters over multiple blocks.
+//!
+//! When the payload of a block gets delivered to the DSM, the delivered statistics
+//! will be collected as [`RawQueryStats`].
+//! Again, after a [`QueryStatsEpoch`] has progressed, the statistics are aggregated
+//! by taking for each [`CanisterId`] the median of the statistics reported by each node.
+//! The aggregated statistics are then added to the [`TotalQueryStats`], from where they can
+//! be accessed by canisters.
+
 use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
 use ic_base_types::{CanisterId, NodeId, NumBytes};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
         canister_state_bits::v1::{TotalQueryStats as TotalQueryStatsProto, Unsigned128},
-        stats::v1::{QueryStats, QueryStatsInner},
+        stats::v1::{QueryStats as QueryStatsProto, QueryStatsInner},
     },
     types::v1::{self as pb},
 };
 use prost::{bytes::BufMut, Message};
-use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CanisterQueryStats {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct QueryStats {
     pub num_calls: u32,
     pub num_instructions: u64, // Want u128, but not supported in protobuf
     pub ingress_payload_size: u64,
     pub egress_payload_size: u64,
 }
-
 /// Total number of query stats collected since creation of the canister.
 ///
 /// This is a separate struct since values contained in here are accumulated
@@ -30,8 +51,8 @@ pub struct CanisterQueryStats {
 /// a problem if the client side is polling frequently enough and handles those overflows.
 ///
 /// Given the size of these values, overflows sould be rare, though.
-#[derive(Default, PartialEq, Eq, Debug, Clone)]
-pub struct TotalCanisterQueryStats {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct TotalQueryStats {
     pub num_calls: u128,
     pub num_instructions: u128,
     pub ingress_payload_size: u128,
@@ -57,7 +78,7 @@ fn get_protobuf_for_u128(value: u128) -> Unsigned128 {
     }
 }
 
-impl TryFrom<TotalQueryStatsProto> for TotalCanisterQueryStats {
+impl TryFrom<TotalQueryStatsProto> for TotalQueryStats {
     type Error = ProxyDecodeError;
 
     fn try_from(value: TotalQueryStatsProto) -> Result<Self, Self::Error> {
@@ -70,8 +91,8 @@ impl TryFrom<TotalQueryStatsProto> for TotalCanisterQueryStats {
     }
 }
 
-impl From<&TotalCanisterQueryStats> for TotalQueryStatsProto {
-    fn from(value: &TotalCanisterQueryStats) -> Self {
+impl From<&TotalQueryStats> for TotalQueryStatsProto {
+    fn from(value: &TotalQueryStats) -> Self {
         TotalQueryStatsProto {
             num_calls: Some(get_protobuf_for_u128(value.num_calls)),
             num_instructions: Some(get_protobuf_for_u128(value.num_instructions)),
@@ -81,25 +102,30 @@ impl From<&TotalCanisterQueryStats> for TotalQueryStatsProto {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EpochStats {
+/// QueryStats with the epoch at which they where collected.
+///
+/// [`LocalQueryStats`] are sent from execution to consensus for
+/// inclusion in blocks.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct LocalQueryStats {
     pub epoch: QueryStatsEpoch,
-    pub stats: Vec<(CanisterId, CanisterQueryStats)>,
+    pub stats: Vec<CanisterQueryStats>,
 }
 
 /// Stats received from block throughout the given epoch.
+///
 /// This struct is used to store defragmented stats received from blocks in the replicated state,
 /// so that they can survive a restart of the node.
 /// Need to remember the epoch this is for as well as the NodeId of the
 /// node proposing the block.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ReceivedEpochStats {
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct RawQueryStats {
     pub epoch: Option<QueryStatsEpoch>,
-    pub stats: BTreeMap<CanisterId, BTreeMap<NodeId, CanisterQueryStats>>,
+    pub stats: BTreeMap<CanisterId, BTreeMap<NodeId, QueryStats>>,
 }
 
-impl ReceivedEpochStats {
-    pub fn as_query_stats(&self) -> Option<QueryStats> {
+impl RawQueryStats {
+    pub fn as_query_stats(&self) -> Option<QueryStatsProto> {
         // Serialize BTreeMap as vector
         let mut query_stats = vec![];
 
@@ -116,18 +142,18 @@ impl ReceivedEpochStats {
             }
         }
 
-        self.epoch.map(|epoch| QueryStats {
+        self.epoch.map(|epoch| QueryStatsProto {
             epoch: epoch.get(),
             query_stats,
         })
     }
 }
 
-impl TryFrom<QueryStats> for ReceivedEpochStats {
+impl TryFrom<QueryStatsProto> for RawQueryStats {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: QueryStats) -> Result<Self, Self::Error> {
-        let mut r = ReceivedEpochStats {
+    fn try_from(value: QueryStatsProto) -> Result<Self, Self::Error> {
+        let mut r = RawQueryStats {
             epoch: Some(QueryStatsEpoch::from(value.epoch)),
             stats: BTreeMap::new(),
         };
@@ -136,7 +162,7 @@ impl TryFrom<QueryStats> for ReceivedEpochStats {
                 let key = try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
                 r.stats.entry(key).or_default().insert(
                     proposer,
-                    CanisterQueryStats {
+                    QueryStats {
                         num_calls: entry.num_calls,
                         num_instructions: entry.num_instructions,
                         ingress_payload_size: entry.ingress_payload_size,
@@ -150,18 +176,19 @@ impl TryFrom<QueryStats> for ReceivedEpochStats {
 }
 
 /// Content of the query stats payload appended to blocks.
+///
 /// This explicitly contains the senders Node ID. While this is redundant with meta
 /// data of the block itself, we want to keep metadata specific to query stats
 /// as part of the query stats payload. This way, consensus stays nice and generic and
 /// the query stats part is self contained.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EpochStatsMessages {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct QueryStatsPayload {
     pub epoch: QueryStatsEpoch,
     pub proposer: NodeId,
-    pub stats: Vec<QueryStatsMessage>,
+    pub stats: Vec<CanisterQueryStats>,
 }
 
-impl EpochStatsMessages {
+impl QueryStatsPayload {
     /// Serialize this payload into a vector
     ///
     /// This function will drop trailing stats to guarantee, that the
@@ -187,7 +214,7 @@ impl EpochStatsMessages {
 
         let mut num_stats_included = 0;
         for entry in &self.stats {
-            if pb::QueryStatsPayloadInner::from(entry)
+            if pb::CanisterQueryStats::from(entry)
                 .encode_length_delimited(&mut buffer)
                 .is_err()
             {
@@ -206,7 +233,7 @@ impl EpochStatsMessages {
         }
     }
 
-    /// Deserializes a [`EpochStatsMessages`]
+    /// Deserializes a [`QueryStatsPayload`]
     ///
     /// Allows to filter for node id and epoch.
     /// If the filters are set, the deserializer will check whether the node_id
@@ -234,9 +261,9 @@ impl EpochStatsMessages {
 
         // Deserialize the stats
         while !data.is_empty() {
-            let stat = pb::QueryStatsPayloadInner::decode_length_delimited(&mut data)
+            let stat = pb::CanisterQueryStats::decode_length_delimited(&mut data)
                 .map_err(ProxyDecodeError::DecodeError)?;
-            messages.stats.push(QueryStatsMessage::try_from(&stat)?);
+            messages.stats.push(CanisterQueryStats::try_from(&stat)?);
         }
 
         Ok(Some(messages))
@@ -244,14 +271,14 @@ impl EpochStatsMessages {
 }
 
 /// A message about the statistics of a specific canister.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QueryStatsMessage {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CanisterQueryStats {
     pub canister_id: CanisterId,
-    pub stats: CanisterQueryStats,
+    pub stats: QueryStats,
 }
 
-impl From<&QueryStatsMessage> for pb::QueryStatsPayloadInner {
-    fn from(entry: &QueryStatsMessage) -> Self {
+impl From<&CanisterQueryStats> for pb::CanisterQueryStats {
+    fn from(entry: &CanisterQueryStats) -> Self {
         Self {
             canister_id: Some(pb::CanisterId::from(entry.canister_id)),
             num_calls: entry.stats.num_calls,
@@ -262,16 +289,16 @@ impl From<&QueryStatsMessage> for pb::QueryStatsPayloadInner {
     }
 }
 
-impl TryFrom<&pb::QueryStatsPayloadInner> for QueryStatsMessage {
+impl TryFrom<&pb::CanisterQueryStats> for CanisterQueryStats {
     type Error = ProxyDecodeError;
 
-    fn try_from(entry: &pb::QueryStatsPayloadInner) -> Result<Self, Self::Error> {
+    fn try_from(entry: &pb::CanisterQueryStats) -> Result<Self, Self::Error> {
         Ok(Self {
             canister_id: try_from_option_field(
                 entry.canister_id.clone(),
                 "QueryStatsInner::canister_id",
             )?,
-            stats: CanisterQueryStats {
+            stats: QueryStats {
                 num_calls: entry.num_calls,
                 num_instructions: entry.num_instructions,
                 ingress_payload_size: entry.ingress_payload_size,
@@ -279,11 +306,6 @@ impl TryFrom<&pb::QueryStatsPayloadInner> for QueryStatsMessage {
             },
         })
     }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QueryStatsPayload {
-    pub canister_stats: BTreeMap<CanisterId, CanisterQueryStats>,
 }
 
 #[cfg(test)]
@@ -299,7 +321,7 @@ mod tests {
         let original_stats = test_message(1000);
         let serialized_stats = original_stats.serialize_with_limit(NumBytes::new(4));
         assert!(serialized_stats.is_empty());
-        assert!(EpochStatsMessages::deserialize(&serialized_stats)
+        assert!(QueryStatsPayload::deserialize(&serialized_stats)
             .unwrap()
             .is_none());
     }
@@ -309,7 +331,7 @@ mod tests {
     fn serialization_roundtrip() {
         let original_stats = test_message(1000);
         let serialized_stats = original_stats.serialize_with_limit(NumBytes::new(2 * 1024 * 1024));
-        let deserialized_stats = EpochStatsMessages::deserialize(&serialized_stats)
+        let deserialized_stats = QueryStatsPayload::deserialize(&serialized_stats)
             .unwrap()
             .unwrap();
         assert_eq!(&original_stats, &deserialized_stats);
@@ -321,20 +343,20 @@ mod tests {
         let original_stats = test_message(1000);
         let serialized_stats = original_stats.serialize_with_limit(NumBytes::new(2 * 1024));
         assert!(serialized_stats.len() < 2 * 1024);
-        let deserialized_stats = EpochStatsMessages::deserialize(&serialized_stats)
+        let deserialized_stats = QueryStatsPayload::deserialize(&serialized_stats)
             .unwrap()
             .unwrap();
         assert!(original_stats.stats.len() > deserialized_stats.stats.len());
     }
 
-    fn test_message(num_stats: u64) -> EpochStatsMessages {
+    fn test_message(num_stats: u64) -> QueryStatsPayload {
         let mut rng = ChaCha8Rng::seed_from_u64(1454);
 
-        EpochStatsMessages {
+        QueryStatsPayload {
             epoch: QueryStatsEpoch::new(1),
             proposer: NodeId::from(PrincipalId::new_node_test_id(1)),
             stats: (0..num_stats)
-                .map(|idx| QueryStatsMessage {
+                .map(|idx| CanisterQueryStats {
                     canister_id: CanisterId::from(idx),
                     stats: rng_epoch_stats(&mut rng),
                 })
@@ -342,11 +364,11 @@ mod tests {
         }
     }
 
-    fn rng_epoch_stats<R>(rng: &mut R) -> CanisterQueryStats
+    fn rng_epoch_stats<R>(rng: &mut R) -> QueryStats
     where
         R: RngCore,
     {
-        CanisterQueryStats {
+        QueryStats {
             num_calls: rng.gen(),
             num_instructions: rng.gen(),
             ingress_payload_size: rng.gen(),
