@@ -10,15 +10,15 @@ use x509_parser::{
     time::ASN1Time,
 };
 
-use crate::snapshot::RoutingTable;
+use crate::snapshot::RegistrySnapshot;
 
 pub struct TlsVerifier {
-    rt: Arc<ArcSwapOption<RoutingTable>>,
+    rs: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl TlsVerifier {
-    pub fn new(rt: Arc<ArcSwapOption<RoutingTable>>) -> Self {
-        Self { rt }
+    pub fn new(rs: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
+        Self { rs }
     }
 }
 
@@ -37,8 +37,8 @@ impl ServerCertVerifier for TlsVerifier {
         now: SystemTime,
     ) -> Result<ServerCertVerified, RustlsError> {
         // Load a routing table if we have one
-        let rt = self
-            .rt
+        let rs = self
+            .rs
             .load_full()
             .ok_or_else(|| RustlsError::General("no routing table published".into()))?;
 
@@ -46,7 +46,7 @@ impl ServerCertVerifier for TlsVerifier {
         let node = match server_name {
             // Currently support only DnsName
             ServerName::DnsName(v) => {
-                match rt.nodes.get(v.as_ref()) {
+                match rs.nodes.get(v.as_ref()) {
                     // If the requested node is not in the routing table
                     None => {
                         return Err(RustlsError::General(format!(

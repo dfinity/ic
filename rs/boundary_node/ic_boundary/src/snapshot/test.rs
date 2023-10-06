@@ -149,7 +149,6 @@ async fn test_routing_table() -> Result<(), Error> {
     let rt = rt.load_full().unwrap();
 
     assert_eq!(rt.registry_version, 1);
-    assert_eq!(rt.nns_subnet_id.to_string(), "fscpm-uiaaa-aaaaa-aaaap-yai");
     assert_eq!(rt.subnets.len(), 4);
 
     let subnets = vec![

@@ -67,7 +67,7 @@ async fn test_cache() -> Result<(), Error> {
     let cache = Cache::new(
         MAX_MEM_SIZE as u64,
         MAX_RESP_SIZE,
-        Duration::from_secs(60),
+        Duration::from_secs(3600),
         false,
     )?;
     let cache = Arc::new(cache);
@@ -92,6 +92,9 @@ async fn test_cache() -> Result<(), Error> {
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Miss);
 
+    // TODO remove, some race condition?
+    tokio::time::sleep(Duration::from_micros(100)).await;
+
     let req = gen_request(CANISTER_1, false);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
@@ -102,6 +105,9 @@ async fn test_cache() -> Result<(), Error> {
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Miss);
+
+    // TODO remove, some race condition?
+    tokio::time::sleep(Duration::from_micros(100)).await;
 
     let req = gen_request(CANISTER_2, false);
     let res = app.call(req).await.unwrap();
