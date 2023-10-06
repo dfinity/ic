@@ -5,18 +5,16 @@ This module defines functions for checking backward compatibility of candid inte
 def _did_git_test_impl(ctx):
     check_did = ctx.executable._check_did
     script = """
+set -xeuo pipefail
+
 readonly merge_base=${{CI_MERGE_REQUEST_DIFF_BASE_SHA:-HEAD}}
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
-readonly previous=$(git show $merge_base:{did_path} > $tmpfile)
+git show $merge_base:{did_path} > $tmpfile
 
 echo MERGE_BASE=$merge_base
 echo DID_PATH={did_path}
 
-{check_did} {did_path} "$tmpfile" 2>errors.log
-if [ -s errors.log ]; then
-    cat errors.log >&2
-    exit 1
-fi
+{check_did} {did_path} "$tmpfile"
     """.format(check_did = check_did.short_path, did_path = ctx.file.did.path)
 
     ctx.actions.write(output = ctx.outputs.executable, content = script)
