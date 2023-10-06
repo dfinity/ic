@@ -566,7 +566,7 @@ mod test {
         payload_builder::{
             get_signing_requests,
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
-            update_ongoing_signatures, update_signature_agreements,
+            signatures::{update_ongoing_signatures, update_signature_agreements},
         },
         test_utils::*,
     };
