@@ -44,6 +44,11 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
     if not sanitizers:
         sanitizers = DEFAULT_SANITIZERS
 
+    RUSTC_FLAGS_LIBFUZZER = RUSTC_FLAGS_DEFAULTS_FOR_FUZZING + [
+        # This would only work inside the devcontainer
+        "-Clink-arg=/usr/lib/llvm-15/lib/clang/15.0.7/lib/linux/libclang_rt.fuzzer-x86_64.a",
+    ]
+
     rust_binary(
         name = name,
         srcs = srcs,
@@ -51,7 +56,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
         crate_features = crate_features + ["fuzzing"],
         proc_macro_deps = proc_macro_deps,
         deps = deps,
-        rustc_flags = rustc_flags + RUSTC_FLAGS_DEFAULTS_FOR_FUZZING + sanitizers,
+        rustc_flags = rustc_flags + RUSTC_FLAGS_LIBFUZZER + sanitizers,
         tags = [
             # Makes sure this target is not run in normal CI builds. It would fail due to non-nightly Rust toolchain.
             "fuzz_test",

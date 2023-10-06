@@ -1,5 +1,5 @@
 {
-  "checksum": "ece835b601f4f461f26304d9a343bd01983bf7b38f9c12199551d22e9058cdbd",
+  "checksum": "4e7200ceb6d17ee1a4f02928d809ecdef58b235c3b734ea2e2746d361c92580a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13576,7 +13576,7 @@
               "target": "libflate"
             },
             {
-              "id": "libfuzzer-sys 0.4.6",
+              "id": "libfuzzer-sys 0.4.7",
               "target": "libfuzzer_sys"
             },
             {
@@ -26164,13 +26164,13 @@
       },
       "license": "MIT"
     },
-    "libfuzzer-sys 0.4.6": {
+    "libfuzzer-sys 0.4.7": {
       "name": "libfuzzer-sys",
-      "version": "0.4.6",
+      "version": "0.4.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/libfuzzer-sys/0.4.6/download",
-          "sha256": "beb09950ae85a0a94b27676cccf37da5ff13f27076aa1adbc6545dd0d0e1bd4e"
+          "url": "https://crates.io/api/v1/crates/libfuzzer-sys/0.4.7/download",
+          "sha256": "a96cfd5557eb82f2b83fed4955246c988d331975a002961b07c81584d107e7f7"
         }
       },
       "targets": [
@@ -26205,7 +26205,7 @@
               "target": "arbitrary"
             },
             {
-              "id": "libfuzzer-sys 0.4.6",
+              "id": "libfuzzer-sys 0.4.7",
               "target": "build_script_build"
             },
             {
@@ -26216,7 +26216,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.6"
+        "version": "0.4.7"
       },
       "build_script_attrs": {
         "data_glob": [

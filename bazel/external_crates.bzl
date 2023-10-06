@@ -589,7 +589,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.1.2",
             ),
             "libfuzzer-sys": crate.spec(
-                version = "^0.4",
+                version = "^0.4.7",
+                default_features = False,
             ),
             "libsecp256k1": crate.spec(
                 version = "^0.7.0",
