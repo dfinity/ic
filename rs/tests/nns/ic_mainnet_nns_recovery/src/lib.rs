@@ -8,35 +8,42 @@
 //
 // * rm -rf test_tmpdir; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_tmpdir=test_tmpdir --flaky_test_attempts=1
 
-use anyhow::Result;
-
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::universal_vm::UniversalVm;
-use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
-
+use candid::CandidType;
+use canister_test::Canister;
+use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
+use dfn_candid::candid_one;
 use ic_canister_client::Sender;
-use ic_canister_client_sender::SigKeys;
+use ic_canister_client_sender::{Ed25519KeyPair, SigKeys};
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
 use ic_recovery::RecoveryArgs;
+use ic_registry_subnet_type::SubnetType;
 use ic_replay::cmd::{
-    ClapSubnetId, ReplayToolArgs, SubCommand, WithTrustedNeuronsFollowingNeuronCmd,
+    ClapSubnetId, ReplayToolArgs, SubCommand, WithLedgerAccountCmd,
+    WithTrustedNeuronsFollowingNeuronCmd,
 };
 use ic_replay::replay;
+use ic_sns_wasm::pb::v1::{
+    GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateAllowedPrincipalsRequest,
+    UpdateSnsSubnetListRequest,
+};
 use ic_tests::driver::boundary_node::BoundaryNodeVm;
 use ic_tests::driver::constants::SSH_USERNAME;
 use ic_tests::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_tests::driver::universal_vm::DeployedUniversalVm;
+use ic_tests::driver::universal_vm::UniversalVm;
 use ic_tests::driver::{
     boundary_node::BoundaryNode,
-    ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources},
+    ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
-    test_env::{TestEnv, TestEnvAttribute},
+    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         await_boundary_node_healthy, retry, HasDependencies, HasIcDependencies, HasPublicApiUrl,
         HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy,
@@ -44,6 +51,7 @@ use ic_tests::driver::{
     },
     universal_vm::UniversalVms,
 };
+use ic_tests::nns::{await_proposal_execution, get_canister};
 use ic_tests::nns::{
     get_governance_canister, submit_update_elected_replica_versions_proposal,
     vote_execute_proposal_assert_executed,
@@ -51,15 +59,17 @@ use ic_tests::nns::{
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_tests::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
 use ic_tests::util::{block_on, runtime_from_url};
+use ic_types::{CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId};
+use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
-use slog::info;
-use ssh2::Session;
+use slog::{info, Logger};
 use std::fs;
 use std::fs::File;
+use std::io::Read;
 use std::io::Write;
 use std::net::IpAddr;
-use std::net::TcpStream;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -79,10 +89,26 @@ const RECOVERY_WORKING_DIR: &str = "recovery/working_dir";
 const IC_CONFIG_DESTINATION: &str = "recovery/working_dir/ic.json5";
 const NNS_STATE_DIR_PATH: &str = "recovery/working_dir/data";
 const NNS_STATE_BACKUP_TARBALL_PATH: &str = "nns_state.tar.zst";
+
+/// Path to temporarily store a tarball of the IC registry local store.
+/// This tarball will be created on the recovered NNS node and scp-ed from it.
+const TMP_IC_REGISTRY_LOCAL_STORE_TARBALL_PATH: &str = "/tmp/ic_registry_local_store.tar.zst";
+
+/// Path where to temporarily store the recovered NNS public key
+/// before moving it to its final destination of /var/lib/ic/data/nns_public_key.pem.
+const TMP_NNS_PUBLIC_KEY_PATH: &str = "/tmp/nns_public_key.pem";
+
 const CONTROLLER: &str = "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae";
 const ORIGINAL_NNS_ID: &str = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
 const IC_CONFIG_SRC_PATH: &str = "/run/ic-node/config/ic.json5";
 const SET_TESTNET_ENV_VARS_SH: &str = "set_testnet_env_variables.sh";
+const RECOVERED_NNS: &str = "recovered-nns";
+const MAINNET_GOVERNANCE_CANISTER_ID: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+const MAINNET_SNS_WASM_CANISTER_ID: &str = "qaa6y-5yaaa-aaaaa-aaafa-cai";
+
+/// This is the version of non-production IC-OS images.
+/// We later bless this version such that we can optionally upgrade to these images.
+const IC_VERSION_ZERO: &str = "0000000000000000000000000000000000000000";
 
 #[derive(Deserialize, Serialize)]
 pub struct RecoveredNnsNodeUrl {
@@ -106,23 +132,19 @@ impl TestEnvAttribute for RecoveredNnsDictatorNeuron {
     }
 }
 
+/// Sets up an IC running mainnet IC-OS nodes running the mainnet NNS
+/// on the latest backup of the state of the mainnet NNS subnet.
+///
+/// The IC consists of a single-node system subnet and two unassigned nodes.
+///
+/// The mainnet NNS will be recovered to the first unassigned node.
+///
+/// The second unassigned node will be turned into an application subnet
+/// to which we can deploy SNSes.
+///
+/// The single-node system subnet will run an initial NNS
+/// that is required to perform the recovery but can be ignored after that.
 pub fn setup(env: TestEnv) {
-    let logger = env.logger();
-    // Check if there's SSH connectivity to the backup pod.
-    info!(
-        logger,
-        "Setting up SSH session to {NNS_BACKUP_POD_USER}@{NNS_BACKUP_POD} ..."
-    );
-    let _sess = get_ssh_session_to_backup_pod().unwrap_or_else(|e| {
-        panic!(
-            "Could not setup SSH session to {NNS_BACKUP_POD_USER}@{NNS_BACKUP_POD} because: {e:?}!",
-        )
-    });
-
-    // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
-    let recovery_dir = env.get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
-
     // Fetch and unpack the NNS mainnet state backup concurrently with setting up the IC.
     // ic-replay also requires the ic.json5 config file of an NNS node.
     // Since we're creating the IC concurrently with fetching the state we use a channel to communicate
@@ -136,29 +158,11 @@ pub fn setup(env: TestEnv) {
         std::sync::mpsc::Sender<DeployedUniversalVm>,
         Receiver<DeployedUniversalVm>,
     ) = mpsc::channel();
+
+    // Recover the NNS concurrently:
     let env_clone = env.clone();
     let nns_state_thread = std::thread::spawn(move || {
-        fetch_nns_state_from_backup_pod(env_clone.clone());
-
-        let topology = rx_topology.recv().unwrap();
-        let nns_node = topology.root_subnet().nodes().next().unwrap();
-        let recovered_nns_node = topology.unassigned_nodes().next().unwrap();
-        fetch_ic_config(env_clone.clone(), nns_node.clone());
-
-        let neuron_id: NeuronId = prepare_nns_state(env_clone.clone());
-
-        let aux_node = rx_aux_node.recv().unwrap();
-        recover_nns_subnet(
-            env_clone.clone(),
-            nns_node,
-            recovered_nns_node.clone(),
-            aux_node,
-        );
-        test_recovered_nns(env_clone.clone(), neuron_id, recovered_nns_node.clone());
-
-        write_sh_lib(env_clone.clone(), neuron_id, recovered_nns_node.clone());
-
-        setup_boundary_node(env_clone, recovered_nns_node);
+        setup_recovered_nns(env_clone, rx_topology, rx_aux_node);
     });
 
     // Start a p8s VM concurrently:
@@ -169,6 +173,7 @@ pub fn setup(env: TestEnv) {
             .expect("Failed to start prometheus VM");
     });
 
+    // Setup and start the aux UVM concurrently:
     let env_clone = env.clone();
     let uvm_thread = std::thread::spawn(move || {
         UniversalVm::new(AUX_NODE_NAME.to_string())
@@ -176,55 +181,7 @@ pub fn setup(env: TestEnv) {
             .expect("Failed to start Universal VM");
     });
 
-    // Start an IC, install the NNS and start a Boundary Node:
-    InternetComputer::new()
-        .with_default_vm_resources(VmResources {
-            vcpus: None,
-            memory_kibibytes: None,
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-        })
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: None,
-                    memory_kibibytes: None,
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(1),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: None,
-                    memory_kibibytes: None,
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(1),
-        )
-        .with_unassigned_nodes(1)
-        .with_mainnet_config()
-        .setup_and_start(&env)
-        .expect("Failed to setup IC under test");
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        NnsCustomizations::default(),
-    );
-
-    {
-        let env: TestEnv = env.clone();
-        let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
-        let topology = env.topology_snapshot();
-        let nns_node = topology.root_subnet().nodes().next().unwrap();
-        let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-        bless_replica_version(
-            env,
-            test_neuron_id,
-            proposal_sender,
-            nns_node,
-            "0000000000000000000000000000000000000000".to_string(),
-        );
-    }
+    setup_ic(env.clone());
 
     let env_clone = env.clone();
     std::thread::spawn(move || {
@@ -238,6 +195,8 @@ pub fn setup(env: TestEnv) {
         tx_aux_node.send(deployed_universal_vm).unwrap();
     });
 
+    bless_zero_ic_version(env.clone());
+
     prometheus_thread.join().unwrap();
     env.sync_with_prometheus();
 
@@ -246,28 +205,157 @@ pub fn setup(env: TestEnv) {
         .unwrap_or_else(|e| std::panic::resume_unwind(e));
 }
 
-fn setup_boundary_node(env: TestEnv, recovered_nns_node: IcNodeSnapshot) {
+fn setup_recovered_nns(
+    env: TestEnv,
+    rx_topology: Receiver<TopologySnapshot>,
+    rx_aux_node: Receiver<DeployedUniversalVm>,
+) {
+    let logger = env.logger();
+    fetch_nns_state_from_backup_pod(env.clone());
+
+    let topology = rx_topology.recv().unwrap();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let mut unassigned_nodes = topology.unassigned_nodes();
+    let recovered_nns_node = unassigned_nodes.next().unwrap();
+    let new_subnet_node = unassigned_nodes.next().unwrap();
+    fetch_ic_config(env.clone(), nns_node.clone());
+
+    let principal = dfx_import_identity(env.clone());
+
+    let account_id = AccountIdentifier::new(principal, None);
+    info!(logger, "account_id = {account_id}");
+
+    // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
+    let recovery_dir = env.get_dependency_path("rs/tests");
+    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
+
+    let neuron_id: NeuronId = prepare_nns_state(env.clone(), account_id);
+
+    let aux_node = rx_aux_node.recv().unwrap();
+
+    recover_nns_subnet(env.clone(), nns_node, recovered_nns_node.clone(), aux_node);
+    test_recovered_nns(env.clone(), neuron_id, recovered_nns_node.clone());
+
+    let recovered_nns_public_key =
+        save_recovered_nns_public_key(env.clone(), recovered_nns_node.clone());
+
+    move_node_to_recovered_nns(
+        env.clone(),
+        recovered_nns_node.clone(),
+        new_subnet_node.clone(),
+        recovered_nns_public_key.clone(),
+    );
+
+    create_subnet(
+        env.clone(),
+        recovered_nns_node.clone(),
+        neuron_id,
+        new_subnet_node.clone(),
+    );
+
+    let new_subnet_id = get_app_subnet_id(
+        env.clone(),
+        recovered_nns_node.clone(),
+        new_subnet_node.node_id,
+    );
+
+    set_default_subnets(
+        env.clone(),
+        recovered_nns_node.clone(),
+        neuron_id,
+        new_subnet_id,
+    );
+
+    let wallet_canister_id = create_cycles_wallet(
+        env.clone(),
+        recovered_nns_node.clone(),
+        principal,
+        new_subnet_node.get_public_url(),
+    );
+
+    configure_sns_wasms(
+        env.clone(),
+        neuron_id,
+        recovered_nns_node.clone(),
+        new_subnet_id,
+        wallet_canister_id,
+    );
+
+    write_sh_lib(
+        env.clone(),
+        neuron_id,
+        recovered_nns_node.clone(),
+        new_subnet_node,
+        wallet_canister_id,
+    );
+
+    setup_boundary_node(env, recovered_nns_node, recovered_nns_public_key);
+}
+
+/// Start an IC and install the initial NNS.
+fn setup_ic(env: TestEnv) {
+    InternetComputer::new()
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .with_unassigned_nodes(2)
+        .with_mainnet_config()
+        .setup_and_start(&env)
+        .expect("Failed to setup IC under test");
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
+        NnsCustomizations::default(),
+    );
+}
+
+fn bless_zero_ic_version(env: TestEnv) {
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    bless_replica_version(
+        env,
+        test_neuron_id,
+        proposal_sender,
+        nns_node,
+        IC_VERSION_ZERO.to_string(),
+    );
+}
+
+fn save_recovered_nns_public_key(env: TestEnv, recovered_nns_node: IcNodeSnapshot) -> PathBuf {
     let ic_admin_path = env
         .clone()
         .get_dependency_path("rs/tests/recovery/binaries/ic-admin");
     let recovered_nns_url = recovered_nns_node.get_public_url();
-    let recovered_nns_nns_public_key = env.clone().get_path("recovered_nns_pubkey.pem");
-    Command::new(ic_admin_path)
-        .arg("--nns-url")
+    let recovered_nns_public_key = env.clone().get_path("recovered_nns_pubkey.pem");
+    let mut cmd = Command::new(ic_admin_path);
+    cmd.arg("--nns-url")
         .arg(recovered_nns_url.to_string())
         .arg("get-subnet-public-key")
         .arg(ORIGINAL_NNS_ID)
-        .arg(recovered_nns_nns_public_key.clone())
-        .output()
-        .unwrap_or_else(|e| {
-            panic!("Could not get the public key of the recovered NNS because {e:?}",)
-        });
+        .arg(recovered_nns_public_key.clone());
+    info!(env.logger(), "{cmd:?} ...");
+    cmd.output().unwrap_or_else(|e| {
+        panic!("Could not get the public key of the recovered NNS because {e:?}",)
+    });
+    recovered_nns_public_key
+}
 
+fn setup_boundary_node(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    recovered_nns_public_key: PathBuf,
+) {
+    let recovered_nns_url = recovered_nns_node.get_public_url();
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .allocate_vm(&env)
         .expect("Allocation of BoundaryNode failed.")
         .for_ic(&env, "")
-        .with_nns_public_key(recovered_nns_nns_public_key)
+        .with_nns_public_key(recovered_nns_public_key)
         .with_nns_urls(vec![recovered_nns_url])
         .use_real_certs_and_dns()
         .start(&env)
@@ -304,15 +392,6 @@ fn setup_boundary_node(env: TestEnv, recovered_nns_node: IcNodeSnapshot) {
     }
 }
 
-fn get_ssh_session_to_backup_pod() -> Result<Session> {
-    let tcp = TcpStream::connect((NNS_BACKUP_POD, 22))?;
-    let mut sess = Session::new()?;
-    sess.set_tcp_stream(tcp);
-    sess.handshake()?;
-    sess.userauth_agent(NNS_BACKUP_POD_USER)?;
-    Ok(sess)
-}
-
 fn fetch_nns_state_from_backup_pod(env: TestEnv) {
     let target = format!("{NNS_BACKUP_POD_USER}@{NNS_BACKUP_POD}:/home/{NNS_BACKUP_POD_USER}/{NNS_STATE_BACKUP_TARBALL_PATH}");
     let logger: slog::Logger = env.logger();
@@ -325,31 +404,34 @@ fn fetch_nns_state_from_backup_pod(env: TestEnv) {
     );
     // TODO: consider using the ssh2 crate (like we do in prometheus_vm.rs)
     // instead of shelling out to scp.
-    let tar_out = Command::new("scp")
-        .arg("-oUserKnownHostsFile=/dev/null")
+    let mut cmd = Command::new("scp");
+    cmd.arg("-oUserKnownHostsFile=/dev/null")
         .arg("-oStrictHostKeyChecking=no")
-        .arg("-v")
         .arg(target.clone())
-        .arg(nns_state_backup_path.clone())
-        .output()
-        .unwrap_or_else(|e| {
-            panic!("Could not scp the {NNS_STATE_BACKUP_TARBALL_PATH} from the backup pod because: {e:?}!",)
-        });
-    if !tar_out.status.success() {
-        std::io::stdout().write_all(&tar_out.stdout).unwrap();
-        std::io::stderr().write_all(&tar_out.stderr).unwrap();
+        .arg(nns_state_backup_path.clone());
+    info!(env.logger(), "{cmd:?} ...");
+    let scp_out = cmd.output().unwrap_or_else(|e| {
+        panic!(
+            "Could not scp the {NNS_STATE_BACKUP_TARBALL_PATH} from the backup pod because: {e:?}!",
+        )
+    });
+    if !scp_out.status.success() {
+        std::io::stdout().write_all(&scp_out.stdout).unwrap();
+        std::io::stderr().write_all(&scp_out.stderr).unwrap();
         panic!("Could not scp the {NNS_STATE_BACKUP_TARBALL_PATH} from the backup pod!");
     }
     info!(
         logger,
         "Downloaded {target:} to {:?}, unpacking ...", nns_state_backup_path
     );
-    let tar_out = Command::new("tar")
-        .arg("xf")
+    let mut cmd = Command::new("tar");
+    cmd.arg("xf")
         .arg(nns_state_backup_path.clone())
         .arg("-C")
         .arg(env.base_path())
-        .arg(format!("--transform=s|nns_state/|{NNS_STATE_DIR_PATH}/|"))
+        .arg(format!("--transform=s|nns_state/|{NNS_STATE_DIR_PATH}/|"));
+    info!(env.logger(), "{cmd:?} ...");
+    let tar_out = cmd
         .output()
         .expect("Could not unpack {NNS_STATE_BACKUP_TARBALL_PATH}!");
     if !tar_out.status.success() {
@@ -399,7 +481,7 @@ fn fetch_ic_config(env: TestEnv, nns_node: IcNodeSnapshot) {
     );
 }
 
-fn prepare_nns_state(env: TestEnv) -> NeuronId {
+fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
     let logger: slog::Logger = env.logger();
     let ic_config_file = env.get_path(IC_CONFIG_DESTINATION);
     let nns_state_dir = env.get_path(NNS_STATE_DIR_PATH);
@@ -410,9 +492,8 @@ fn prepare_nns_state(env: TestEnv) -> NeuronId {
     info!(logger, "Create a neuron followed by trusted neurons ...");
     let neuron_stake_e8s: u64 = 1_000_000_000 * E8;
     let ic_replay_path = env.get_dependency_path("rs/replay/ic-replay");
-    let mut ic_replay_cmd = Command::new(ic_replay_path);
-    let ic_replay_cmd = ic_replay_cmd
-        .arg("--subnet-id")
+    let mut cmd = Command::new(ic_replay_path);
+    cmd.arg("--subnet-id")
         .arg(subnet_id.to_string())
         .arg("--data-root")
         .arg(nns_state_dir.clone())
@@ -420,14 +501,12 @@ fn prepare_nns_state(env: TestEnv) -> NeuronId {
         .arg("with-neuron-for-tests")
         .arg(controller.to_string())
         .arg(neuron_stake_e8s.to_string());
-    info!(logger, "Running {ic_replay_cmd:?} ...");
-    let ic_replay_out = ic_replay_cmd
-        .output()
-        .expect("Failed to run {ic_replay_cmd:?}");
+    info!(logger, "{cmd:?} ...");
+    let ic_replay_out = cmd.output().expect("Failed to run {cmd:?}");
     if !ic_replay_out.status.success() {
         std::io::stdout().write_all(&ic_replay_out.stdout).unwrap();
         std::io::stderr().write_all(&ic_replay_out.stderr).unwrap();
-        panic!("Failed to run {ic_replay_cmd:?}!");
+        panic!("Failed to run {cmd:?}!");
     }
     let prefix = "neuron_id=";
     let neuron_id = match std::str::from_utf8(&ic_replay_out.stdout)
@@ -463,7 +542,7 @@ fn prepare_nns_state(env: TestEnv) -> NeuronId {
 
     let NeuronId(id) = neuron_id;
     replay(ReplayToolArgs {
-        config: Some(ic_config_file),
+        config: Some(ic_config_file.clone()),
         canister_caller_id: None,
         subcmd: Some(SubCommand::WithTrustedNeuronsFollowingNeuronForTests(
             WithTrustedNeuronsFollowingNeuronCmd {
@@ -472,10 +551,29 @@ fn prepare_nns_state(env: TestEnv) -> NeuronId {
             },
         )),
         subnet_id: Some(clap_subnet_id),
+        data_root: Some(nns_state_dir.clone()),
+        replay_until_height: None,
+    })
+    .unwrap();
+
+    info!(logger, "Giving our principal 1 million ICP ...");
+    let clap_subnet_id = ClapSubnetId(subnet_id);
+    replay(ReplayToolArgs {
+        config: Some(ic_config_file),
+        canister_caller_id: None,
+        subcmd: Some(SubCommand::WithLedgerAccountForTests(
+            WithLedgerAccountCmd {
+                account_identifier: account_id,
+                e8s_to_mint: 1_000_000 * E8,
+            },
+        )),
+        subnet_id: Some(clap_subnet_id),
         data_root: Some(nns_state_dir),
         replay_until_height: None,
     })
     .unwrap();
+    info!(logger, "Our principal now has 1 million ICP");
+
     neuron_id
 }
 
@@ -555,19 +653,26 @@ fn recover_nns_subnet(
             .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
     }
 
+    wait_until_ready_for_interaction(logger.clone(), recovered_nns_node);
+}
+
+fn wait_until_ready_for_interaction(logger: Logger, node: IcNodeSnapshot) {
+    let node_ip = node.get_ip_addr();
     info!(
         logger.clone(),
-        "Recovery done, waiting until the new NNS starts up @ {upload_ip:?} ..."
+        "Waiting until node {node_ip:?} is ready for interaction ..."
     );
     retry(
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
-        || recovered_nns_node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'"),
+        || node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'"),
     )
-    .expect("NNS didn't start up!");
+    .unwrap_or_else(|e| {
+        panic!("Node {node_ip:?} didn't become ready for interaction in time because {e:?}")
+    });
 
-    info!(logger, "NNS @ {upload_ip:?} is ready for interaction.");
+    info!(logger, "Node {node_ip:?} is ready for interaction.");
 }
 
 fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapshot) {
@@ -604,11 +709,460 @@ fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapsho
     );
 }
 
+fn package_registry_local_store(logger: Logger, recovered_nns_node: IcNodeSnapshot) {
+    retry(
+        logger,
+        Duration::from_secs(120),
+        Duration::from_secs(5),
+        || {
+            recovered_nns_node.block_on_bash_script(&format!(
+                r#"
+                    sudo tar -C /var/lib/ic/data \
+                        -cf {TMP_IC_REGISTRY_LOCAL_STORE_TARBALL_PATH} \
+                        --use-compress-program='zstd --threads=0' \
+                        ic_registry_local_store
+                "#
+            ))
+        },
+    )
+    .unwrap_or_else(|e| panic!("Could not create ic_registry_local_store.tar.zst because {e:?}",));
+}
+
+fn move_node_to_recovered_nns(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    new_subnet_node: IcNodeSnapshot,
+    recovered_nns_public_key: PathBuf,
+) {
+    let logger = env.logger();
+    let new_subnet_node_ip = new_subnet_node.get_ip_addr();
+    info!(
+        logger,
+        "Moving node {new_subnet_node_ip:?} to the recovered NNS ..."
+    );
+    package_registry_local_store(logger.clone(), recovered_nns_node.clone());
+
+    let priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let recovered_nns_node_ip = recovered_nns_node.get_ip_addr();
+    let src = format!(
+        "{SSH_USERNAME}@[{recovered_nns_node_ip:?}]:{TMP_IC_REGISTRY_LOCAL_STORE_TARBALL_PATH}"
+    );
+    let dst = format!(
+        "{SSH_USERNAME}@[{new_subnet_node_ip:?}]:{TMP_IC_REGISTRY_LOCAL_STORE_TARBALL_PATH}"
+    );
+
+    let mut cmd = Command::new("scp");
+    cmd.arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg("-3")
+        .arg("-i")
+        .arg(priv_key_path.clone())
+        .arg(src.clone())
+        .arg(dst.clone());
+    info!(logger, "{cmd:?} ...");
+    let scp_out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not scp {src} to {dst} because: {e:?}!",));
+    if !scp_out.status.success() {
+        std::io::stdout().write_all(&scp_out.stdout).unwrap();
+        std::io::stderr().write_all(&scp_out.stderr).unwrap();
+        panic!("Could not scp {src} to {dst}!");
+    }
+
+    let dst_nns_public_key_pem =
+        format!("{SSH_USERNAME}@[{new_subnet_node_ip:?}]:{TMP_NNS_PUBLIC_KEY_PATH}");
+    let mut cmd = Command::new("scp");
+    cmd.arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg("-i")
+        .arg(priv_key_path)
+        .arg(recovered_nns_public_key.clone())
+        .arg(dst_nns_public_key_pem.clone());
+    info!(logger, "{cmd:?} ...");
+    let scp_out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not scp {recovered_nns_public_key:?} to {dst_nns_public_key_pem} because: {e:?}!",));
+    if !scp_out.status.success() {
+        std::io::stdout().write_all(&scp_out.stdout).unwrap();
+        std::io::stderr().write_all(&scp_out.stderr).unwrap();
+        panic!("Could not scp {recovered_nns_public_key:?} to {dst_nns_public_key_pem}!");
+    }
+
+    new_subnet_node
+        .block_on_bash_script(&format!(
+            r#"
+                set -e
+                tar -xf {TMP_IC_REGISTRY_LOCAL_STORE_TARBALL_PATH} --zstd -C /tmp
+                sudo chown -R ic-replica:ic-registry-local-store /tmp/ic_registry_local_store
+                sudo chown ic-replica {TMP_NNS_PUBLIC_KEY_PATH}
+                sudo systemctl stop ic-replica
+                sudo rm -rf /var/lib/ic/data/ic_registry_local_store
+                sudo mv /tmp/ic_registry_local_store /var/lib/ic/data/ic_registry_local_store
+                sudo mv {TMP_NNS_PUBLIC_KEY_PATH} /var/lib/ic/data/nns_public_key.pem
+                sudo systemctl start ic-replica
+            "#
+        ))
+        .unwrap_or_else(|e| panic!("Could not ... on {new_subnet_node_ip:?} because {e:?}",));
+    info!(
+        logger,
+        "Moved node {new_subnet_node_ip:?} to the recovered NNS"
+    );
+}
+
+fn create_subnet(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    neuron_id: NeuronId,
+    new_subnet_node: IcNodeSnapshot,
+) {
+    let logger = env.logger();
+    let new_subnet_node_ip = new_subnet_node.get_ip_addr();
+    info!(
+        logger,
+        "Proposing to create new subnet from {new_subnet_node_ip:?}"
+    );
+
+    let ic_admin_path = env
+        .clone()
+        .get_dependency_path("rs/tests/recovery/binaries/ic-admin");
+    let recovered_nns_url = recovered_nns_node.get_public_url();
+    let pem = env.get_dependency_path("rs/tests/nns/secret_key.pem");
+    let neuron_id_number = neuron_id.0;
+    let replica_version = env.get_initial_replica_version().unwrap();
+    let mut cmd = Command::new(ic_admin_path);
+    cmd.arg("--nns-url")
+        .arg(recovered_nns_url.to_string())
+        .arg("-s")
+        .arg(pem)
+        .arg("propose-to-create-subnet")
+        .arg("--summary")
+        .arg("Creating a subnet")
+        .arg("--proposer")
+        .arg(neuron_id_number.to_string())
+        .arg("--subnet-type")
+        .arg("application")
+        .arg("--replica-version-id")
+        .arg(replica_version.to_string())
+        .arg(new_subnet_node.node_id.to_string());
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not create new subnet because {e:?}",));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+    if out.status.success() {
+        info!(
+            logger,
+            "Successfully proposed to create new subnet from {new_subnet_node_ip:?}"
+        );
+    } else {
+        panic!("Could not create new subnet");
+    }
+    wait_until_ready_for_interaction(logger.clone(), new_subnet_node);
+}
+
+/// Imports the test PEM as a dfx identity
+/// and returns its Principal and its ledger account ID.
+fn dfx_import_identity(env: TestEnv) -> PrincipalId {
+    let logger = env.logger();
+    info!(logger, "Creating cycles wallet ...");
+    let dfx_path = env.clone().get_dependency_path("external/dfx/dfx");
+    let pem = env.get_dependency_path("rs/tests/nns/secret_key.pem");
+    let home = env.base_path();
+    let mut cmd = Command::new(dfx_path.clone());
+    cmd.env("HOME", home.clone())
+        .arg("identity")
+        .arg("import")
+        .arg("--force")
+        .arg("--storage-mode=plaintext")
+        .arg("nns_test_user_dfx_identity")
+        .arg(pem);
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}"));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+
+    let mut cmd = Command::new(dfx_path.clone());
+    cmd.env("HOME", home.clone())
+        .arg("identity")
+        .arg("use")
+        .arg("nns_test_user_dfx_identity");
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+
+    let mut cmd = Command::new(dfx_path.clone());
+    cmd.env("HOME", home.clone())
+        .arg("identity")
+        .arg("get-principal");
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+
+    let principal = String::from_utf8(out.stdout).unwrap();
+    let principal = principal.trim();
+    let principal: PrincipalId = PrincipalId::from_str(principal)
+        .unwrap_or_else(|e| panic!("Could not parse PrincipalId because {e:?}"));
+    info!(logger, "principal = {principal:?}");
+    principal
+}
+
+fn get_app_subnet_id(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    new_subnet_node_id: NodeId,
+) -> SubnetId {
+    let logger = env.logger();
+
+    package_registry_local_store(logger.clone(), recovered_nns_node.clone());
+
+    let priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let recovered_nns_node_ip = recovered_nns_node.get_ip_addr();
+    let src = format!(
+        "{SSH_USERNAME}@[{recovered_nns_node_ip:?}]:{TMP_IC_REGISTRY_LOCAL_STORE_TARBALL_PATH}"
+    );
+    let dst = env.get_path("ic_registry_local_store.tar.zst");
+    let mut cmd = Command::new("scp");
+    cmd.arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg("-i")
+        .arg(priv_key_path.clone())
+        .arg(src.clone())
+        .arg(dst.clone());
+    info!(logger, "{cmd:?} ...");
+    let scp_out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not scp {src} to {dst:?} because: {e:?}!",));
+    if !scp_out.status.success() {
+        std::io::stdout().write_all(&scp_out.stdout).unwrap();
+        std::io::stderr().write_all(&scp_out.stderr).unwrap();
+        panic!("Could not scp {src} to {dst:?}!");
+    }
+
+    let recovered_nns_prep_state_dir = env
+        .create_prep_dir(RECOVERED_NNS)
+        .unwrap_or_else(|e| panic!("Could not create prep_dir for {RECOVERED_NNS} because {e:?}"));
+    let recovered_nns_prep_state_dir_path = recovered_nns_prep_state_dir.clone().prep_dir;
+    let mut cmd = Command::new("tar");
+    cmd.arg("-xf")
+        .arg(dst)
+        .arg("--zstd")
+        .arg("-C")
+        .arg(recovered_nns_prep_state_dir_path.clone());
+    info!(logger, "{cmd:?} ...");
+    let tar_out = cmd.output().unwrap_or_else(|e| {
+        panic!("Could not unpack the recovered NNS registry local store because {e:?}",)
+    });
+    if !tar_out.status.success() {
+        std::io::stdout().write_all(&tar_out.stdout).unwrap();
+        std::io::stderr().write_all(&tar_out.stderr).unwrap();
+        panic!("Could not unpack the recovered NNS registry local store");
+    }
+    let recovered_nns_registry_local_store_path =
+        recovered_nns_prep_state_dir.registry_local_store_path();
+    fs::rename(
+        recovered_nns_prep_state_dir_path.join("ic_registry_local_store"),
+        recovered_nns_registry_local_store_path,
+    )
+    .unwrap_or_else(|e| panic!("Could not rename ic_registry_local_store because {e:?}"));
+
+    let app_subnet = env
+        .topology_snapshot_by_name(RECOVERED_NNS)
+        .subnets()
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::Application
+                && subnet
+                    .nodes()
+                    .any(|node| node.node_id == new_subnet_node_id)
+        })
+        .unwrap();
+    app_subnet.subnet_id
+}
+
+fn set_default_subnets(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    neuron_id: NeuronId,
+    subnet_id: SubnetId,
+) {
+    let logger = env.logger();
+    info!(logger, "Setting authorized subnetworks {subnet_id:?} ...");
+    submit_execute_await_proposal(
+        env,
+        recovered_nns_node,
+        neuron_id,
+        NnsFunction::SetAuthorizedSubnetworks,
+        SetAuthorizedSubnetworkListArgs {
+            who: None,
+            subnets: vec![subnet_id],
+        },
+        "Setting authorized subnetworks".to_string(),
+    );
+    info!(logger, "Set authorized subnetworks {subnet_id:?}.");
+}
+
+fn create_cycles_wallet(
+    env: TestEnv,
+    recovered_nns_node: IcNodeSnapshot,
+    principal: PrincipalId,
+    new_subnet_node_url: Url,
+) -> CanisterId {
+    let logger = env.logger();
+    let dfx_path = env.clone().get_dependency_path("external/dfx/dfx");
+    let recovered_nns_url = recovered_nns_node.get_public_url();
+    let home = env.base_path();
+    let mut cmd = Command::new(dfx_path.clone());
+    cmd.env("HOME", home.clone())
+        .arg("ledger")
+        .arg("--network")
+        .arg(recovered_nns_url.to_string())
+        .arg("create-canister")
+        .arg(principal.to_string())
+        .arg("--amount")
+        .arg("10000");
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+
+    let prefix: &str = "Canister created with id: \"";
+    let wallet_canister_id: CanisterId = match std::str::from_utf8(&out.stdout)
+        .unwrap()
+        .split('\n')
+        .filter(|line| line.starts_with(prefix))
+        .collect::<Vec<&str>>()
+        .first()
+        .unwrap()
+        .split(prefix)
+        .collect::<Vec<&str>>()[..]
+    {
+        [_, canister_id_str] => {
+            let mut canister_id_string = canister_id_str.to_string();
+            canister_id_string.pop(); // Drop the last " character
+            CanisterId::from_str(&canister_id_string).unwrap()
+        }
+        _ => panic!("Couldn't parse canister ID!"),
+    };
+    info!(logger, "WALLET_CANISTER = {wallet_canister_id}");
+
+    let mut cmd = Command::new(dfx_path.clone());
+    cmd.env("HOME", home.clone())
+        .arg("-q")
+        .arg("identity")
+        .arg("--network")
+        .arg(new_subnet_node_url.to_string())
+        .arg("deploy-wallet")
+        .arg(wallet_canister_id.to_string());
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+
+    let mut cmd = Command::new(dfx_path);
+    cmd.env("HOME", home)
+        .arg("-q")
+        .arg("identity")
+        .arg("--network")
+        .arg(new_subnet_node_url.to_string())
+        .arg("set-wallet")
+        .arg(wallet_canister_id.to_string());
+    info!(logger, "{cmd:?} ...");
+    let out = cmd
+        .output()
+        .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}",));
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+
+    wallet_canister_id
+}
+
+fn configure_sns_wasms(
+    env: TestEnv,
+    neuron_id: NeuronId,
+    recovered_nns_node: IcNodeSnapshot,
+    new_subnet_id: SubnetId,
+    wallet_canister_id: CanisterId,
+) {
+    let logger = env.logger();
+    let recovered_nns_node_url = recovered_nns_node.get_public_url();
+
+    let current_subnets = block_on(async {
+        let nns = runtime_from_url(
+            recovered_nns_node_url,
+            PrincipalId::from_str(MAINNET_SNS_WASM_CANISTER_ID).unwrap(),
+        );
+        let sns_wasm_canister = Canister::new(
+            &nns,
+            CanisterId::from_str(MAINNET_SNS_WASM_CANISTER_ID).unwrap(),
+        );
+        info!(logger, "get_sns_subnet_ids ...");
+        let get_sns_subnet_ids_response: GetSnsSubnetIdsResponse = sns_wasm_canister
+            .query_("get_sns_subnet_ids", candid_one, GetSnsSubnetIdsRequest {})
+            .await
+            .unwrap();
+        get_sns_subnet_ids_response.sns_subnet_ids
+    });
+
+    info!(
+        logger,
+        "Proposing to remove SNS subnet IDs {current_subnets:?} and add {new_subnet_id:?} ..."
+    );
+    submit_execute_await_proposal(
+        env.clone(),
+        recovered_nns_node.clone(),
+        neuron_id,
+        NnsFunction::UpdateSnsWasmSnsSubnetIds,
+        UpdateSnsSubnetListRequest {
+            sns_subnet_ids_to_add: vec![new_subnet_id.get()],
+            sns_subnet_ids_to_remove: current_subnets,
+        },
+        "Add SNS Subnet IDs to SNS-WASM".to_string(),
+    );
+
+    info!(
+        logger,
+        "Proposing to allow the wallet canister {wallet_canister_id:?} to deploy an SNS ..."
+    );
+    submit_execute_await_proposal(
+        env,
+        recovered_nns_node,
+        neuron_id,
+        NnsFunction::UpdateAllowedPrincipals,
+        UpdateAllowedPrincipalsRequest {
+            added_principals: vec![wallet_canister_id.get()],
+            removed_principals: vec![],
+        },
+        "Update the list of Principals allowed to deploy an SNS".to_string(),
+    );
+}
+
 /// Write a shell script containing some environment variable exports.
 /// This script can be sourced such that we can easily use the legacy
 /// nns-tools shell scripts in /testnet/tools/nns-tools/ with the dynamic
 /// testnet deployed by this system-test.
-fn write_sh_lib(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapshot) {
+fn write_sh_lib(
+    env: TestEnv,
+    neuron_id: NeuronId,
+    nns_node: IcNodeSnapshot,
+    new_subnet_node: IcNodeSnapshot,
+    wallet_canister_id: CanisterId,
+) {
     let logger: slog::Logger = env.clone().logger();
     let set_testnet_env_vars_sh_path = env.get_path(SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
@@ -617,7 +1171,13 @@ fn write_sh_lib(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapshot) {
     let sns_cli = fs::canonicalize(env.get_dependency_path("rs/sns/cli/sns")).unwrap();
     let pem = fs::canonicalize(env.get_dependency_path("rs/tests/nns/secret_key.pem")).unwrap();
     let recovered_nns_node_url = nns_node.get_public_url();
+    let new_subnet_node_url = new_subnet_node.get_public_url();
     let neuron_id_number = neuron_id.0;
+    let wallet_canister_id_str = wallet_canister_id.to_string();
+    let sns_quill =
+        fs::canonicalize(env.get_dependency_path("external/sns_quill/sns-quill")).unwrap();
+    let idl2json = fs::canonicalize(env.get_dependency_path("external/idl2json/idl2json")).unwrap();
+    let dfx_home = fs::canonicalize(env.base_path());
     fs::write(
         set_testnet_env_vars_sh_path.clone(),
         format!(
@@ -625,7 +1185,12 @@ fn write_sh_lib(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapshot) {
              export SNS_CLI={sns_cli:?}; \
              export PEM={pem:?}; \
              export NNS_URL=\"{recovered_nns_node_url}\"; \
-             export NEURON_ID={neuron_id_number:?};"
+             export NEURON_ID={neuron_id_number:?}; \
+             export SUBNET_URL=\"{new_subnet_node_url}\"; \
+             export WALLET_CANISTER=\"{wallet_canister_id_str}\"; \
+             export SNS_QUILL={sns_quill:?}; \
+             export IDL2JSON={idl2json:?}; \
+             export DFX_HOME={dfx_home:?}; "
         ),
     )
     .unwrap_or_else(|e| {
@@ -688,4 +1253,53 @@ fn bless_replica_version(
         replica_version,
         neuron_id,
     );
+}
+
+fn submit_execute_await_proposal(
+    env: TestEnv,
+    nns_node: IcNodeSnapshot,
+    neuron_id: NeuronId,
+    nns_function: NnsFunction,
+    nns_function_input: impl CandidType,
+    title: String,
+) {
+    let logger = env.logger();
+    block_on(async {
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        let governance_canister_id = CanisterId::from_str(MAINNET_GOVERNANCE_CANISTER_ID).unwrap();
+        let governance = get_canister(&nns, governance_canister_id);
+
+        let pem_path = env.get_dependency_path("rs/tests/nns/secret_key.pem");
+        let mut pem_file = File::open(pem_path).unwrap();
+        let mut pem = String::new();
+        pem_file.read_to_string(&mut pem).unwrap();
+        let ed_25519_key_pair = Ed25519KeyPair::from_pem(&pem).unwrap();
+        let sender = Sender::from_keypair(&ed_25519_key_pair);
+
+        info!(logger, "Submitting proposal \"{title}\" ... ");
+        let proposal_id = submit_external_update_proposal(
+            &governance,
+            sender,
+            neuron_id,
+            nns_function,
+            nns_function_input,
+            title.clone(),
+            title.clone(),
+        )
+        .await;
+
+        info!(
+            logger,
+            "Submitted proposal \"{title}\" with ID {proposal_id:?}. Executing it ..."
+        );
+        vote_execute_proposal_assert_executed(&governance, proposal_id).await;
+
+        let retry_delay = Duration::from_secs(5);
+        let timeout = Duration::from_secs(60);
+        await_proposal_execution(&logger, &governance, proposal_id, retry_delay, timeout).await;
+        info!(
+            logger,
+            "Executed proposal \"{title}\" with ID {proposal_id:?}"
+        );
+    });
 }
