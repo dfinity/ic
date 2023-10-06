@@ -36,6 +36,8 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:base64",
+    "@crate_index//:bincode",
+    "@crate_index//:bytes",
     "@crate_index//:hex",
     "@crate_index//:time",
     "@crate_index//:parking_lot",
@@ -87,6 +89,7 @@ DEV_DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
+    "@crate_index//:educe",
 ]
 
 DEV_MACRO_DEPENDENCIES = [

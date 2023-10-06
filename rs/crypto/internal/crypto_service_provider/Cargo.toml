@@ -8,6 +8,9 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.41"
 base64 = { workspace = true }
+bincode = "1.2"
+bytes = "1.5"
+educe = "0.4"
 hex = "0.4.2"
 ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }

@@ -45,10 +45,11 @@ use std::sync::Arc;
 use tarpc::server::BaseChannel;
 #[allow(unused_imports)]
 use tarpc::server::Serve;
-use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{context, serde_transport, server::Channel};
 use threadpool::ThreadPool;
 use tokio::net::UnixListener;
+
+use super::codec::{Bincode, CspVaultObserver, ObservableCodec};
 
 /// Crypto service provider (CSP) vault server based on the tarpc RPC framework.
 pub struct TarpcCspVaultServerImpl<C: CspVault> {
@@ -56,6 +57,7 @@ pub struct TarpcCspVaultServerImpl<C: CspVault> {
     listener: UnixListener,
     thread_pool: ThreadPool,
     max_frame_length: usize,
+    metrics: Arc<CryptoMetrics>,
     #[allow(unused)]
     logger: ReplicaLogger,
 }
@@ -569,6 +571,7 @@ impl<C: CspVault> TarpcCspVaultServerImplBuilder<C> {
             listener,
             thread_pool: self.threadpool_builder.clone().build(),
             max_frame_length: self.max_frame_length,
+            metrics: Arc::clone(&self.metrics),
             logger: new_logger!(&self.logger),
         }
     }
@@ -607,9 +610,13 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
             });
             let local_csp_vault = Arc::clone(&self.local_csp_vault);
             let thread_pool_handle = self.thread_pool.clone(); // creates a pool handle similar to Arc
+            let codec = ObservableCodec::new(
+                Bincode::default(),
+                CspVaultObserver::new(new_logger!(&self.logger), Arc::clone(&self.metrics)),
+            );
             tokio::spawn(async move {
                 let framed = codec_builder.new_framed(conn);
-                let transport = serde_transport::new(framed, Bincode::default());
+                let transport = serde_transport::new(framed, codec);
                 let worker = TarpcCspVaultServerWorker {
                     local_csp_vault,
                     thread_pool_handle,

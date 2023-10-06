@@ -1,5 +1,5 @@
 {
-  "checksum": "3221c85aaa7156db133d1c15fb77be1ab74f97a8b3250e45680d85e0b34e2bcb",
+  "checksum": "650bec204f2705cf85c665fc99b0f65c3f51f1dde1bf19d214d05ecbd154c825",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14318,6 +14318,10 @@
               "target": "derive_more"
             },
             {
+              "id": "educe 0.4.22",
+              "target": "educe"
+            },
+            {
               "id": "gflags-derive 0.1.0",
               "target": "gflags_derive"
             },
@@ -15089,8 +15093,18 @@
         ],
         "crate_features": {
           "common": [
+            "Clone",
+            "Copy",
             "Debug",
-            "Default"
+            "Default",
+            "Deref",
+            "DerefMut",
+            "Eq",
+            "Hash",
+            "Ord",
+            "PartialEq",
+            "PartialOrd",
+            "default"
           ],
           "selects": {}
         },

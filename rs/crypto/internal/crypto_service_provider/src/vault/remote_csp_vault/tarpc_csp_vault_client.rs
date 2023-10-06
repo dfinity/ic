@@ -10,7 +10,7 @@ use crate::vault::api::{
     PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
     ThresholdSignatureCspVault, ValidatePksAndSksError,
 };
-use crate::vault::remote_csp_vault::codec::{CspVaultClientObserver, ObservableCodec};
+use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{
     remote_vault_codec_builder, robust_unix_socket, TarpcCspVaultClient, FOUR_GIGA_BYTES,
 };
@@ -48,7 +48,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
-use tarpc::tokio_serde::formats::Bincode;
 
 #[cfg(test)]
 use ic_config::logger::Config as LoggerConfig;
@@ -203,7 +202,7 @@ impl RemoteCspVaultBuilder {
                 .new_framed(conn),
             ObservableCodec::new(
                 Bincode::default(),
-                CspVaultClientObserver::new(new_logger!(&self.logger), self.metrics.clone()),
+                CspVaultObserver::new(new_logger!(&self.logger), Arc::clone(&self.metrics)),
             ),
         );
         let client = {
