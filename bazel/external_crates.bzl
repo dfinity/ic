@@ -326,6 +326,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ed25519-consensus": crate.spec(
                 version = "^2.0.1",
             ),
+            "educe": crate.spec(
+                version = "^0.4",
+            ),
             "either": crate.spec(
                 version = "^1.6",
             ),
