@@ -92,14 +92,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         metrics_addr = cli.monitoring.metrics_addr.to_string().as_str(),
     );
 
-    let lookup_table = Arc::new(ArcSwapOption::empty());
     let routing_table = Arc::new(ArcSwapOption::empty());
+    let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     // DNS
-    let dns_resolver = DnsResolver::new(Arc::clone(&routing_table));
+    let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
 
     // TLS Verification
-    let tls_verifier = TlsVerifier::new(Arc::clone(&routing_table));
+    let tls_verifier = TlsVerifier::new(Arc::clone(&registry_snapshot));
 
     // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
@@ -190,7 +190,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // Server / API
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
-        Arc::clone(&lookup_table),
+        Arc::clone(&routing_table),
         [DER_PREFIX.as_slice(), nns_pub_key.into_bytes().as_slice()].concat(),
     );
 
@@ -352,7 +352,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     // Snapshots
-    let snapshot_runner = SnapshotRunner::new(Arc::clone(&routing_table), registry_client);
+    let snapshot_runner = SnapshotRunner::new(Arc::clone(&registry_snapshot), registry_client);
     let snapshot_runner = WithMetrics(
         snapshot_runner,
         MetricParams::new(&registry, "run_snapshot"),
@@ -361,8 +361,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // Checks
     let persister = WithMetrics(
-        persist::Persister::new(Arc::clone(&lookup_table)),
-        MetricParams::new(&registry, "persist"),
+        persist::Persister::new(Arc::clone(&routing_table)),
+        MetricParams::new_with_opts(&registry, "persist", &[], None),
     );
 
     let checker = Checker::new(http_client);
@@ -382,7 +382,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     let check_runner = CheckRunner::new(
-        Arc::clone(&routing_table),
+        Arc::clone(&registry_snapshot),
         cli.health.min_ok_count,
         cli.health.max_height_lag,
         persister,

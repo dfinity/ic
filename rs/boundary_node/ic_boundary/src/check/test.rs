@@ -13,7 +13,7 @@ use mockall::{predicate::*, *};
 use super::*;
 use crate::{
     persist::{Persister, Routes},
-    snapshot::{CanisterRange, Node, RoutingTable, Subnet},
+    snapshot::{CanisterRange, Node, RegistrySnapshot, Subnet},
 };
 
 const NODE_ID_OFFSET: u64 = 1000;
@@ -34,11 +34,11 @@ impl Routes {
     }
 }
 
-pub fn generate_custom_routing_table(
+pub fn generate_custom_registry_snapshot(
     subnet_count: u64,
     nodes_per_subnet: u64,
     offset: u64,
-) -> RoutingTable {
+) -> RegistrySnapshot {
     let mut subnets = Vec::new();
     let mut nodes_hash = HashMap::new();
 
@@ -76,9 +76,8 @@ pub fn generate_custom_routing_table(
         });
     }
 
-    RoutingTable {
+    RegistrySnapshot {
         registry_version: 1,
-        nns_subnet_id: Principal::from_text("fscpm-uiaaa-aaaaa-aaaap-yai").unwrap(),
         subnets,
         nodes: nodes_hash,
     }
@@ -105,9 +104,9 @@ fn check_result(height: u64, lat: u64) -> CheckResult {
 async fn test_check_some_unhealthy() -> Result<(), Error> {
     let routes = Arc::new(ArcSwapOption::empty());
     let persist = Persister::new(Arc::clone(&routes));
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
-        2, 2, 0,
-    )));
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(
+        generate_custom_registry_snapshot(2, 2, 0),
+    ));
 
     let mut check = MockCheck::new();
 
@@ -163,9 +162,9 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
         .returning(|_| Ok(check_result(1000, 0)));
 
     // Generate a table with 4 nodes first
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
-        2, 2, 0,
-    )));
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(
+        generate_custom_registry_snapshot(2, 2, 0),
+    ));
     let mut check_runner = Runner::new(Arc::clone(&routing_table), 1, 10, persist, check);
     check_runner.run().await.expect("run should succeed");
 
@@ -176,7 +175,7 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
     assert!(rt.node_exists(node_id(101)));
 
     // Generate a smaller table with 2 nodes now and store it
-    let new_table = Arc::new(generate_custom_routing_table(2, 1, 0));
+    let new_table = Arc::new(generate_custom_registry_snapshot(2, 1, 0));
     routing_table.store(Some(new_table));
 
     check_runner.run().await.expect("run should succeed");
@@ -189,7 +188,7 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
     assert!(!rt.node_exists(node_id(101)));
 
     // Generate a bigger table with 4 nodes again
-    let new_table = Arc::new(generate_custom_routing_table(2, 2, 0));
+    let new_table = Arc::new(generate_custom_registry_snapshot(2, 2, 0));
     routing_table.store(Some(new_table));
 
     check_runner.run().await.expect("run should succeed");
@@ -234,9 +233,9 @@ async fn test_check_min_ok() -> Result<(), Error> {
         .in_sequence(&mut seq1);
 
     // Generate a table
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
-        2, 2, 0,
-    )));
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(
+        generate_custom_registry_snapshot(2, 2, 0),
+    ));
     let mut check_runner = Runner::new(Arc::clone(&routing_table), 5, 10, persist, check);
 
     for i in 0..7 {
@@ -290,9 +289,9 @@ async fn test_check_node_upgrade() -> Result<(), Error> {
         .in_sequence(&mut seq1);
 
     // Generate a table
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(generate_custom_routing_table(
-        2, 2, 0,
-    )));
+    let routing_table = Arc::new(ArcSwapOption::from_pointee(
+        generate_custom_registry_snapshot(2, 2, 0),
+    ));
     let mut check_runner = Runner::new(Arc::clone(&routing_table), 5, 10, persist, check);
 
     for i in 0..3 {

@@ -1,6 +1,5 @@
 use std::{sync::Arc, time::Instant};
 
-use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
@@ -9,7 +8,7 @@ use tracing::{error, info};
 
 use crate::{
     metrics::{MetricParams, WithMetrics},
-    snapshot::{Node, RoutingTable},
+    snapshot::{Node, Subnet},
 };
 
 #[derive(Copy, Clone)]
@@ -38,16 +37,6 @@ fn principal_bytes_to_u256(p: &[u8]) -> u256 {
     padded[pad..32].copy_from_slice(p);
 
     u256::from_be_bytes(padded)
-}
-
-// Converts string principal to a u256
-#[allow(dead_code)] // remove if this is used outside of tests
-fn principal_to_u256(p: &str) -> Result<u256, Error> {
-    // Parse textual representation into a byte slice
-    let p = Principal::from_text(p)?;
-    let p = p.as_slice();
-
-    Ok(principal_bytes_to_u256(p))
 }
 
 // Principals are 2^232 max so we can use the u256 type to efficiently store them
@@ -108,7 +97,7 @@ impl Routes {
 
 #[async_trait]
 pub trait Persist: Send + Sync {
-    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error>;
+    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus;
 }
 
 pub struct Persister {
@@ -124,21 +113,21 @@ impl Persister {
 #[async_trait]
 impl Persist for Persister {
     // Construct a lookup table based on provided routing table
-    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
-        if rt.subnets.is_empty() {
-            return Ok(PersistStatus::SkippedEmpty);
+    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
+        if subnets.is_empty() {
+            return PersistStatus::SkippedEmpty;
         }
 
         // Generate a list of subnets with a single canister range
         // Can contain several entries with the same subnet ID
-        let mut subnets = vec![];
+        let mut rt_subnets = vec![];
 
         let mut node_count: u32 = 0;
-        for subnet in rt.subnets.into_iter() {
+        for subnet in subnets.into_iter() {
             node_count += subnet.nodes.len() as u32;
 
             for range in subnet.ranges.into_iter() {
-                subnets.push(Arc::new(RouteSubnet {
+                rt_subnets.push(Arc::new(RouteSubnet {
                     id: subnet.id.to_string(),
                     range_start: principal_bytes_to_u256(range.start.as_slice()),
                     range_end: principal_bytes_to_u256(range.end.as_slice()),
@@ -148,11 +137,11 @@ impl Persist for Persister {
         }
 
         // Sort subnets by range_start for the binary search to work in lookup()
-        subnets.sort_by_key(|x| x.range_start);
+        rt_subnets.sort_by_key(|x| x.range_start);
 
         let rt = Arc::new(Routes {
             node_count,
-            subnets,
+            subnets: rt_subnets,
         });
 
         // Load old subnet to get previous numbers
@@ -170,34 +159,28 @@ impl Persist for Persister {
         // Publish new routing table
         self.published_routes.store(Some(rt));
 
-        Ok(PersistStatus::Completed(results))
+        PersistStatus::Completed(results)
     }
 }
 
 #[async_trait]
 impl<T: Persist> Persist for WithMetrics<T> {
-    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
+    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
         let start_time = Instant::now();
-        let out = self.0.persist(rt).await;
+        let out = self.0.persist(subnets).await;
         let duration = start_time.elapsed().as_secs_f64();
 
         match out {
-            Ok(PersistStatus::SkippedEmpty) => {
-                error!("Lookup table is empty!");
+            PersistStatus::SkippedEmpty => {
+                error!("Lookup table is empty");
             }
-            Ok(PersistStatus::Completed(s)) => {
+            PersistStatus::Completed(s) => {
                 info!(
                     "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
                     s.ranges_old, s.ranges_new, s.nodes_old, s.nodes_new,
                 );
             }
-            Err(_) => {}
         }
-
-        let status = match &out {
-            Ok(_) => "ok".to_string(),
-            Err(e) => format!("error_{}", e),
-        };
 
         let MetricParams {
             action,
@@ -205,17 +188,10 @@ impl<T: Persist> Persist for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.with_label_values(&[status.as_str()]).inc();
-        recorder
-            .with_label_values(&[status.as_str()])
-            .observe(duration);
+        counter.with_label_values(&[]).inc();
+        recorder.with_label_values(&[]).observe(duration);
 
-        info!(
-            action,
-            status,
-            error = ?out.as_ref().err(),
-            duration,
-        );
+        info!(action, duration);
 
         out
     }

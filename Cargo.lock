@@ -4903,7 +4903,6 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
- "simple_moving_average",
  "slog",
  "stretto",
  "tempfile",
@@ -16216,15 +16215,6 @@ dependencies = [
  "num-traits",
  "thiserror",
  "time 0.3.22",
-]
-
-[[package]]
-name = "simple_moving_average"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdd19d3808aad2604c824399fd270260d634678b010328c9d96851bb0fb63121"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]

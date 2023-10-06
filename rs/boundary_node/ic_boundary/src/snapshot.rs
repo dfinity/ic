@@ -10,7 +10,9 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_types::RegistryVersion;
 use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
+use tracing::info;
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::core::Run;
@@ -53,42 +55,33 @@ impl fmt::Display for Subnet {
 }
 
 #[derive(Debug, Clone)]
-pub struct RoutingTable {
+pub struct RegistrySnapshot {
     pub registry_version: u64,
-    pub nns_subnet_id: Principal,
     pub subnets: Vec<Subnet>,
     // Hash map for a faster lookup by DNS resolver
     pub nodes: HashMap<String, Node>,
 }
 
 pub struct Runner {
-    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     registry_client: Arc<dyn RegistryClient>,
+    registry_version: Option<RegistryVersion>,
 }
 
 impl Runner {
     pub fn new(
-        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
         registry_client: Arc<dyn RegistryClient>,
     ) -> Self {
         Self {
-            published_routing_table,
+            published_registry_snapshot,
             registry_client,
+            registry_version: None,
         }
     }
 
-    // Constructs a routing table based on registry
-    fn get_routing_table(&mut self) -> Result<RoutingTable, Error> {
-        let version = self.registry_client.get_latest_version();
-
-        // Get NNS subnet ID
-        // TODO What do we need it for?
-        let root_subnet_id = self
-            .registry_client
-            .get_root_subnet_id(version)
-            .context("failed to get root subnet id")? // Result
-            .context("root subnet id not available")?; // Option
-
+    // Creates a snapshot of the registry for given version
+    fn get_snapshot(&mut self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
         let routing_table = self
             .registry_client
@@ -198,9 +191,8 @@ impl Runner {
             .collect::<Result<Vec<Subnet>, Error>>()
             .context("unable to get subnets")?;
 
-        Ok(RoutingTable {
+        Ok(RegistrySnapshot {
             registry_version: version.get(),
-            nns_subnet_id: root_subnet_id.as_ref().0,
             subnets,
             nodes: nodes_map,
         })
@@ -210,9 +202,25 @@ impl Runner {
 #[async_trait]
 impl Run for Runner {
     async fn run(&mut self) -> Result<(), Error> {
-        // Obtain routing table & publish it
-        let rt = self.get_routing_table()?;
-        self.published_routing_table.store(Some(Arc::new(rt)));
+        // Fetch latest available registry version
+        let version = self.registry_client.get_latest_version();
+
+        // Check if we already have this version published
+        if self.registry_version == Some(version) {
+            return Ok(());
+        }
+
+        // Otherwise create a snapshot & publish it
+        let rt = self.get_snapshot(version)?;
+        self.published_registry_snapshot.store(Some(Arc::new(rt)));
+        info!(
+            version_old = self.registry_version.map(|x| x.get()),
+            version_new = version.get(),
+            "New registry snapshot published",
+        );
+
+        self.registry_version = Some(version);
+
         Ok(())
     }
 }
