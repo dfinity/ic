@@ -339,6 +339,7 @@ impl ExecutionEnvironment {
             config.allocatable_compute_capacity_in_percent,
             config.wasm_chunk_store,
         );
+        let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor),
             log.clone(),
@@ -352,7 +353,7 @@ impl ExecutionEnvironment {
             hypervisor,
             canister_manager,
             ingress_history_writer,
-            metrics: ExecutionEnvironmentMetrics::new(metrics_registry),
+            metrics,
             config,
             cycles_account_manager,
             own_subnet_id,
@@ -564,9 +565,8 @@ impl ExecutionEnvironment {
                                         msg.canister_change_origin(sender_canister_version),
                                         cycles,
                                         settings,
-                                        registry_settings.max_number_of_canisters,
+                                        registry_settings,
                                         &mut state,
-                                        registry_settings.subnet_size,
                                         round_limits,
                                     )),
                                 };
@@ -930,6 +930,7 @@ impl ExecutionEnvironment {
                                         &round_limits.subnet_available_memory,
                                     ),
                                     registry_settings.subnet_size,
+                                    &self.metrics.canister_creation_error,
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
                                 .map_err(|err| err.into()),
@@ -1305,9 +1306,8 @@ impl ExecutionEnvironment {
         origin: CanisterChangeOrigin,
         cycles: Cycles,
         settings: CanisterSettings,
-        max_number_of_canisters: u64,
+        registry_settings: &RegistryExecutionSettings,
         state: &mut ReplicatedState,
-        subnet_size: usize,
         round_limits: &mut RoundLimits,
     ) -> (Result<Vec<u8>, UserError>, Cycles) {
         let sender = origin.origin();
@@ -1318,11 +1318,12 @@ impl ExecutionEnvironment {
                     sender_subnet_id,
                     cycles,
                     settings,
-                    max_number_of_canisters,
+                    registry_settings.max_number_of_canisters,
                     state,
-                    subnet_size,
+                    registry_settings.subnet_size,
                     round_limits,
                     self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+                    &self.metrics.canister_creation_error,
                 );
                 (
                     res.map(|new_canister_id| CanisterIdRecord::from(new_canister_id).encode())

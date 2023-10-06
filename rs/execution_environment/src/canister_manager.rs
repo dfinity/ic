@@ -566,6 +566,7 @@ impl CanisterManager {
         subnet_size: usize,
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: ResourceSaturation,
+        canister_creation_error: &IntCounter,
     ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
         // Creating a canister is possible only in the following cases:
         // 1. sender is on NNS => it can create canister on any subnet
@@ -618,6 +619,7 @@ impl CanisterManager {
                     state,
                     round_limits,
                     None,
+                    canister_creation_error,
                 ) {
                     Ok(canister_id) => canister_id,
                     Err(err) => return (Err(err), cycles),
@@ -1124,6 +1126,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
+        canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
 
@@ -1161,6 +1164,7 @@ impl CanisterManager {
                 state,
                 round_limits,
                 specified_id,
+                canister_creation_error,
             ),
         }
     }
@@ -1209,6 +1213,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         specified_id: Option<PrincipalId>,
+        canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
 
@@ -1224,7 +1229,7 @@ impl CanisterManager {
         let new_canister_id = match specified_id {
             Some(spec_id) => self.validate_specified_id(state, spec_id)?,
 
-            None => self.generate_new_canister_id(state)?,
+            None => self.generate_new_canister_id(state, canister_creation_error)?,
         };
 
         // Canister id available. Create the new canister.
@@ -1327,11 +1332,12 @@ impl CanisterManager {
     /// with the newly generated ID already exists.
     //
     // WARNING!!! If you change the logic here, please ensure that the sequence
-    // of NNS canister ids as defined in nns/constants/src/constants.rs are also
+    // of NNS canister ids as defined in nns/constants/src/lib.rs are also
     // updated.
     fn generate_new_canister_id(
         &self,
         state: &mut ReplicatedState,
+        canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let canister_id = state.metadata.generate_new_canister_id().map_err(|err| {
             error!(self.log, "Unable to generate new canister IDs: {}", err);
@@ -1339,8 +1345,14 @@ impl CanisterManager {
         })?;
 
         // Sanity check: ensure that no canister with this ID exists already.
+        debug_assert!(state.canister_state(&canister_id).is_none());
         if state.canister_state(&canister_id).is_some() {
-            return Err(CanisterManagerError::CanisterAlreadyExists(canister_id));
+            canister_creation_error.inc();
+            error!(
+                self.log,
+                "[EXC-BUG] New canister id {} already exists.", canister_id
+            );
+            return Err(CanisterManagerError::CanisterIdAlreadyExists(canister_id));
         }
 
         Ok(canister_id)
@@ -1415,6 +1427,7 @@ pub(crate) enum CanisterManagerError {
         controller_provided: PrincipalId,
     },
     CanisterAlreadyExists(CanisterId),
+    CanisterIdAlreadyExists(CanisterId),
     CanisterNotFound(CanisterId),
     CanisterNonEmpty(CanisterId),
     InvalidSenderSubnet(SubnetId),
@@ -1510,6 +1523,12 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
+                )
+            }
+            CanisterIdAlreadyExists(canister_id) => {
+                Self::new(
+                    ErrorCode::CanisterIdAlreadyExists,
+                        format!("Unsuccessful canister creation: canister id already exists {}", canister_id) 
                 )
             }
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),
