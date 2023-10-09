@@ -31,7 +31,6 @@ pub struct PocketIc {
     subnet: StateMachine,
 }
 
-#[allow(clippy::new_without_default)]
 impl PocketIc {
     pub fn new(sm: StateMachine) -> Self {
         Self { subnet: sm }

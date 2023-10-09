@@ -44,6 +44,7 @@ const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 /// Command line arguments to PocketIC server.
 #[derive(Parser)]
+#[clap(version = "0.2.0")]
 struct Args {
     /// A common identifier for all clients that use this instance of a PocketIC-server. In
     /// general, this is assumed to be the PID of the parent process of the test process. Thus, all
