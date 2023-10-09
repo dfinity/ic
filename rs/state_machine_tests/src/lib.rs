@@ -714,6 +714,11 @@ impl StateMachine {
         )
     }
 
+    pub fn into_state_dir(self) -> TempDir {
+        let (path, _, _, _) = self.into_components();
+        path
+    }
+
     /// Emulates a node restart, including checkpoint recovery.
     pub fn restart_node(self) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
