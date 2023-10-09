@@ -440,7 +440,8 @@ impl SubnetMetrics {
                 | CyclesUseCase::Instructions
                 | CyclesUseCase::RequestAndResponseTransmission
                 | CyclesUseCase::Uninstall
-                | CyclesUseCase::CanisterCreation => total += *cycles,
+                | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }
 

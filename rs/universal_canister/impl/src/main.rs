@@ -397,6 +397,11 @@ fn eval(ops_bytes: OpsBytes) {
                 let data = stack.pop_blob();
                 stack.push_int(api::is_controller(&data));
             }
+            Ops::CyclesBurn128 => {
+                let amount_low = stack.pop_int64();
+                let amount_high = stack.pop_int64();
+                stack.push_blob(api::cycles_burn128(amount_high, amount_low))
+            }
         }
     }
 }

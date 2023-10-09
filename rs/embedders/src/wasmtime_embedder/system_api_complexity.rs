@@ -34,6 +34,7 @@ pub mod overhead {
         pub const CANISTER_STATUS: NumInstructions = NumInstructions::new(0);
         pub const CANISTER_VERSION: NumInstructions = NumInstructions::new(0);
         pub const CERTIFIED_DATA_SET: NumInstructions = NumInstructions::new(0);
+        pub const CYCLES_BURN: NumInstructions = NumInstructions::new(100);
         pub const DATA_CERTIFICATE_COPY: NumInstructions = NumInstructions::new(0);
         pub const DATA_CERTIFICATE_PRESENT: NumInstructions = NumInstructions::new(0);
         pub const DATA_CERTIFICATE_SIZE: NumInstructions = NumInstructions::new(0);
@@ -202,6 +203,7 @@ pub mod cpu {
     pub const CERTIFIED_DATA_SET: CpuComplexity = from_nanos(70);
     pub const CONTROLLER_COPY: CpuComplexity = from_nanos(60);
     pub const CONTROLLER_SIZE: CpuComplexity = from_nanos(20);
+    pub const CYCLES_BURN: CpuComplexity = from_nanos(200);
     pub const DATA_CERTIFICATE_COPY: CpuComplexity = from_nanos(60);
     pub const DATA_CERTIFICATE_PRESENT: CpuComplexity = from_nanos(20);
     pub const DATA_CERTIFICATE_SIZE: CpuComplexity = from_nanos(20);

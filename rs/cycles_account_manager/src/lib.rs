@@ -30,7 +30,7 @@ use ic_types::{
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::{str::FromStr, time::Duration};
+use std::{cmp::min, str::FromStr, time::Duration};
 
 pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
     "cycles_account_manager_response_cycles_refund_error";
@@ -860,7 +860,8 @@ impl CyclesAccountManager {
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed => system_state.balance(),
+            | CyclesUseCase::NonConsumed
+            | CyclesUseCase::BurnedCycles => system_state.balance(),
         };
 
         self.verify_cycles_balance_with_threshold(
@@ -942,6 +943,42 @@ impl CyclesAccountManager {
             *cycles_balance += amount_to_mint;
             Ok(())
         }
+    }
+
+    /// Burns as many cycles as possible, up to these constraints:
+    ///
+    /// 1. It burns no more cycles than the `amount_to_burn`.
+    ///
+    /// 2. It burns no more cycles than `balance` - `freezing_limit`, where `freezing_limit`
+    /// is the amount of idle cycles burned by the canister during its `freezing_threshold`.
+    ///
+    /// Returns the number of cycles that were burned.
+    pub fn cycles_burn(
+        &self,
+        cycles_balance: &mut Cycles,
+        amount_to_burn: Cycles,
+        freeze_threshold: NumSeconds,
+        memory_allocation: MemoryAllocation,
+        memory_usage: NumBytes,
+        compute_allocation: ComputeAllocation,
+        subnet_size: usize,
+        reserved_balance: Cycles,
+    ) -> Cycles {
+        let threshold = self.freeze_threshold_cycles(
+            freeze_threshold,
+            memory_allocation,
+            memory_usage,
+            compute_allocation,
+            subnet_size,
+            reserved_balance,
+        );
+
+        // The subtraction '*cycles_balance - threshold' is saturating
+        // and hence returned value will never be negative.
+        let burning = min(amount_to_burn, *cycles_balance - threshold);
+
+        *cycles_balance -= burning;
+        burning
     }
 
     /// Converts `num_instructions` in `Cycles`.
@@ -1165,5 +1202,31 @@ mod tests {
             cycles_account_manager.http_request_fee(request_size, None, subnet_size as usize),
             Cycles::from(1_605_046_800u64) * subnet_size
         );
+    }
+
+    #[test]
+    fn test_cycles_burn() {
+        let subnet_size = 13;
+        let cycles_account_manager = create_cycles_account_manager(subnet_size);
+        let initial_balance = Cycles::new(1_000_000_000);
+        let mut balance = initial_balance;
+        let amount_to_burn = Cycles::new(1_000_000);
+
+        assert_eq!(
+            cycles_account_manager.cycles_burn(
+                &mut balance,
+                amount_to_burn,
+                NumSeconds::new(0),
+                MemoryAllocation::default(),
+                0.into(),
+                ComputeAllocation::default(),
+                13,
+                Cycles::new(0)
+            ),
+            amount_to_burn
+        );
+
+        // Check that the balance is updated properly.
+        assert_eq!(balance + amount_to_burn, initial_balance)
     }
 }

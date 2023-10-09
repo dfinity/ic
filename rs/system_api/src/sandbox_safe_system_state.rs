@@ -771,6 +771,31 @@ impl SandboxSafeSystemState {
         result
     }
 
+    /// Burns min(balance - freezing_treshold, amount_to_burn) cycles from the canister's
+    /// balance and returns the number of burned cycles.
+    pub(super) fn cycles_burn128(
+        &mut self,
+        amount_to_burn: Cycles,
+        canister_current_memory_usage: NumBytes,
+    ) -> Cycles {
+        let mut new_balance = self.cycles_balance();
+        let burned_cycles = self.cycles_account_manager.cycles_burn(
+            &mut new_balance,
+            amount_to_burn,
+            self.freeze_threshold,
+            self.memory_allocation,
+            canister_current_memory_usage,
+            self.compute_allocation,
+            self.subnet_size,
+            self.reserved_balance(),
+        );
+        self.update_balance_change_consuming(
+            new_balance,
+            &[(CyclesUseCase::BurnedCycles, burned_cycles)],
+        );
+        burned_cycles
+    }
+
     pub(super) fn refund_cycles(&mut self, cycles: Cycles) {
         let mut new_balance = self.cycles_balance();
         new_balance += cycles;
