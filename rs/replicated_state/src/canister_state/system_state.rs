@@ -61,6 +61,7 @@ pub enum CyclesUseCase {
     HTTPOutcalls,
     DeletedCanisters,
     NonConsumed,
+    BurnedCycles,
 }
 
 impl CyclesUseCase {
@@ -79,6 +80,7 @@ impl CyclesUseCase {
             Self::HTTPOutcalls => "HTTPOutcalls",
             Self::DeletedCanisters => "DeletedCanisters",
             Self::NonConsumed => "NonConsumed",
+            Self::BurnedCycles => "BurnedCycles",
         }
     }
 }
@@ -97,6 +99,7 @@ impl From<CyclesUseCase> for i32 {
             CyclesUseCase::HTTPOutcalls => 9,
             CyclesUseCase::DeletedCanisters => 10,
             CyclesUseCase::NonConsumed => 11,
+            CyclesUseCase::BurnedCycles => 12,
         }
     }
 }
@@ -115,6 +118,7 @@ impl From<i32> for CyclesUseCase {
             9 => Self::HTTPOutcalls,
             10 => Self::DeletedCanisters,
             11 => Self::NonConsumed,
+            12 => Self::BurnedCycles,
             _ => panic!("Unsupported value"),
         }
     }
@@ -1338,7 +1342,8 @@ impl SystemState {
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed => requested_amount,
+            | CyclesUseCase::NonConsumed
+            | CyclesUseCase::BurnedCycles => requested_amount,
         };
         self.cycles_balance -= remaining_amount;
         self.observe_consumed_cycles_with_use_case(

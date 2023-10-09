@@ -8,6 +8,7 @@ use crate::util::*;
 use canister_test::PrincipalId;
 use ic_agent::agent::RejectCode;
 use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 
 pub fn test_raw_rand_api(env: TestEnv) {
@@ -103,6 +104,43 @@ pub fn test_controller(env: TestEnv) {
                     .update(wasm().is_controller(&[0u8; 128]).reply_int())
                     .await,
                 RejectCode::CanisterError,
+            );
+        }
+    })
+}
+
+pub fn test_cycles_burn(env: TestEnv) {
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    let logger = env.logger();
+    block_on({
+        async move {
+            let balance_initial = 1_000_000_000;
+            let canister_a = UniversalCanister::new_with_cycles_with_retries(
+                &agent,
+                nns_node.effective_canister_id(),
+                Cycles::new(balance_initial),
+                &logger,
+            )
+            .await;
+            let amount_to_burn = 1_000_000;
+            assert_eq!(
+                canister_a
+                    .update(
+                        wasm()
+                            .cycles_burn128(Cycles::new(amount_to_burn))
+                            .reply_data_append()
+                            .reply()
+                            .build()
+                    )
+                    .await
+                    .unwrap(),
+                amount_to_burn.to_le_bytes()
+            );
+
+            assert_eq!(
+                balance_initial - amount_to_burn,
+                get_balance(&canister_a.canister_id(), &agent).await
             );
         }
     })

@@ -105,5 +105,6 @@ try_from_u8!(
         MintCycles = 75,
         OneWayCallNew = 76,
         IsController = 77,
+        CyclesBurn128 = 78,
     }
 );

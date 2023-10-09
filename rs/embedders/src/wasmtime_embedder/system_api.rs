@@ -1236,6 +1236,21 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "cycles_burn128", {
+            move |mut caller: Caller<'_, StoreData>, amount_high: i64, amount_low: i64, dst: i32| {
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    s.ic0_cycles_burn128(
+                        Cycles::from_parts(amount_high as u64, amount_low as u64),
+                        dst as u32,
+                        memory,
+                    )
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cycles_burn128 failed: {}", e)))
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("__", "internal_trap", {
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {

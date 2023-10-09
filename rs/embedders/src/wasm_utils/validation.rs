@@ -581,6 +581,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 },
             )],
         ),
+        (
+            "cycles_burn128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis

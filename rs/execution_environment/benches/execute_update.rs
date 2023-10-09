@@ -308,6 +308,11 @@ pub fn execute_update_bench(c: &mut Criterion) {
             Module::Test.from_ic0("is_controller", Params2(0, 29), Result::I32),
             905_000_004,
         ),
+        common::Benchmark(
+            "ic0_cycles_burn128()".into(),
+            Module::Test.from_ic0("cycles_burn128", Params3(1_i64, 2_i64, 3_i32), Result::No),
+            13_000_004,
+        ),
     ];
     common::run_benchmarks(
         c,

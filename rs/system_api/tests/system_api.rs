@@ -180,6 +180,7 @@ fn test_canister_init_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -236,6 +237,7 @@ fn test_canister_update_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -292,6 +294,7 @@ fn test_canister_replicated_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -348,6 +351,7 @@ fn test_canister_pure_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -414,6 +418,7 @@ fn test_canister_stateful_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -470,6 +475,7 @@ fn test_reply_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -526,6 +532,7 @@ fn test_reply_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -583,6 +590,7 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -640,6 +648,7 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -696,6 +705,7 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -752,6 +762,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -811,6 +822,7 @@ fn test_cleanup_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -872,6 +884,7 @@ fn test_inspect_message_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -929,6 +942,7 @@ fn test_canister_system_task_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -985,6 +999,7 @@ fn test_canister_system_task_support_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
 
@@ -1775,4 +1790,37 @@ fn ic0_is_controller_invalid_principal_id() {
             PrincipalIdBlobParseError(..)
         ))
     ));
+}
+
+#[test]
+fn test_ic0_cycles_burn() {
+    let initial_cycles = Cycles::new(5_000_000_000_000);
+    let system_state = SystemStateBuilder::default()
+        .initial_cycles(initial_cycles)
+        .build();
+
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &system_state,
+        CyclesAccountManagerBuilder::new().build(),
+    );
+
+    let removed = Cycles::new(2_000_000_000_000);
+
+    for _ in 0..2 {
+        let mut heap = vec![0; 16];
+        api.ic0_cycles_burn128(removed, 0, &mut heap).unwrap();
+        assert_eq!(removed, Cycles::from(&heap));
+    }
+
+    let mut heap = vec![0; 16];
+    api.ic0_cycles_burn128(removed, 0, &mut heap).unwrap();
+    // The remaining balance is lower than the amount requested to be burned,
+    // hence the system will remove as many cycles as it can.
+    assert_eq!(Cycles::new(1_000_000_000_000), Cycles::from(&heap));
+
+    let mut heap = vec![0; 16];
+    api.ic0_cycles_burn128(removed, 0, &mut heap).unwrap();
+    // There are no more cycles that can be burned.
+    assert_eq!(Cycles::new(0), Cycles::from(&heap));
 }

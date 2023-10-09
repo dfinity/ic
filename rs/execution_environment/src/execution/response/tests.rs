@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
@@ -17,6 +17,7 @@ use ic_types::{
     CanisterId, Cycles, Time,
 };
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
+use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_universal_canister::{call_args, wasm};
 
 #[test]
@@ -2567,6 +2568,64 @@ fn cycles_balance_changes_applied_correctly() {
     let b_balance_new = test.canister_state(b_id).system_state.balance();
 
     assert!(a_balance_old + b_balance_old > a_balance_new + b_balance_new);
+}
+
+#[test]
+fn test_cycles_burn() {
+    let test = ExecutionTestBuilder::new().build();
+
+    let canister_memory_usage = NumBytes::try_from(1_000_000).unwrap();
+
+    let amount = 1_000_000_000;
+    let mut balance = Cycles::new(amount);
+    let amount_to_burn = Cycles::new(amount / 10);
+
+    let burned = test.cycles_account_manager().cycles_burn(
+        &mut balance,
+        amount_to_burn,
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        canister_memory_usage,
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+        Cycles::zero(),
+    );
+
+    assert_eq!(burned, amount_to_burn);
+    assert_eq!(balance.get() + burned.get(), amount);
+}
+
+#[test]
+fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
+    let test = ExecutionTestBuilder::new().build();
+
+    let canister_memory_usage = NumBytes::try_from(1_000_000).unwrap();
+
+    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        canister_memory_usage,
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+        Cycles::zero(),
+    );
+
+    let amount = 1_000_000_000;
+    let mut balance = Cycles::new(amount);
+
+    let burned = test.cycles_account_manager().cycles_burn(
+        &mut balance,
+        Cycles::new(10 * amount),
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        canister_memory_usage,
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+        Cycles::zero(),
+    );
+
+    assert_eq!(burned.get(), amount - freezing_threshold_cycles.get());
+    assert_eq!(balance.get() + burned.get(), amount);
 }
 
 #[test]

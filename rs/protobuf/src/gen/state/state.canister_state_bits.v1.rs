@@ -693,6 +693,7 @@ pub enum CyclesUseCase {
     HttpOutcalls = 9,
     DeletedCanisters = 10,
     NonConsumed = 11,
+    BurnedCycles = 12,
 }
 impl CyclesUseCase {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -715,6 +716,7 @@ impl CyclesUseCase {
             CyclesUseCase::HttpOutcalls => "CYCLES_USE_CASE_HTTP_OUTCALLS",
             CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
             CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
+            CyclesUseCase::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -734,6 +736,7 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_HTTP_OUTCALLS" => Some(Self::HttpOutcalls),
             "CYCLES_USE_CASE_DELETED_CANISTERS" => Some(Self::DeletedCanisters),
             "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
+            "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
             _ => None,
         }
     }

@@ -2801,6 +2801,36 @@ impl SystemApi for SystemApiImpl {
         );
         result
     }
+
+    fn ic0_cycles_burn128(
+        &mut self,
+        amount: Cycles,
+        dst: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let method_name = "ic0_cycles_burn128";
+        let result = match self.api_type {
+            ApiType::Start { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
+            ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::Update { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
+                let cycles = self
+                    .sandbox_safe_system_state
+                    .cycles_burn128(amount, self.memory_usage.current_usage);
+                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                Ok(())
+            }
+        };
+        trace_syscall!(self, ic0_cycles_burn128, result, amount);
+        result
+    }
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.

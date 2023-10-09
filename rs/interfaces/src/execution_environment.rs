@@ -1012,6 +1012,20 @@ pub trait SystemApi {
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
     fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
+
+    /// Burns the provided `amount` cycles.
+    /// Removes cycles from the canister's balance.
+    ///
+    /// Removes no more cycles than `amount`.
+    ///
+    /// If the canister does not have enough cycles, it burns as much
+    /// as possible while the canister does not freeze.
+    fn ic0_cycles_burn128(
+        &mut self,
+        amount: Cycles,
+        dst: u32,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
