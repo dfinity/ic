@@ -1,51 +1,60 @@
 use candid::{candid_method, Nat};
-use futures::future::join_all;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, Address};
+use ic_cketh_minter::deposit::scrap_eth_logs;
 use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
     Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
-use ic_cketh_minter::eth_logs::{
-    report_transaction_error, EventSource, ReceivedEthEvent, ReceivedEthEventError,
-};
-use ic_cketh_minter::eth_rpc::FeeHistory;
-use ic_cketh_minter::eth_rpc::{JsonRpcResult, SendRawTransactionResult};
-use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
-use ic_cketh_minter::eth_rpc_client::{EthRpcClient, MultiCallError};
-use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
+use ic_cketh_minter::guard::retrieve_eth_guard;
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
-use ic_cketh_minter::numeric::{
-    BlockNumber, LedgerBurnIndex, LedgerMintIndex, TransactionCount, Wei,
-};
-use ic_cketh_minter::state::audit::{process_event, Event, EventType};
-use ic_cketh_minter::state::{
-    lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
-};
-use ic_cketh_minter::transactions::{
-    create_transaction, CreateTransactionError, EthWithdrawalRequest,
-};
-use ic_cketh_minter::tx::{estimate_transaction_price, TransactionPrice};
+use ic_cketh_minter::numeric::{LedgerBurnIndex, Wei};
+use ic_cketh_minter::state::audit::{Event, EventType};
+use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
+use ic_cketh_minter::transactions::EthWithdrawalRequest;
+use ic_cketh_minter::tx::estimate_transaction_price;
+use ic_cketh_minter::withdraw::{eth_fee_history, process_retrieve_eth_requests};
 use ic_cketh_minter::{
-    eth_logs, eth_rpc, MINT_RETRY_DELAY, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL,
-    SCRAPPING_ETH_LOGS_INTERVAL,
+    state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, SCRAPPING_ETH_LOGS_INTERVAL,
 };
-use ic_cketh_minter::{state, storage};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
-use std::cmp::{min, Ordering};
-use std::collections::{BTreeMap, BTreeSet};
-use std::iter::zip;
 use std::str::FromStr;
 use std::time::Duration;
 
 mod dashboard;
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
+
+fn validate_caller_not_anonymous() -> candid::Principal {
+    let principal = ic_cdk::caller();
+    if principal == candid::Principal::anonymous() {
+        panic!("anonymous principal is not allowed");
+    }
+    principal
+}
+
+fn setup_timers() {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        // Initialize the minter's public key to make the address known.
+        ic_cdk::spawn(async {
+            let _ = lazy_call_ecdsa_public_key().await;
+        })
+    });
+    // Start scraping logs immediately after the install, then repeat with the interval.
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrap_eth_logs()));
+    ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {
+        ic_cdk::spawn(scrap_eth_logs())
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
+        ic_cdk::spawn(process_retrieve_eth_requests())
+    });
+}
 
 #[init]
 #[candid_method(init)]
@@ -66,465 +75,6 @@ fn init(arg: MinterArg) {
     setup_timers();
 }
 
-fn setup_timers() {
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-        // Initialize the minter's public key to make the address known.
-        ic_cdk::spawn(async {
-            let _ = lazy_call_ecdsa_public_key().await;
-        })
-    });
-    // Start scraping logs immediately after the install, then repeat with the interval.
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrap_eth_logs()));
-    ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {
-        ic_cdk::spawn(scrap_eth_logs())
-    });
-    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
-        ic_cdk::spawn(process_retrieve_eth_requests())
-    });
-}
-
-async fn scrap_eth_logs() {
-    let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
-        Ok(guard) => guard,
-        Err(_) => return,
-    };
-    let contract_address = match read_state(|s| s.ethereum_contract_address) {
-        Some(address) => address,
-        None => {
-            log!(
-                DEBUG,
-                "[scrap_eth_logs]: skipping scrapping ETH logs: no contract address"
-            );
-            return;
-        }
-    };
-    let mut last_scraped_block_number = read_state(|s| s.last_scraped_block_number);
-    let last_queried_block_number = update_last_observed_block_number().await;
-    while last_scraped_block_number < last_queried_block_number {
-        last_scraped_block_number = scrap_eth_logs_between(
-            contract_address,
-            last_scraped_block_number,
-            last_queried_block_number,
-        )
-        .await;
-    }
-}
-
-/// Scraps Ethereum logs between `from` and `min(from + 1024, to)` since certain RPC providers
-/// require that the number of blocks queried is no greater than 1024.
-/// Returns the last block number that was scraped (which is `min(from + 1024, to)`).
-async fn scrap_eth_logs_between(
-    contract_address: Address,
-    from: BlockNumber,
-    to: BlockNumber,
-) -> BlockNumber {
-    const MAX_BLOCK_SPREAD: u16 = 1024;
-    match from.cmp(&to) {
-        Ordering::Less => {
-            let max_to = from
-                .checked_add(BlockNumber::from(MAX_BLOCK_SPREAD))
-                .unwrap_or(BlockNumber::MAX);
-            let last_scraped_block_number = min(max_to, to);
-            log!(
-                DEBUG,
-                "Scrapping ETH logs from block {:?} to block {:?}...",
-                from,
-                last_scraped_block_number
-            );
-
-            let (transaction_events, errors) = eth_logs::last_received_eth_events(
-                contract_address,
-                from,
-                last_scraped_block_number,
-            )
-            .await;
-            let has_new_events = !transaction_events.is_empty();
-            for event in transaction_events {
-                log!(
-                    INFO,
-                    "Received event {event:?}; will mint {} wei to {}",
-                    event.value,
-                    event.principal
-                );
-                if ic_cketh_minter::blocklist::is_blocked(event.from_address) {
-                    log!(
-                        INFO,
-                        "Received event from a blocked address: {} for {} WEI",
-                        event.from_address,
-                        event.value,
-                    );
-                    mutate_state(|s| {
-                        process_event(
-                            s,
-                            EventType::InvalidDeposit {
-                                event_source: ic_cketh_minter::eth_logs::EventSource {
-                                    transaction_hash: event.transaction_hash,
-                                    log_index: event.log_index,
-                                },
-                                reason: format!("blocked address {}", event.from_address),
-                            },
-                        )
-                    });
-                } else {
-                    mutate_state(|s| process_event(s, EventType::AcceptedDeposit(event)));
-                }
-            }
-            if has_new_events {
-                ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint_cketh()));
-            }
-            for error in errors {
-                if let ReceivedEthEventError::InvalidEventSource { source, error } = &error {
-                    mutate_state(|s| {
-                        process_event(
-                            s,
-                            EventType::InvalidDeposit {
-                                event_source: *source,
-                                reason: error.to_string(),
-                            },
-                        )
-                    });
-                }
-                report_transaction_error(error);
-            }
-            mutate_state(|s| s.last_scraped_block_number = last_scraped_block_number);
-            last_scraped_block_number
-        }
-        Ordering::Equal => {
-            log!(
-                DEBUG,
-                "[scrap_eth_logs] Skipping scrapping ETH logs: no new blocks",
-            );
-            to
-        }
-        Ordering::Greater => {
-            ic_cdk::trap(&format!(
-                "BUG: last scraped block number ({:?}) is greater than the last queried block number ({:?})",
-                from, to
-            ));
-        }
-    }
-}
-
-async fn update_last_observed_block_number() -> BlockNumber {
-    use eth_rpc::{Block, BlockSpec};
-
-    let finalized_block: Block = read_state(EthRpcClient::from_state)
-        .eth_get_block_by_number(BlockSpec::Tag(read_state(State::ethereum_block_height)))
-        .await
-        .expect("HTTP call failed");
-    let block_number = finalized_block.number;
-    mutate_state(|s| s.last_observed_block_number = Some(block_number));
-    block_number
-}
-
-async fn mint_cketh() {
-    use icrc_ledger_types::icrc1::transfer::TransferArg;
-
-    let _guard = match TimerGuard::new(TaskType::MintCkEth) {
-        Ok(guard) => guard,
-        Err(_) => return,
-    };
-
-    let (ledger_canister_id, events) = read_state(|s| (s.ledger_id, s.events_to_mint.clone()));
-    let client = ICRC1Client {
-        runtime: CdkRuntime,
-        ledger_canister_id,
-    };
-
-    let mut error_count = 0;
-
-    for (event_source, event) in events {
-        let block_index = match client
-            .transfer(TransferArg {
-                from_subaccount: None,
-                to: event.principal.into(),
-                fee: None,
-                created_at_time: None,
-                memo: None,
-                amount: Nat::from(event.value),
-            })
-            .await
-        {
-            Ok(Ok(block_index)) => block_index,
-            Ok(Err(err)) => {
-                log!(INFO, "Failed to mint ckETH: {event:?} {err}");
-                error_count += 1;
-                continue;
-            }
-            Err(err) => {
-                log!(
-                    INFO,
-                    "Failed to send a message to the ledger ({ledger_canister_id}): {err:?}"
-                );
-                error_count += 1;
-                continue;
-            }
-        };
-        mutate_state(|s| {
-            process_event(
-                s,
-                EventType::MintedCkEth {
-                    event_source,
-                    mint_block_index: LedgerMintIndex::new(block_index),
-                },
-            )
-        });
-        log!(
-            INFO,
-            "Minted {} ckWei to {} in block {block_index}",
-            event.value,
-            event.principal
-        );
-    }
-
-    if error_count > 0 {
-        log!(
-            INFO,
-            "Failed to mint {error_count} events, rescheduling the minting"
-        );
-        ic_cdk_timers::set_timer(MINT_RETRY_DELAY, || ic_cdk::spawn(mint_cketh()));
-    }
-}
-
-async fn process_retrieve_eth_requests() {
-    let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
-        Ok(guard) => guard,
-        Err(e) => {
-            log!(
-                DEBUG,
-                "Failed retrieving timer guard to process ETH requests: {e:?}",
-            );
-            return;
-        }
-    };
-
-    if read_state(|s| s.eth_transactions.nothing_to_process()) {
-        return;
-    }
-
-    let transaction_price = estimate_transaction_price(&eth_fee_history().await);
-    let max_transaction_fee = transaction_price.max_transaction_fee();
-    log!(
-        INFO,
-        "[withdraw]: Estimated max transaction fee: {:?}",
-        max_transaction_fee,
-    );
-    resubmit_transactions_batch(&transaction_price).await;
-    create_transactions_batch(transaction_price);
-    sign_transactions_batch().await;
-    send_transactions_batch().await;
-    finalize_transactions_batch().await;
-}
-
-async fn resubmit_transactions_batch(transaction_price: &TransactionPrice) {
-    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
-        return;
-    }
-    match latest_transaction_count().await {
-        Ok(latest_tx_count) => {
-            let transactions_to_resubmit = read_state(|s| {
-                s.eth_transactions
-                    .create_resubmit_transactions(latest_tx_count, transaction_price.clone())
-            });
-            for tx in transactions_to_resubmit {
-                match tx {
-                    Ok(resubmit_tx) => {
-                        log!(INFO, "[resubmit_transactions_batch]: transactions to resubmit {resubmit_tx:?}");
-                        mutate_state(|s| {
-                            s.eth_transactions.record_resubmit_transaction(resubmit_tx)
-                        });
-                    }
-                    Err(e) => {
-                        log!(INFO, "Failed to resubmit transaction: {e:?}");
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            log!(INFO, "Failed to get latest transaction count: {e:?}");
-        }
-    }
-}
-
-fn create_transactions_batch(transaction_price: TransactionPrice) {
-    for request in read_state(|s| s.eth_transactions.withdrawal_requests_batch(5)) {
-        log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
-        let ethereum_network = read_state(State::ethereum_network);
-        let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
-        match create_transaction(&request, nonce, transaction_price.clone(), ethereum_network) {
-            Ok(tx) => {
-                log!(
-                    DEBUG,
-                    "[create_transactions_batch]: created transaction {tx:?}",
-                );
-
-                mutate_state(|s| s.eth_transactions.record_created_transaction(request, tx));
-            }
-            Err(CreateTransactionError::InsufficientAmount {
-                ledger_burn_index,
-                withdrawal_amount,
-                max_transaction_fee,
-            }) => {
-                log!(
-                    INFO,
-                    "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient
-                amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}.
-                Request moved back to end of queue."
-                );
-                mutate_state(|s| s.eth_transactions.reschedule_withdrawal_request(request));
-            }
-        };
-    }
-}
-
-async fn sign_transactions_batch() {
-    let transactions_batch: Vec<_> = read_state(|s| {
-        s.eth_transactions
-            .created_transactions_iter()
-            .map(|(_nonce, _ledger_burn_index, tx)| tx)
-            .cloned()
-            .collect()
-    });
-    log!(DEBUG, "Signing transactions {transactions_batch:?}");
-    let results = join_all(transactions_batch.into_iter().map(|tx| tx.sign())).await;
-    let mut errors = Vec::new();
-    for result in results {
-        match result {
-            Ok(signed_tx) => {
-                mutate_state(|s| s.eth_transactions.record_signed_transaction(signed_tx))
-            }
-            Err(e) => errors.push(e),
-        }
-    }
-    if !errors.is_empty() {
-        // At this point there might be a gap in transaction nonces between signed transactions, e.g.,
-        // transactions 1,2,4,5 were signed, but 3 was not due to some unexpected error.
-        // This means that transactions 4 and 5 are currently stuck until transaction 3 is signed.
-        // However, we still proceed with transactions 4 and 5 since that way they might be mined faster
-        // once transaction 3 is sent on the next iteration. Otherwise, we would need to re-sign transactions 4 and 5
-        // and send them (together with transaction 3) on the next iteration.
-        log!(INFO, "Errors encountered during signing: {errors:?}");
-    }
-}
-async fn send_transactions_batch() {
-    let signed_transactions: Vec<_> = read_state(|s| {
-        s.eth_transactions
-            .signed_transactions_iter()
-            .map(|(_nonce, _index, tx)| tx)
-            .cloned()
-            .collect()
-    });
-
-    let rpc_client = read_state(EthRpcClient::from_state);
-    let results = join_all(
-        signed_transactions
-            .iter()
-            .map(|tx| rpc_client.eth_send_raw_transaction(tx.raw_transaction_hex())),
-    )
-    .await;
-
-    for (signed_tx, result) in zip(signed_transactions, results) {
-        log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
-        match result {
-            Ok(JsonRpcResult::Result(tx_result)) if tx_result == SendRawTransactionResult::Ok => {
-                 mutate_state(|s| {
-                    s.eth_transactions
-                        .record_sent_transaction(signed_tx)
-                });
-            }
-            Ok(JsonRpcResult::Result(tx_result)) if tx_result == SendRawTransactionResult::NonceTooLow => {
-                // In case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
-                // if the stuck transaction was mined in the meantime. In that case we
-                // add the resubmitted transaction to sent_tx to keep a trace of it.
-                // It will be cleaned-up once the transaction is finalized.
-                mutate_state(|s| {
-                    s.eth_transactions
-                        .record_sent_transaction(signed_tx)
-                });
-            }
-            Ok(JsonRpcResult::Result(tx_result)) => log!(INFO,
-                "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
-            ),
-            Ok(JsonRpcResult::Error { code, message }) => log!(INFO,
-                "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
-            ),
-            Err(e) => {
-                log!(INFO, "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later.")
-            }
-        };
-    }
-}
-
-async fn finalize_transactions_batch() {
-    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
-        return;
-    }
-
-    match finalized_transaction_count().await {
-        Ok(finalized_tx_count) => {
-            let txs_to_finalize = read_state(|s| {
-                s.eth_transactions
-                    .sent_transactions_to_finalize(&finalized_tx_count)
-            });
-            let expected_finalized_withdrawal_ids: BTreeSet<_> =
-                txs_to_finalize.values().cloned().collect();
-            let rpc_client = read_state(EthRpcClient::from_state);
-            let results = join_all(
-                txs_to_finalize
-                    .keys()
-                    .map(|hash| rpc_client.eth_get_transaction_receipt(*hash)),
-            )
-            .await;
-            let mut receipts: BTreeMap<LedgerBurnIndex, TransactionReceipt> = BTreeMap::new();
-            for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
-                match result {
-                    Ok(Some(receipt)) => {
-                        log!(DEBUG, "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}");
-                        match receipts.get(&withdrawal_id) {
-                            // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
-                            Some(existing_receipt) => {
-                                log!(INFO, "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later");
-                                return;
-                            }
-                            None => {
-                                receipts.insert(withdrawal_id, receipt);
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        log!(
-                            DEBUG,
-                            "Transaction {hash} for withdrawal ID {withdrawal_id} was not mined, it's probably a resubmitted transaction",
-                        )
-                    }
-                    Err(e) => {
-                        log!(
-                            INFO,
-                            "Failed to get transaction receipt for {hash} and withdrawal ID {withdrawal_id}: {e:?}. Will retry later",
-                        );
-                        return;
-                    }
-                }
-            }
-            let actual_finalized_withdrawal_ids: BTreeSet<_> = receipts.keys().cloned().collect();
-            assert_eq!(
-                expected_finalized_withdrawal_ids, actual_finalized_withdrawal_ids,
-                "ERROR: unexpected transaction receipts for some withdrawal IDs"
-            );
-            for (withdrawal_id, receipt) in receipts {
-                mutate_state(|s| {
-                    s.eth_transactions
-                        .record_finalized_transaction(withdrawal_id, receipt)
-                });
-            }
-        }
-
-        Err(e) => {
-            log!(INFO, "Failed to get finalized transaction count: {e:?}");
-        }
-    }
-}
-
 #[pre_upgrade]
 fn pre_upgrade() {
     read_state(|s| {
@@ -533,6 +83,19 @@ fn pre_upgrade() {
             block_number: s.last_scraped_block_number,
         });
     });
+}
+
+#[post_upgrade]
+fn post_upgrade(minter_arg: Option<MinterArg>) {
+    use ic_cketh_minter::lifecycle;
+    match minter_arg {
+        Some(MinterArg::InitArg(_)) => {
+            ic_cdk::trap("cannot upgrade canister state with init args");
+        }
+        Some(MinterArg::UpgradeArg(upgrade_args)) => lifecycle::post_upgrade(Some(upgrade_args)),
+        None => lifecycle::post_upgrade(None),
+    }
+    setup_timers();
 }
 
 #[update]
@@ -648,52 +211,6 @@ async fn withdraw_eth(
     }
 }
 
-fn validate_caller_not_anonymous() -> candid::Principal {
-    let principal = ic_cdk::caller();
-    if principal == candid::Principal::anonymous() {
-        panic!("anonymous principal is not allowed");
-    }
-    principal
-}
-
-async fn eth_fee_history() -> FeeHistory {
-    use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
-    read_state(EthRpcClient::from_state)
-        .eth_fee_history(FeeHistoryParams {
-            block_count: Quantity::from(5_u8),
-            highest_block: BlockSpec::Tag(BlockTag::Latest),
-            reward_percentiles: vec![20],
-        })
-        .await
-        .expect("HTTP call failed")
-        .unwrap()
-}
-
-async fn latest_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-    use eth_rpc::{BlockSpec, BlockTag};
-    use ic_cketh_minter::eth_rpc_client::requests::GetTransactionCountParams;
-    read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Latest),
-        })
-        .await
-        .reduce_with_min_by_key(|transaction_count| *transaction_count)
-}
-
-async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
-{
-    use eth_rpc::{BlockSpec, BlockTag};
-    use ic_cketh_minter::eth_rpc_client::requests::GetTransactionCountParams;
-    read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Finalized),
-        })
-        .await
-        .reduce_with_equality()
-}
-
 #[update]
 #[candid_method(update)]
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
@@ -720,19 +237,6 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
     .await
     .expect("failed to fetch canister status")
     .0
-}
-
-#[post_upgrade]
-fn post_upgrade(minter_arg: Option<MinterArg>) {
-    use ic_cketh_minter::lifecycle;
-    match minter_arg {
-        Some(MinterArg::InitArg(_)) => {
-            ic_cdk::trap("cannot upgrade canister state with init args");
-        }
-        Some(MinterArg::UpgradeArg(upgrade_args)) => lifecycle::post_upgrade(Some(upgrade_args)),
-        None => lifecycle::post_upgrade(None),
-    }
-    setup_timers();
 }
 
 #[query]

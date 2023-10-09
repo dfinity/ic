@@ -4,6 +4,7 @@ pub mod address;
 pub mod blocklist;
 mod cbor;
 pub mod checked_amount;
+pub mod deposit;
 pub mod endpoints;
 pub mod eth_logs;
 pub mod eth_rpc;
@@ -20,6 +21,7 @@ pub mod state;
 pub mod storage;
 pub mod transactions;
 pub mod tx;
+pub mod withdraw;
 
 #[cfg(test)]
 mod tests;
