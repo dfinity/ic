@@ -86,6 +86,7 @@ def export_container_filesystem(container_cmd: str,
     container_name = image_tag + "_container"
     invoke.run(f"{container_cmd} create --name {container_name} {image_tag}")
     invoke.run(f"{container_cmd} export -o {destination_tar_filename} {container_name}")
+    invoke.run("sync")
     invoke.run(f"{container_cmd} container rm {container_name}")
 
     # Using sudo w/ podman requires changing permissions on the output tar file (not the tar contents)

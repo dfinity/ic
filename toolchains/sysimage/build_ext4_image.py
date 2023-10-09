@@ -255,6 +255,7 @@ def main():
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     install_extra_files(fs_basedir, fakeroot_statefile, extra_files)
+    subprocess.run(['sync'], check=True)
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
@@ -268,12 +269,15 @@ def main():
 
     # 1. SELinux context of the root inode does not get set correctly.
     if file_contexts_file:
+        subprocess.run(['sync'], check=True)
         fixup_selinux_root_context(original_file_contexts, limit_prefix, image_file)
 
+    subprocess.run(['sync'], check=True)
     # 2. Ownership of all inodes is root.root, but that is not what it is
     # supposed to be in the final image
     fixup_permissions(os.path.join(fs_basedir, limit_prefix), fakeroot_statefile, image_file)
 
+    subprocess.run(['sync'], check=True)
     # Wrap the built filesystem image up in a tar file. Use sparse to
     # deflate all the zeroes left unwritten during build.
     subprocess.run(
