@@ -811,7 +811,7 @@ pub(crate) fn get_signing_requests<'a>(
             // Remember this is already responded to.
             known_random_ids_completed.insert(context.pseudo_random_id);
             if let Some(metrics) = ecdsa_payload_metrics {
-                metrics.payload_errors_inc("expired_requests");
+                metrics.payload_errors_inc("invalid_keyid_requests");
             }
         }
     }
@@ -865,7 +865,7 @@ pub(crate) fn get_signing_requests<'a>(
                     ecdsa::CompletedSignature::Unreported(response),
                 );
                 if let Some(metrics) = ecdsa_payload_metrics {
-                    metrics.payload_errors_inc("invalid_keyid_requests");
+                    metrics.payload_errors_inc("expired_requests");
                 }
                 // Remove from other structures if request id exists
                 if let Some(request_id) = request_id {
