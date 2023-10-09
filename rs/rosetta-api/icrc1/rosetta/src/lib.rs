@@ -8,5 +8,5 @@ pub mod ledger_blocks_synchronization;
 
 pub struct AppState {
     pub ledger_id: CanisterId,
-    pub _storage: Arc<StorageClient>,
+    pub storage: Arc<StorageClient>,
 }

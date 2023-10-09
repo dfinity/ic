@@ -142,7 +142,16 @@ pub fn blocks_strategy<Tokens: TokensType>(
     let fee_collector_strategy = prop::option::of(account_strategy());
     let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
     let effective_fee_strategy = prop::option::of(arb_small_amount());
-    let timestamp_strategy = prop::num::u64::ANY;
+    let timestamp_strategy = Just({
+        let end = SystemTime::now();
+        // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
+        let day_in_sec = 24 * 60 * 60 - 60 * 5;
+        let start = end - Duration::from_secs(day_in_sec);
+        let mut rng = rand::thread_rng(); // initialize random number generator
+        let random_duration = Duration::from_secs(rng.gen_range(0..=day_in_sec));
+        let random_time = start + random_duration; // calculate the random time
+        random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
+    });
     (
         transaction_strategy,
         effective_fee_strategy,

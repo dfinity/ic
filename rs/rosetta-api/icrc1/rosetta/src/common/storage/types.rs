@@ -17,6 +17,7 @@ pub struct RosettaBlock {
     pub block_hash: ByteBuf,
     pub encoded_block: EncodedBlock,
     pub transaction_hash: ByteBuf,
+    pub timestamp: u64,
 }
 
 impl RosettaBlock {
@@ -30,10 +31,13 @@ impl RosettaBlock {
                 .map_err(anyhow::Error::msg)?
                 .hash(),
         );
+        let timestamp = block.timestamp;
+
         Ok(Self {
             index: block_idx,
             parent_hash: Block::parent_hash(&block).map(|eb| ByteBuf::from(eb.as_slice().to_vec())),
             block_hash,
+            timestamp,
             encoded_block: block.encode(),
             transaction_hash,
         })
@@ -54,6 +58,7 @@ impl RosettaBlock {
                     .as_slice()
                     .to_vec(),
             ),
+            timestamp: block.timestamp,
         })
     }
 

@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use clap::{Parser, ValueEnum};
-use endpoints::{health, network_list, network_options};
+use endpoints::{health, network_list, network_options, network_status};
 use http::Request;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::AnonymousIdentity, Agent,
@@ -24,6 +24,7 @@ use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{debug, error_span, info, Level, Span};
 use url::Url;
+
 mod endpoints;
 
 lazy_static! {
@@ -164,7 +165,7 @@ async fn main() -> Result<()> {
 
     let shared_state = Arc::new(AppState {
         ledger_id: args.ledger_id,
-        _storage: storage.clone(),
+        storage: storage.clone(),
     });
 
     let network_url = args.effective_network_url();
@@ -214,6 +215,7 @@ async fn main() -> Result<()> {
         .route("/health", get(health))
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))
+        .route("/network/status", post(network_status))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())
