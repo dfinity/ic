@@ -113,9 +113,9 @@ use ic_interfaces::{
     ingress_pool::ChangeSet as IngressChangeSet,
     time_source::{SysTimeSource, TimeSource},
 };
-use ic_metrics::MetricsRegistry;
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
-use prometheus::{histogram_opts, labels, Histogram, IntCounter, Opts};
+use prometheus::{histogram_opts, labels, Histogram};
 use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
     Arc, RwLock,
@@ -131,8 +131,7 @@ struct ArtifactProcessorMetrics {
     processing_time: Histogram,
     /// The processing interval histogram.
     processing_interval: Histogram,
-    outbound_artifacts: IntCounter,
-    outbound_artifact_bytes: IntCounter,
+    outbound_artifact_bytes: Histogram,
     /// The last update time.
     last_update: std::time::Instant,
 }
@@ -165,33 +164,20 @@ impl ArtifactProcessorMetrics {
             ))
             .unwrap(),
         );
-        let outbound_artifacts_opts = Opts {
-            name: "artifact_manager_outbound_artifacts_total".to_string(),
-            help: "Total number of artifacts that should be delivered to all peers.".to_string(),
-            const_labels: const_labels.clone(),
-            variable_labels: vec![],
-            subsystem: "".to_string(),
-            namespace: "".to_string(),
-        };
-        let outbound_artifacts =
-            metrics_registry.register(IntCounter::with_opts(outbound_artifacts_opts).unwrap());
 
-        let outbound_artifact_bytes_opts = Opts {
-            name: "artifact_manager_outbound_artifact_bytes_total".to_string(),
-            help: "Total number of bytes from artifacts that should be delivered to all peers."
-                .to_string(),
-            const_labels,
-            variable_labels: vec![],
-            subsystem: "".to_string(),
-            namespace: "".to_string(),
-        };
-        let outbound_artifact_bytes =
-            metrics_registry.register(IntCounter::with_opts(outbound_artifact_bytes_opts).unwrap());
+        let outbound_artifact_bytes = metrics_registry.register(
+            Histogram::with_opts(histogram_opts!(
+                "artifact_manager_outbound_artifact_bytes",
+                "Distribution of bytes from artifacts that should be delivered to all peers.",
+                decimal_buckets(0, 6),
+                const_labels.clone()
+            ))
+            .unwrap(),
+        );
 
         Self {
             processing_time,
             processing_interval,
-            outbound_artifacts,
             outbound_artifact_bytes,
             last_update: std::time::Instant::now(),
         }
@@ -319,8 +305,7 @@ fn process_messages<
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
         for advert in adverts {
-            metrics.outbound_artifacts.inc();
-            metrics.outbound_artifact_bytes.inc_by(advert.size as u64);
+            metrics.outbound_artifact_bytes.observe(advert.size as f64);
             send_advert(ArtifactProcessorEvent::Advert(advert));
         }
         last_on_state_change_result = changed;
