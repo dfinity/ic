@@ -445,21 +445,42 @@ build-ic-release:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
-cargo-lock-generate:
+lock-generate:
   extends:
-    - .ubuntu-cargo-k8s
-    - .cargo-rules
-  needs: []  # don't wait on other jobs
+    - .build-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  needs: []
+  tags:
+    - dfinity-ic
+    - bazel
   script:
     - |
-      echo "Running a tiny cargo check (should always succeed), just to make sure Cargo.lock is up to date"
-      set -exuo pipefail
-      cd "${CI_PROJECT_DIR}"
+      set -euo pipefail
+      EXIT_STATUS=0
+
+      # Check that cargo lock file needs to be regenerated.
       cargo check -p ic-sys
-      cd "${CI_PROJECT_DIR}"
-    - |
-      set -exuo pipefail
-      git add Cargo.lock
+
+      # Check that bazel lock file needs to be regenerated.
+      if ! bazel query @crate_index//:all ; then
+        CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+        # Verify that it fixed.
+        bazel query @crate_index//:all
+        # Ensure pipeline will fail.
+        EXIT_STATUS=1
+      fi
+
+      # The same for static ssl build
+      if ! DFINITY_OPENSSL_STATIC=1 bazel query @crate_index//:all ; then
+        DFINITY_OPENSSL_STATIC=1 CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+        # Verify that it fixed.
+        bazel query @crate_index//:all
+        # Ensure pipeline will fail.
+        EXIT_STATUS=1
+      fi
+
+      git add Cargo.lock Cargo.Bazel.*.lock
       git status
       if ! git diff --cached --quiet; then
         # If a merge request and not on a merge train then update the Cargo.lock file in the MR automatically.
@@ -470,13 +491,13 @@ cargo-lock-generate:
           git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
           git config --global user.email "infra+gitlab-automation@dfinity.org"
           git config --global user.name "IDX GitLab Automation"
-          git commit -m"Automatically updated Cargo.lock"
+          git commit -m"Automatically updated Cargo*.lock"
           git push origin HEAD:"${CI_COMMIT_REF_NAME}"
         fi
-
-        # Force the pipeline to fail so MRs cannot be merged with a stale cargo lockfile.
-        exit 1
+        EXIT_STATUS=1
       fi
+
+      exit "${EXIT_STATUS}"
 
 pre-commit:
   variables:
