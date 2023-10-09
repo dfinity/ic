@@ -313,7 +313,7 @@ impl BlockMaker {
                         &context,
                         &parent,
                         Some(&self.ecdsa_payload_metrics),
-                        self.log.clone(),
+                        &self.log,
                     )
                     .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
                     .ok()
@@ -358,7 +358,7 @@ impl BlockMaker {
                                 &context,
                                 &parent,
                                 &self.ecdsa_payload_metrics,
-                                self.log.clone(),
+                                &self.log,
                             )
                             .map_err(|err| {
                                 warn!(self.log, "Payload construction has failed: {:?}", err)

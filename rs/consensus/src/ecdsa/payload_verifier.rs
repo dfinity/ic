@@ -246,7 +246,7 @@ pub fn validate_summary_payload(
         context,
         parent_block,
         None,
-        ic_logger::replica_logger::no_op_logger(),
+        &ic_logger::replica_logger::no_op_logger(),
     ) {
         Ok(payload) => {
             if payload.as_ref() == summary_payload {
@@ -375,7 +375,7 @@ pub fn validate_data_payload(
         state_manager,
         registry_client,
         None,
-        ic_logger::replica_logger::no_op_logger(),
+        &ic_logger::replica_logger::no_op_logger(),
     )
     .map_err(|err| PermanentError::UnexpectedDataPayload(Some(err)))?;
 
@@ -930,7 +930,7 @@ mod test {
             Some(&current_key_transcript),
             max_ongoing_signatures,
             &mut ecdsa_payload,
-            no_op_logger(),
+            &no_op_logger(),
         )
         .unwrap();
 
