@@ -88,7 +88,10 @@ submit_nns_upgrade_proposal_mainnet() {
 
     confirm_submit_proposal_command "${cmd[@]}"
 
-    "${cmd[@]}"
+    RESPONSE=$("${cmd[@]}")
+    echo "$RESPONSE"
+    PROPOSAL_ID=$(echo "${RESPONSE}" | grep -o 'proposal [0-9]*' | awk '{print $2}' | tr -d '[:space:]')
+    echo "https://dashboard.internetcomputer.org/proposal/${PROPOSAL_ID}"
 }
 
 if ! is_variable_set IC_ADMIN; then
