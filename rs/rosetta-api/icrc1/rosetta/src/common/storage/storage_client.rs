@@ -112,6 +112,7 @@ impl StorageClient {
                 hash BLOB NOT NULL,
                 serialized_block BLOB NOT NULL,
                 parent_hash BLOB,
+                timestamp INTEGER,
                 verified BOOLEAN)
             "#,
             [],

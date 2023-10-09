@@ -19,7 +19,7 @@ pub fn store_blocks(
 ) -> anyhow::Result<()> {
     connection.execute_batch("BEGIN TRANSACTION;")?;
     let mut stmt_blocks = connection.prepare(
-        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp) VALUES (?1, ?2, ?3, ?4, ?5)",
     )?;
 
     let mut stmt_transactions = connection.prepare(
@@ -35,7 +35,8 @@ pub fn store_blocks(
                 rosetta_block
                     .parent_hash
                     .clone()
-                    .map(|hash| hash.as_slice().to_vec())
+                    .map(|hash| hash.as_slice().to_vec()),
+                rosetta_block.timestamp
             ],
         ) {
             Ok(_) => (),

@@ -1,4 +1,6 @@
-use ic_icrc_rosetta::common::types::{MetadataRequest, NetworkListResponse};
+use ic_icrc_rosetta::common::types::{
+    MetadataRequest, NetworkIdentifier, NetworkListResponse, NetworkRequest, NetworkStatusResponse,
+};
 use reqwest::{Client, Url};
 use url::ParseError;
 
@@ -39,6 +41,22 @@ impl RosettaClient {
         self.http_client
             .post(self.url("/network/list"))
             .json(&MetadataRequest { metadata: None })
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn network_status(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> reqwest::Result<NetworkStatusResponse> {
+        self.http_client
+            .post(self.url("/network/status"))
+            .json(&NetworkRequest {
+                network_identifier,
+                metadata: None,
+            })
             .send()
             .await?
             .json()
