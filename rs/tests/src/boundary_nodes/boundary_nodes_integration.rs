@@ -25,12 +25,15 @@ use crate::{
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::assert_create_agent,
+    util::{assert_create_agent, block_on},
 };
 
 use crate::boundary_nodes::{
     constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
-    helpers::{create_canister, get_install_url},
+    helpers::{
+        create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
+        set_counters_on_counter_canisters,
+    },
 };
 use std::{net::SocketAddrV6, time::Duration};
 
@@ -1944,4 +1947,72 @@ pub fn reboot_test(env: TestEnv) {
     boundary_node
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
+}
+
+/* tag::catalog[]
+Title:: Handle incoming canister calls by the boundary node.
+
+Goal:: Verify that ic-boundary service of the boundary node routes canister requests (query/call/read_state) on different subnets correctly.
+
+Runbook:
+. Setup:
+    . Subnets(>=2) with node/s(>=1) on each subnet.
+    . A single boundary node.
+. Install three counter canisters on each subnet.
+. Set unique counter values on each canister via update (`write`) calls. All calls are executed via boundary node agent.
+. Verify an OK execution status of each update call via read_state call.
+. Retrieve counter values from each canister via query (`read`) call.
+. Assert that retrieved values match the expected ones.
+
+end::catalog[] */
+
+pub fn canister_routing_test(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let canisters_per_subnet = 3;
+    let subnets = topology.subnets().count() as u32;
+    assert!(subnets >= 2);
+    // These values will be set via update `write` call. Each counter value is chosen to be unique.
+    let canister_values: Vec<u32> = (0..canisters_per_subnet * subnets).collect();
+    info!(
+        log,
+        "Installing {canisters_per_subnet} canisters on each of the {subnets} subnets ...",
+    );
+    let canister_ids: Vec<Principal> = block_on(async {
+        install_canisters(
+            topology,
+            wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+            canisters_per_subnet,
+        )
+        .await
+    });
+    info!(
+        log,
+        "All {} canisters ({canisters_per_subnet} per subnet) were successfully installed",
+        canister_ids.len()
+    );
+    // As creating an agent requires a status call, the status endpoint is implicitly tested.
+    let bn_agent = {
+        let boundary_node = env
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        boundary_node.build_default_agent()
+    };
+    info!(
+        log,
+        "Incrementing counters on canisters via BN agent update calls ..."
+    );
+    block_on(set_counters_on_counter_canisters(
+        bn_agent.clone(),
+        canister_ids.clone(),
+        canister_values.clone(),
+    ));
+    info!(
+        log,
+        "Asserting expected counters on canisters via BN agent query calls ... "
+    );
+    let counters = block_on(read_counters_on_counter_canisters(bn_agent, canister_ids));
+    assert_eq!(counters, canister_values);
 }
