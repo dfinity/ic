@@ -19,33 +19,21 @@ message ArtifactAttribute {
 
 message ConsensusMessageAttribute {
   oneof kind {
-    uint64 random_beacon = 1;
     FinalizationAttribute finalization = 2;
     NotarizationAttribute notarization = 3;
-    BlockProposalAttribute block_proposal = 4;
-    uint64 random_beacon_share = 5;
-    uint64 notarization_share = 6;
-    uint64 finalization_share = 7;
-    uint64 random_tape = 8;
-    uint64 random_tape_share = 9;
-    uint64 catch_up_package = 10;
-    uint64 catch_up_package_share = 11;
+    google.protobuf.Empty empty = 12;
   }
+  reserved 1, 4, 5, 6, 7, 8, 9, 10, 11;
 }
 
 message FinalizationAttribute {
   bytes block_hash = 1;
-  uint64 height = 2;
+  reserved 2;
 }
 
 message NotarizationAttribute {
   bytes block_hash = 1;
-  uint64 height = 2;
-}
-
-message BlockProposalAttribute {
-  uint64 rank = 1;
-  uint64 height = 2;
+  reserved 2;
 }
 
 message DkgMessageAttribute {

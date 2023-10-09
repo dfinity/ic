@@ -1202,10 +1202,7 @@ pub mod artifact_attribute {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusMessageAttribute {
-    #[prost(
-        oneof = "consensus_message_attribute::Kind",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
-    )]
+    #[prost(oneof = "consensus_message_attribute::Kind", tags = "2, 3, 12")]
     pub kind: ::core::option::Option<consensus_message_attribute::Kind>,
 }
 /// Nested message and enum types in `ConsensusMessageAttribute`.
@@ -1214,28 +1211,12 @@ pub mod consensus_message_attribute {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(uint64, tag = "1")]
-        RandomBeacon(u64),
         #[prost(message, tag = "2")]
         Finalization(super::FinalizationAttribute),
         #[prost(message, tag = "3")]
         Notarization(super::NotarizationAttribute),
-        #[prost(message, tag = "4")]
-        BlockProposal(super::BlockProposalAttribute),
-        #[prost(uint64, tag = "5")]
-        RandomBeaconShare(u64),
-        #[prost(uint64, tag = "6")]
-        NotarizationShare(u64),
-        #[prost(uint64, tag = "7")]
-        FinalizationShare(u64),
-        #[prost(uint64, tag = "8")]
-        RandomTape(u64),
-        #[prost(uint64, tag = "9")]
-        RandomTapeShare(u64),
-        #[prost(uint64, tag = "10")]
-        CatchUpPackage(u64),
-        #[prost(uint64, tag = "11")]
-        CatchUpPackageShare(u64),
+        #[prost(message, tag = "12")]
+        Empty(()),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -1244,8 +1225,6 @@ pub mod consensus_message_attribute {
 pub struct FinalizationAttribute {
     #[prost(bytes = "vec", tag = "1")]
     pub block_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1253,17 +1232,6 @@ pub struct FinalizationAttribute {
 pub struct NotarizationAttribute {
     #[prost(bytes = "vec", tag = "1")]
     pub block_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlockProposalAttribute {
-    #[prost(uint64, tag = "1")]
-    pub rank: u64,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
