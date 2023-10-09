@@ -104,6 +104,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
         )
     }
 
@@ -116,6 +117,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
         )
     }
 }

@@ -75,9 +75,12 @@ pub enum SubnetAvailableMemoryError {
 /// Performance counter type.
 #[derive(Debug)]
 pub enum PerformanceCounterType {
-    // The number of WebAssembly instructions the canister has executed based on
-    // the given `i64` instruction counter.
+    // The number of WebAssembly instructions the canister has executed since
+    // the beginning of the current message execution.
     Instructions(i64),
+    // The number of WebAssembly instructions the canister has executed since
+    // the creation of the current call context.
+    CallContextInstructions(i64),
 }
 
 /// Tracks the execution complexity.
@@ -524,6 +527,9 @@ pub trait SystemApi {
     /// Returns the number of instructions executed in the current slice.
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions;
 
+    /// Return the total number of instructions executed in the call context.
+    fn call_context_instructions_executed(&self) -> NumInstructions;
+
     /// Canister id of the executing canister.
     fn canister_id(&self) -> ic_types::CanisterId;
 
@@ -828,6 +834,9 @@ pub trait SystemApi {
     ///     0 : instruction counter. The number of WebAssembly
     ///         instructions the system has determined that the canister
     ///         has executed.
+    ///     1 : call context instruction counter. The number of WebAssembly
+    ///         instructions the canister has executed within the call context
+    ///         of the current Message Execution since the Call Context creation.
     ///
     /// Note: as the instruction counters are not available on the SystemApi level,
     /// the `ic0_performance_counter_helper()` in `wasmtime_embedder` module does

@@ -281,6 +281,8 @@ pub enum ApiType {
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
         execution_mode: ExecutionMode,
+        /// The total number of instructions executed in the call context
+        call_context_instructions_executed: NumInstructions,
     },
 
     // For executing closures when a `Reject` is received
@@ -299,6 +301,8 @@ pub enum ApiType {
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
         execution_mode: ExecutionMode,
+        /// The total number of instructions executed in the call context
+        call_context_instructions_executed: NumInstructions,
     },
 
     PreUpgrade {
@@ -440,6 +444,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         execution_mode: ExecutionMode,
+        call_context_instructions_executed: NumInstructions,
     ) -> Self {
         Self::ReplyCallback {
             time,
@@ -456,6 +461,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             execution_mode,
+            call_context_instructions_executed,
         }
     }
 
@@ -468,6 +474,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         execution_mode: ExecutionMode,
+        call_context_instructions_executed: NumInstructions,
     ) -> Self {
         Self::RejectCallback {
             time,
@@ -484,6 +491,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             execution_mode,
+            call_context_instructions_executed,
         }
     }
 
@@ -1318,6 +1326,28 @@ impl SystemApi for SystemApiImpl {
         let result = (self.instructions_executed_before_current_slice as u64)
             .saturating_add(self.slice_instructions_executed(instruction_counter).get());
         NumInstructions::from(result)
+    }
+
+    fn call_context_instructions_executed(&self) -> NumInstructions {
+        match &self.api_type {
+            ApiType::ReplyCallback {
+                call_context_instructions_executed,
+                ..
+            }
+            | ApiType::RejectCallback {
+                call_context_instructions_executed,
+                ..
+            } => *call_context_instructions_executed,
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. }
+            | ApiType::Update { .. } => 0.into(),
+        }
     }
 
     fn slice_instruction_limit(&self) -> NumInstructions {
@@ -2243,6 +2273,13 @@ impl SystemApi for SystemApiImpl {
             PerformanceCounterType::Instructions(instruction_counter) => Ok(self
                 .message_instructions_executed(instruction_counter)
                 .get()),
+            PerformanceCounterType::CallContextInstructions(instruction_counter) => Ok(self
+                .call_context_instructions_executed()
+                .get()
+                .saturating_add(
+                    self.message_instructions_executed(instruction_counter)
+                        .get(),
+                )),
         };
         trace_syscall!(self, ic0_performance_counter, result);
         result

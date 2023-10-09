@@ -2640,8 +2640,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
 
     // Canister A calls canister B and C.
     let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(b_id, call_args())
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2689,8 +2689,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
 
     // Canister A calls canister B and C, the canister B on reply traps.
     let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args().on_reply(wasm().trap()))
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(b_id, call_args().on_reply(wasm().trap()))
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2738,12 +2738,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
 
     // Canister A calls canister B and C, the canister B on reply traps.
     let wasm_payload = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
-            call_args().on_reply(wasm().trap()).on_cleanup(wasm()),
-        )
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(b_id, call_args().on_reply(wasm().trap()).on_cleanup(wasm()))
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2792,14 +2788,13 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
 
     // Canister A calls canister B and C, the canister B on reply and on cleanup trap.
     let wasm_payload = wasm()
-        .call_simple(
-            b_id.get(),
-            "update",
+        .inter_update(
+            b_id,
             call_args()
                 .on_reply(wasm().trap())
                 .on_cleanup(wasm().trap()),
         )
-        .call_simple(c_id.get(), "update", call_args())
+        .inter_update(c_id, call_args())
         .build();
 
     // Enqueue ingress message to canister A.
@@ -2834,4 +2829,104 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
     // Make sure the `instructions_executed` has increased.
     let instructions_executed_a_2 = call_context.instructions_executed();
     assert!(instructions_executed_a_2 > instructions_executed_a_1);
+}
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_reply() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .inter_update(
+            b_id,
+            call_args().on_reply(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    .inter_update(
+                        b_id,
+                        call_args().on_reply(
+                            wasm()
+                                .get_global_data()
+                                .reply_data_append()
+                                // Counter a.3
+                                .performance_counter(1)
+                                .reply_int64(),
+                        ),
+                    ),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    let result = test.ingress(a_id, "update", a).unwrap();
+
+    let counters = result
+        .bytes()
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
+    assert!(counters[2] < counters[3]);
+}
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_reject() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .inter_update(
+            b_id,
+            call_args().other_side(wasm().trap()).on_reject(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    .inter_update(
+                        b_id,
+                        call_args().other_side(wasm().trap()).on_reject(
+                            wasm()
+                                .get_global_data()
+                                .reply_data_append()
+                                // Counter a.3
+                                .performance_counter(1)
+                                .reply_int64(),
+                        ),
+                    ),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    let result = test.ingress(a_id, "update", a).unwrap();
+
+    let counters = result
+        .bytes()
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
+    assert!(counters[2] < counters[3]);
 }
