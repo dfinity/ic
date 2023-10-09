@@ -11,7 +11,8 @@ use axum::{
     Router,
 };
 use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
-use tower::Service;
+use tower::{Service, ServiceBuilder};
+use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
 
 #[derive(Clone)]
 struct ProxyRouter {
@@ -54,6 +55,105 @@ impl Health for ProxyRouter {
 }
 
 #[tokio::test]
+async fn test_middleware_validate_request() -> Result<(), Error> {
+    let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
+    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
+
+    let proxy_router = Arc::new(ProxyRouter {
+        node,
+        root_key: root_key.clone(),
+    });
+
+    let (state_rootkey, state_health) = (
+        proxy_router.clone() as Arc<dyn RootKey>,
+        proxy_router.clone() as Arc<dyn Health>,
+    );
+
+    // NOTE: this router should be aligned with the one in core.rs, otherwise this testing is useless.
+    let mut app = Router::new()
+        .route(
+            PATH_STATUS,
+            get(status).with_state((state_rootkey, state_health)),
+        )
+        .layer(
+            ServiceBuilder::new()
+                .layer(middleware::from_fn(validate_request))
+                .set_x_request_id(MakeRequestUuid)
+                .propagate_x_request_id(),
+        );
+
+    // case 1: no 'x-request-id' header, middleware generates one with a random uuid
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/api/v2/status")
+        .body(Body::from(""))
+        .unwrap();
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let request_id = resp
+        .headers()
+        .get("x-request-id")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(UUID_V4_REGEX.is_match(request_id));
+
+    // case 2: 'x-request-id' header contains a valid uuid, this uuid is not overwritten by middleware
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/api/v2/status")
+        .header("x-request-id", "40a6d613-149e-4bde-8443-33593fd2fd17")
+        .body(Body::from(""))
+        .unwrap();
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        resp.headers().get("x-request-id").unwrap(),
+        "40a6d613-149e-4bde-8443-33593fd2fd17"
+    );
+    // case 3: 'x-request-id' header contains an invalid uuid
+    let expected_failure =
+        "malformed_request: Value of 'x-request-id' header is not in version 4 uuid format\n";
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/api/v2/status")
+        .header("x-request-id", "1")
+        .body(Body::from(""))
+        .unwrap();
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!(body, expected_failure);
+    // case 4: 'x-request-id' header contains an invalid (not hyphenated) uuid
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/api/v2/status")
+        .header("x-request-id", "40a6d613149e4bde844333593fd2fd17")
+        .body(Body::from(""))
+        .unwrap();
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!(body, expected_failure);
+    // case 5: 'x-request-id' header is empty
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/api/v2/status")
+        .header("x-request-id", "")
+        .body(Body::from(""))
+        .unwrap();
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!(body, expected_failure);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_status() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
@@ -68,10 +168,12 @@ async fn test_status() -> Result<(), Error> {
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let mut app = Router::new().route(
-        PATH_STATUS,
-        get(status).with_state((state_rootkey, state_health)),
-    );
+    let mut app = Router::new()
+        .route(
+            PATH_STATUS,
+            get(status).with_state((state_rootkey, state_health)),
+        )
+        .layer(middleware::from_fn(validate_request));
 
     let request = Request::builder()
         .method("GET")

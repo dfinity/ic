@@ -273,6 +273,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
             // 1st layer wraps 2nd layer and so on
             ServiceBuilder::new()
+                .layer(middleware::from_fn(routes::validate_request))
                 .layer(
                     CompressionLayer::new()
                         .gzip(true)
