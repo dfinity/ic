@@ -25,7 +25,9 @@ use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId,
 };
+use lazy_static::lazy_static;
 use rand::seq::SliceRandom;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tower_governor::errors::GovernorError;
 use url::Url;
@@ -67,6 +69,12 @@ pub const PATH_STATUS: &str = "/api/v2/status";
 pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
 pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
 pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
+
+lazy_static! {
+    pub static ref UUID_V4_REGEX: Regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap();
+}
 
 // Type of IC request
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
@@ -458,6 +466,25 @@ impl From<BoxError> for ApiError {
             GovernorError::Other { .. } => ApiError::Unspecified(anyhow!("GovernorError")),
         }
     }
+}
+
+pub async fn validate_request(
+    request: Request<Body>,
+    next: Next<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    if let Some(id_header) = request.headers().get("x-request-id") {
+        let is_valid_id = id_header
+            .to_str()
+            .map(|id| UUID_V4_REGEX.is_match(id))
+            .unwrap_or(false);
+        if !is_valid_id {
+            return Err(ErrorCause::MalformedRequest(
+                "Value of 'x-request-id' header is not in version 4 uuid format".to_string(),
+            )
+            .into());
+        }
+    }
+    Ok(next.run(request).await)
 }
 
 // Middleware: preprocess the request before handing it over to handlers
