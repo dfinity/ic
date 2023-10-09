@@ -88,7 +88,7 @@ pub(crate) fn update_ongoing_signatures(
     current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
     max_ongoing_signatures: u32,
     payload: &mut ecdsa::EcdsaPayload,
-    log: ReplicaLogger,
+    log: &ReplicaLogger,
 ) -> Result<(), EcdsaPayloadError> {
     if let Some(key_transcript) = current_key_transcript {
         debug!(

@@ -742,8 +742,25 @@ impl EcdsaPayloadMetrics {
         }
     }
 
-    pub fn payload_metrics_set(&self, label: &str, value: i64) {
-        self.payload_metrics.with_label_values(&[label]).set(value);
+    pub fn report(&self, payload: &EcdsaPayload) {
+        self.payload_metrics_set("signature_agreements", payload.signature_agreements.len());
+        self.payload_metrics_set("ongoing_signatures", payload.ongoing_signatures.len());
+        self.payload_metrics_set("available_quadruples", payload.available_quadruples.len());
+        self.payload_metrics_set(
+            "quaruples_in_creation",
+            payload.quadruples_in_creation.len(),
+        );
+        self.payload_metrics_set("ongoing_xnet_reshares", payload.ongoing_xnet_reshares.len());
+        self.payload_metrics_set(
+            "xnet_reshare_agreements",
+            payload.xnet_reshare_agreements.len(),
+        );
+    }
+
+    fn payload_metrics_set(&self, label: &str, value: usize) {
+        self.payload_metrics
+            .with_label_values(&[label])
+            .set(value as i64);
     }
 
     pub fn payload_metrics_inc(&self, label: &str) {
