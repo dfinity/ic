@@ -304,15 +304,16 @@ fn ic0_performance_counter_helper(
     caller: &mut Caller<'_, StoreData>,
     counter_type: u32,
 ) -> HypervisorResult<u64> {
+    let num_instructions_global = get_num_instructions_global(caller)?;
+    let instruction_counter = load_value(&num_instructions_global, caller)?;
     match counter_type {
-        0 => {
-            let num_instructions_global = get_num_instructions_global(caller)?;
-            let instruction_counter = load_value(&num_instructions_global, caller)?;
-            caller
-                .data()
-                .system_api()?
-                .ic0_performance_counter(PerformanceCounterType::Instructions(instruction_counter))
-        }
+        0 => caller
+            .data()
+            .system_api()?
+            .ic0_performance_counter(PerformanceCounterType::Instructions(instruction_counter)),
+        1 => caller.data().system_api()?.ic0_performance_counter(
+            PerformanceCounterType::CallContextInstructions(instruction_counter),
+        ),
         _ => Err(HypervisorError::ContractViolation(format!(
             "Error getting performance counter type {}",
             counter_type

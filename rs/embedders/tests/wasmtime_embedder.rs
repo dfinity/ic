@@ -16,11 +16,7 @@ mod test {
     use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-    use ic_test_utilities::{
-        universal_canister::{call_args, wasm},
-        wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS,
-    };
-    use ic_test_utilities_execution_environment::ExecutionTestBuilder;
+    use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
     use ic_types::{methods::WasmClosure, NumBytes, PrincipalId};
 
     use super::*;
@@ -259,71 +255,6 @@ mod test {
         assert_eq!(performance_counter2, expected_instructions_counter2);
 
         assert_eq!(instructions_used.get(), expected_instructions);
-    }
-
-    #[test]
-    // TODO: RUN-759: The test fails, as the performance counter is not implemented yet.
-    #[ignore]
-    fn test_correctly_report_call_context_performance_counter() {
-        let mut test = ExecutionTestBuilder::new().build();
-        let a_id = test.universal_canister().unwrap();
-        let b_id = test.universal_canister().unwrap();
-
-        let b = wasm().performance_counter(1).reply_int64().build();
-        let a = wasm()
-            // Counter a.0
-            .performance_counter(1)
-            .int64_to_blob()
-            .append_to_global_data()
-            .call_simple(
-                b_id.get(),
-                "update",
-                call_args()
-                    // Counter b.2
-                    .other_side(b.clone())
-                    .on_reply(
-                        wasm()
-                            .message_payload()
-                            .append_to_global_data()
-                            // Counter a.3
-                            .performance_counter(1)
-                            .int64_to_blob()
-                            .append_to_global_data()
-                            .call_simple(
-                                b_id.get(),
-                                "update",
-                                call_args()
-                                    // Counter b.4
-                                    .other_side(b)
-                                    .on_reply(
-                                        wasm()
-                                            .get_global_data()
-                                            .reply_data_append()
-                                            .message_payload()
-                                            .reply_data_append()
-                                            // Counter a.5
-                                            .performance_counter(1)
-                                            .reply_int64(),
-                                    ),
-                            ),
-                    ),
-            )
-            // Counter a.1
-            .performance_counter(1)
-            .int64_to_blob()
-            .append_to_global_data()
-            .build();
-        let result = test.ingress(a_id, "update", a).unwrap();
-
-        let counters = result
-            .bytes()
-            .chunks_exact(std::mem::size_of::<u64>())
-            .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
-            .collect::<Vec<_>>();
-
-        assert!(
-            counters[0] < counters[1] && counters[1] < counters[3] && counters[3] < counters[5]
-        );
     }
 
     const CALL_NEW_CALL_PERFORM_WAT: &str = r#"

@@ -486,6 +486,7 @@ impl<'a> QueryContext<'a> {
                 call_context_id,
                 call_responded,
                 execution_parameters.execution_mode.clone(),
+                call_context.instructions_executed(),
             ),
             Payload::Reject(context) => ApiType::reject_callback(
                 time,
@@ -495,6 +496,7 @@ impl<'a> QueryContext<'a> {
                 call_context_id,
                 call_responded,
                 execution_parameters.execution_mode.clone(),
+                call_context.instructions_executed(),
             ),
         };
 
@@ -549,7 +551,7 @@ impl<'a> QueryContext<'a> {
                 .get()
                 .saturating_sub(instructions_left.get()),
         );
-        // TODO: RUN-759: Cover with a test once performance counter type 1 is implemented
+        // TODO: RUN-795: The query test fails because we don't call `on_canister_result`
         let action = canister
             .system_state
             .call_context_manager_mut()
