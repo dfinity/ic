@@ -96,7 +96,7 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
         .unwrap()
         .to_str()
         .unwrap();
-    assert!(UUID_V4_REGEX.is_match(request_id));
+    assert!(UUID_REGEX.is_match(request_id));
 
     // case 2: 'x-request-id' header contains a valid uuid, this uuid is not overwritten by middleware
     let request = Request::builder()
