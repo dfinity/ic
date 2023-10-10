@@ -17,7 +17,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+icrc-ledger-types = "0.1.2"
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 lazy_static = "1.4.0"
 num-traits = "0.2.12"

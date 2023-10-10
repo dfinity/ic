@@ -27,11 +27,11 @@ ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-ic00-types = { path = "../../../types/ic00_types" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
-ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }
+icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
-icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+icrc-ledger-types = "0.1.2"
 lazy_static = "1.4.0"
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }

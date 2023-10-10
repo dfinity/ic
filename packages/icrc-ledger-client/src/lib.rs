@@ -2,13 +2,11 @@ use async_trait::async_trait;
 use candid::types::number::Nat;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::Principal;
-use ic_ledger_core::block::BlockIndex;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
-use num_traits::ToPrimitive;
 
 // Abstraction over the runtime. Implement this in terms of cdk call if you use
 // the cdk or dfn_* if you use dfn_* call.
@@ -25,14 +23,6 @@ pub trait Runtime {
         Out: for<'a> ArgumentDecoder<'a>;
 }
 
-/// Converts Nat to u64.
-///
-/// Note: our ICRC-1 ledger implementation is guaranteed to return values that
-/// fit into u64.
-fn nat_to_u64(n: Nat) -> u64 {
-    n.0.to_u64().expect("nat does not fit into u64")
-}
-
 pub struct ICRC1Client<R: Runtime> {
     pub runtime: R,
     pub ledger_canister_id: Principal,
@@ -44,12 +34,11 @@ pub struct ICRC1Client<R: Runtime> {
 // the in and out structures as we can use the ones defined in ic_icrc1::endpoints.
 
 impl<R: Runtime> ICRC1Client<R> {
-    pub async fn balance_of(&self, account: Account) -> Result<u64, (i32, String)> {
+    pub async fn balance_of(&self, account: Account) -> Result<Nat, (i32, String)> {
         self.runtime
             .call(self.ledger_canister_id, "icrc1_balance_of", (account,))
             .await
             .map(untuple)
-            .map(nat_to_u64)
     }
 
     pub async fn decimals(&self) -> Result<u8, (i32, String)> {
@@ -80,20 +69,18 @@ impl<R: Runtime> ICRC1Client<R> {
             .map(untuple)
     }
 
-    pub async fn total_supply(&self) -> Result<u64, (i32, String)> {
+    pub async fn total_supply(&self) -> Result<Nat, (i32, String)> {
         self.runtime
             .call(self.ledger_canister_id, "icrc1_total_supply", ())
             .await
             .map(untuple)
-            .map(nat_to_u64)
     }
 
-    pub async fn fee(&self) -> Result<u64, (i32, String)> {
+    pub async fn fee(&self) -> Result<Nat, (i32, String)> {
         self.runtime
             .call(self.ledger_canister_id, "icrc1_fee", ())
             .await
             .map(untuple)
-            .map(nat_to_u64)
     }
 
     pub async fn minting_account(&self) -> Result<Option<Account>, (i32, String)> {
@@ -112,7 +99,7 @@ impl<R: Runtime> ICRC1Client<R> {
             .call(self.ledger_canister_id, "icrc1_transfer", (args,))
             .await
             .map(untuple)?;
-        Ok(result.map(nat_to_u64))
+        Ok(result)
     }
 
     pub async fn transfer_from(
@@ -124,7 +111,7 @@ impl<R: Runtime> ICRC1Client<R> {
             .call(self.ledger_canister_id, "icrc2_transfer_from", (args,))
             .await
             .map(untuple)?;
-        Ok(result.map(nat_to_u64))
+        Ok(result)
     }
 
     pub async fn approve(
@@ -136,7 +123,7 @@ impl<R: Runtime> ICRC1Client<R> {
             .call(self.ledger_canister_id, "icrc2_approve", (args,))
             .await
             .map(untuple)?;
-        Ok(result.map(nat_to_u64))
+        Ok(result)
     }
 }
 

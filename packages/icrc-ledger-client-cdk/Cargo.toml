@@ -1,8 +1,8 @@
 [package]
-name = "icrc-ledger-agent"
-version = "0.1.0"
+name = "icrc-ledger-client-cdk"
+version = "0.1.2"
 edition = "2021"
-description = "Functions for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
+description = "ICRC-1 compliant client library."
 license = "Apache-2.0"
 readme = "README.md"
 include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
@@ -11,6 +11,7 @@ repository = "https://github.com/dfinity/ic"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1.53"
 candid = { workspace = true }
-ic-agent = { workspace = true }
-icrc-ledger-types = { version = "0.1.2", features = ["experimental-api"] }
+ic-cdk = { workspace = true }
+icrc-ledger-client = { path = "../icrc-ledger-client" }

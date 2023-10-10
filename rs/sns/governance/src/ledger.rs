@@ -3,14 +3,15 @@ use candid::{types::number::Nat, Principal};
 use dfn_candid::{ArgumentDecoder, ArgumentEncoder};
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1_client::{ICRC1Client, Runtime};
 use ic_ledger_core::{block::BlockIndex, Tokens};
 pub use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
+use icrc_ledger_client::{ICRC1Client, Runtime};
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
     transfer::{Memo, TransferArg},
 };
+use num_traits::ToPrimitive;
 
 // A ICRC1 client runtime that uses dfn_* functionalities
 struct DfnRuntime {}
@@ -87,11 +88,12 @@ impl ICRC1Ledger for LedgerCanister {
                 err
             ))
         })
+        .map(|n| n.0.to_u64().expect("nat does not fit into u64"))
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         self.client.total_supply().await
-            .map(Tokens::from_e8s)
+            .map(|n| Tokens::from_e8s(n.0.to_u64().expect("nat does not fit into u64")))
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
@@ -104,7 +106,7 @@ impl ICRC1Ledger for LedgerCanister {
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         self.client.balance_of(account).await
-            .map(Tokens::from_e8s)
+            .map(|n| Tokens::from_e8s(n.0.to_u64().expect("nat does not fit into u64")))
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(
                     format!(
