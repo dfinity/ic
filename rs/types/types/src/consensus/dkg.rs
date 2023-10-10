@@ -15,6 +15,40 @@ use std::collections::BTreeMap;
 /// Contains a Node's contribution to a DKG dealing.
 pub type Message = BasicSigned<DealingContent>;
 
+/// Identifier of a DKG message.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
+pub struct DkgMessageId {
+    pub hash: CryptoHashOf<Message>,
+    pub height: Height,
+}
+
+impl From<&Message> for DkgMessageId {
+    fn from(msg: &Message) -> Self {
+        Self {
+            hash: crypto_hash(msg),
+            height: msg.content.dkg_id.start_block_height,
+        }
+    }
+}
+
+impl From<&pb::DkgMessageId> for DkgMessageId {
+    fn from(id: &pb::DkgMessageId) -> Self {
+        Self {
+            hash: CryptoHash(id.hash.clone()).into(),
+            height: Height::from(id.height),
+        }
+    }
+}
+
+impl From<&DkgMessageId> for pb::DkgMessageId {
+    fn from(id: &DkgMessageId) -> Self {
+        Self {
+            hash: id.hash.clone().get().0,
+            height: id.height.get(),
+        }
+    }
+}
+
 /// Holds the content of a DKG dealing
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

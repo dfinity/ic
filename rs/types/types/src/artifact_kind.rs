@@ -4,6 +4,7 @@ use crate::{
     canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
+        dkg::DkgMessageId,
         dkg::Message as DkgMessage,
         ecdsa::{ecdsa_msg_id, EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHashable,
@@ -104,19 +105,17 @@ impl ArtifactKind for DkgArtifact {
     const TAG: ArtifactTag = ArtifactTag::DkgArtifact;
     type Id = DkgMessageId;
     type Message = DkgMessage;
-    type Attribute = DkgMessageAttribute;
+    type Attribute = ();
 
     /// The function converts a `DkgMessage` into an advert for a
     /// `DkgArtifact`.
     fn message_to_advert(msg: &DkgMessage) -> Advert<DkgArtifact> {
         let size = bincode::serialized_size(&msg).unwrap() as usize;
-        let attribute = DkgMessageAttribute {
-            interval_start_height: msg.content.dkg_id.start_block_height,
-        };
-        let hash = crypto_hash(msg);
+        let id = DkgMessageId::from(msg);
+        let hash = id.hash.clone();
         Advert {
-            id: hash.clone(),
-            attribute,
+            id,
+            attribute: (),
             size,
             integrity_hash: hash.get(),
         }

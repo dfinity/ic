@@ -10,11 +10,11 @@ import "types/v1/ecdsa.proto";
 message ArtifactAttribute {
   oneof kind {
     ConsensusMessageAttribute consensus_message = 1;
-    DkgMessageAttribute dkg_message = 2;
     EcdsaMessageAttribute ecdsa_message = 3;
     CanisterHttpResponseAttribute canister_http = 4;
     google.protobuf.Empty empty = 5;
   }
+  reserved 2;
 }
 
 message ConsensusMessageAttribute {
@@ -34,10 +34,6 @@ message FinalizationAttribute {
 message NotarizationAttribute {
   bytes block_hash = 1;
   reserved 2;
-}
-
-message DkgMessageAttribute {
-  uint64 height = 1;
 }
 
 message EcdsaMessageAttribute {
@@ -62,11 +58,17 @@ message ArtifactId {
     IngressMessageId ingress = 2;
     CertificationMessageId certification = 3;
     bytes canister_http = 4;
-    bytes dkg_message = 5;
+    DkgMessageId dkg_message = 10;
     types.v1.EcdsaArtifactId ecdsa = 6;
     string file_tree_sync = 7;
     p2p.v1.StateSyncId state_sync = 9;
   }
+  reserved 5;
+}
+
+message DkgMessageId {
+  bytes hash = 1;
+  uint64 height = 2;
 }
 
 message ConsensusMessageId {

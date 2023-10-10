@@ -11,7 +11,7 @@ use ic_types::{
                 verify_dealing_error::DkgVerifyDealingError,
             },
         },
-        CryptoError, CryptoHashOf,
+        CryptoError,
     },
     registry::RegistryClientError,
     Height,
@@ -45,7 +45,7 @@ pub enum ChangeAction {
     AddToValidated(dkg::Message),
     MoveToValidated(dkg::Message),
     RemoveFromUnvalidated(dkg::Message),
-    HandleInvalid(CryptoHashOf<dkg::Message>, String),
+    HandleInvalid(dkg::DkgMessageId, String),
     Purge(Height),
 }
 

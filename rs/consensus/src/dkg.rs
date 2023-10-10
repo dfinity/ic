@@ -28,12 +28,12 @@ use ic_registry_client_helpers::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{DkgMessageAttribute, DkgMessageId, Priority, PriorityFn},
+    artifact::{Priority, PriorityFn},
     artifact_kind::DkgArtifact,
     batch::ValidationContext,
     consensus::{
         dkg,
-        dkg::{DealingContent, Message, Summary},
+        dkg::{DealingContent, DkgMessageId, Message, Summary},
         get_faults_tolerated, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock,
         HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
@@ -336,10 +336,7 @@ fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_i
 }
 
 fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T) -> ChangeAction {
-    ChangeAction::HandleInvalid(
-        ic_types::crypto::crypto_hash(message),
-        reason.as_ref().to_string(),
-    )
+    ChangeAction::HandleInvalid(DkgMessageId::from(message), reason.as_ref().to_string())
 }
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
@@ -1215,14 +1212,11 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
 impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossipImpl {
-    fn get_priority_function(
-        &self,
-        dkg_pool: &Pool,
-    ) -> PriorityFn<DkgMessageId, DkgMessageAttribute> {
+    fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId, ()> {
         let start_height = dkg_pool.get_current_start_height();
-        Box::new(move |_id, attribute| {
+        Box::new(move |id, _| {
             use std::cmp::Ordering;
-            match attribute.interval_start_height.cmp(&start_height) {
+            match id.height.cmp(&start_height) {
                 Ordering::Equal => Priority::Fetch,
                 Ordering::Greater => Priority::Stash,
                 Ordering::Less => Priority::Drop,

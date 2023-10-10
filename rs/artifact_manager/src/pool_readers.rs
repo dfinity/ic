@@ -12,6 +12,7 @@ use ic_types::{
     chunkable::*,
     consensus::{
         certification::CertificationMessage,
+        dkg::DkgMessageId,
         dkg::Message as DkgMessage,
         ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute,
@@ -258,7 +259,7 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(&self) -> PriorityFn<DkgMessageId, DkgMessageAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<DkgMessageId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }

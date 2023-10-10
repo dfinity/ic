@@ -1177,7 +1177,7 @@ pub struct IngressPayload {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactAttribute {
-    #[prost(oneof = "artifact_attribute::Kind", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "artifact_attribute::Kind", tags = "1, 3, 4, 5")]
     pub kind: ::core::option::Option<artifact_attribute::Kind>,
 }
 /// Nested message and enum types in `ArtifactAttribute`.
@@ -1188,8 +1188,6 @@ pub mod artifact_attribute {
     pub enum Kind {
         #[prost(message, tag = "1")]
         ConsensusMessage(super::ConsensusMessageAttribute),
-        #[prost(message, tag = "2")]
-        DkgMessage(super::DkgMessageAttribute),
         #[prost(message, tag = "3")]
         EcdsaMessage(super::EcdsaMessageAttribute),
         #[prost(message, tag = "4")]
@@ -1236,13 +1234,6 @@ pub struct NotarizationAttribute {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DkgMessageAttribute {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaMessageAttribute {
     #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5")]
     pub kind: ::core::option::Option<ecdsa_message_attribute::Kind>,
@@ -1281,7 +1272,7 @@ pub struct CanisterHttpResponseAttribute {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactId {
-    #[prost(oneof = "artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 9")]
+    #[prost(oneof = "artifact_id::Kind", tags = "1, 2, 3, 4, 10, 6, 7, 9")]
     pub kind: ::core::option::Option<artifact_id::Kind>,
 }
 /// Nested message and enum types in `ArtifactId`.
@@ -1298,8 +1289,8 @@ pub mod artifact_id {
         Certification(super::CertificationMessageId),
         #[prost(bytes, tag = "4")]
         CanisterHttp(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "5")]
-        DkgMessage(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "10")]
+        DkgMessage(super::DkgMessageId),
         #[prost(message, tag = "6")]
         Ecdsa(super::EcdsaArtifactId),
         #[prost(string, tag = "7")]
@@ -1307,6 +1298,15 @@ pub mod artifact_id {
         #[prost(message, tag = "9")]
         StateSync(super::super::super::p2p::v1::StateSyncId),
     }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DkgMessageId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
