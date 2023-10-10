@@ -1641,6 +1641,22 @@ impl ExecutionEnvironment {
 
         let canister_state = canister(ingress.canister_id())?;
 
+        match canister_state.status() {
+            CanisterStatusType::Running => {}
+            CanisterStatusType::Stopping => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterStopping,
+                    format!("Canister {} is stopping", ingress.canister_id()),
+                ));
+            }
+            CanisterStatusType::Stopped => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterStopped,
+                    format!("Canister {} is stopped", ingress.canister_id()),
+                ));
+            }
+        }
+
         // Composite queries are not allowed to be called in replicated mode.
         let method = WasmMethod::CompositeQuery(ingress.method_name().to_string());
         if canister_state.exports_method(&method) {

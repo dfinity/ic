@@ -1709,6 +1709,29 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
 }
 
 #[test]
+fn message_to_stopping_canister_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.stop_canister(canister);
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopping, err.code());
+}
+
+#[test]
+fn message_to_stopped_canister_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.stop_canister(canister);
+    test.process_stopping_canisters();
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopped, err.code());
+}
+
+#[test]
 fn should_accept_ingress_filters_correctly_on_method_type() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
