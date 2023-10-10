@@ -1439,7 +1439,18 @@ fn call_perform_not_enough_cycles_resets_state() {
     api.ic0_call_new(0, 10, 0, 10, 0, 0, 0, 0, &[0; 1024])
         .unwrap();
     api.ic0_call_cycles_add128(Cycles::new(100)).unwrap();
-    assert_eq!(api.ic0_call_perform().unwrap(), 2);
+    let res = api.ic0_call_perform();
+    match res {
+        Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow {
+            bytes: _,
+            available: _,
+            threshold: _,
+        }) => {}
+        _ => panic!(
+            "expected to get an InsufficientCyclesInMessageMemoryGrow error, got {:?}",
+            res
+        ),
+    }
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
@@ -1476,6 +1487,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
         EmbeddersConfig::default()
@@ -1543,6 +1555,7 @@ fn push_output_request_respects_memory_limits() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
         EmbeddersConfig::default()
@@ -1647,6 +1660,7 @@ fn push_output_request_oversized_request_memory_limits() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
         EmbeddersConfig::default()

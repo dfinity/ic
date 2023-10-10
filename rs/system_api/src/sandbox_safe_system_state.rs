@@ -777,6 +777,7 @@ impl SandboxSafeSystemState {
         &mut self,
         amount_to_burn: Cycles,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
     ) -> Cycles {
         let mut new_balance = self.cycles_balance();
         let burned_cycles = self.cycles_account_manager.cycles_burn(
@@ -785,6 +786,7 @@ impl SandboxSafeSystemState {
             self.freeze_threshold,
             self.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             self.compute_allocation,
             self.subnet_size,
             self.reserved_balance(),
@@ -853,6 +855,7 @@ impl SandboxSafeSystemState {
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         amount: Cycles,
     ) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
@@ -863,6 +866,7 @@ impl SandboxSafeSystemState {
                 self.freeze_threshold,
                 self.memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 self.compute_allocation,
                 &mut new_balance,
                 amount,
@@ -878,6 +882,7 @@ impl SandboxSafeSystemState {
     pub fn push_output_request(
         &mut self,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         msg: Request,
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
@@ -889,6 +894,7 @@ impl SandboxSafeSystemState {
             self.freeze_threshold,
             self.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             self.compute_allocation,
             &msg,
             prepayment_for_response_execution,
@@ -955,6 +961,7 @@ impl SandboxSafeSystemState {
     pub(super) fn check_freezing_threshold_for_memory_grow(
         &self,
         api_type: &ApiType,
+        current_message_memory_usage: NumBytes,
         old_memory_usage: NumBytes,
         new_memory_usage: NumBytes,
     ) -> HypervisorResult<()> {
@@ -973,6 +980,7 @@ impl SandboxSafeSystemState {
                     self.freeze_threshold,
                     self.memory_allocation,
                     new_memory_usage,
+                    current_message_memory_usage,
                     self.compute_allocation,
                     self.subnet_size,
                     self.reserved_balance(),
@@ -987,6 +995,47 @@ impl SandboxSafeSystemState {
                     })
                 }
             }
+        }
+    }
+
+    /// Checks the cycles balance against the freezing threshold with the new
+    /// message memory usage if that's needed for the given API type.
+    ///
+    /// If the old message memory usage is higher than the new message memory usage,
+    /// then no check is performed.
+    ///
+    /// Returns `Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow)`
+    /// if the canister would become frozen with the new message memory usage.
+    /// Otherwise, returns `Ok(())`.
+    pub(super) fn check_freezing_threshold_for_message_memory_grow(
+        &self,
+        api_type: &ApiType,
+        current_memory_usage: NumBytes,
+        old_message_memory_usage: NumBytes,
+        new_message_memory_usage: NumBytes,
+    ) -> HypervisorResult<()> {
+        let should_check = self.should_check_freezing_threshold_for_memory_grow(api_type);
+        if !should_check || old_message_memory_usage >= new_message_memory_usage {
+            return Ok(());
+        }
+
+        let threshold = self.cycles_account_manager.freeze_threshold_cycles(
+            self.freeze_threshold,
+            self.memory_allocation,
+            current_memory_usage,
+            new_message_memory_usage,
+            self.compute_allocation,
+            self.subnet_size,
+            self.reserved_balance(),
+        );
+        if self.cycles_balance() >= threshold {
+            Ok(())
+        } else {
+            Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow {
+                bytes: new_message_memory_usage - old_message_memory_usage,
+                available: self.cycles_balance(),
+                threshold,
+            })
         }
     }
 

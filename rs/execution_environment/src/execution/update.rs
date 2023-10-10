@@ -49,10 +49,12 @@ pub fn execute_update(
             None => {
                 let mut canister = clean_canister;
                 let memory_usage = canister.memory_usage();
+                let message_memory_usage = canister.message_memory_usage();
                 let prepaid_execution_cycles =
                     match round.cycles_account_manager.prepay_execution_cycles(
                         &mut canister.system_state,
                         memory_usage,
+                        message_memory_usage,
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
@@ -78,6 +80,7 @@ pub fn execute_update(
         clean_canister.system_state.freeze_threshold,
         clean_canister.system_state.memory_allocation,
         clean_canister.memory_usage(),
+        clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
         clean_canister.system_state.reserved_balance(),
@@ -131,11 +134,13 @@ pub fn execute_update(
     };
 
     let memory_usage = helper.canister().memory_usage();
+    let message_memory_usage = helper.canister().message_memory_usage();
     let result = round.hypervisor.execute_dts(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         memory_usage,
+        message_memory_usage,
         original.execution_parameters.clone(),
         FuncRef::Method(original.method.clone()),
         round_limits,

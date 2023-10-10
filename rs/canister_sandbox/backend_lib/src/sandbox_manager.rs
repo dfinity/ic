@@ -143,6 +143,7 @@ impl Execution {
             exec_input.func_ref,
             exec_input.api_type,
             exec_input.canister_current_memory_usage,
+            exec_input.canister_current_message_memory_usage,
             exec_input.execution_parameters,
             exec_input.subnet_available_memory,
             exec_input.sandbox_safe_system_state,

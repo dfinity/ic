@@ -145,6 +145,11 @@ pub enum HypervisorError {
         requested: Cycles,
         limit: Cycles,
     },
+    InsufficientCyclesInMessageMemoryGrow {
+        bytes: NumBytes,
+        available: Cycles,
+        threshold: Cycles,
+    },
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -346,6 +351,14 @@ impl HypervisorError {
                         bytes, limit, requested - limit,
                     ),
             ),
+            Self::InsufficientCyclesInMessageMemoryGrow { bytes, available, threshold } => UserError::new(
+                E::InsufficientCyclesInMessageMemoryGrow,
+                format!(
+                    "Canister cannot grow message memory by {} bytes due to insufficient cycles. \
+                     At least {} additional cycles are required.",
+                     bytes,
+                     threshold - available)
+            ),
         }
     }
 
@@ -381,6 +394,9 @@ impl HypervisorError {
             }
             HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. } => {
                 "ReservedCyclesLimitExceededInMemoryGrow"
+            }
+            HypervisorError::InsufficientCyclesInMessageMemoryGrow { .. } => {
+                "InsufficientCyclesInMessageMemoryGrow"
             }
         }
     }

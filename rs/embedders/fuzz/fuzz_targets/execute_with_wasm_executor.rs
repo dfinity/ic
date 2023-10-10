@@ -87,6 +87,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     );
 
     let canister_current_memory_usage = NumBytes::new(0);
+    let canister_current_message_memory_usage = NumBytes::new(0);
 
     let subnet_memory_capacity = i64::MAX / 2;
 
@@ -116,6 +117,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         api_type,
         sandbox_safe_system_state,
         canister_current_memory_usage,
+        canister_current_message_memory_usage,
         execution_parameters,
         subnet_available_memory,
         func_ref,

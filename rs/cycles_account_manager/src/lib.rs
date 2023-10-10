@@ -40,6 +40,7 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
 
 /// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
 const USE_COST_SCALING_FLAG: bool = true;
+const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -253,21 +254,57 @@ impl CyclesAccountManager {
         )
     }
 
-    // Returns the idle resource consumption rate in cycles per day.
+    // Returns the total idle resource consumption rate in cycles per day.
     pub fn idle_cycles_burned_rate(
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> Cycles {
+        let mut total_rate = Cycles::zero();
+        for (_, rate) in self.idle_cycles_burned_rate_by_resource(
+            memory_allocation,
+            memory_usage,
+            message_memory_usage,
+            compute_allocation,
+            subnet_size,
+        ) {
+            total_rate += rate;
+        }
+        total_rate
+    }
+
+    // Returns a list of the idle resource consumption rate in cycles per day
+    // for each resource.
+    fn idle_cycles_burned_rate_by_resource(
+        &self,
+        memory_allocation: MemoryAllocation,
+        memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
+        compute_allocation: ComputeAllocation,
+        subnet_size: usize,
+    ) -> [(CyclesUseCase, Cycles); 3] {
         let memory = match memory_allocation {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => memory_usage,
         };
-        let day = Duration::from_secs(24 * 60 * 60);
-        self.memory_cost(memory, day, subnet_size)
-            + self.compute_allocation_cost(compute_allocation, day, subnet_size)
+        let day = Duration::from_secs(SECONDS_PER_DAY as u64);
+        [
+            (
+                CyclesUseCase::Memory,
+                self.memory_cost(memory, day, subnet_size),
+            ),
+            (
+                CyclesUseCase::Memory,
+                self.memory_cost(message_memory_usage, day, subnet_size),
+            ),
+            (
+                CyclesUseCase::ComputeAllocation,
+                self.compute_allocation_cost(compute_allocation, day, subnet_size),
+            ),
+        ]
     }
 
     /// Returns the freezing threshold for this canister in cycles after
@@ -277,6 +314,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reserved_balance: Cycles,
@@ -285,14 +323,14 @@ impl CyclesAccountManager {
             .idle_cycles_burned_rate(
                 memory_allocation,
                 memory_usage,
+                message_memory_usage,
                 compute_allocation,
                 subnet_size,
             )
             .get();
-        let seconds_per_day = 24 * 60 * 60;
 
         let threshold = Cycles::from(
-            idle_cycles_burned_rate * freeze_threshold.get() as u128 / seconds_per_day,
+            idle_cycles_burned_rate * freeze_threshold.get() as u128 / SECONDS_PER_DAY,
         );
 
         // Here we rely on the saturating subtraction for Cycles.
@@ -316,6 +354,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         cycles_balance: &mut Cycles,
         cycles: Cycles,
@@ -330,6 +369,7 @@ impl CyclesAccountManager {
                 freeze_threshold,
                 memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
                 reserved_balance,
@@ -350,6 +390,7 @@ impl CyclesAccountManager {
         &self,
         canister: &mut CanisterState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -358,6 +399,7 @@ impl CyclesAccountManager {
             canister.system_state.freeze_threshold,
             canister.system_state.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             canister.system_state.reserved_balance(),
@@ -399,6 +441,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -408,6 +451,7 @@ impl CyclesAccountManager {
             system_state.freeze_threshold,
             system_state.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             system_state.reserved_balance(),
@@ -429,6 +473,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
         subnet_size: usize,
@@ -441,6 +486,7 @@ impl CyclesAccountManager {
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
                 system_state.reserved_balance(),
@@ -484,31 +530,7 @@ impl CyclesAccountManager {
         system_state.add_cycles(cycles_to_refund, CyclesUseCase::Instructions);
     }
 
-    /// Charges the canister for its compute allocation
-    ///
-    /// # Errors
-    ///
-    /// Returns a `CanisterOutOfCyclesError` if the
-    /// requested amount is greater than the currently available.
-    pub fn charge_for_compute_allocation(
-        &self,
-        system_state: &mut SystemState,
-        compute_allocation: ComputeAllocation,
-        duration: Duration,
-        subnet_size: usize,
-    ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles = self.compute_allocation_cost(compute_allocation, duration, subnet_size);
-
-        // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(
-            system_state,
-            cycles,
-            Cycles::zero(),
-            CyclesUseCase::ComputeAllocation,
-        )
-    }
-
-    /// The cost of compute allocation, per round
+    /// Returns the cost of compute allocation for the given duration.
     #[doc(hidden)] // pub for usage in tests
     pub fn compute_allocation_cost(
         &self,
@@ -591,35 +613,6 @@ impl CyclesAccountManager {
     // Storage
     //
     ////////////////////////////////////////////////////////////////////////////
-
-    /// Subtracts the cycles cost of using a `bytes` amount of memory.
-    ///
-    /// Note: The following charges for memory taken by the canister. It
-    /// currently takes into account all the pages in the canister's heap and
-    /// stable memory (among other things). This will be revised in the future
-    /// to take into account charging for dirty/read pages by the canister.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `CanisterOutOfCyclesError` if there's
-    /// not enough cycles to charge for memory.
-    pub fn charge_for_memory(
-        &self,
-        system_state: &mut SystemState,
-        bytes: NumBytes,
-        duration: Duration,
-        subnet_size: usize,
-    ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles_amount = self.memory_cost(bytes, duration, subnet_size);
-
-        // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(
-            system_state,
-            cycles_amount,
-            Cycles::zero(),
-            CyclesUseCase::Memory,
-        )
-    }
 
     /// The cost of using `bytes` worth of memory.
     #[doc(hidden)] // pub for usage in tests
@@ -706,6 +699,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         request: &Request,
         prepayment_for_response_execution: Cycles,
@@ -734,6 +728,7 @@ impl CyclesAccountManager {
                 freeze_threshold,
                 memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
                 reserved_balance,
@@ -814,6 +809,7 @@ impl CyclesAccountManager {
         system_state: &SystemState,
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
@@ -821,6 +817,7 @@ impl CyclesAccountManager {
             system_state.freeze_threshold,
             system_state.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             system_state.reserved_balance(),
@@ -960,6 +957,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reserved_balance: Cycles,
@@ -968,6 +966,7 @@ impl CyclesAccountManager {
             freeze_threshold,
             memory_allocation,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             subnet_size,
             reserved_balance,
@@ -1004,66 +1003,39 @@ impl CyclesAccountManager {
 
     /// Charges a canister for its resource allocation and usage for the
     /// duration specified. If fees were successfully charged, then returns
-    /// Ok(CanisterState) else returns Err(CanisterState).
+    /// Ok() else returns Err(CanisterOutOfCyclesError).
     pub fn charge_canister_for_resource_allocation_and_usage(
         &self,
         log: &ReplicaLogger,
         canister: &mut CanisterState,
-        duration_between_blocks: Duration,
+        duration_since_last_charge: Duration,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let canister_memory_bytes_to_charge = match canister.memory_allocation() {
-            // The canister has explicitly asked for a memory allocation, so charge
-            // based on it accordingly.
-            MemoryAllocation::Reserved(bytes) => bytes,
-            // The canister uses best-effort memory allocation, so charge based on current usage.
-            MemoryAllocation::BestEffort => canister.memory_usage(),
-        };
-        if let Err(err) = self.charge_for_memory(
-            &mut canister.system_state,
-            canister_memory_bytes_to_charge,
-            duration_between_blocks,
+        for (use_case, rate) in self.idle_cycles_burned_rate_by_resource(
+            canister.memory_allocation(),
+            canister.memory_usage(),
+            canister.message_memory_usage(),
+            canister.compute_allocation(),
             subnet_size,
         ) {
-            info!(
-                log,
-                "Charging canister {} for memory allocation/usage failed with {}",
-                canister.canister_id(),
-                err
-            );
-            return Err(err);
-        }
+            let cycles = rate * duration_since_last_charge.as_secs() / SECONDS_PER_DAY;
 
-        let message_memory_bytes_to_charge = canister.message_memory_usage();
-        if let Err(err) = self.charge_for_memory(
-            &mut canister.system_state,
-            message_memory_bytes_to_charge,
-            duration_between_blocks,
-            subnet_size,
-        ) {
-            info!(
-                log,
-                "Charging canister {} for message memory usage failed with {}",
-                canister.canister_id(),
-                err
-            );
-            return Err(err);
-        }
-
-        let compute_allocation = canister.compute_allocation();
-        if let Err(err) = self.charge_for_compute_allocation(
-            &mut canister.system_state,
-            compute_allocation,
-            duration_between_blocks,
-            subnet_size,
-        ) {
-            info!(
-                log,
-                "Charging canister {} for compute allocation failed with {}",
-                canister.canister_id(),
-                err
-            );
-            return Err(err);
+            // Charging for resources can charge all the way down to zero cycles.
+            if let Err(err) = self.consume_with_threshold(
+                &mut canister.system_state,
+                cycles,
+                Cycles::zero(),
+                use_case,
+            ) {
+                info!(
+                    log,
+                    "Charging canister {} for {} failed with {}",
+                    canister.canister_id(),
+                    use_case.as_str(),
+                    err
+                );
+                return Err(err);
+            }
         }
         Ok(())
     }
@@ -1218,6 +1190,7 @@ mod tests {
                 amount_to_burn,
                 NumSeconds::new(0),
                 MemoryAllocation::default(),
+                0.into(),
                 0.into(),
                 ComputeAllocation::default(),
                 13,

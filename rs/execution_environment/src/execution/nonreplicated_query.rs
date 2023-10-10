@@ -45,6 +45,7 @@ pub fn execute_non_replicated_query(
     }
 
     let memory_usage = canister.memory_usage();
+    let message_memory_usage = canister.message_memory_usage();
 
     // Validate that the Wasm module is present and exports the method
     if let Err(err) = validate_method(&method, &canister) {
@@ -99,6 +100,7 @@ pub fn execute_non_replicated_query(
         time,
         canister.system_state,
         memory_usage,
+        message_memory_usage,
         execution_parameters,
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),

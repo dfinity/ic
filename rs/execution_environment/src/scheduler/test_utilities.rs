@@ -997,6 +997,7 @@ impl WasmExecutor for TestWasmExecutor {
             sandbox_safe_system_state: input.sandbox_safe_system_state,
             execution_parameters: input.execution_parameters,
             canister_current_memory_usage: input.canister_current_memory_usage,
+            canister_current_message_memory_usage: input.canister_current_message_memory_usage,
             call_context_id,
             instructions_executed: NumInstructions::from(0),
             executor: Arc::clone(&self),
@@ -1101,6 +1102,7 @@ impl TestWasmExecutorCore {
             message.calls,
             paused.call_context_id,
             paused.canister_current_memory_usage,
+            paused.canister_current_message_memory_usage,
         );
 
         let canister_state_changes = CanisterStateChanges {
@@ -1176,6 +1178,7 @@ impl TestWasmExecutorCore {
         calls: Vec<TestCall>,
         call_context_id: Option<CallContextId>,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
     ) -> SystemStateChanges {
         for call in calls.into_iter() {
             if let Err(error) = self.perform_call(
@@ -1183,6 +1186,7 @@ impl TestWasmExecutorCore {
                 call,
                 call_context_id.unwrap(),
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
             ) {
                 eprintln!("Skipping a call due to an error: {}", error);
             }
@@ -1197,6 +1201,7 @@ impl TestWasmExecutorCore {
         call: TestCall,
         call_context_id: CallContextId,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
     ) -> Result<(), String> {
         let sender = system_state.canister_id();
         let receiver = call.other_side.canister.unwrap();
@@ -1236,6 +1241,7 @@ impl TestWasmExecutorCore {
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             request,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
@@ -1358,6 +1364,7 @@ struct TestPausedWasmExecution {
     sandbox_safe_system_state: SandboxSafeSystemState,
     execution_parameters: ExecutionParameters,
     canister_current_memory_usage: NumBytes,
+    canister_current_message_memory_usage: NumBytes,
     call_context_id: Option<CallContextId>,
     instructions_executed: NumInstructions,
     executor: Arc<TestWasmExecutor>,

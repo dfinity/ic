@@ -142,6 +142,7 @@ impl WasmtimeInstanceBuilder {
             self.api_type,
             sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
+            ic_types::NumBytes::from(0),
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
                     FlagStatus::Disabled,

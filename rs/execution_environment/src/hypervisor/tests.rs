@@ -5950,6 +5950,100 @@ fn memory_grow_checks_freezing_threshold_in_init() {
 }
 
 #[test]
+fn call_perform_checks_freezing_threshold_in_update() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(2_500_000_000))
+        .unwrap();
+    let body = wasm()
+        .call_simple(
+            canister_id,
+            "update",
+            call_args().other_side(wasm().message_payload().reply().build()),
+        )
+        .build();
+    let err = test.ingress(canister_id, "update", body).unwrap_err();
+    assert!(
+        err.description().contains(
+            "Canister cannot grow message memory by 2097168 bytes due to insufficient cycles"
+        ),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMessageMemoryGrow);
+}
+
+#[test]
+fn call_perform_does_not_check_freezing_threshold_in_reply() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let callee = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+        .unwrap();
+    let body = wasm()
+        .call_simple(
+            callee,
+            "update",
+            call_args()
+                .other_side(wasm().message_payload().append_and_reply().build())
+                .on_reply(
+                    wasm()
+                        .call_simple(
+                            callee,
+                            "update",
+                            call_args().other_side(wasm().stable_grow(10_000).reply().build()),
+                        )
+                        .build(),
+                ),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", body);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![])));
+    assert_eq!(
+        test.execution_state(callee).stable_memory.size,
+        NumWasmPages::new(10_000)
+    );
+}
+
+#[test]
+fn call_perform_does_not_check_freezing_threshold_in_reject() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let callee = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+        .unwrap();
+    let body = wasm()
+        .call_simple(
+            callee,
+            "update",
+            call_args()
+                .other_side(wasm().message_payload().reject().build())
+                .on_reject(
+                    wasm()
+                        .call_simple(
+                            callee,
+                            "update",
+                            call_args().other_side(wasm().stable_grow(10_000).reply().build()),
+                        )
+                        .build(),
+                ),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", body);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![])));
+    assert_eq!(
+        test.execution_state(callee).stable_memory.size,
+        NumWasmPages::new(10_000)
+    );
+}
+
+#[test]
 fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -5971,6 +6065,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         freezing_threshold,
         ic_types::MemoryAllocation::Reserved(NumBytes::new(memory_allocation)),
+        NumBytes::new(0),
         NumBytes::new(0),
         ComputeAllocation::zero(),
         test.subnet_size(),
@@ -6016,6 +6111,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
         freezing_threshold,
         ic_types::MemoryAllocation::BestEffort,
         NumBytes::new(memory_usage),
+        NumBytes::new(0),
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
