@@ -632,8 +632,6 @@ benchmarks:
   variables:
     BAZEL_COMMAND: "run"
     RUST_BACKTRACE: "full"
-  tags:
-    - rust-benchmarks
   script:
     - |
       set -eEuo pipefail
