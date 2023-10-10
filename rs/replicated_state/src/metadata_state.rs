@@ -503,24 +503,18 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                     )
                 })
                 .collect(),
-            // (EXC-1473):Default to 0 values in case the fields do not exist for
-            // backwards compatibility. We can change the code to require these
-            // fields exist after the first upgrade to this code is done.
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
-            )
-            .unwrap_or(0),
+            )?,
             canister_state_bytes: try_from_option_field(
                 item.canister_state_bytes,
                 "SubnetMetrics::canister_state_bytes",
-            )
-            .unwrap_or(NumBytes::from(0)),
+            )?,
             update_transactions_total: try_from_option_field(
                 item.update_transactions_total,
                 "SubnetMetrics::update_transactions_total",
-            )
-            .unwrap_or(0),
+            )?,
         })
     }
 }
