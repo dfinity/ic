@@ -2,7 +2,7 @@
 //! for testing distributed key generation and threshold signing.
 
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgDealing,
+    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_temp_crypto::CryptoComponentRng;
@@ -12,9 +12,12 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::get_faults_tolerated;
-use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
+use ic_types::crypto::threshold_sig::ni_dkg::config::{
+    NiDkgConfig, NiDkgConfigData, NiDkgThreshold,
+};
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+    NiDkgDealing, NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+    NiDkgTranscript,
 };
 use ic_types::crypto::{KeyPurpose, Signable, ThresholdSigShareOf};
 use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
@@ -183,6 +186,36 @@ pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
         .collect()
 }
 
+pub fn dummy_transcript_for_tests_with_params(
+    committee: Vec<NodeId>,
+    dkg_tag: NiDkgTag,
+    threshold: u32,
+    registry_version: u64,
+) -> NiDkgTranscript {
+    NiDkgTranscript {
+        dkg_id: NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(0)),
+            dkg_tag,
+            target_subnet: NiDkgTargetSubnet::Local,
+        },
+        threshold: NiDkgThreshold::new(crate::NumberOfNodes::new(threshold))
+            .expect("Couldn't create a non-interactive DKG threshold."),
+        committee: NiDkgReceivers::new(committee.into_iter().collect())
+            .expect("Couldn't create non-interactive DKG committee"),
+        registry_version: RegistryVersion::from(registry_version),
+        internal_csp_transcript: CspNiDkgTranscript::placeholder_to_delete(),
+    }
+}
+pub fn dummy_transcript_for_tests() -> NiDkgTranscript {
+    dummy_transcript_for_tests_with_params(
+        vec![NodeId::from(PrincipalId::new_node_test_id(0))],
+        NiDkgTag::LowThreshold,
+        1,
+        0,
+    )
+}
+
 pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
     use ni_dkg_groth20_bls12_381 as scheme;
     fn fr(seed: u8) -> scheme::FrBytes {
@@ -237,7 +270,7 @@ pub fn empty_ni_dkg_transcripts_with_committee(
     vec![
         (
             NiDkgTag::LowThreshold,
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+            dummy_transcript_for_tests_with_params(
                 committee.clone(),
                 NiDkgTag::LowThreshold,
                 NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
@@ -246,7 +279,7 @@ pub fn empty_ni_dkg_transcripts_with_committee(
         ),
         (
             NiDkgTag::HighThreshold,
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+            dummy_transcript_for_tests_with_params(
                 committee.clone(),
                 NiDkgTag::HighThreshold,
                 NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,

@@ -1498,6 +1498,7 @@ mod tests {
         dependencies, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
     };
+    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_interfaces::{
         artifact_pool::{MutablePool, UnvalidatedArtifact},
         consensus_pool::ConsensusPool,
@@ -1910,7 +1911,7 @@ mod tests {
     #[test]
     fn test_get_configs_for_local_transcripts() {
         let prev_committee: Vec<_> = (10..21).map(node_test_id).collect();
-        let reshared_transcript = Some(NiDkgTranscript::dummy_transcript_for_tests_with_params(
+        let reshared_transcript = Some(dummy_transcript_for_tests_with_params(
             prev_committee.clone(),
             NiDkgTag::HighThreshold,
             NiDkgTag::HighThreshold.threshold_for_subnet_of_size(prev_committee.len()) as u32,
@@ -3797,8 +3798,7 @@ mod tests {
         tag: NiDkgTag,
     ) -> InitialNiDkgTranscriptRecord {
         let threshold = committee.len() as u32 / 3 + 1;
-        let transcript =
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
+        let transcript = dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
         InitialNiDkgTranscriptRecord {
             id: Some(transcript.dkg_id.into()),
             threshold: transcript.threshold.get().get(),

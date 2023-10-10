@@ -3,6 +3,7 @@
 use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_ic00_types::{DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
@@ -20,7 +21,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
@@ -94,8 +95,7 @@ pub fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
         tag: NiDkgTag,
     ) -> InitialNiDkgTranscriptRecord {
         let threshold = committee.len() as u32 / 3 + 1;
-        let transcript =
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
+        let transcript = dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
         InitialNiDkgTranscriptRecord {
             id: Some(transcript.dkg_id.into()),
             threshold: transcript.threshold.get().get(),

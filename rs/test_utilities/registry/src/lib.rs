@@ -1,3 +1,4 @@
+use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::LocalStoreCertifiedTimeReader;
 use ic_protobuf::registry::subnet::v1::{
@@ -24,7 +25,7 @@ fn empty_ni_dkg_transcripts_with_committee(
     BTreeMap::from([
         (
             NiDkgTag::LowThreshold,
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+            dummy_transcript_for_tests_with_params(
                 committee.clone(),
                 NiDkgTag::LowThreshold,
                 NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
@@ -33,7 +34,7 @@ fn empty_ni_dkg_transcripts_with_committee(
         ),
         (
             NiDkgTag::HighThreshold,
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(
+            dummy_transcript_for_tests_with_params(
                 committee.clone(),
                 NiDkgTag::HighThreshold,
                 NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,

@@ -2,8 +2,10 @@
 pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use crate::crypto::threshold_sig::ThresholdSigPublicKey;
+#[cfg(test)]
+use crate::NodeId;
 use crate::NumberOfNodes;
-use crate::{Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
+use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 use ic_protobuf::types::v1 as pb;
@@ -215,6 +217,7 @@ impl From<&NiDkgTranscript> for CspNiDkgTranscript {
     }
 }
 
+#[cfg(test)]
 impl NiDkgTranscript {
     #[allow(clippy::new_without_default)]
     pub fn dummy_transcript_for_tests_with_params(
