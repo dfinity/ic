@@ -28,5 +28,5 @@ ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 ic-sys = { path = "../../sys" }
 serde = { version = "1.0.99", features = ["derive"] }
-nix = "0.23.0"
+nix = { workspace = true }
 libc = "0.2.119"

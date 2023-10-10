@@ -29,7 +29,7 @@ ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 libc = "0.2.91"
 maplit = "1.0.2"
-nix = "0.23.0"
+nix = { workspace = true }
 rand = "0.8.4"
 rand_chacha = "0.3.0"
 phantom_newtype = { path = "../phantom_newtype" }

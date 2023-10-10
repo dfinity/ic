@@ -11,7 +11,7 @@ libc = "*"
 memory_tracker = { path = "../../../rs/memory_tracker" }
 slog = "*"
 slog-scope = "*"
-nix = "*"
+nix = { workspace = true }
 
 [dev-dependencies]
 lazy_static = "*"

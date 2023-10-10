@@ -51,7 +51,7 @@ ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 jemalloc-ctl = "0.3.3"
 jemallocator = "0.3.2"
 libc = "0.2.91"
-nix = "0.23.0"
+nix = { workspace = true }
 num_cpus = "1.13.1"
 pprof = { version = "0.10.1", default-features = false, features = [
   "flamegraph",

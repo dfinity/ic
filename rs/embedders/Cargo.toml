@@ -21,7 +21,7 @@ ic-wasm-types = { path = "../types/wasm_types" }
 libc = "0.2.91"
 libflate = "1.1.2"
 memory_tracker = { path = "../memory_tracker" }
-nix = "0.23.0"
+nix = { workspace = true }
 prometheus = { workspace = true }
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
