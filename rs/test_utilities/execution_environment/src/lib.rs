@@ -311,9 +311,11 @@ impl ExecutionTest {
             .canister_state(canister_id)
             .scheduler_state
             .compute_allocation;
+        let message_memory_usage = self.canister_state(canister_id).message_memory_usage();
         self.cycles_account_manager.idle_cycles_burned_rate(
             memory_allocation,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             self.subnet_size(),
         )
@@ -322,6 +324,7 @@ impl ExecutionTest {
     pub fn freezing_threshold(&self, canister_id: CanisterId) -> Cycles {
         let canister = self.canister_state(canister_id);
         let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
         let memory_allocation = canister.system_state.memory_allocation;
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let freeze_threshold = canister.system_state.freeze_threshold;
@@ -329,6 +332,7 @@ impl ExecutionTest {
             freeze_threshold,
             memory_allocation,
             memory_usage,
+            message_memory_usage,
             compute_allocation,
             self.subnet_size(),
             canister.system_state.reserved_balance(),

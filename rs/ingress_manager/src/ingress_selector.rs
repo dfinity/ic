@@ -355,6 +355,7 @@ impl IngressManager {
                         &canister.system_state,
                         *cumulative_ingress_cost + ingress_cost,
                         canister.memory_usage(),
+                        canister.message_memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
                     ) {

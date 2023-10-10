@@ -644,11 +644,13 @@ impl ExecutionEnvironment {
                                         registry_settings.subnet_size,
                                     );
                                 let memory_usage = canister.memory_usage();
+                                let message_memory_usage = canister.message_memory_usage();
                                 // This call may fail with `CanisterOutOfCyclesError`,
                                 // which is not actionable at this point.
                                 let _ignore_error = self.cycles_account_manager.consume_cycles(
                                     &mut canister.system_state,
                                     memory_usage,
+                                    message_memory_usage,
                                     canister.scheduler_state.compute_allocation,
                                     induction_cost,
                                     registry_settings.subnet_size,
@@ -1619,6 +1621,7 @@ impl ExecutionEnvironment {
                     &paying_canister.system_state,
                     cost,
                     paying_canister.memory_usage(),
+                    paying_canister.message_memory_usage(),
                     paying_canister.scheduler_state.compute_allocation,
                     subnet_size,
                 ) {

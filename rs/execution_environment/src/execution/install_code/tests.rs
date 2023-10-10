@@ -774,6 +774,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         NumBytes::new(canister_history_memory_usage as u64),
+        NumBytes::new(0),
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),

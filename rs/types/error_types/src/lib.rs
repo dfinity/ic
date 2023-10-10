@@ -111,6 +111,7 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInMemoryGrow => CanisterError,
             ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
             ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
+            InsufficientCyclesInMessageMemoryGrow => CanisterError,
         }
     }
 }
@@ -174,6 +175,7 @@ pub enum ErrorCode {
     InsufficientCyclesInMemoryGrow = 532,
     ReservedCyclesLimitExceededInMemoryAllocation = 533,
     ReservedCyclesLimitExceededInMemoryGrow = 534,
+    InsufficientCyclesInMessageMemoryGrow = 535,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -229,6 +231,7 @@ impl TryFrom<u64> for ErrorCode {
             532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
             533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
             534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
+            535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -344,7 +347,8 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMemoryAllocation
             | ErrorCode::InsufficientCyclesInMemoryGrow
             | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
-            | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow => false,
+            | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+            | ErrorCode::InsufficientCyclesInMessageMemoryGrow => false,
         }
     }
 

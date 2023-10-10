@@ -175,6 +175,7 @@ impl<'a> QueryContext<'a> {
             old_canister.system_state.freeze_threshold,
             old_canister.system_state.memory_allocation,
             old_canister.memory_usage(),
+            old_canister.message_memory_usage(),
             old_canister.scheduler_state.compute_allocation,
             subnet_size,
             old_canister.system_state.reserved_balance(),
@@ -505,6 +506,7 @@ impl<'a> QueryContext<'a> {
             time,
             canister.system_state.clone(),
             canister.memory_usage(),
+            canister.message_memory_usage(),
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
@@ -514,6 +516,7 @@ impl<'a> QueryContext<'a> {
         );
 
         let canister_current_memory_usage = canister.memory_usage();
+        let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
         execution_parameters
             .instruction_limits
@@ -540,6 +543,7 @@ impl<'a> QueryContext<'a> {
                         &call_origin,
                         callback_err,
                         canister_current_memory_usage,
+                        canister_current_message_memory_usage,
                         execution_parameters,
                     ),
                 }
@@ -583,6 +587,7 @@ impl<'a> QueryContext<'a> {
         call_origin: &CallOrigin,
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
@@ -602,6 +607,7 @@ impl<'a> QueryContext<'a> {
                 time,
                 canister.system_state.clone(),
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 execution_parameters,
                 func_ref,
                 canister.execution_state.take().unwrap(),

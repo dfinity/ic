@@ -2575,6 +2575,7 @@ fn test_cycles_burn() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::try_from(1_000_000).unwrap();
+    let canister_message_memory_usage = NumBytes::from(0);
 
     let amount = 1_000_000_000;
     let mut balance = Cycles::new(amount);
@@ -2586,6 +2587,7 @@ fn test_cycles_burn() {
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         canister_memory_usage,
+        canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -2600,11 +2602,13 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
     let test = ExecutionTestBuilder::new().build();
 
     let canister_memory_usage = NumBytes::try_from(1_000_000).unwrap();
+    let canister_message_memory_usage = NumBytes::from(0);
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         canister_memory_usage,
+        canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -2619,6 +2623,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         canister_memory_usage,
+        canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),

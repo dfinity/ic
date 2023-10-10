@@ -52,10 +52,12 @@ fn test_wasmtime_system_api() {
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
         ApiType::start(mock_time()),
         sandbox_safe_system_state,
         canister_current_memory_usage,
+        canister_current_message_memory_usage,
         ExecutionParameters {
             instruction_limits: InstructionLimits::new(
                 FlagStatus::Disabled,

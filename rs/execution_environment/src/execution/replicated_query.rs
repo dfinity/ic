@@ -38,11 +38,13 @@ pub fn execute_replicated_query(
     let instruction_limit = instruction_limits.message();
     // Withdraw execution cycles.
     let memory_usage = canister.memory_usage();
+    let message_memory_usage = canister.message_memory_usage();
     let compute_allocation = canister.scheduler_state.compute_allocation;
 
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
         memory_usage,
+        message_memory_usage,
         compute_allocation,
         instruction_limit,
         subnet_size,
@@ -110,6 +112,7 @@ pub fn execute_replicated_query(
     let call_origin = CallOrigin::from(&req);
 
     let memory_usage = canister.memory_usage();
+    let message_memory_usage = canister.message_memory_usage();
 
     let api_type =
         ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender(), None);
@@ -124,6 +127,7 @@ pub fn execute_replicated_query(
         time,
         canister.system_state.clone(),
         memory_usage,
+        message_memory_usage,
         execution_parameters,
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),

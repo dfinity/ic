@@ -32,6 +32,7 @@ pub fn execute_inspect_message(
 ) -> (NumInstructions, Result<(), UserError>) {
     let canister_id = canister.canister_id();
     let memory_usage = canister.memory_usage();
+    let message_memory_usage = canister.message_memory_usage();
     let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
     let (execution_state, system_state, _) = canister.into_parts();
     let message_instruction_limit = execution_parameters.instruction_limits.message();
@@ -75,6 +76,7 @@ pub fn execute_inspect_message(
         time,
         system_state,
         memory_usage,
+        message_memory_usage,
         execution_parameters,
         FuncRef::Method(method),
         execution_state,
