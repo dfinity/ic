@@ -1026,11 +1026,10 @@ pub mod tests {
         types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::artifact::DkgMessageAttribute;
-    use ic_types::consensus::dkg::{DealingContent, Message as DkgMessage};
+    use ic_types::consensus::dkg::{DealingContent, DkgMessageId, Message as DkgMessage};
     use ic_types::crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        {CryptoHash, CryptoHashOf},
+        CryptoHash,
     };
     use ic_types::signature::BasicSignature;
     use ic_types::SubnetId;
@@ -1656,13 +1655,10 @@ pub mod tests {
         let mut result = vec![];
         for advert_number in range {
             let msg = receive_check_test_create_message(advert_number);
-            let artifact_id = CryptoHashOf::from(ic_types::crypto::crypto_hash(&msg).get());
-            let attribute = DkgMessageAttribute {
-                interval_start_height: Default::default(),
-            };
+            let artifact_id = ArtifactId::DkgMessage(DkgMessageId::from(&msg));
             let gossip_advert = GossipAdvert {
-                artifact_id: ArtifactId::DkgMessage(artifact_id),
-                attribute: ArtifactAttribute::DkgMessage(attribute),
+                artifact_id,
+                attribute: ic_types::artifact::ArtifactAttribute::Empty(()),
                 size: 0,
                 integrity_hash: ic_types::crypto::crypto_hash(&msg).get(),
             };
@@ -1689,9 +1685,7 @@ pub mod tests {
         let max_adverts = gossip.gossip_config.max_artifact_streams_per_peer;
         let mut adverts = receive_check_test_create_adverts(0..max_adverts);
         let msg = receive_check_test_create_message(0);
-        let artifact_id = ArtifactId::DkgMessage(CryptoHashOf::from(
-            ic_types::crypto::crypto_hash(&msg).get(),
-        ));
+        let artifact_id = ArtifactId::DkgMessage(DkgMessageId::from(&msg));
         for advert in &mut adverts {
             advert.artifact_id = artifact_id.clone();
         }

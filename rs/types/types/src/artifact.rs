@@ -18,6 +18,7 @@ use crate::{
     chunkable::{ArtifactChunk, ChunkId, ChunkableArtifact},
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
+        dkg::DkgMessageId,
         dkg::Message as DkgMessage,
         ecdsa::{EcdsaArtifactId, EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHash,
@@ -61,7 +62,6 @@ pub enum Artifact {
 #[try_into(owned, ref, ref_mut)]
 pub enum ArtifactAttribute {
     ConsensusMessage(ConsensusMessageAttribute),
-    DkgMessage(DkgMessageAttribute),
     EcdsaMessage(EcdsaMessageAttribute),
     CanisterHttpMessage(CanisterHttpResponseAttribute),
     Empty(()),
@@ -72,7 +72,6 @@ impl From<&ArtifactAttribute> for pb::ArtifactAttribute {
         use pb::artifact_attribute::Kind;
         let kind = match value {
             ArtifactAttribute::ConsensusMessage(x) => Kind::ConsensusMessage(x.into()),
-            ArtifactAttribute::DkgMessage(x) => Kind::DkgMessage(x.into()),
             ArtifactAttribute::EcdsaMessage(x) => Kind::EcdsaMessage(x.into()),
             ArtifactAttribute::CanisterHttpMessage(x) => Kind::CanisterHttp(x.into()),
             ArtifactAttribute::Empty(_) => Kind::Empty(()),
@@ -90,7 +89,6 @@ impl TryFrom<&pb::ArtifactAttribute> for ArtifactAttribute {
         };
         Ok(match kind {
             Kind::ConsensusMessage(x) => ArtifactAttribute::ConsensusMessage(x.try_into()?),
-            Kind::DkgMessage(x) => ArtifactAttribute::DkgMessage(x.into()),
             Kind::EcdsaMessage(x) => ArtifactAttribute::EcdsaMessage(x.try_into()?),
             Kind::CanisterHttp(x) => ArtifactAttribute::CanisterHttpMessage(x.into()),
             Kind::Empty(_) => ArtifactAttribute::Empty(()),
@@ -118,7 +116,7 @@ impl From<&ArtifactId> for pb::ArtifactId {
         let kind = match value {
             ArtifactId::ConsensusMessage(x) => Kind::Consensus(x.into()),
             ArtifactId::IngressMessage(x) => Kind::Ingress(x.into()),
-            ArtifactId::DkgMessage(x) => Kind::DkgMessage(x.clone().get().0),
+            ArtifactId::DkgMessage(x) => Kind::DkgMessage(x.into()),
             ArtifactId::CertificationMessage(x) => Kind::Certification(x.into()),
             ArtifactId::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
             ArtifactId::CanisterHttpMessage(x) => Kind::CanisterHttp(x.clone().get().0),
@@ -141,7 +139,7 @@ impl TryFrom<&pb::ArtifactId> for ArtifactId {
         Ok(match kind {
             Kind::Consensus(x) => ArtifactId::ConsensusMessage(x.try_into()?),
             Kind::Ingress(x) => ArtifactId::IngressMessage(x.try_into()?),
-            Kind::DkgMessage(x) => ArtifactId::DkgMessage(DkgMessageId::new(CryptoHash(x.clone()))),
+            Kind::DkgMessage(x) => ArtifactId::DkgMessage(x.into()),
             Kind::Certification(x) => ArtifactId::CertificationMessage(x.try_into()?),
             Kind::Ecdsa(x) => ArtifactId::EcdsaMessage(x.try_into()?),
             Kind::CanisterHttp(x) => {
@@ -471,33 +469,6 @@ impl TryFrom<&pb::CertificationMessageId> for CertificationMessageId {
             hash: try_from_option_field(value.hash.as_ref(), "CertificationMessageId::hash")?,
             height: Height::new(value.height),
         })
-    }
-}
-
-// -----------------------------------------------------------------------------
-// DKG artifacts
-
-/// Identifier of a DKG message.
-pub type DkgMessageId = CryptoHashOf<DkgMessage>;
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct DkgMessageAttribute {
-    pub interval_start_height: Height,
-}
-
-impl From<&DkgMessageAttribute> for pb::DkgMessageAttribute {
-    fn from(value: &DkgMessageAttribute) -> Self {
-        Self {
-            height: value.interval_start_height.get(),
-        }
-    }
-}
-
-impl From<&pb::DkgMessageAttribute> for DkgMessageAttribute {
-    fn from(value: &pb::DkgMessageAttribute) -> Self {
-        Self {
-            interval_start_height: Height::new(value.height),
-        }
     }
 }
 
