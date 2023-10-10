@@ -2462,6 +2462,25 @@ struct ProposeToOpenSnsTokenSwap {
 
 impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
     fn from(cli_proposal: &ProposeToOpenSnsTokenSwap) -> OpenSnsTokenSwap {
+        let min_direct_participation_icp_e8s =
+            cli_proposal
+                .community_fund_investment_e8s
+                .map(|community_fund_investment_e8s| {
+                    cli_proposal
+                        .min_participant_icp_e8s
+                        .checked_sub(community_fund_investment_e8s)
+                        .unwrap()
+                });
+        let max_direct_participation_icp_e8s =
+            cli_proposal
+                .community_fund_investment_e8s
+                .map(|community_fund_investment_e8s| {
+                    cli_proposal
+                        .max_participant_icp_e8s
+                        .checked_sub(community_fund_investment_e8s)
+                        .unwrap()
+                });
+
         let ProposeToOpenSnsTokenSwap {
             target_swap_canister_id,
             min_participants,
@@ -2492,6 +2511,8 @@ impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
                 min_participants,
                 min_icp_e8s,
                 max_icp_e8s,
+                min_direct_participation_icp_e8s,
+                max_direct_participation_icp_e8s,
                 min_participant_icp_e8s,
                 max_participant_icp_e8s,
                 swap_due_timestamp_seconds,
@@ -3865,6 +3886,10 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
         let swap_parameters = {
             let minimum_participants = Some(swap_minimum_participants);
+            let minimum_direct_participation_icp =
+                swap_minimum_icp.checked_sub(&neurons_fund_investment_icp);
+            let maximum_direct_participation_icp =
+                swap_maximum_icp.checked_sub(&neurons_fund_investment_icp);
             let minimum_icp = Some(swap_minimum_icp);
             let maximum_icp = Some(swap_maximum_icp);
             let minimum_participant_icp = Some(swap_minimum_participant_icp);
@@ -3890,6 +3915,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 minimum_participants,
                 minimum_icp,
                 maximum_icp,
+                minimum_direct_participation_icp,
+                maximum_direct_participation_icp,
                 minimum_participant_icp,
                 maximum_participant_icp,
                 confirmation_text,

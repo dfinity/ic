@@ -94,3 +94,15 @@ impl Percentage {
         }
     }
 }
+
+impl Tokens {
+    pub fn checked_add(&self, rhs: &Tokens) -> Option<Tokens> {
+        let e8s = self.e8s?.checked_add(rhs.e8s?)?;
+        Some(Tokens { e8s: Some(e8s) })
+    }
+
+    pub fn checked_sub(&self, rhs: &Tokens) -> Option<Tokens> {
+        let e8s = self.e8s?.checked_sub(rhs.e8s?)?;
+        Some(Tokens { e8s: Some(e8s) })
+    }
+}

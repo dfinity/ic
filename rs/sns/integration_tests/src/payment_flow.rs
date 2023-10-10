@@ -49,6 +49,8 @@ lazy_static! {
         min_participants: 1,
         min_icp_e8s: 1,
         max_icp_e8s: 10_000_000,
+        min_direct_participation_icp_e8s: Some(1),
+        max_direct_participation_icp_e8s: Some(10_000_000),
         min_participant_icp_e8s: 1_010_000,
         max_participant_icp_e8s: 10_000_000,
         swap_due_timestamp_seconds: StateMachine::new()
@@ -184,6 +186,8 @@ impl PaymentProtocolTestSetup {
             min_participants: None,                      // TODO[NNS1-2339]
             min_icp_e8s: None,                           // TODO[NNS1-2339]
             max_icp_e8s: None,                           // TODO[NNS1-2339]
+            min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+            max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
             min_participant_icp_e8s: None,               // TODO[NNS1-2339]
             max_participant_icp_e8s: None,               // TODO[NNS1-2339]
             swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]

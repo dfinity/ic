@@ -72,7 +72,7 @@ use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{
-    self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints,
+    self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints, Params,
     RestoreDappControllersRequest,
 };
 use ic_sns_wasm::pb::v1::{
@@ -4569,11 +4569,40 @@ impl Governance {
         open_sns_token_swap: &OpenSnsTokenSwap,
         original_total_community_fund_maturity_e8s_equivalent: u64,
     ) {
-        let params = open_sns_token_swap
-            .params
-            .as_ref()
-            .expect("OpenSnsTokenSwap proposal lacks params.")
-            .clone();
+        let params = {
+            let params = open_sns_token_swap
+                .params
+                .as_ref()
+                .expect("OpenSnsTokenSwap proposal lacks params.")
+                .clone();
+            Params {
+                max_direct_participation_icp_e8s: Some(
+                    params.max_direct_participation_icp_e8s.unwrap_or_else(|| {
+                        params
+                            .max_icp_e8s
+                            .checked_sub(
+                                open_sns_token_swap
+                                    .community_fund_investment_e8s
+                                    .unwrap_or(0),
+                            )
+                            .unwrap()
+                    }),
+                ),
+                min_direct_participation_icp_e8s: Some(
+                    params.min_direct_participation_icp_e8s.unwrap_or_else(|| {
+                        params
+                            .min_icp_e8s
+                            .checked_sub(
+                                open_sns_token_swap
+                                    .community_fund_investment_e8s
+                                    .unwrap_or(0),
+                            )
+                            .unwrap()
+                    }),
+                ),
+                ..params
+            }
+        };
 
         let cf_participants = {
             let proposals = &self.heap_data.proposals;
@@ -4748,19 +4777,73 @@ impl Governance {
                 "missing field swap_parameters",
             ))?;
 
-        let max_icp_e8s = *swap_parameters
+        let max_direct_participation_icp_e8s = swap_parameters
+            .maximum_direct_participation_icp
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.maximum_direct_participation_icp",
+            ))
+            .and_then(|max_direct_icp| {
+                max_direct_icp
+                    .e8s
+                    .as_ref()
+                    .ok_or(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "missing field swap_parameters.maximum_direct_participation_icp.e8s",
+                    ))
+            });
+        // TODO NNS1-2590: Fallback until swap_parameters.maximum_direct_participation_icp is required to
+        // be in the proposal the user submits
+        let max_icp_minus_nf_contribution = swap_parameters
             .maximum_icp
             .as_ref()
             .ok_or(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "missing field swap_parameters.maximum_icp",
-            ))?
-            .e8s
-            .as_ref()
-            .ok_or(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "missing field swap_parameters.maximum_icp.e8s",
-            ))?;
+            ))
+            .and_then(|max_icp| {
+                max_icp
+                    .e8s
+                    .as_ref()
+                    .ok_or(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "missing field swap_parameters.maximum_icp.e8s",
+                    ))
+            })
+            .and_then(|max_icp_e8s| {
+                swap_parameters
+                    .neurons_fund_investment_icp
+                    .as_ref()
+                    .ok_or(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "missing field swap_parameters.neurons_fund_investment_icp.e8s",
+                    ))
+                    .and_then(|neurons_fund_investment_icp| {
+                        neurons_fund_investment_icp.e8s.as_ref().ok_or(
+                            GovernanceError::new_with_message(
+                                ErrorType::PreconditionFailed,
+                                "missing field swap_parameters.maximum_icp.e8s",
+                            ),
+                        )
+                    })
+                    .map(|neurons_fund_investment_icp_e8s| {
+                        max_icp_e8s - neurons_fund_investment_icp_e8s
+                    })
+            });
+        let max_direct_participation_icp_e8s = match (
+            max_direct_participation_icp_e8s,
+            max_icp_minus_nf_contribution,
+        ) {
+            (Ok(max_direct_participation_icp_e8s), _) => *max_direct_participation_icp_e8s,
+            (_, Ok(max_icp_minus_nf_contribution)) => max_icp_minus_nf_contribution,
+            (Err(_), Err(_)) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Unable to determine maximum_direct_participation_icp from swap_parameters",
+                ))
+            }
+        };
 
         let min_participant_icp_e8s = *swap_parameters
             .minimum_participant_icp
@@ -4815,7 +4898,7 @@ impl Governance {
                 original_total_community_fund_maturity_e8s_equivalent,
                 withdrawal_amount_e8s,
                 &sns_swap_pb::Params {
-                    max_icp_e8s,
+                    max_direct_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
                     min_participant_icp_e8s,
                     max_participant_icp_e8s,
                     ..Default::default()
@@ -8284,16 +8367,15 @@ fn draw_funds_from_the_community_fund(
 
     // Cap the withdrawal amount.
     let original_withdrawal_amount_e8s = withdrawal_amount_e8s;
-    let withdrawal_amount_e8s = withdrawal_amount_e8s
-        .min(total_cf_maturity_e8s)
-        // This is extra defensive programming, because OpenSnsTokenSwap
+    let mut withdrawal_amount_e8s = withdrawal_amount_e8s.min(total_cf_maturity_e8s);
+    if let Some(max_direct_participation_icp_e8s) = limits.max_direct_participation_icp_e8s {
+        // This is extra defensive programming, because CreateServiceNervousSystem
         // validation is supposed to ensure that withdrawal_amount_e8s <=
-        // limits.max_icp_e8s.
-        //
-        // TODO: Maybe the withdrawal_amount_e8s should be (meaningfully) less
-        // than max_icp_e8s, because otherwise, nobody else would be able to
-        // participate.
-        .min(limits.max_icp_e8s);
+        // limits.max_direct_participation_icp_e8s.
+        withdrawal_amount_e8s = withdrawal_amount_e8s.min(max_direct_participation_icp_e8s);
+    } else {
+        println!("{LOG_PREFIX}ERROR: (draw_funds_from_the_community_fund) limits.max_direct_participation_icp_e8s is not set. This is probably a bug in the NNS governance canister.");
+    }
 
     // The amount that each CF neuron invests is proportional to its
     // maturity. Because we round down, there will almost certainly be some
@@ -9221,6 +9303,8 @@ fn is_information_about_swap_from_different_sources_consistent(
                 min_participants: _,
                 min_icp_e8s: _,
                 max_icp_e8s: _,
+                min_direct_participation_icp_e8s: _,
+                max_direct_participation_icp_e8s: _,
                 min_participant_icp_e8s: _,
                 max_participant_icp_e8s: _,
                 swap_start_timestamp_seconds: _,

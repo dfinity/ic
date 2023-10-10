@@ -326,7 +326,7 @@ pub async fn open_swap(swap: &mut Swap, params: &Params) {
                 },
             )
             .await;
-        assert!(r.is_ok());
+        r.unwrap();
     }
 }
 

@@ -171,9 +171,7 @@ fn test_parse() {
             duration: nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             },
-            neurons_fund_investment_icp: nervous_system_pb::Tokens {
-                e8s: Some(1000 * E8),
-            },
+            neurons_fund_investment_icp: nervous_system_pb::Tokens { e8s: Some(10 * E8) },
         },
         nns_proposal: NnsProposal {
             title: "Proposal to Create an SNS named Daniel".to_string(),
@@ -435,6 +433,9 @@ fn test_convert_to_create_service_nervous_system() {
             minimum_icp: Some(parse_tokens("123 tokens").unwrap()),
             maximum_icp: Some(parse_tokens("65000 tokens").unwrap()),
 
+            minimum_direct_participation_icp: Some(parse_tokens("113 tokens").unwrap()),
+            maximum_direct_participation_icp: Some(parse_tokens("64990 tokens").unwrap()),
+
             minimum_participant_icp: Some(parse_tokens("650 tokens").unwrap()),
             maximum_participant_icp: Some(parse_tokens("6500 tokens").unwrap()),
 
@@ -455,9 +456,7 @@ fn test_convert_to_create_service_nervous_system() {
             duration: Some(nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             }),
-            neurons_fund_investment_icp: Some(nervous_system_pb::Tokens {
-                e8s: Some(1000 * E8)
-            }),
+            neurons_fund_investment_icp: Some(nervous_system_pb::Tokens { e8s: Some(10 * E8) }),
         }
     );
 }

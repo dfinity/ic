@@ -274,26 +274,26 @@ impl Init {
                     })
                     .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
             }), // 17
-            "min_icp_e8s".to_string() => self.min_icp_e8s.as_ref().map(|x| {
+            "min_direct_participation_icp_e8s".to_string() => self.min_direct_participation_icp_e8s.as_ref().map(|x| {
                 open_request
                     .map(|r| {
                         r.params
                             .as_ref()
-                            .map(|p| m(*x == p.min_icp_e8s))
+                            .map(|p| m(Some(*x) == p.min_direct_participation_icp_e8s))
                             .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
                     })
                     .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
-            }), // 18
-            "max_icp_e8s".to_string() => self.max_icp_e8s.as_ref().map(|x| {
+            }), // 30
+            "max_direct_participation_icp_e8s".to_string() => self.max_direct_participation_icp_e8s.as_ref().map(|x| {
                 open_request
                     .map(|r| {
                         r.params
                             .as_ref()
-                            .map(|p| m(*x == p.max_icp_e8s))
+                            .map(|p| m(Some(*x) == p.max_direct_participation_icp_e8s))
                             .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
                     })
                     .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
-            }), // 19
+            }), // 31
             "min_participant_icp_e8s".to_string() => self.min_participant_icp_e8s.as_ref().map(|x| {
                 open_request
                     .map(|r| {
@@ -409,10 +409,14 @@ impl Init {
             self.is_swap_init_for_one_proposal_flow(),
             "cannot make an `OpenRequest` instance from a legacy `SnsInitPayload`"
         );
+        // This is checked by the previous assert, but repeating here to be explicit
+        assert!(self.min_direct_participation_icp_e8s.is_some());
+        assert!(self.max_direct_participation_icp_e8s.is_some());
+
         let params = Params {
             min_participants: self.min_participants.unwrap(),
-            min_icp_e8s: self.min_icp_e8s.unwrap(),
-            max_icp_e8s: self.max_icp_e8s.unwrap(),
+            min_direct_participation_icp_e8s: self.min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s: self.max_direct_participation_icp_e8s,
             min_participant_icp_e8s: self.min_participant_icp_e8s.unwrap(),
             max_participant_icp_e8s: self.max_participant_icp_e8s.unwrap(),
             swap_due_timestamp_seconds: self.swap_due_timestamp_seconds.unwrap(),
@@ -421,6 +425,12 @@ impl Init {
                 .neuron_basket_construction_parameters
                 .clone(),
             sale_delay_seconds: None,
+
+            // Deprecated fields
+            // These have to be kept in the struct for backwards compatibility,
+            // but aren't used in any of the swap's logic.
+            min_icp_e8s: self.min_icp_e8s.unwrap(),
+            max_icp_e8s: self.max_icp_e8s.unwrap(),
         };
         OpenRequest {
             params: Some(params),
@@ -1185,10 +1195,12 @@ mod tests {
     const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
 
     const PARAMS: Params = Params {
-        max_icp_e8s: 1_000 * E8,
         max_participant_icp_e8s: 1_000 * E8,
-        min_icp_e8s: 10 * E8,
         min_participant_icp_e8s: 5 * E8,
+        max_icp_e8s: 1_000 * E8,
+        min_icp_e8s: 10 * E8,
+        max_direct_participation_icp_e8s: Some(1_000 * E8),
+        min_direct_participation_icp_e8s: Some(10 * E8),
         sns_token_e8s: 5_000 * E8,
         min_participants: 10,
         swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS + 14 * SECONDS_PER_DAY,
@@ -1226,7 +1238,7 @@ mod tests {
         let mut init = INIT.clone();
 
         let sns_token_e8s = PARAMS.min_participant_icp_e8s as u128 * PARAMS.sns_token_e8s as u128
-            / PARAMS.max_icp_e8s as u128;
+            / PARAMS.max_direct_participation_icp_e8s.unwrap() as u128;
         let neuron_basket_count = PARAMS
             .neuron_basket_construction_parameters
             .as_ref()
@@ -1262,6 +1274,7 @@ mod tests {
             min_participants: 500,
             // max_icp_e8s must be enough for all of min_participants to participate
             max_icp_e8s: 500 * PARAMS.min_participant_icp_e8s,
+            max_direct_participation_icp_e8s: Some(500 * PARAMS.min_participant_icp_e8s),
             ..PARAMS
         };
         params.validate(&INIT).unwrap();
@@ -1577,6 +1590,8 @@ mod tests {
             min_participants: Some(17_u32),
             min_icp_e8s: Some(18_u64),
             max_icp_e8s: Some(19_000_u64),
+            min_direct_participation_icp_e8s: Some(18_u64),
+            max_direct_participation_icp_e8s: Some(19_000_u64),
             min_participant_icp_e8s: Some(20_u64),
             max_participant_icp_e8s: Some(21_u64),
             swap_start_timestamp_seconds: Some(22_u64),

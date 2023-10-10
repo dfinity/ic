@@ -141,9 +141,11 @@ type SnsInitPayload = record {
   token_logo : opt text;
   token_name : opt text;
   max_participant_icp_e8s : opt nat64;
+  min_direct_participation_icp_e8s : opt nat64;
   proposal_reject_cost_e8s : opt nat64;
   restricted_countries : opt Countries;
   min_icp_e8s : opt nat64;
+  max_direct_participation_icp_e8s : opt nat64;
 };
 type SnsUpgrade = record {
   next_version : opt SnsVersion;

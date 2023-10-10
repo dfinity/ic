@@ -103,8 +103,10 @@ type Init = record {
   should_auto_finalize : opt bool;
   max_participant_icp_e8s : opt nat64;
   sns_governance_canister_id : text;
+  min_direct_participation_icp_e8s : opt nat64;
   restricted_countries : opt Countries;
   min_icp_e8s : opt nat64;
+  max_direct_participation_icp_e8s : opt nat64;
 };
 type InvalidUserAmount = record {
   min_amount_icp_e8s_included : nat64;
@@ -174,7 +176,9 @@ type Params = record {
   sns_token_e8s : nat64;
   sale_delay_seconds : opt nat64;
   max_participant_icp_e8s : nat64;
+  min_direct_participation_icp_e8s : opt nat64;
   min_icp_e8s : nat64;
+  max_direct_participation_icp_e8s : opt nat64;
 };
 type Participant = record {
   participation : opt BuyerState;

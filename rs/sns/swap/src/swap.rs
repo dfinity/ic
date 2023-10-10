@@ -572,9 +572,9 @@ impl Swap {
             // Automatically fill out the fields that the (legacy) open request
             // used to provide, supporting clients who read legacy Swap fields.
             {
-                let data = init.mk_open_sns_request();
-                res.params = data.params;
-                res.cf_participants = data.cf_participants;
+                let open_request = init.mk_open_sns_request();
+                res.params = open_request.params;
+                res.cf_participants = open_request.cf_participants;
             }
             res.open_sns_token_swap_proposal_id = init.nns_proposal_id;
             res.decentralization_sale_open_timestamp_seconds = init.swap_start_timestamp_seconds;
@@ -639,7 +639,9 @@ impl Swap {
         self.params
             .as_ref()
             .expect("Expected params to be set")
-            .max_icp_e8s
+            .max_direct_participation_icp_e8s
+            .expect("Expected params.max_direct_participation_icp_e8s to be set")
+            .saturating_add(self.max_neurons_fund_participation_e8s())
     }
 
     /// The total amount of ICP e8s contributed by the Neurons' Fund.
@@ -662,18 +664,11 @@ impl Swap {
 
     /// The maximum direct participation amount (in ICP e8s).
     pub fn max_direct_participation_e8s(&self) -> u64 {
-        let max_total_participation_e8s = self.max_total_participation_e8s();
-        let max_neurons_fund_participation_e8s = self.max_neurons_fund_participation_e8s();
-        max_total_participation_e8s
-            .checked_sub(max_neurons_fund_participation_e8s)
-            .unwrap_or_else(|| {
-                log!(
-                    ERROR,
-                    "max_total_participation_e8s ({max_total_participation_e8s}) \
-                    < max_neurons_fund_participation_e8s ({max_neurons_fund_participation_e8s})"
-                );
-                0
-            })
+        self.params
+            .clone()
+            .expect("Expected params to be set")
+            .max_direct_participation_icp_e8s
+            .expect("Expected params.max_direct_participation_icp_e8s to be set")
     }
 
     /// The amount of ICP e8s currently available for direct participation.
@@ -2448,6 +2443,9 @@ impl Swap {
             .into()
     }
 
+    // PRECONDITIONS:
+    // 1. self.params must not be None
+    // 2. self.params.unwrap().max_direct_participation_icp_e8s must not be None
     pub fn new_sale_ticket(
         &mut self,
         request: &NewSaleTicketRequest,
@@ -2499,8 +2497,10 @@ impl Swap {
             .get(&caller.to_string())
             .map_or(0, |buyer_state| buyer_state.amount_icp_e8s());
         let amount_icp_e8s = match compute_participation_increment(
-            self.current_total_participation_e8s(),
-            params.max_icp_e8s,
+            self.current_direct_participation_e8s(),
+            params.max_direct_participation_icp_e8s.expect(
+                "`params.max_direct_participation_icp_e8s` should always be set during Swap's initialization",
+            ),
             params.min_participant_icp_e8s,
             params.max_participant_icp_e8s,
             old_balance_e8s,
@@ -2729,9 +2729,9 @@ impl Swap {
     }
 
     /// The minimum number of participants have been achieved, and the
-    /// minimal total amount has been reached.
+    /// minimal total amount of direct participation has been reached.
     pub fn sufficient_participation(&self) -> bool {
-        self.min_participation_reached() && self.min_icp_e8s_reached()
+        self.min_participation_reached() && self.min_direct_participation_icp_e8s_reached()
     }
 
     /// The minimum number of participants have been achieved.
@@ -2744,9 +2744,13 @@ impl Swap {
         false
     }
 
-    pub fn min_icp_e8s_reached(&self) -> bool {
+    pub fn min_direct_participation_icp_e8s_reached(&self) -> bool {
         if let Some(params) = &self.params {
-            return self.current_total_participation_e8s() >= params.min_icp_e8s;
+            let Some(min_direct_participation_icp_e8s) = params.min_direct_participation_icp_e8s
+            else {
+                return false;
+            };
+            return self.current_direct_participation_e8s() >= min_direct_participation_icp_e8s;
         }
 
         false
@@ -3030,9 +3034,8 @@ impl Swap {
         &self,
         _request: &GetSaleParametersRequest,
     ) -> GetSaleParametersResponse {
-        GetSaleParametersResponse {
-            params: self.params.clone(),
-        }
+        let params = self.params.clone();
+        GetSaleParametersResponse { params }
     }
 
     /// Lists Community Fund participants.
@@ -3116,10 +3119,10 @@ impl Swap {
 ///
 /// # Arguments
 ///
-/// * `tot_participation` - The current amount of tokens committed to
-///                         the swap by all users.
-/// * `max_tot_participation` - The maximum amount of tokens that can
-///                             be committed to the swap.
+/// * `tot_direct_participation` - The current amount of tokens committed to
+///                                the swap by all users.
+/// * `max_tot_direct_participation` - The maximum amount of tokens that can
+///                                    be committed to the swap.
 /// * `min_user_participation` - The minimum amount of tokens that a
 ///                              user must commit to participate to the swap.
 /// * `max_user_participation` - The maximum amount of tokens that a
@@ -3129,19 +3132,19 @@ impl Swap {
 /// * `requested_increment` - The amount of tokens by which the user wants
 ///                           to increase its participation in the swap.
 fn compute_participation_increment(
-    tot_participation: u64,
-    max_tot_participation: u64,
+    tot_direct_participation: u64,
+    max_tot_direct_participation: u64,
     min_user_participation: u64,
     max_user_participation: u64,
     user_participation: u64,
     requested_increment: u64,
 ) -> Result<u64, (u64, u64)> {
     // Check that there are available tokens available.
-    if tot_participation >= max_tot_participation {
+    if tot_direct_participation >= max_tot_direct_participation {
         return Err((0, 0));
     }
     // The previous check guarantees that max_available_increment > 0
-    let max_available_increment = max_tot_participation - tot_participation;
+    let max_available_increment = max_tot_direct_participation - tot_direct_participation;
 
     // Check that the user can reach min_user_participation with the next
     // ticket. We do not want users to participate less than min_user_participation
@@ -3600,6 +3603,8 @@ mod tests {
             min_participants: None,                      // TODO[NNS1-2339]
             min_icp_e8s: None,                           // TODO[NNS1-2339]
             max_icp_e8s: None,                           // TODO[NNS1-2339]
+            min_direct_participation_icp_e8s: None,                    // TODO[NNS1-2339]
+            max_direct_participation_icp_e8s: None,                    // TODO[NNS1-2339]
             min_participant_icp_e8s: None,               // TODO[NNS1-2339]
             max_participant_icp_e8s: None,               // TODO[NNS1-2339]
             swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -3617,6 +3622,8 @@ mod tests {
         min_participants: 7,
         min_icp_e8s: 10 * E8,
         max_icp_e8s: 1000 * E8,
+        min_direct_participation_icp_e8s: Some(10 * E8),
+        max_direct_participation_icp_e8s: Some(1000 * E8),
         min_participant_icp_e8s: 2 * E8,
         max_participant_icp_e8s: 100 * E8,
         swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
@@ -4228,6 +4235,8 @@ mod tests {
                     min_participants: None, // TODO[NNS1-2339]
                     min_icp_e8s: None, // TODO[NNS1-2339]
                     max_icp_e8s: None, // TODO[NNS1-2339]
+                    min_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
+                    max_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
                     min_participant_icp_e8s: None, // TODO[NNS1-2339]
                     max_participant_icp_e8s: None, // TODO[NNS1-2339]
                     swap_start_timestamp_seconds: None, // TODO[NNS1-2339]
@@ -4243,6 +4252,8 @@ mod tests {
                     min_participants: 1,
                     min_icp_e8s: 10_010_000,
                     max_icp_e8s: 20_000_000,
+                    min_direct_participation_icp_e8s: Some(10_010_000),
+                    max_direct_participation_icp_e8s: Some(20_000_000),
                     min_participant_icp_e8s: 10_000,
                     max_participant_icp_e8s: 1_000_000,
                     swap_due_timestamp_seconds: 0,
@@ -4289,8 +4300,8 @@ mod tests {
             lifecycle: Lifecycle::Open as i32,
             params: Some(Params {
                 min_participants: 1,
-                min_icp_e8s: 10,
-                max_icp_e8s: 100,
+                min_direct_participation_icp_e8s: Some(10),
+                max_direct_participation_icp_e8s: Some(100),
                 min_participant_icp_e8s: 1,
                 max_participant_icp_e8s: 20,
                 swap_due_timestamp_seconds: sale_duration,
@@ -4322,8 +4333,8 @@ mod tests {
             lifecycle: Lifecycle::Open as i32,
             params: Some(Params {
                 min_participants: 1,
-                min_icp_e8s: 10,
-                max_icp_e8s: 100,
+                min_direct_participation_icp_e8s: Some(10),
+                max_direct_participation_icp_e8s: Some(100),
                 min_participant_icp_e8s: 10,
                 max_participant_icp_e8s: 20,
                 swap_due_timestamp_seconds: sale_duration,
@@ -4355,8 +4366,8 @@ mod tests {
             lifecycle: Lifecycle::Open as i32,
             params: Some(Params {
                 min_participants: 1,
-                min_icp_e8s: 10,
-                max_icp_e8s: 100,
+                min_direct_participation_icp_e8s: Some(10),
+                max_direct_participation_icp_e8s: Some(100),
                 min_participant_icp_e8s: 10,
                 max_participant_icp_e8s: 20,
                 swap_due_timestamp_seconds: sale_duration,
@@ -4390,8 +4401,8 @@ mod tests {
             lifecycle: Lifecycle::Open as i32,
             params: Some(Params {
                 min_participants: 1,
-                min_icp_e8s: 10,
-                max_icp_e8s: 20,
+                min_direct_participation_icp_e8s: Some(10),
+                max_direct_participation_icp_e8s: Some(20),
                 min_participant_icp_e8s: 10,
                 max_participant_icp_e8s: 20,
                 swap_due_timestamp_seconds: sale_duration,
@@ -4431,8 +4442,8 @@ mod tests {
             lifecycle: Lifecycle::Open as i32,
             params: Some(Params {
                 min_participants: 1,
-                min_icp_e8s: 10,
-                max_icp_e8s: 20,
+                min_direct_participation_icp_e8s: Some(10),
+                max_direct_participation_icp_e8s: Some(20),
                 min_participant_icp_e8s: 10,
                 max_participant_icp_e8s: 20,
                 swap_due_timestamp_seconds: sale_duration,
@@ -4480,8 +4491,8 @@ mod tests {
             lifecycle: Lifecycle::Open as i32,
             params: Some(Params {
                 min_participants: 2,
-                min_icp_e8s: 10,
-                max_icp_e8s: 20,
+                min_direct_participation_icp_e8s: Some(10),
+                max_direct_participation_icp_e8s: Some(20),
                 min_participant_icp_e8s: 10,
                 max_participant_icp_e8s: 20,
                 swap_due_timestamp_seconds: sale_duration,
@@ -4538,6 +4549,8 @@ mod tests {
                 min_participants: None,
                 min_icp_e8s: None,                           // TODO[NNS1-2339]
                 max_icp_e8s: None,                           // TODO[NNS1-2339]
+                min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+                max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
                 min_participant_icp_e8s: None,               // TODO[NNS1-2339]
                 max_participant_icp_e8s: None,               // TODO[NNS1-2339]
                 swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -4553,6 +4566,8 @@ mod tests {
                 min_participants: 0,
                 min_icp_e8s: 1,
                 max_icp_e8s: 10,
+                min_direct_participation_icp_e8s: Some(1),
+                max_direct_participation_icp_e8s: Some(10),
                 min_participant_icp_e8s,
                 max_participant_icp_e8s: 1,
                 swap_due_timestamp_seconds: 10_000_000,

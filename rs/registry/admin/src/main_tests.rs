@@ -146,6 +146,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 minimum_participants: Some(42),
                 minimum_icp: Some(nervous_system_pb::Tokens::from_tokens(123)),
                 maximum_icp: Some(nervous_system_pb::Tokens::from_tokens(65000)),
+                minimum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(121)),
+                maximum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(
+                    64998
+                )),
                 minimum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(650)),
                 maximum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(6500)),
                 neuron_basket_construction_parameters: Some(

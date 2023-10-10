@@ -420,7 +420,9 @@ type Params = record {
   sns_token_e8s : nat64;
   sale_delay_seconds : opt nat64;
   max_participant_icp_e8s : nat64;
+  min_direct_participation_icp_e8s : opt nat64;
   min_icp_e8s : nat64;
+  max_direct_participation_icp_e8s : opt nat64;
 };
 type Percentage = record { basis_points : opt nat64 };
 type Progress = variant { LastNeuronId : NeuronId };
@@ -553,8 +555,10 @@ type SwapParameters = record {
   confirmation_text : opt text;
   maximum_participant_icp : opt Tokens;
   minimum_icp : opt Tokens;
+  minimum_direct_participation_icp : opt Tokens;
   minimum_participant_icp : opt Tokens;
   start_time : opt GlobalTimeOfDay;
+  maximum_direct_participation_icp : opt Tokens;
   maximum_icp : opt Tokens;
   neurons_fund_investment_icp : opt Tokens;
   restricted_countries : opt Countries;
