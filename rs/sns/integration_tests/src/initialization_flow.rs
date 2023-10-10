@@ -109,6 +109,8 @@ lazy_static! {
                 minimum_participants: Some(5),
                 minimum_icp: Some(Tokens::from_tokens(500_000)),
                 maximum_icp: Some(Tokens::from_tokens(750_000)),
+                minimum_direct_participation_icp: Some(Tokens::from_tokens(499_900)),
+                maximum_direct_participation_icp: Some(Tokens::from_tokens(749_900)),
                 minimum_participant_icp: Some(Tokens::from_tokens(1)),
                 maximum_participant_icp: Some(Tokens::from_tokens(500_000)),
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
@@ -597,6 +599,8 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
     // Set the Neurons Fund investment to zero
     if let Some(s) = &mut swap_parameters {
         s.neurons_fund_investment_icp = Some(Tokens::from_tokens(0));
+        s.minimum_direct_participation_icp = s.minimum_icp;
+        s.maximum_direct_participation_icp = s.maximum_icp;
     }
 
     // Create the proposal and splice in the dapp canisters and swap_parameters
@@ -981,6 +985,8 @@ fn test_one_proposal_sns_initialization_swap_cannot_be_opened_by_legacy_method()
             min_participants: swap_parameters.minimum_participants() as u32,
             min_icp_e8s: swap_parameters.minimum_icp.unwrap().e8s(),
             max_icp_e8s: swap_parameters.maximum_icp.unwrap().e8s(),
+            min_direct_participation_icp_e8s: Some(swap_parameters.minimum_icp.unwrap().e8s()),
+            max_direct_participation_icp_e8s: Some(swap_parameters.maximum_icp.unwrap().e8s()),
             min_participant_icp_e8s: swap_parameters.minimum_participant_icp.unwrap().e8s(),
             max_participant_icp_e8s: swap_parameters.maximum_participant_icp.unwrap().e8s(),
             swap_due_timestamp_seconds: now + (2 * ONE_DAY_SECONDS),
@@ -1266,6 +1272,8 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     // Set the Neurons Fund investment to zero
     if let Some(s) = &mut swap_parameters {
         s.neurons_fund_investment_icp = Some(Tokens::from_tokens(0));
+        s.minimum_direct_participation_icp = s.minimum_icp;
+        s.maximum_direct_participation_icp = s.maximum_icp;
     }
     let proposal = CreateServiceNervousSystem {
         swap_parameters,

@@ -143,6 +143,8 @@ fn make_open_sns_token_swap_proposal(
     let params = SnsSwapParams {
         max_icp_e8s: 42 * E8,
         min_icp_e8s: 42 * E8,
+        max_direct_participation_icp_e8s: Some(42 * E8),
+        min_direct_participation_icp_e8s: Some(42 * E8),
         min_participants: 1,
         max_participant_icp_e8s: 42 * E8,
         min_participant_icp_e8s: 42 * E8,

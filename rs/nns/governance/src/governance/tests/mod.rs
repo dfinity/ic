@@ -50,6 +50,8 @@ fn test_time_warp() {
 const PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
     max_icp_e8s: 1000 * E8,
     min_icp_e8s: 10 * E8,
+    max_direct_participation_icp_e8s: Some(1000 * E8),
+    min_direct_participation_icp_e8s: Some(10 * E8),
     min_participant_icp_e8s: 5 * E8,
     max_participant_icp_e8s: 1000 * E8,
     min_participants: 2,
@@ -1352,6 +1354,12 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 min_participants: original_swap_parameters.minimum_participants,
                 min_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.minimum_icp),
                 max_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.maximum_icp),
+                min_direct_participation_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.minimum_direct_participation_icp
+                ),
+                max_direct_participation_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.maximum_direct_participation_icp
+                ),
                 min_participant_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_participant_icp
                 ),
@@ -1671,6 +1679,12 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 min_participants: original_swap_parameters.minimum_participants,
                 min_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.minimum_icp),
                 max_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.maximum_icp),
+                min_direct_participation_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.minimum_direct_participation_icp
+                ),
+                max_direct_participation_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.maximum_direct_participation_icp
+                ),
                 min_participant_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_participant_icp
                 ),
@@ -1802,6 +1816,92 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         assert_eq!(
             converted.swap_due_timestamp_seconds,
             Some(expected_swap_due_timestamp_seconds)
+        );
+    }
+
+    // Test that if min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
+    // max_direct_participation_icp_e8s are Some, or vice versa, then the
+    // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
+    // the missing fields.
+    #[test]
+    fn test_convert_from_valid_swap_parameters_with_missing_max_direct_icp() {
+        // Step 1: Prepare the world. (In this case, trivial.)
+
+        // Step 2: Call the code under test.
+        let payload = CreateServiceNervousSystem {
+            swap_parameters: Some(SwapParameters {
+                minimum_icp: Some(pb::Tokens {
+                    e8s: Some(12_300_000_000),
+                }),
+                maximum_icp: Some(pb::Tokens {
+                    e8s: Some(25_000_000_000),
+                }),
+                minimum_direct_participation_icp: None,
+                maximum_direct_participation_icp: None,
+                neurons_fund_investment_icp: Some(pb::Tokens {
+                    e8s: Some(6_100_000_000),
+                }),
+                ..CREATE_SERVICE_NERVOUS_SYSTEM
+                    .swap_parameters
+                    .clone()
+                    .unwrap()
+            }),
+            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
+        };
+        let converted = SnsInitPayload::try_from(payload).unwrap();
+
+        // Step 3: Inspect the result.
+
+        assert_eq!(
+            converted.min_direct_participation_icp_e8s(),
+            12_300_000_000 - 6_100_000_000 // Subtract neurons_fund_investment_icp
+        );
+        assert_eq!(
+            converted.max_direct_participation_icp_e8s(),
+            25_000_000_000 - 6_100_000_000 // Subtract neurons_fund_investment_icp
+        );
+    }
+
+    // Test that if min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
+    // max_direct_participation_icp_e8s are Some, or vice versa, then the
+    // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
+    // the missing fields.
+    #[test]
+    fn test_convert_from_valid_swap_parameters_with_missing_max_icp() {
+        // Step 1: Prepare the world. (In this case, trivial.)
+
+        // Step 2: Call the code under test.
+        let payload = CreateServiceNervousSystem {
+            swap_parameters: Some(SwapParameters {
+                minimum_icp: None,
+                maximum_icp: None,
+                minimum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(12_300_000_000 - 6_100_000_000),
+                }),
+                maximum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(25_000_000_000 - 6_100_000_000),
+                }),
+                neurons_fund_investment_icp: Some(pb::Tokens {
+                    e8s: Some(6_100_000_000),
+                }),
+                ..CREATE_SERVICE_NERVOUS_SYSTEM
+                    .swap_parameters
+                    .clone()
+                    .unwrap()
+            }),
+            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
+        };
+        let converted = SnsInitPayload::try_from(payload).unwrap();
+
+        // Step 3: Inspect the result.
+
+        assert_eq!(
+            converted.min_icp_e8s(),
+            12_300_000_000 // Subtract neurons_fund_investment_icp
+        );
+        assert_eq!(
+            converted.max_icp_e8s(),
+            25_000_000_000 // Subtract neurons_fund_investment_icp
         );
     }
 }

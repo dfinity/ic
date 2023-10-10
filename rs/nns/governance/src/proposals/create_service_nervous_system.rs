@@ -318,9 +318,147 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
         let min_participants = swap_parameters.minimum_participants;
 
+        let min_direct_participation_icp_e8s = swap_parameters
+            .minimum_direct_participation_icp
+            .and_then(|tokens| tokens.e8s);
+
+        let max_direct_participation_icp_e8s = swap_parameters
+            .maximum_direct_participation_icp
+            .and_then(|tokens| tokens.e8s);
+
+        let neurons_fund_investment_icp_e8s = swap_parameters
+            .neurons_fund_investment_icp
+            .and_then(|tokens| tokens.e8s);
+
         let min_icp_e8s = swap_parameters.minimum_icp.and_then(|tokens| tokens.e8s);
 
         let max_icp_e8s = swap_parameters.maximum_icp.and_then(|tokens| tokens.e8s);
+
+        // If min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
+        // max_direct_participation_icp_e8s are Some, or vice versa, then we can
+        // "reconstruct" the missing fields.
+        let (
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
+            min_icp_e8s,
+            max_icp_e8s,
+        ) = match (
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
+            min_icp_e8s,
+            max_icp_e8s,
+        ) {
+            (
+                Some(min_direct_participation_icp_e8s),
+                Some(max_direct_participation_icp_e8s),
+                None,
+                None,
+            ) => {
+                let min_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        min_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                let max_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        max_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                (
+                    Some(min_direct_participation_icp_e8s),
+                    Some(max_direct_participation_icp_e8s),
+                    min_icp_e8s,
+                    max_icp_e8s,
+                )
+            }
+            (None, None, Some(min_icp_e8s), Some(max_icp_e8s)) => {
+                let min_direct_participation_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        min_icp_e8s.checked_sub(neurons_fund_investment_icp_e8s)
+                    });
+
+                let max_direct_participation_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        max_icp_e8s.checked_sub(neurons_fund_investment_icp_e8s)
+                    });
+
+                (
+                    min_direct_participation_icp_e8s,
+                    max_direct_participation_icp_e8s,
+                    Some(min_icp_e8s),
+                    Some(max_icp_e8s),
+                )
+            }
+            (
+                Some(min_direct_participation_icp_e8s),
+                Some(max_direct_participation_icp_e8s),
+                Some(min_icp_e8s),
+                Some(max_icp_e8s),
+            ) => {
+                // We'll just check that all 4 are consistent
+                let expected_min_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        min_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                let expected_max_icp_e8s =
+                    neurons_fund_investment_icp_e8s.and_then(|neurons_fund_investment_icp_e8s| {
+                        max_direct_participation_icp_e8s
+                            .checked_add(neurons_fund_investment_icp_e8s)
+                    });
+
+                if expected_min_icp_e8s != Some(min_icp_e8s) {
+                    defects.push(format!(
+                        "min_icp_e8s is inconsistent with min_direct_participation_icp_e8s and neurons_fund_investment_icp_e8s. \
+                        min_icp_e8s = {min_icp_e8s:?}, \
+                        min_direct_participation_icp_e8s = {min_direct_participation_icp_e8s:?}, \
+                        neurons_fund_investment_icp_e8s = {neurons_fund_investment_icp_e8s:?}, \
+                        min_icp_e8s should be {expected_min_icp_e8s:?}",
+                    ));
+                }
+
+                if expected_max_icp_e8s != Some(max_icp_e8s) {
+                    defects.push(format!(
+                        "max_icp_e8s is inconsistent with max_direct_participation_icp_e8s and neurons_fund_investment_icp_e8s. \
+                        max_icp_e8s = {max_icp_e8s:?}, \
+                        max_direct_participation_icp_e8s = {max_direct_participation_icp_e8s:?}, \
+                        neurons_fund_investment_icp_e8s = {neurons_fund_investment_icp_e8s:?}, \
+                        max_icp_e8s should be {expected_max_icp_e8s:?}",
+                    ));
+                }
+
+                (
+                    Some(min_direct_participation_icp_e8s),
+                    Some(max_direct_participation_icp_e8s),
+                    Some(min_icp_e8s),
+                    Some(max_icp_e8s),
+                )
+            }
+            (
+                min_direct_participation_icp_e8s,
+                max_direct_participation_icp_e8s,
+                min_icp_e8s,
+                max_icp_e8s,
+            ) => {
+                defects.push(format!(
+                    "(min_direct_participation_icp_e8s AND max_direct_participation_icp_e8s) OR (min_icp_e8s AND max_icp_e8s) must be set. \
+                    min_direct_participation_icp_e8s = {min_direct_participation_icp_e8s:?}, \
+                    max_direct_participation_icp_e8s = {max_direct_participation_icp_e8s:?}, \
+                    min_icp_e8s = {min_icp_e8s:?}, \
+                    max_icp_e8s = {max_icp_e8s:?}"
+                ));
+
+                (
+                    min_direct_participation_icp_e8s,
+                    max_direct_participation_icp_e8s,
+                    min_icp_e8s,
+                    max_icp_e8s,
+                )
+            }
+        };
 
         let min_participant_icp_e8s = swap_parameters
             .minimum_participant_icp
@@ -375,6 +513,8 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             min_participants,
             min_icp_e8s,
             max_icp_e8s,
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
             min_participant_icp_e8s,
             max_participant_icp_e8s,
             neuron_basket_construction_parameters,

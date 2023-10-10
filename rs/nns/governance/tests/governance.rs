@@ -7264,6 +7264,8 @@ fn test_default_followees() {
                 min_participants: 100,
                 min_icp_e8s: 20 * E8,
                 max_icp_e8s: 1000 * E8,
+                min_direct_participation_icp_e8s: Some(20 * E8),
+                max_direct_participation_icp_e8s: Some(1000 * E8),
                 min_participant_icp_e8s: 10 * E8,
                 max_participant_icp_e8s: 12 * E8,
                 swap_due_timestamp_seconds: 0,
@@ -11293,6 +11295,8 @@ lazy_static! {
         min_participants: None, // TODO[NNS1-2339]
         min_icp_e8s: None, // TODO[NNS1-2339]
         max_icp_e8s: None, // TODO[NNS1-2339]
+        min_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
+        max_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
         min_participant_icp_e8s: None, // TODO[NNS1-2339]
         max_participant_icp_e8s: None, // TODO[NNS1-2339]
         swap_start_timestamp_seconds: None, // TODO[NNS1-2339]
@@ -11313,6 +11317,8 @@ lazy_static! {
         sns_token_e8s: 70_000 * E8,
         min_icp_e8s: 2 * E8,
         max_icp_e8s: 42_000 * E8,
+        min_direct_participation_icp_e8s: Some(2 * E8),
+        max_direct_participation_icp_e8s: Some(42_000 * E8),
         min_participant_icp_e8s: BASKET_COUNT * 2 * E8,
         max_participant_icp_e8s: 42_000 * E8,
         min_participants: 1,

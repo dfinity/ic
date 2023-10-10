@@ -104,6 +104,8 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         min_participants: None,                      // TODO[NNS1-2339]
         min_icp_e8s: None,                           // TODO[NNS1-2339]
         max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+        max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
         min_participant_icp_e8s: None,               // TODO[NNS1-2339]
         max_participant_icp_e8s: None,               // TODO[NNS1-2339]
         swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -128,6 +130,8 @@ pub fn params() -> Params {
         min_participants: 3,
         min_icp_e8s: 1,
         max_icp_e8s: 1_000_000 * E8,
+        min_direct_participation_icp_e8s: Some(1),
+        max_direct_participation_icp_e8s: Some(1_000_000 * E8),
         min_participant_icp_e8s: 100 * E8,
         max_participant_icp_e8s: 100_000 * E8,
         swap_due_timestamp_seconds: END_TIMESTAMP_SECONDS,
@@ -394,6 +398,8 @@ fn test_min_icp() {
     let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
+        max_direct_participation_icp_e8s: Some(10 * E8),
+        min_direct_participation_icp_e8s: Some(5 * E8),
         min_participants: 2,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 5 * E8,
@@ -422,7 +428,7 @@ fn test_min_icp() {
             )
             .now_or_never()
             .unwrap();
-        assert!(r.is_ok());
+        r.unwrap();
     }
     assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
@@ -545,6 +551,8 @@ fn test_min_max_icp_per_buyer() {
     let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
+        max_direct_participation_icp_e8s: Some(10 * E8),
+        min_direct_participation_icp_e8s: Some(5 * E8),
         min_participants: 2,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 5 * E8,
@@ -573,7 +581,7 @@ fn test_min_max_icp_per_buyer() {
             )
             .now_or_never()
             .unwrap();
-        assert!(r.is_ok());
+        r.unwrap();
     }
     assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
@@ -663,6 +671,8 @@ fn test_max_icp() {
     let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
+        max_direct_participation_icp_e8s: Some(10 * E8),
+        min_direct_participation_icp_e8s: Some(5 * E8),
         min_participants: 2,
         min_participant_icp_e8s: /* 1 */ E8,
         max_participant_icp_e8s: 6 * E8,
@@ -691,7 +701,7 @@ fn test_max_icp() {
             )
             .now_or_never()
             .unwrap();
-        assert!(r.is_ok());
+        r.unwrap();
     }
     assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
@@ -767,7 +777,8 @@ fn test_max_icp() {
 fn test_scenario_happy() {
     let params = Params {
         sns_token_e8s: 200_000 * E8,
-        min_participants: 5, // Two from the community fund, and three direct.
+        min_participants: 5,   // Two from the community fund, and three direct.
+        min_icp_e8s: 150 * E8, // Need to set it higher because we're depositing 100 ICP from the community fund.
         ..params()
     };
     let account = Account {
@@ -1151,6 +1162,8 @@ async fn test_finalize_swap_ok() {
     let params = Params {
         max_icp_e8s: 100,
         min_icp_e8s: 0,
+        max_direct_participation_icp_e8s: Some(100),
+        min_direct_participation_icp_e8s: Some(0),
         min_participant_icp_e8s: 1,
         max_participant_icp_e8s: 100,
         min_participants: 1,
@@ -1515,6 +1528,8 @@ async fn test_finalize_swap_abort() {
         // This absurdly large number ensures that the swap reaches the Aborted state.
         max_icp_e8s: E8 * E8,
         min_icp_e8s: E8 * E8,
+        max_direct_participation_icp_e8s: Some(E8 * E8),
+        min_direct_participation_icp_e8s: Some(E8 * E8),
         min_participant_icp_e8s: 1,
         max_participant_icp_e8s: E8 * E8,
         // There will only be one participant; therefore, this also ensures that
@@ -1743,6 +1758,8 @@ fn test_error_refund_single_user() {
         let params = Params {
             max_icp_e8s: 10 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(10 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: E8,
             max_participant_icp_e8s: 6 * E8,
@@ -1924,6 +1941,8 @@ fn test_error_refund_multiple_users() {
         let params = Params {
             max_icp_e8s: 10 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(10 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 2,
             min_participant_icp_e8s: E8,
             max_participant_icp_e8s: 6 * E8,
@@ -2040,6 +2059,8 @@ fn test_error_refund_after_close() {
         let params = Params {
             max_icp_e8s: 10 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(10 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: E8,
             max_participant_icp_e8s: 6 * E8,
@@ -2126,6 +2147,8 @@ fn test_get_buyer_state() {
     let params = Params {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
+        max_direct_participation_icp_e8s: Some(10 * E8),
+        min_direct_participation_icp_e8s: Some(5 * E8),
         min_participants: 1,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 6 * E8,
@@ -2212,7 +2235,7 @@ fn test_get_buyer_state() {
         .now_or_never()
         .unwrap()
         .is_ok());
-    // But only 4 ICP is "accepted" as the swap's init.max_icp_e8s is 10 Tokens and has
+    // But only 4 ICP is "accepted" as the swap's init.max_direct_participation_icp_e8s is 10 Tokens and has
     // been reached by this point.
     assert_eq!(
         swap.buyers
@@ -4245,7 +4268,7 @@ fn test_refresh_buyer_tokens() {
                     params: Some(params.clone()),
                     cf_participants: vec![],
                     open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
-                }
+                },
             )
             .now_or_never()
             .unwrap()
@@ -4278,6 +4301,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 50 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(50 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4342,6 +4367,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 50 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(50 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4366,10 +4393,13 @@ fn test_refresh_buyer_tokens() {
             &mut swap,
             &user2,
             &(params.max_participant_icp_e8s),
-            &(params.max_icp_e8s - params.max_participant_icp_e8s),
+            &(params.max_direct_participation_icp_e8s.unwrap() - params.max_participant_icp_e8s),
         );
 
-        assert_eq!(swap.get_buyers_total().buyers_total, params.max_icp_e8s);
+        assert_eq!(
+            swap.get_buyers_total().buyers_total,
+            params.max_direct_participation_icp_e8s.unwrap()
+        );
 
         // No user should be able to commit to tokens now no matter how small the amount
         buy_token_err(
@@ -4385,6 +4415,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 200 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(200 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4443,6 +4475,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 100 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(100 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4470,7 +4504,7 @@ fn test_refresh_buyer_tokens() {
 
         // Make sure that only an amount smaller than the minimum amount to be bought per user is available
         assert!(
-            params.max_icp_e8s - swap.get_buyers_total().buyers_total
+            params.max_direct_participation_icp_e8s.unwrap() - swap.get_buyers_total().buyers_total
                 < params.min_participant_icp_e8s
         );
 
@@ -4487,7 +4521,7 @@ fn test_refresh_buyer_tokens() {
             &mut swap,
             &user2,
             &amount_user2_0,
-            &(params.max_icp_e8s - E8),
+            &(params.max_direct_participation_icp_e8s.unwrap() - E8),
         );
     }
 
@@ -4496,6 +4530,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 100 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(100 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4527,6 +4563,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 100 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(100 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4556,11 +4594,15 @@ fn test_refresh_buyer_tokens() {
         );
 
         assert!(
-            params.max_icp_e8s - swap.get_buyers_total().buyers_total
+            params.max_direct_participation_icp_e8s.unwrap() - swap.get_buyers_total().buyers_total
                 < params.min_participant_icp_e8s
         );
 
-        assert!((params.max_icp_e8s - swap.get_buyers_total().buyers_total) < amount_user1_1);
+        assert!(
+            (params.max_direct_participation_icp_e8s.unwrap()
+                - swap.get_buyers_total().buyers_total)
+                < amount_user1_1
+        );
 
         assert!(
             swap.buyers
@@ -4586,7 +4628,7 @@ fn test_refresh_buyer_tokens() {
             &mut swap,
             &user1,
             &(amount_user1_0 + E8),
-            &(params.max_icp_e8s),
+            &(params.max_direct_participation_icp_e8s.unwrap()),
         );
     }
 
@@ -4595,6 +4637,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 50 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(50 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4626,6 +4670,8 @@ fn test_refresh_buyer_tokens() {
         let params = Params {
             max_icp_e8s: 100 * E8,
             min_icp_e8s: 5 * E8,
+            max_direct_participation_icp_e8s: Some(100 * E8),
+            min_direct_participation_icp_e8s: Some(5 * E8),
             min_participants: 1,
             min_participant_icp_e8s: 2 * E8,
             max_participant_icp_e8s: 40 * E8,
@@ -4647,13 +4693,18 @@ fn test_refresh_buyer_tokens() {
         buy_token_ok(&mut swap, &user4, &amount_user4_0, &amount_user4_0);
 
         assert_eq!(
-            params.max_icp_e8s - swap.get_buyers_total().buyers_total,
+            params.max_direct_participation_icp_e8s.unwrap() - swap.get_buyers_total().buyers_total,
             2 * E8
         );
 
         buy_token_ok(&mut swap, &user1, &amount_user1_0, &(2 * E8));
 
-        check_final_conditions(&mut swap, &user1, &(2 * E8), &(params.max_icp_e8s));
+        check_final_conditions(
+            &mut swap,
+            &user1,
+            &(2 * E8),
+            &(params.max_direct_participation_icp_e8s.unwrap()),
+        );
     }
 }
 

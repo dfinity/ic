@@ -1903,6 +1903,12 @@ pub mod create_service_nervous_system {
         pub minimum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         #[prost(message, optional, tag = "3")]
         pub maximum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "12")]
+        pub minimum_direct_participation_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "13")]
+        pub maximum_direct_participation_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         #[prost(message, optional, tag = "4")]
         pub minimum_participant_icp:
             ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,

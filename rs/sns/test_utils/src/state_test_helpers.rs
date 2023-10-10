@@ -35,7 +35,9 @@ use ic_sns_swap::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
-use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{
+    AccountIdentifier, BlockIndex, Memo, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+};
 use icrc_ledger_types::icrc1::account::Account;
 
 #[derive(Debug)]
@@ -232,6 +234,7 @@ pub fn participate_in_swap(
 
     Decode!(&response, RefreshBuyerTokensResponse).unwrap()
 }
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SnsCanisterType {
     Ledger,
@@ -284,16 +287,16 @@ pub fn send_participation_funds(
     let subaccount = icp_ledger::Subaccount(ic_sns_swap::swap::principal_to_subaccount(
         &participant_principal_id,
     ));
-    let request = Encode!(&TransferArgs {
+    let transfer_args = TransferArgs {
         memo: Memo(0),
         amount: amount.into(),
         fee: DEFAULT_TRANSFER_FEE,
         from_subaccount: None,
         to: AccountIdentifier::new(swap_canister_id.into(), Some(subaccount)).to_address(),
         created_at_time: None,
-    })
-    .unwrap();
-    state_machine
+    };
+    let request = Encode!(&transfer_args).unwrap();
+    let response = state_machine
         .execute_ingress_as(
             participant_principal_id,
             ICP_LEDGER_CANISTER_ID,
@@ -301,6 +304,17 @@ pub fn send_participation_funds(
             request,
         )
         .unwrap();
+    let _response = match response {
+        WasmResult::Reply(reply) => Decode!(&reply, Result<BlockIndex, TransferError>)
+            .expect("Failed to decode response")
+            .expect("Failed to transfer participation funds"),
+        WasmResult::Reject(reject) => {
+            panic!(
+                "transfer was rejected by the ICP ledger canister: {:#?}",
+                reject
+            )
+        }
+    };
 }
 
 pub fn swap_get_state(
@@ -638,6 +652,8 @@ pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params
                 min_participants: 1,
                 min_icp_e8s: 1,
                 max_icp_e8s: 10_000_000,
+                min_direct_participation_icp_e8s: Some(1),
+                max_direct_participation_icp_e8s: Some(10_000_000),
                 min_participant_icp_e8s: 2_020_000,
                 max_participant_icp_e8s: 10_000_000,
                 swap_due_timestamp_seconds: env

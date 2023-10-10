@@ -1708,6 +1708,9 @@ message CreateServiceNervousSystem {
     optional ic_nervous_system.pb.v1.Tokens minimum_icp = 2;
     optional ic_nervous_system.pb.v1.Tokens maximum_icp = 3;
 
+    optional ic_nervous_system.pb.v1.Tokens minimum_direct_participation_icp = 12;
+    optional ic_nervous_system.pb.v1.Tokens maximum_direct_participation_icp = 13;
+
     optional ic_nervous_system.pb.v1.Tokens minimum_participant_icp = 4;
     optional ic_nervous_system.pb.v1.Tokens maximum_participant_icp = 5;
 

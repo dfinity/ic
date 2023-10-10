@@ -291,9 +291,28 @@ pub struct Init {
     /// number of SNS tokens received per invested ICP. If this amount is achieved
     /// without reaching sufficient_participation, the swap will abort without
     /// waiting for the due date. Must be at least
-    /// `min_participants * min_participant_icp_e8s`.
+    /// `min_participants * min_participant_icp_e8s`
     #[prost(uint64, optional, tag = "19")]
     pub max_icp_e8s: ::core::option::Option<u64>,
+    /// The total number of ICP that is required to be "directly contributed"
+    /// for this token swap to take place. This number divided by the number of SNS tokens being
+    /// offered gives the seller's reserve price for the swap, i.e., the
+    /// minimum number of ICP per SNS tokens that the seller of SNS
+    /// tokens is willing to accept. If this amount is not achieved, the
+    /// swap will be aborted (instead of committed) when the due date/time
+    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
+    #[prost(uint64, optional, tag = "30")]
+    pub min_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// The number of ICP that is "targeted" by this token swap. If this
+    /// amount is achieved with sufficient participation, the swap will be
+    /// triggered immediately, without waiting for the due date
+    /// (`end_timestamp_seconds`). This means that an investor knows the minimum
+    /// number of SNS tokens received per invested ICP. If this amount is achieved
+    /// without reaching sufficient_participation, the swap will abort without
+    /// waiting for the due date. Must be at least
+    /// `min_participants * min_participant_icp_e8s`.
+    #[prost(uint64, optional, tag = "31")]
+    pub max_direct_participation_icp_e8s: ::core::option::Option<u64>,
     /// The minimum amount of ICP that each buyer must contribute to
     /// participate. Must be greater than zero.
     #[prost(uint64, optional, tag = "20")]
@@ -493,6 +512,25 @@ pub struct Params {
     /// `min_participants * min_participant_icp_e8s`.
     #[prost(uint64, tag = "3")]
     pub max_icp_e8s: u64,
+    /// The total number of ICP that is required for this token swap to
+    /// take place. This number divided by the number of SNS tokens being
+    /// offered gives the seller's reserve price for the swap, i.e., the
+    /// minimum number of ICP per SNS tokens that the seller of SNS
+    /// tokens is willing to accept. If this amount is not achieved, the
+    /// swap will be aborted (instead of committed) when the due date/time
+    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
+    #[prost(uint64, optional, tag = "10")]
+    pub min_direct_participation_icp_e8s: ::core::option::Option<u64>,
+    /// The number of ICP that is "targeted" by this token swap. If this
+    /// amount is achieved with sufficient participation, the swap will be
+    /// triggered immediately, without waiting for the due date
+    /// (`end_timestamp_seconds`). This means that an investor knows the minimum
+    /// number of SNS tokens received per invested ICP. If this amount is achieved
+    /// without reaching sufficient_participation, the swap will abort without
+    /// waiting for the due date. Must be at least
+    /// `min_participants * min_participant_icp_e8s`.
+    #[prost(uint64, optional, tag = "11")]
+    pub max_direct_participation_icp_e8s: ::core::option::Option<u64>,
     /// The minimum amount of ICP that each buyer must contribute to
     /// participate. Must be greater than zero.
     #[prost(uint64, tag = "4")]
