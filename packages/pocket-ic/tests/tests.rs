@@ -76,7 +76,7 @@ fn test_checkpoint() {
     let _canister_id = pic.create_canister(None);
 
     pic.create_checkpoint();
-    // todo: read from graph and assert
+    // Insert assertions, VER-2546
 }
 
 #[test]
