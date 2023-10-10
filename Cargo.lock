@@ -8223,6 +8223,7 @@ dependencies = [
  "ic-config",
  "ic-constants",
  "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
@@ -10872,6 +10873,7 @@ dependencies = [
 name = "ic-test-utilities-registry"
 version = "0.8.0"
 dependencies = [
+ "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-protobuf",
@@ -15031,6 +15033,7 @@ dependencies = [
  "ic-crypto-node-key-generation",
  "ic-crypto-node-key-validation",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
  "ic-ic00-types",

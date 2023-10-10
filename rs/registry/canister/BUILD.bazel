@@ -56,6 +56,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "//rs/crypto/test_utils/ni-dkg",
     "//rs/rust_canisters/canister_test",
     "//rs/canister_client/sender",
     "//rs/config",

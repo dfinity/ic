@@ -47,6 +47,7 @@ rust_test(
     name = "messaging_test",
     crate = ":messaging",
     deps = [
+        "//rs/crypto/test_utils/ni-dkg",
         "//rs/interfaces/state_manager/mocks",
         "//rs/registry/fake",
         "//rs/registry/local_registry",
