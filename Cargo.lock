@@ -12945,6 +12945,70 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
+name = "multiservice_discovery"
+version = "0.1.0"
+dependencies = [
+ "base64 0.13.1",
+ "clap 4.4.5",
+ "crossbeam",
+ "crossbeam-channel",
+ "erased-serde",
+ "futures-util",
+ "humantime",
+ "ic-async-utils",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-registry-client",
+ "ic-types",
+ "ic-utils 0.8.0",
+ "multiservice_discovery_shared",
+ "regex",
+ "serde",
+ "serde_json",
+ "service-discovery",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+ "url",
+ "warp",
+]
+
+[[package]]
+name = "multiservice_discovery_downloader"
+version = "0.1.0"
+dependencies = [
+ "clap 4.4.5",
+ "crossbeam",
+ "crossbeam-channel",
+ "futures-util",
+ "humantime",
+ "ic-async-utils",
+ "ic-types",
+ "multiservice_discovery_shared",
+ "regex",
+ "reqwest",
+ "service-discovery",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "multiservice_discovery_shared"
+version = "0.1.0"
+dependencies = [
+ "erased-serde",
+ "ic-types",
+ "regex",
+ "ring",
+ "serde",
+ "serde_json",
+ "service-discovery",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"

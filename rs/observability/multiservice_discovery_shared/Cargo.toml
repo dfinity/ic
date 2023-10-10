@@ -1,0 +1,15 @@
+[package]
+name = "multiservice_discovery_shared"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+service-discovery = { path = "../service_discovery" }
+serde = { version = "1.0.152", features = ["derive"] }
+serde_json = "1.0.54"
+ic-types ={ path = "../../types/types" }
+erased-serde = "0.3.23"
+regex = "1.7.0"
+ring = "0.16"
