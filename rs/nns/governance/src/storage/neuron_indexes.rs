@@ -23,8 +23,8 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-type NeuronId = u64;
-type Topic = Signed32;
+type NeuronIdU64 = u64;
+type TopicSigned32 = Signed32;
 
 // Because many arguments are needed to construct a StableNeuronIndexes,
 // there is no natural argument order that StableNeuronIndexes::new would be able to
@@ -70,14 +70,14 @@ where
     Memory: ic_stable_structures::Memory,
 {
     subaccount: NeuronSubaccountIndex<Memory>,
-    principal: StableNeuronPrincipalIndex<NeuronId, Memory>,
-    following: StableNeuronFollowingIndex<NeuronId, Topic, Memory>,
+    principal: StableNeuronPrincipalIndex<NeuronIdU64, Memory>,
+    following: StableNeuronFollowingIndex<NeuronIdU64, TopicSigned32, Memory>,
     known_neuron: KnownNeuronIndex<Memory>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct CorruptedNeuronIndexes {
-    neuron_id: NeuronId,
+    neuron_id: NeuronIdU64,
     indexes: Vec<NeuronIndexDefect>,
 }
 
@@ -188,7 +188,7 @@ where
 
 fn already_present_principal_ids_to_result(
     already_present_principal_ids: Vec<PrincipalId>,
-    neuron_id: NeuronId,
+    neuron_id: NeuronIdU64,
 ) -> Result<(), NeuronIndexDefect> {
     if already_present_principal_ids.is_empty() {
         Ok(())
@@ -204,7 +204,7 @@ fn already_present_principal_ids_to_result(
 
 fn already_absent_principal_ids_to_result(
     already_absent_principal_ids: Vec<PrincipalId>,
-    neuron_id: NeuronId,
+    neuron_id: NeuronIdU64,
 ) -> Result<(), NeuronIndexDefect> {
     if already_absent_principal_ids.is_empty() {
         Ok(())
@@ -218,7 +218,7 @@ fn already_absent_principal_ids_to_result(
     }
 }
 
-impl<Memory> NeuronIndex for StableNeuronPrincipalIndex<NeuronId, Memory>
+impl<Memory> NeuronIndex for StableNeuronPrincipalIndex<NeuronIdU64, Memory>
 where
     Memory: ic_stable_structures::Memory,
 {
@@ -288,8 +288,8 @@ where
 }
 
 fn already_present_topic_followee_pairs_to_result(
-    already_present_topic_followee_pairs: Vec<(Topic, NeuronId)>,
-    neuron_id: NeuronId,
+    already_present_topic_followee_pairs: Vec<(TopicSigned32, NeuronIdU64)>,
+    neuron_id: NeuronIdU64,
 ) -> Result<(), NeuronIndexDefect> {
     if already_present_topic_followee_pairs.is_empty() {
         Ok(())
@@ -304,8 +304,8 @@ fn already_present_topic_followee_pairs_to_result(
 }
 
 fn already_absent_topic_followee_pairs_to_result(
-    already_absent_topic_followee_pairs: Vec<(Topic, NeuronId)>,
-    neuron_id: NeuronId,
+    already_absent_topic_followee_pairs: Vec<(TopicSigned32, NeuronIdU64)>,
+    neuron_id: NeuronIdU64,
 ) -> Result<(), NeuronIndexDefect> {
     if already_absent_topic_followee_pairs.is_empty() {
         Ok(())
@@ -319,7 +319,7 @@ fn already_absent_topic_followee_pairs_to_result(
     }
 }
 
-impl<Memory> NeuronIndex for StableNeuronFollowingIndex<NeuronId, Topic, Memory>
+impl<Memory> NeuronIndex for StableNeuronFollowingIndex<NeuronIdU64, TopicSigned32, Memory>
 where
     Memory: ic_stable_structures::Memory,
 {
@@ -332,7 +332,7 @@ where
             new_neuron
                 .topic_followee_pairs()
                 .iter()
-                .map(|(topic, followee)| (Topic::from(*topic as i32), followee.id))
+                .map(|(topic, followee)| (TopicSigned32::from(*topic as i32), followee.id))
                 .collect(),
         );
         already_present_topic_followee_pairs_to_result(
@@ -350,7 +350,7 @@ where
             existing_neuron
                 .topic_followee_pairs()
                 .iter()
-                .map(|(topic, followee)| (Topic::from(*topic as i32), followee.id))
+                .map(|(topic, followee)| (TopicSigned32::from(*topic as i32), followee.id))
                 .collect(),
         );
         already_absent_topic_followee_pairs_to_result(
@@ -373,12 +373,12 @@ where
         let topic_followee_pairs_to_remove = old_topic_followee_pairs
             .difference(&new_topic_followee_pairs)
             .cloned()
-            .map(|(topic, followee)| (Topic::from(topic as i32), followee.id))
+            .map(|(topic, followee)| (TopicSigned32::from(topic as i32), followee.id))
             .collect::<BTreeSet<_>>();
         let topic_followee_pairs_to_add = new_topic_followee_pairs
             .difference(&old_topic_followee_pairs)
             .cloned()
-            .map(|(topic, followee)| (Topic::from(topic as i32), followee.id))
+            .map(|(topic, followee)| (TopicSigned32::from(topic as i32), followee.id))
             .collect::<BTreeSet<_>>();
 
         let already_absent_topic_followee_pairs =
@@ -633,11 +633,11 @@ where
         &self.subaccount
     }
 
-    pub fn principal(&self) -> &StableNeuronPrincipalIndex<NeuronId, Memory> {
+    pub fn principal(&self) -> &StableNeuronPrincipalIndex<NeuronIdU64, Memory> {
         &self.principal
     }
 
-    pub fn following(&self) -> &StableNeuronFollowingIndex<NeuronId, Topic, Memory> {
+    pub fn following(&self) -> &StableNeuronFollowingIndex<NeuronIdU64, TopicSigned32, Memory> {
         &self.following
     }
 
