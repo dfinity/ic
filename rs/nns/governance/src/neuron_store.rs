@@ -465,7 +465,8 @@ impl NeuronStore {
     ) -> Result<R, NeuronStoreError> {
         let old_neuron = self
             .heap_neurons
-            .get_mut(&neuron_id.id)
+            .get(&neuron_id.id)
+            .cloned()
             .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
 
         // Clone and call f() to possibly modify the neuron.
@@ -482,10 +483,22 @@ impl NeuronStore {
             write_through_to_stable_neuron_store(is_neuron_inactive, &new_neuron);
         }
 
+        self.update_neuron_indexes(&old_neuron, &new_neuron);
+
+        // TODO switch to stable storage in the neuron is inactive and vice versa
+        self.heap_neurons.insert(neuron_id.id, new_neuron);
+
+        result
+    }
+
+    /// Internal function to update neuron indexes when an existing neuron is changed.
+    /// Each index is responsible for its own change detection (i.e. if the change should cause
+    ///  and update in the index)
+    fn update_neuron_indexes(&mut self, old_neuron: &Neuron, new_neuron: &Neuron) {
         // Update indexes by passing in both old and new versions of neuron.
-        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, *neuron_id) {
+        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, old_neuron.id.unwrap()) {
             if let Err(error) = NEURON_INDEXES
-                .with(|indexes| indexes.borrow_mut().update_neuron(old_neuron, &new_neuron))
+                .with(|indexes| indexes.borrow_mut().update_neuron(old_neuron, new_neuron))
             {
                 println!(
                     "{}WARNING: issues found when updating neuron indexes, possibly because of \
@@ -494,10 +507,6 @@ impl NeuronStore {
                 );
             }
         }
-
-        *old_neuron = new_neuron;
-
-        result
     }
 
     fn is_indexes_migrated_for_neuron(indexes_migration: &Migration, neuron_id: NeuronId) -> bool {
