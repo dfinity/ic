@@ -1,12 +1,14 @@
 use std::{collections::HashMap, fmt, str::FromStr};
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum NodeOS {
     Guest,
     Host,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum JobType {
     Replica,
     NodeExporter(NodeOS),

@@ -31,7 +31,7 @@ use ic_registry_local_registry::{LocalRegistry, LocalRegistryError};
 use ic_types::{registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use job_types::{JobType, NodeOS};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use slog::{warn, Logger};
 use thiserror::Error;
 
@@ -60,7 +60,7 @@ pub trait IcServiceDiscovery: Send + Sync {
 
 /// A [TargetGroup] associates a set of scrape targets with
 /// a set of labels.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TargetGroup {
     pub node_id: NodeId,
     pub ic_name: String,

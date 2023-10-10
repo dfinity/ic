@@ -187,4 +187,4 @@ all:
   vars:
     ansible_python_interpreter: python3
     become_method: sudo
-    service_discovery_server: ic-service-discovery.ch1-obsstage1.dfinity.network
+    multiservice_discovery_server: https://service-discovery.sf1-esmesh1.dfinity.network

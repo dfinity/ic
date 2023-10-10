@@ -5,6 +5,10 @@ use service_discovery::{
     jobs::Job,
 };
 
+pub mod builders;
+pub mod contracts;
+pub mod filters;
+
 pub const JOB_REPLICA: Job = Job {
     _type: JobType::Replica,
     port: 9090,
