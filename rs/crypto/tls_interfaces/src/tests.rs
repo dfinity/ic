@@ -4,13 +4,12 @@ mod tls_public_key_cert {
     use crate::{TlsPublicKeyCert, TlsPublicKeyCertCreationError};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
+    use x509_parser::certificate::X509Certificate;
+    use x509_parser::prelude::FromDer;
 
     #[test]
     fn should_create_certificate_from_valid_der() {
-        let cert_der = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
+        let cert_der = generate_ed25519_cert().cert_der();
 
         let cert = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
 
@@ -19,10 +18,7 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_return_proto_with_correct_der() {
-        let cert_der = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
+        let cert_der = generate_ed25519_cert().cert_der();
 
         let cert = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
 
@@ -31,10 +27,7 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_equal_with_same_der() {
-        let cert_der = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
+        let cert_der = generate_ed25519_cert().cert_der();
 
         let cert1 = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
         let cert2 = TlsPublicKeyCert::new_from_der(cert_der).unwrap();
@@ -45,18 +38,10 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_not_equal_to_other() {
-        let cert_der1 = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
-
+        let cert_der1 = generate_ed25519_cert().cert_der();
         let cert1 = TlsPublicKeyCert::new_from_der(cert_der1).unwrap();
 
-        let cert_der2 = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
-
+        let cert_der2 = generate_ed25519_cert().cert_der();
         let cert2 = TlsPublicKeyCert::new_from_der(cert_der2).unwrap();
 
         assert_ne!(cert1, cert2);
@@ -86,13 +71,7 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_deserialize_from_serialized() {
-        let cert = TlsPublicKeyCert::new_from_der(
-            generate_ed25519_cert()
-                .1
-                .to_der()
-                .expect("failed to DER encode tls cert"),
-        )
-        .unwrap();
+        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert().cert_der()).unwrap();
 
         let serialized = json5::to_string(&cert).unwrap();
 
@@ -118,11 +97,13 @@ mod tls_public_key_cert {
         assert!(result.is_ok());
 
         let deserialized = result.unwrap();
-        use openssl::x509::X509;
-        let x509_cert = X509::from_der(deserialized.as_der()).expect("invalid DER");
-        let subj_name = x509_cert.subject_name();
-        let subj_name = format!("{:?}", subj_name);
-        assert_eq!(subj_name, "[commonName = \"Spock\"]");
+        let (remainder, x509_cert) =
+            X509Certificate::from_der(deserialized.as_der()).expect("Error parsing DER");
+        assert!(remainder.is_empty(), "DER not fully consumed when parsing");
+        assert_eq!(x509_cert.subject().iter_common_name().count(), 1);
+        let subj_name = x509_cert.subject();
+        let subj_name = format!("{}", subj_name);
+        assert_eq!(subj_name, "CN=Spock");
     }
 
     #[test]
@@ -142,13 +123,7 @@ mod tls_public_key_cert {
         // Also, config uses JSON5.
         use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 
-        let cert = TlsPublicKeyCert::new_from_der(
-            generate_ed25519_cert()
-                .1
-                .to_der()
-                .expect("failed to DER encode tls cert"),
-        )
-        .unwrap();
+        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert().cert_der()).unwrap();
 
         let proto_cert = X509PublicKeyCert {
             certificate_der: cert.as_der().clone(),

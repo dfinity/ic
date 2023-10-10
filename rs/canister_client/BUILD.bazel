@@ -39,7 +39,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:tokio",
     "@crate_index//:url",
-    "@crate_index//:openssl",
 ]
 
 MACRO_DEPENDENCIES = [

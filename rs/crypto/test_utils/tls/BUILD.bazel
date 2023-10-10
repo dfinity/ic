@@ -3,14 +3,21 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/crypto/ecdsa_secp256r1",
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tls_interfaces",
     "//rs/protobuf",
     "//rs/types/types",
     "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
+    "@crate_index//:pkcs8",
+    "@crate_index//:signature",
+    "@crate_index//:time",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-openssl",
-    "@crate_index//:openssl",
+    "@crate_index//:tokio-rustls",
+    "@crate_index//:x509-cert",
 ]
 
 DEV_DEPENDENCIES = []

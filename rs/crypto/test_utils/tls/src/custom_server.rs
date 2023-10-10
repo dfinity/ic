@@ -2,40 +2,36 @@
 //! implementation. It is purely for testing the client.
 #![allow(clippy::unwrap_used)]
 use crate::x509_certificates::CertWithPrivateKey;
+use crate::CipherSuite;
+use crate::CipherSuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
+use crate::TlsVersion;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
-use openssl::ssl;
-use openssl::ssl::{Ssl, SslAcceptor, SslContextBuilder, SslMethod, SslVersion};
-use std::pin::Pin;
+use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio_rustls::rustls;
+use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
 
-const DEFAULT_MAX_PROTO_VERSION: SslVersion = SslVersion::TLS1_3;
-const DEFAULT_ALLOWED_CIPHER_SUITES: &str = "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384";
-const DEFAULT_ALLOWED_SIGNATURE_ALGORITHMS: &str = "ed25519";
+static DEFAULT_PROTOCOL_VERSIONS: &[TlsVersion] = &[TlsVersion::TLS1_3];
+static DEFAULT_ALLOWED_CIPHER_SUITES: &[CipherSuite] =
+    &[TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384];
 
 /// A builder that allows to configure and build a `CustomServer` using a fluent
 /// API.
 pub struct CustomServerBuilder {
-    max_proto_version: Option<SslVersion>,
-    allowed_cipher_suites: Option<String>,
-    allowed_signature_algorithms: Option<String>,
+    protocol_versions: Option<Vec<TlsVersion>>,
+    allowed_cipher_suites: Option<Vec<CipherSuite>>,
     expected_error: Option<String>,
 }
 
 impl CustomServerBuilder {
-    pub fn with_max_protocol_version(mut self, version: SslVersion) -> Self {
-        self.max_proto_version = Some(version);
+    pub fn with_protocol_versions(mut self, protocol_versions: Vec<TlsVersion>) -> Self {
+        self.protocol_versions = Some(protocol_versions);
         self
     }
 
-    pub fn with_allowed_cipher_suites(mut self, allowed_cipher_suites: &str) -> Self {
-        self.allowed_cipher_suites = Some(allowed_cipher_suites.to_string());
-        self
-    }
-
-    /// The list of allowed values for TLS 1.3 can be found in https://tools.ietf.org/html/rfc8446#appendix-B.3.1.3
-    pub fn with_allowed_signature_algorithms(mut self, allowed_signature_algorithms: &str) -> Self {
-        self.allowed_signature_algorithms = Some(allowed_signature_algorithms.to_string());
+    pub fn with_allowed_cipher_suites(mut self, allowed_cipher_suites: Vec<CipherSuite>) -> Self {
+        self.allowed_cipher_suites = Some(allowed_cipher_suites);
         self
     }
 
@@ -52,20 +48,18 @@ impl CustomServerBuilder {
     }
 
     pub fn build(self, server_cert: CertWithPrivateKey) -> CustomServer {
-        let max_proto_version = self.max_proto_version.unwrap_or(DEFAULT_MAX_PROTO_VERSION);
+        let protocol_versions = self
+            .protocol_versions
+            .unwrap_or(DEFAULT_PROTOCOL_VERSIONS.to_vec());
         let allowed_cipher_suites = self
             .allowed_cipher_suites
-            .unwrap_or_else(|| DEFAULT_ALLOWED_CIPHER_SUITES.to_string());
-        let allowed_signature_algorithms = self
-            .allowed_signature_algorithms
-            .unwrap_or_else(|| DEFAULT_ALLOWED_SIGNATURE_ALGORITHMS.to_string());
+            .unwrap_or_else(|| DEFAULT_ALLOWED_CIPHER_SUITES.to_vec());
         let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("failed to bind");
         CustomServer {
             listener,
             server_cert,
-            max_proto_version,
+            protocol_versions,
             allowed_cipher_suites,
-            allowed_signature_algorithms,
             expected_error: self.expected_error,
         }
     }
@@ -76,24 +70,22 @@ impl CustomServerBuilder {
 pub struct CustomServer {
     listener: std::net::TcpListener,
     server_cert: CertWithPrivateKey,
-    max_proto_version: SslVersion,
-    allowed_cipher_suites: String,
-    allowed_signature_algorithms: String,
+    protocol_versions: Vec<TlsVersion>,
+    allowed_cipher_suites: Vec<CipherSuite>,
     expected_error: Option<String>,
 }
 
 impl CustomServer {
     pub fn builder() -> CustomServerBuilder {
         CustomServerBuilder {
-            max_proto_version: None,
+            protocol_versions: None,
             allowed_cipher_suites: None,
-            allowed_signature_algorithms: None,
             expected_error: None,
         }
     }
 
     /// Run this client asynchronously. This allows a client to connect.
-    pub async fn run(&self) -> Result<(), ssl::Error> {
+    pub async fn run(&self) -> Result<(), String> {
         self.listener
             .set_nonblocking(true)
             .expect("failed to make listener non-blocking");
@@ -104,12 +96,32 @@ impl CustomServer {
             .await
             .expect("failed to accept connection");
 
-        let tls_acceptor = self.tls_acceptor();
-        let tls_state = Ssl::new(tls_acceptor.context())
-            .expect("failed to convert TLS acceptor to state object");
-        let mut tls_stream = tokio_openssl::SslStream::new(tls_state, tcp_stream)
-            .expect("failed to create tokio_openssl::SslStream");
-        let result = Pin::new(&mut tls_stream).accept().await;
+        let cipher_suites: Vec<_> = self
+            .allowed_cipher_suites
+            .iter()
+            .map(rustls::SupportedCipherSuite::from)
+            .collect();
+        let protocol_versions: Vec<_> = self
+            .protocol_versions
+            .iter()
+            .map(<&rustls::SupportedProtocolVersion>::from)
+            .collect();
+        let cert_chain = vec![rustls::Certificate(self.server_cert.cert_der())];
+        let key_der = rustls::PrivateKey(self.server_cert.key_pair().serialize_for_rustls());
+
+        let config = ServerConfig::builder()
+            .with_cipher_suites(&cipher_suites)
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&protocol_versions)
+            .expect("invalid rustls server config")
+            .with_no_client_auth()
+            .with_single_cert(cert_chain, key_der)
+            .expect("failed to build rustls server config");
+
+        let result: Result<_, String> = TlsAcceptor::from(Arc::new(config))
+            .accept(tcp_stream)
+            .await
+            .map_err(|e| format!("TlsAcceptor::accept failed: {e}"));
 
         if let Some(expected_error) = &self.expected_error {
             let error = result.as_ref().expect_err("expected error");
@@ -119,14 +131,13 @@ impl CustomServer {
                     expected_error, error
                 )
             }
-        } else if let Some(error) = result.as_ref().err() {
+        } else if let Err(error) = &result {
             panic!(
                 "expected the server result to be ok but got error: {}",
                 error
             )
         }
-
-        result
+        result.map(|_tls_stream| ())
     }
 
     /// Returns the port this server is running on.
@@ -139,49 +150,11 @@ impl CustomServer {
 
     /// Returns the server certificate.
     pub fn cert(&self) -> X509PublicKeyCert {
-        X509PublicKeyCert {
-            certificate_der: self
-                .server_cert
-                .x509()
-                .to_der()
-                .expect("failed to DER encode server cert"),
-        }
+        self.server_cert.x509().to_proto()
     }
 
     /// Returns the PEM encoded server certificate.
     pub fn cert_pem(&self) -> Vec<u8> {
-        self.server_cert
-            .x509()
-            .to_pem()
-            .expect("failed to PEM encode server cert")
-    }
-
-    fn tls_acceptor(&self) -> SslAcceptor {
-        let mut builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls_server())
-            .expect("Failed to initialize the acceptor.");
-        self.restrict_tls_version_and_cipher_suites_and_sig_algs(&mut builder);
-        builder.set_verify_depth(0);
-        builder
-            .set_private_key(&self.server_cert.key_pair())
-            .expect("Failed to set the private key.");
-        builder
-            .set_certificate(&self.server_cert.x509())
-            .expect("Failed to set the server certificate.");
-        builder
-            .check_private_key()
-            .expect("Inconsistent private key and certificate.");
-        builder.build()
-    }
-
-    fn restrict_tls_version_and_cipher_suites_and_sig_algs(&self, builder: &mut SslContextBuilder) {
-        builder
-            .set_max_proto_version(Some(self.max_proto_version))
-            .expect("Failed to set the maximum protocol version.");
-        builder
-            .set_ciphersuites(self.allowed_cipher_suites.as_str())
-            .expect("Failed to set the ciphersuites.");
-        builder
-            .set_sigalgs_list(self.allowed_signature_algorithms.as_str())
-            .expect("Failed to set the sigalgs list.");
+        self.server_cert.cert_pem()
     }
 }

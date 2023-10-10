@@ -47,6 +47,5 @@ rust_test(
         "@crate_index//:assert_matches",
         "@crate_index//:json5",
         "@crate_index//:maplit",
-        "@crate_index//:openssl",
     ],
 )

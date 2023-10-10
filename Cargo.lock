@@ -2141,9 +2141,9 @@ dependencies = [
 
 [[package]]
 name = "const-oid"
-version = "0.9.2"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520fbf3c07483f94e3e3ca9d0cfd913d7718ef2483d2cfd91c0d9e91474ab913"
+checksum = "28c122c3980598d243d63d9a704629a2d748d101f278052ff068be5a4423ab6f"
 
 [[package]]
 name = "convert_case"
@@ -2821,6 +2821,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56acb310e15652100da43d130af8d97b509e95af61aab1c5a7939ef24337ee17"
 dependencies = [
  "const-oid",
+ "der_derive",
+ "flagset",
  "pem-rfc7468",
  "zeroize",
 ]
@@ -2837,6 +2839,17 @@ dependencies = [
  "num-bigint 0.4.3",
  "num-traits",
  "rusticata-macros",
+]
+
+[[package]]
+name = "der_derive"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fe87ce4529967e0ba1dcf8450bab64d97dfd5010a6256187ffe2e43e6f0e049"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.31",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -3115,7 +3128,7 @@ dependencies = [
  "digest 0.10.7",
  "elliptic-curve 0.13.5",
  "rfc6979 0.4.0",
- "signature 2.0.0",
+ "signature 2.1.0",
  "spki",
 ]
 
@@ -3598,6 +3611,12 @@ name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
+
+[[package]]
+name = "flagset"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d52a7e408202050813e6f1d9addadcaafef3dca7530c7ddfb005d4081cce6779"
 
 [[package]]
 name = "flate2"
@@ -5095,7 +5114,6 @@ dependencies = [
  "ic-validator",
  "itertools 0.10.5",
  "native-tls",
- "openssl",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -6826,14 +6844,21 @@ dependencies = [
 name = "ic-crypto-test-utils-tls"
 version = "0.8.0"
 dependencies = [
+ "ic-crypto-ecdsa-secp256r1",
+ "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-tls-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-types",
- "openssl",
+ "pkcs8",
+ "signature 2.1.0",
+ "time 0.3.22",
  "tokio",
- "tokio-openssl",
+ "tokio-rustls",
+ "x509-cert",
 ]
 
 [[package]]
@@ -6850,7 +6875,6 @@ dependencies = [
  "ic-crypto-test-utils-tls",
  "ic-protobuf",
  "ic-types",
- "openssl",
  "serde",
  "x509-parser 0.14.0",
 ]
@@ -6867,7 +6891,6 @@ dependencies = [
  "ic-types",
  "json5",
  "maplit",
- "openssl",
  "serde",
  "tokio",
  "tokio-rustls",
@@ -11990,7 +12013,7 @@ dependencies = [
  "elliptic-curve 0.13.5",
  "once_cell",
  "sha2 0.10.6",
- "signature 2.0.0",
+ "signature 2.1.0",
 ]
 
 [[package]]
@@ -15358,7 +15381,7 @@ dependencies = [
  "pkcs8",
  "rand_core 0.6.4",
  "sha2 0.10.6",
- "signature 2.0.0",
+ "signature 2.1.0",
  "spki",
  "subtle",
  "zeroize",
@@ -16219,9 +16242,9 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fe458c98333f9c8152221191a77e2a44e8325d0193484af2e9421a53019e57d"
+checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
 dependencies = [
  "digest 0.10.7",
  "rand_core 0.6.4",
@@ -19017,6 +19040,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "x509-cert"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25eefca1d99701da3a57feb07e5079fc62abba059fc139e98c13bbb250f3ef29"
+dependencies = [
+ "const-oid",
+ "der 0.7.6",
+ "sha1",
+ "signature 2.1.0",
+ "spki",
 ]
 
 [[package]]
