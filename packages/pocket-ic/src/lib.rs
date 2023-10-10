@@ -59,7 +59,6 @@ impl PocketIc {
     }
 
     pub fn upload_blob(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
-        // TODO: check if the hash of the blob already exists and if yes, don't upload.
         let mut request = self
             .reqwest_client
             .post(self.server_url.join("blobstore/").unwrap())
