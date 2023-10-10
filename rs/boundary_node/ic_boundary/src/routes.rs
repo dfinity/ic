@@ -71,9 +71,8 @@ pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
 pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
 
 lazy_static! {
-    pub static ref UUID_V4_REGEX: Regex =
-        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
-            .unwrap();
+    pub static ref UUID_REGEX: Regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 }
 
 // Type of IC request
@@ -475,7 +474,7 @@ pub async fn validate_request(
     if let Some(id_header) = request.headers().get("x-request-id") {
         let is_valid_id = id_header
             .to_str()
-            .map(|id| UUID_V4_REGEX.is_match(id))
+            .map(|id| UUID_REGEX.is_match(id))
             .unwrap_or(false);
         if !is_valid_id {
             return Err(ErrorCause::MalformedRequest(
