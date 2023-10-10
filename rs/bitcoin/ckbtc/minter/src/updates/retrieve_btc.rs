@@ -14,7 +14,7 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
-use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -435,7 +435,7 @@ async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
                 msg, code
             ))
         })?;
-    Ok(result)
+    Ok(result.0.to_u64().expect("nat does not fit into u64"))
 }
 
 async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, RetrieveBtcError> {
@@ -468,7 +468,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
         })?;
 
     match result {
-        Ok(block_index) => Ok(block_index),
+        Ok(block_index) => Ok(block_index.0.to_u64().expect("nat does not fit into u64")),
         Err(TransferError::InsufficientFunds { balance }) => Err(RetrieveBtcError::InsufficientFunds {
             balance: balance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
         }),
@@ -538,7 +538,7 @@ async fn burn_ckbtcs_icrc2(
         })?;
 
     match result {
-        Ok(block_index) => Ok(block_index),
+        Ok(block_index) => Ok(block_index.0.to_u64().expect("nat does not fit into u64")),
         Err(TransferFromError::InsufficientFunds { balance }) => Err(RetrieveBtcWithApprovalError::InsufficientFunds {
             balance: balance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
         }),

@@ -4,11 +4,11 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 LIB_DEPS = [
+    "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/extended_bip32",
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha2",
-    "//rs/rosetta-api/icrc1/client/cdk",
     "//rs/rust_canisters/canister_log",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_core",

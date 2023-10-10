@@ -27,10 +27,10 @@ ic-cdk-timers = { workspace = true }
 ic-crypto-ecdsa-secp256k1 = { path = "../../../crypto/ecdsa_secp256k1" }
 ic-crypto-sha3 = { path = "../../../crypto/sha3" }
 ic-ic00-types = { path = "../../../types/ic00_types" }
-ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }
+icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
-icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+icrc-ledger-types = "0.1.2"
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-bigint = "0.4.3"

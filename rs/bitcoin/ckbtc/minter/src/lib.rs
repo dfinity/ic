@@ -10,6 +10,7 @@ use ic_canister_log::log;
 use ic_ic00_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
+use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -1040,8 +1041,8 @@ fn distribute(amount: u64, n: u64) -> Vec<u64> {
 }
 
 pub async fn distribute_kyt_fees() {
-    use ic_icrc1_client_cdk::CdkRuntime;
-    use ic_icrc1_client_cdk::ICRC1Client;
+    use icrc_ledger_client_cdk::CdkRuntime;
+    use icrc_ledger_client_cdk::ICRC1Client;
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
     #[derive(Debug)]
@@ -1072,6 +1073,7 @@ pub async fn distribute_kyt_fees() {
             .await
             .map_err(|(code, msg)| MintError::CallError(code, msg))?
             .map_err(MintError::TransferError)
+            .map(|n| n.0.to_u64().expect("nat does not fit into u64"))
     }
 
     let fees_to_distribute = state::read_state(|s| s.owed_kyt_amount.clone());

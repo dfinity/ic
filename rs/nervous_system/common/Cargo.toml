@@ -29,7 +29,7 @@ ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-nervous-system-runtime = { path = "../runtime" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+icrc-ledger-types = "0.1.2"
 ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 json5 = "0.4.1"

@@ -8,7 +8,7 @@ edition = "2021"
 candid = { workspace = true }
 ic-icrc1 = { path = ".." }
 ic-ledger-core = { path = "../../ledger_core" }
-icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+icrc-ledger-types = "0.1.2"
 num-traits = "0.2.15"
 proptest = "1.0"
 rand = "0.8"

@@ -22,13 +22,13 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-icrc1 = { path = "../.." }
 ic-icrc1-benchmark-worker = { path = "../worker"}
-ic-icrc1-client = { path = "../../client"}
-ic-icrc1-client-cdk = { path = "../../client/cdk" }
+icrc-ledger-client = { path = "../../../../../packages/icrc-ledger-client" }
+icrc-ledger-client-cdk = { path = "../../../../../packages/icrc-ledger-client-cdk" }
 ic-icrc1-index = { path = "../../index" }
 ic-ledger-canister-core = { path = "../../../ledger_canister_core" }
 ic-ledger-core = { path = "../../../ledger_core" }
 ic-metrics-encoder = "1"
-icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+icrc-ledger-types = "0.1.2"
 num-traits = "0.2.14"
 rand = { version = "0.8.5", features = ["small_rng"]}
 rand_core = "0.6.4"

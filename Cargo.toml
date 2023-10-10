@@ -2,6 +2,8 @@
 
 members = [
   "packages/icrc-ledger-agent",
+  "packages/icrc-ledger-client",
+  "packages/icrc-ledger-client-cdk",
   "packages/icrc-ledger-types",
   "packages/ic-ledger-hash-of",
   "packages/ic-starter-tests",
@@ -249,8 +251,6 @@ members = [
   "rs/rosetta-api/icrc1",
   "rs/rosetta-api/icrc1/benchmark/generator",
   "rs/rosetta-api/icrc1/benchmark/worker",
-  "rs/rosetta-api/icrc1/client",
-  "rs/rosetta-api/icrc1/client/cdk",
   "rs/rosetta-api/icrc1/index",
   "rs/rosetta-api/icrc1/index-ng",
   "rs/rosetta-api/icrc1/ledger",

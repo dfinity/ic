@@ -23,8 +23,9 @@ use ic_cketh_minter::withdraw::{eth_fee_history, process_retrieve_eth_requests};
 use ic_cketh_minter::{
     state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, SCRAPPING_ETH_LOGS_INTERVAL,
 };
-use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
+use num_traits::cast::ToPrimitive;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -172,7 +173,8 @@ async fn withdraw_eth(
         .await
     {
         Ok(Ok(block_index)) => {
-            let ledger_burn_index = LedgerBurnIndex::new(block_index);
+            let ledger_burn_index =
+                LedgerBurnIndex::new(block_index.0.to_u64().expect("nat does not fit into u64"));
             let withdrawal_request = EthWithdrawalRequest {
                 withdrawal_amount: amount,
                 destination,

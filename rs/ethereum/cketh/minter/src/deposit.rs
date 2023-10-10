@@ -9,11 +9,12 @@ use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
 use ic_canister_log::log;
+use num_traits::ToPrimitive;
 use std::cmp::{min, Ordering};
 use std::time::Duration;
 
 async fn mint_cketh() {
-    use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+    use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
     let _guard = match TimerGuard::new(TaskType::MintCkEth) {
@@ -41,7 +42,7 @@ async fn mint_cketh() {
             })
             .await
         {
-            Ok(Ok(block_index)) => block_index,
+            Ok(Ok(block_index)) => block_index.0.to_u64().expect("nat does not fit into u64"),
             Ok(Err(err)) => {
                 log!(INFO, "Failed to mint ckETH: {event:?} {err}");
                 error_count += 1;
