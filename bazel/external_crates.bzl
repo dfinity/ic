@@ -647,7 +647,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "nix": crate.spec(
-                version = "^0.23.0",
+                version = "^0.24.3",
             ),
             "nonblock": crate.spec(
                 version = "^0.1.0",

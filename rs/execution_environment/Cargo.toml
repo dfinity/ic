@@ -38,7 +38,7 @@ ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
-nix = "0.23.0"
+nix = { workspace = true }
 num-rational = "0.2.2"
 num-traits = "0.2.12"
 phantom_newtype = { path = "../phantom_newtype" }

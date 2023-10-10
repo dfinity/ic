@@ -45,7 +45,7 @@ ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 maplit = "1.0.2"
 mockall = "0.7.2"
-nix = "0.23.0"
+nix = { workspace = true }
 proptest = "1.0"
 reqwest = "0.11.1"
 tempfile = "3.1.0"

@@ -16,7 +16,7 @@ rand = "0.8.3"
 cvt = "0.1.1"
 ic-sys = { path = "../sys" }
 libc = "0.2.91"
-nix = "0.23.0"
+nix = { workspace = true }
 thiserror = "1.0"
 
 [dev-dependencies]

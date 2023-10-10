@@ -13,7 +13,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-utils = { path = "../utils" }
 libc = "0.2.91"
-nix = "0.23.0"
+nix = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

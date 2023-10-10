@@ -23,7 +23,7 @@ ic-registry-local-store = { path = "../../registry/local_store" }
 ic-types = { path = "../../types/types" }
 lazy_static = "1.4.0"
 mockall = "0.11.1"
-nix = { version = "0.24.2", features = ["signal"] }
+nix = { workspace = true }
 opentelemetry = "0.18.0"
 opentelemetry-prometheus = "0.11.0"
 prometheus = { workspace = true }
