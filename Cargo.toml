@@ -418,9 +418,12 @@ p256 = { version = "0.13", default_features = false, features = [
   "pem",
   "pkcs8",
 ] }
+pkcs8 = "0.10.2"
 prometheus = { version = "0.13.3", features = ["process"] }
 prost = "0.11.9"
 prost-build = "0.11.9"
+signature = "2.1.0"
 tonic = "0.9.2"
 tonic-build = "0.9.2"
 tower = { version = "0.4.13", features = ["full"] }
+x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }

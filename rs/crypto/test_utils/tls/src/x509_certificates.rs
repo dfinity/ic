@@ -1,63 +1,182 @@
-//! Utilities for building X.509 certificates for tests.
+use x509_cert::der; // re-export of der create
+use x509_cert::spki; // re-export of spki create
+
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use openssl::asn1::{Asn1Integer, Asn1Time};
-use openssl::bn::BigNum;
-use openssl::ec::{EcGroup, EcKey};
-use openssl::hash::MessageDigest;
-use openssl::nid::Nid;
-use openssl::pkey::{PKey, Private};
-use openssl::x509::extension::BasicConstraints;
-use openssl::x509::{X509Name, X509Ref, X509};
+use std::str::FromStr;
+use std::time::{Duration, SystemTime};
+use x509_cert::{
+    builder::{Builder, CertificateBuilder, Profile},
+    ext::pkix::BasicConstraints,
+    name::Name,
+    serial_number::SerialNumber,
+    time::Validity,
+};
 
 const DEFAULT_SERIAL: [u8; 19] = [42u8; 19];
-const DEFAULT_X509_VERSION: i32 = 3;
 const DEFAULT_CN: &str = "Spock";
-const DEFAULT_NOT_BEFORE_DAYS_FROM_NOW: u32 = 0;
 const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
+const SECS_PER_DAY: u64 = 60 * 60 * 24;
+
+#[derive(Clone)]
+pub enum KeyPair {
+    Ed25519 {
+        secret_key: ic_crypto_internal_basic_sig_ed25519::types::SecretKeyBytes,
+        public_key: ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes,
+    },
+    Secp256r1 {
+        secret_key: ic_crypto_ecdsa_secp256r1::PrivateKey,
+        public_key: ic_crypto_ecdsa_secp256r1::PublicKey,
+    },
+}
+
+impl signature::Signer<Signature> for KeyPair {
+    fn try_sign(&self, msg: &[u8]) -> Result<Signature, signature::Error> {
+        match self {
+            KeyPair::Ed25519 { secret_key, .. } => Ok(Signature(
+                ic_crypto_internal_basic_sig_ed25519::sign(msg, secret_key)
+                    .unwrap()
+                    .0
+                    .to_vec(),
+            )),
+            KeyPair::Secp256r1 { secret_key, .. } => {
+                Ok(Signature(secret_key.sign_message(msg).to_vec()))
+            }
+        }
+    }
+}
+
+pub struct Signature(Vec<u8>);
+
+impl spki::SignatureBitStringEncoding for Signature {
+    fn to_bitstring(&self) -> der::Result<der::asn1::BitString> {
+        der::asn1::BitString::from_bytes(&self.0)
+    }
+}
+
+impl spki::DynSignatureAlgorithmIdentifier for KeyPair {
+    fn signature_algorithm_identifier(&self) -> spki::Result<spki::AlgorithmIdentifierOwned> {
+        match self {
+            KeyPair::Ed25519 { .. } => Ok(spki::AlgorithmIdentifierOwned {
+                oid: pkcs8::ObjectIdentifier::new("1.3.101.112").unwrap(),
+                parameters: None,
+            }),
+            KeyPair::Secp256r1 { .. } => Ok(spki::AlgorithmIdentifierOwned {
+                oid: pkcs8::ObjectIdentifier::new("1.2.840.10045.3.1.7").unwrap(),
+                parameters: None,
+            }),
+        }
+    }
+}
+
+impl signature::Keypair for KeyPair {
+    type VerifyingKey = VerifyingKey;
+
+    fn verifying_key(&self) -> Self::VerifyingKey {
+        match self {
+            KeyPair::Ed25519 { public_key, .. } => VerifyingKey::Ed25519(*public_key),
+            KeyPair::Secp256r1 { public_key, .. } => VerifyingKey::Secp256r1(public_key.clone()),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum VerifyingKey {
+    Ed25519(ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes),
+    Secp256r1(ic_crypto_ecdsa_secp256r1::PublicKey),
+}
+
+impl pkcs8::EncodePublicKey for VerifyingKey {
+    fn to_public_key_der(&self) -> spki::Result<pkcs8::Document> {
+        match self {
+            VerifyingKey::Ed25519(key) => {
+                let der = ic_crypto_internal_basic_sig_ed25519::public_key_to_der(*key);
+                Ok(pkcs8::Document::try_from(der)
+                    .expect("failed to create document from ed25519 DER"))
+            }
+            VerifyingKey::Secp256r1(key) => Ok(pkcs8::Document::try_from(key.serialize_der())
+                .expect("failed to create document from ed25519 DER")),
+        }
+    }
+}
+
+impl KeyPair {
+    pub fn gen_ed25519() -> Self {
+        let rng = &mut reproducible_rng();
+        let key_pair = ic_crypto_internal_basic_sig_ed25519::api::keypair_from_rng(rng);
+        Self::Ed25519 {
+            secret_key: key_pair.0,
+            public_key: key_pair.1,
+        }
+    }
+
+    pub fn gen_secp256r1() -> Self {
+        let rng = &mut reproducible_rng();
+        let secret_key = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+        let public_key = secret_key.public_key();
+        Self::Secp256r1 {
+            secret_key,
+            public_key,
+        }
+    }
+
+    pub fn public_key_der(&self) -> Vec<u8> {
+        match self {
+            KeyPair::Ed25519 {
+                secret_key: _,
+                public_key,
+            } => ic_crypto_internal_basic_sig_ed25519::public_key_to_der(*public_key),
+            KeyPair::Secp256r1 {
+                secret_key: _,
+                public_key,
+            } => public_key.serialize_der(),
+        }
+    }
+
+    /// Serializes the private key for usage with Rustls.
+    ///
+    /// In particular, for usage with `ConfigBuilder<ServerConfig, WantsServerCert>::with_single_cert`.
+    /// While the documentation says `DER-encoded RSA, ECDSA, or Ed25519 private key`, for Ed25519
+    /// both PKCS#8 v1 and v2 work (i.e., both without and with public key), but for ECDSA P256 only
+    /// PKCS#8 v2 (i.e., with the public key) works (as well as SEC1). See also the documentation of
+    /// `rustls::sign::any_ecdsa_type`.
+    pub fn serialize_for_rustls(&self) -> Vec<u8> {
+        match self {
+            KeyPair::Ed25519 { secret_key, .. } => {
+                ic_crypto_internal_basic_sig_ed25519::secret_key_to_pkcs8_v1_der(secret_key)
+                    .expose_secret()
+                    .to_vec()
+            }
+            KeyPair::Secp256r1 { secret_key, .. } => secret_key.serialize_rfc5915_der(),
+        }
+    }
+}
 
 /// Generates an ed25519 key pair.
-pub fn ed25519_key_pair() -> PKey<Private> {
-    PKey::generate_ed25519().expect("failed to create Ed25519 key pair")
+pub fn ed25519_key_pair() -> KeyPair {
+    KeyPair::gen_ed25519()
 }
 
 /// Generates a prime256v1 key pair.
 ///
 /// Note that NIST P-256, prime256v1, secp256r1 are all the same, see https://tools.ietf.org/search/rfc4492#appendix-A
-pub fn prime256v1_key_pair() -> PKey<Private> {
-    let group = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).expect("unable to create EC group");
-    let ec_key_pair = EcKey::generate(&group).expect("unable to create EC key");
-    PKey::from_ec_key(ec_key_pair).expect("unable to create EC key pair")
+pub fn prime256v1_key_pair() -> KeyPair {
+    KeyPair::gen_secp256r1()
 }
 
 /// Generates an X.509 certificate together with its private key.
-pub fn generate_ed25519_cert() -> (PKey<Private>, X509) {
-    let key_pair = ed25519_key_pair();
-    let server_cert = generate_cert(&key_pair, MessageDigest::null());
-    (key_pair, server_cert)
+pub fn generate_ed25519_cert() -> CertWithPrivateKey {
+    CertWithPrivateKey::builder().build_ed25519()
 }
 
 /// Converts the `cert` into an `X509PublicKeyCert`.
-pub fn x509_public_key_cert(cert: &X509) -> X509PublicKeyCert {
-    X509PublicKeyCert {
-        certificate_der: cert_to_der(cert),
-    }
+pub fn x509_public_key_cert(cert: &TlsPublicKeyCert) -> X509PublicKeyCert {
+    cert.to_proto()
 }
 
-/// DER encodes the `cert`.
-fn cert_to_der(cert: &X509Ref) -> Vec<u8> {
-    cert.to_der().expect("error converting cert to DER")
-}
-
-/// Generates an X.509 certificate using the `key_pair`.
-fn generate_cert(key_pair: &PKey<Private>, digest: MessageDigest) -> X509 {
-    CertWithPrivateKey::builder()
-        .build(key_pair.clone(), digest)
-        .x509()
-}
-
-/// A builder that allows to build X.509 certificates using a fluent API.
 pub struct CertBuilder {
-    version: Option<i32>,
+    version_1: bool,
     cn: Option<String>,
     serial_number: Option<[u8; 19]>,
     validity_days: Option<u32>,
@@ -65,7 +184,7 @@ pub struct CertBuilder {
     not_before_days_from_now: Option<u32>,
     not_before: Option<String>,
     not_before_unix: Option<i64>,
-    ca_signing_data: Option<(PKey<Private>, String)>,
+    ca_signing_data: Option<(KeyPair, String)>,
     set_ca_key_usage_extension: bool,
     duplicate_subject_cn: bool,
     duplicate_issuer_cn: bool,
@@ -73,8 +192,8 @@ pub struct CertBuilder {
 }
 
 impl CertBuilder {
-    pub fn version(mut self, version: i32) -> Self {
-        self.version = Some(version);
+    pub fn version_1(mut self) -> Self {
+        self.version_1 = true;
         self
     }
 
@@ -126,11 +245,7 @@ impl CertBuilder {
         self
     }
 
-    pub fn with_ca_signing(
-        mut self,
-        ca_signing_key_pair: PKey<Private>,
-        issuer_cn: String,
-    ) -> Self {
+    pub fn with_ca_signing(mut self, ca_signing_key_pair: KeyPair, issuer_cn: String) -> Self {
         self.ca_signing_data = Some((ca_signing_key_pair, issuer_cn));
         self
     }
@@ -151,126 +266,166 @@ impl CertBuilder {
     }
 
     pub fn build_ed25519(self) -> CertWithPrivateKey {
-        self.build(ed25519_key_pair(), MessageDigest::null())
+        self.build(ed25519_key_pair())
     }
 
     pub fn build_prime256v1(self) -> CertWithPrivateKey {
-        self.build(prime256v1_key_pair(), MessageDigest::sha256())
+        self.build(prime256v1_key_pair())
     }
 
-    pub fn build(self, key_pair: PKey<Private>, digest: MessageDigest) -> CertWithPrivateKey {
+    pub fn build(self, key_pair: KeyPair) -> CertWithPrivateKey {
+        if self.self_sign_with_wrong_secret_key && self.ca_signing_data.is_some() {
+            panic!(
+                "unsupported CertBuilder usage: self_sign_with_wrong_secret_key 
+                    and ca_signing_data cannot be used in combination. Choose either."
+            )
+        }
+        if self.set_ca_key_usage_extension && self.version_1 {
+            panic!("unsupported CertBuilder usage: x509-cert crate doesn't allow to manually set the version; it 
+                    sets version to 1 if there are no extensions (and no unique IDs); by default the version is 3; 
+                    this means that version_1 and the CA-flag (which is expressed via a BasicConstraints 
+                    extension) together are not supported.")
+        }
         CertWithPrivateKey {
-            x509: self.x509(key_pair.clone(), digest),
+            x509: self.x509(&key_pair),
             key_pair,
         }
     }
 
-    fn x509(self, key_pair: PKey<Private>, digest: MessageDigest) -> X509 {
-        let mut builder = X509::builder().expect("unable to create builder");
-        let version = self.version.unwrap_or(DEFAULT_X509_VERSION);
-        builder
-            .set_version(version - 1) // OpenSSL uses index origin 0 for version
-            .expect("unable to set version");
-        builder
-            .set_serial_number(&serial_number(self.serial_number.unwrap_or(DEFAULT_SERIAL)))
-            .expect("unable to set serial number");
-        let subject_cn = x509_name_with_cn(
-            &self.cn.clone().unwrap_or_else(|| DEFAULT_CN.to_string()),
-            self.duplicate_subject_cn,
-        );
-        builder
-            .set_subject_name(&subject_cn)
-            .expect("unable to set subject cn");
-        builder
-            .set_pubkey(&key_pair)
-            .expect("unable to set public key");
-        builder
-            .set_not_before(&self.not_before_asn_1_time())
-            .expect("unable to set 'not before'");
-        builder
-            .set_not_after(&self.not_after_asn_1_time())
-            .expect("unable to set 'not after'");
-        if self.set_ca_key_usage_extension {
-            let ca_extension = BasicConstraints::new()
-                .ca()
-                .build()
-                .expect("failed to build basic constraints");
-            builder
-                .append_extension(ca_extension)
-                .expect("unable to set basic constraints extension")
-        }
-        if let Some((ca_key, issuer)) = &self.ca_signing_data {
-            // CA signed cert:
-            let issuer_cn = x509_name_with_cn(issuer, self.duplicate_issuer_cn);
-            builder
-                .set_issuer_name(&issuer_cn)
-                .expect("unable to set issuer cn");
-            builder.sign(ca_key, digest).expect("unable to sign");
+    fn x509(self, key_pair: &KeyPair) -> x509_cert::Certificate {
+        let cn_or_default = self.cn.clone().unwrap_or_else(|| DEFAULT_CN.to_string());
+        let (profile, cert_signer) = if let Some((ca_key_pair, issuer)) = &self.ca_signing_data {
+            // CA signed cert
+            let cert_signer = ca_key_pair.clone();
+            let profile = Profile::Manual {
+                issuer: Some(x509_cert_cn(issuer, self.duplicate_issuer_cn)),
+            };
+            (profile, cert_signer)
         } else {
-            // self signed cert:
-            let issuer_cn = x509_name_with_cn(
-                &self.cn.clone().unwrap_or_else(|| DEFAULT_CN.to_string()),
-                self.duplicate_issuer_cn,
-            );
-            builder
-                .set_issuer_name(&issuer_cn)
-                .expect("unable to set issuer cn");
-            if self.self_sign_with_wrong_secret_key {
-                let wrong_signing_key_pair = ed25519_key_pair();
-                builder
-                    .sign(&wrong_signing_key_pair, digest)
-                    .expect("unable to sign");
+            // self signed cert
+            let cert_signer = if self.self_sign_with_wrong_secret_key {
+                KeyPair::gen_ed25519()
             } else {
-                builder.sign(&key_pair, digest).expect("unable to sign");
-            }
+                key_pair.clone()
+            };
+            let profile = Profile::Manual {
+                issuer: Some(x509_cert_cn(&cn_or_default, self.duplicate_issuer_cn)),
+            };
+            (profile, cert_signer)
+        };
+
+        let serial_number = SerialNumber::new(&self.serial_number.unwrap_or(DEFAULT_SERIAL))
+            .expect("serial failed");
+        let validity = Validity {
+            not_before: self.not_before_asn_1_time(),
+            not_after: self.not_after_asn_1_time(),
+        };
+        let subject = x509_cert_cn(&cn_or_default, self.duplicate_subject_cn);
+        let subject_public_key_info =
+            spki::SubjectPublicKeyInfoOwned::try_from(key_pair.public_key_der().as_slice())
+                .expect("spki failed");
+
+        let mut builder = CertificateBuilder::new(
+            profile,
+            serial_number,
+            validity,
+            subject,
+            subject_public_key_info,
+            &cert_signer,
+        )
+        .expect("Create certificate");
+
+        if !self.version_1 {
+            // x509_certs sets version to 3 whenever there are extensions added
+            builder
+                .add_extension(&BasicConstraints {
+                    ca: self.set_ca_key_usage_extension,
+                    path_len_constraint: None,
+                })
+                .expect("failed to add extension");
         }
-        builder.build()
+
+        builder.build().expect("failed to build certificate")
     }
 
-    fn not_before_asn_1_time(&self) -> Asn1Time {
+    fn not_before_asn_1_time(&self) -> x509_cert::time::Time {
+        use der::asn1::GeneralizedTime;
+        use x509_cert::time::Time;
         match (
             &self.not_before,
             self.not_before_unix,
             self.not_before_days_from_now,
         ) {
-            (None, None, None) => Asn1Time::days_from_now(DEFAULT_NOT_BEFORE_DAYS_FROM_NOW)
-                .expect("unable to create 'not before'"),
-            (Some(not_before_string), None, None) => {
-                Asn1Time::from_str_x509(not_before_string).expect("unable to create 'not before'")
+            (None, None, None) => {
+                Time::try_from(SystemTime::now()).expect("notBefore: Time::try_from failed")
             }
-            (None, Some(not_before_unix), None) => {
-                Asn1Time::from_unix(not_before_unix).expect("unable to create 'not before'")
+            (Some(nb_string), None, None) => {
+                let nb_unix_timestamp = asn1_time_string_to_unix_timestamp(nb_string)
+                    .expect("notBefore: invalid ASN1 time");
+                let nb_duration_since_unix_epoch = Duration::from_secs(nb_unix_timestamp);
+                Time::from(
+                    GeneralizedTime::from_unix_duration(nb_duration_since_unix_epoch)
+                        .expect("notBefore: GeneralizedTime::from_unix_duration failed"),
+                )
             }
-            (None, None, Some(not_before_days_from_now)) => {
-                Asn1Time::days_from_now(not_before_days_from_now)
-                    .expect("unable to create 'not before'")
+            (None, Some(nb_unix_i64), None) => {
+                let nb_unix_u64 =
+                    u64::try_from(nb_unix_i64).expect("notBefore: u64 conversion failed");
+                let nb_unix_duration = Duration::from_secs(nb_unix_u64);
+                Time::from(
+                    GeneralizedTime::from_unix_duration(nb_unix_duration)
+                        .expect("notBefore: GeneralizedTime::from_unix_duration failed"),
+                )
+            }
+            (None, None, Some(nb_days_from_now)) => {
+                let nb_secs_from_now = (nb_days_from_now as u64)
+                    .checked_mul(SECS_PER_DAY)
+                    .expect("notBefore: checked_mul failed");
+                let nb_duration_from_now = Duration::from_secs(nb_secs_from_now);
+                Time::try_from(SystemTime::now() + nb_duration_from_now)
+                    .expect("notBefore: Time::try_from failed")
             }
             _ => panic!("internal error: illegal combination of notBefore fields"),
         }
     }
 
-    fn not_after_asn_1_time(&self) -> Asn1Time {
+    fn not_after_asn_1_time(&self) -> x509_cert::time::Time {
+        use der::asn1::GeneralizedTime;
+        use x509_cert::time::Time;
         if let Some(validity_days) = self.validity_days {
-            return Asn1Time::days_from_now(validity_days).expect("unable to create 'not after'");
+            let validity_secs = (validity_days as u64)
+                .checked_mul(SECS_PER_DAY)
+                .expect("notAfter: checked_mul failed");
+            let validity_duration = Duration::from_secs(validity_secs);
+            return Time::try_from(SystemTime::now() + validity_duration)
+                .expect("notAfter: Time::try_from failed");
         }
-        let not_after = self
+        let na_or_infinity = self
             .not_after
             .clone()
             .unwrap_or_else(|| RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string());
-        Asn1Time::from_str_x509(&not_after).expect("unable to create 'not after'")
+
+        let na_unix_timestamp = asn1_time_string_to_unix_timestamp(&na_or_infinity)
+            .expect("notAfter: invalid ASN1 time");
+
+        let na_duration_since_unix_epoch = Duration::from_secs(na_unix_timestamp);
+        Time::from(
+            GeneralizedTime::from_unix_duration(na_duration_since_unix_epoch)
+                .expect("notBefore: GeneralizedTime::from_unix_duration failed"),
+        )
     }
 }
 
 /// An X.509 certificate together with the corresponding private key.
 pub struct CertWithPrivateKey {
-    x509: X509,
-    key_pair: PKey<Private>,
+    x509: x509_cert::Certificate,
+    key_pair: KeyPair, // same key pair as within `x509` in different format
 }
 
 impl CertWithPrivateKey {
     pub fn builder() -> CertBuilder {
         CertBuilder {
-            version: None,
+            version_1: false,
             cn: None,
             serial_number: None,
             not_before_days_from_now: None,
@@ -287,35 +442,53 @@ impl CertWithPrivateKey {
     }
 
     /// Returns the key pair.
-    pub fn key_pair(&self) -> PKey<Private> {
-        self.key_pair.clone()
+    pub fn key_pair(&self) -> &KeyPair {
+        &self.key_pair
     }
 
     /// Returns the X.509 certificate.
-    pub fn x509(&self) -> X509 {
-        self.x509.clone()
+    pub fn x509(&self) -> TlsPublicKeyCert {
+        TlsPublicKeyCert::new_from_der(self.cert_der())
+            .expect("unable to convert to TlsPublicKeyCert")
+    }
+
+    /// Returns a PEM encoding of the X.509 certificate.
+    pub fn cert_pem(&self) -> Vec<u8> {
+        use der::EncodePem;
+        self.x509
+            .to_pem(x509_cert::der::pem::LineEnding::default())
+            .expect("unable to PEM encode cert")
+            .into_bytes()
     }
 
     /// Returns a DER encoding of the X.509 certificate.
     pub fn cert_der(&self) -> Vec<u8> {
+        use der::Encode;
         self.x509.to_der().expect("unable to DER encode cert")
     }
 }
 
-fn x509_name_with_cn(common_name: &str, duplicate: bool) -> X509Name {
-    let mut name = X509Name::builder().expect("unable to create name builder");
-    name.append_entry_by_nid(Nid::COMMONNAME, common_name)
-        .expect("unable to append common name");
-    if duplicate {
-        name.append_entry_by_nid(Nid::COMMONNAME, common_name)
-            .expect("unable to append common name");
-    }
-    name.build()
+fn x509_cert_cn(cn: &String, duplicate: bool) -> x509_cert::name::Name {
+    let cn_effective = if duplicate {
+        format!("CN={cn},CN={cn}")
+    } else {
+        format!("CN={cn}")
+    };
+    Name::from_str(&cn_effective)
+        .unwrap_or_else(|_| panic!("creating CN (cn={cn}, duplicate={duplicate}) failed"))
 }
 
-fn serial_number(serial: [u8; 19]) -> Asn1Integer {
-    BigNum::from_slice(&serial)
-        .expect("unable to create the serial number big num")
-        .to_asn1_integer()
-        .expect("unable to create ASN1 integer for serial number")
+fn asn1_time_string_to_unix_timestamp(time_asn1: &str) -> Result<u64, String> {
+    use time::macros::format_description;
+    use time::PrimitiveDateTime;
+
+    let asn1_format = format_description!("[year][month][day][hour][minute][second]Z"); // e.g., 99991231235959Z
+    let time_primitivedatetime =
+        PrimitiveDateTime::parse(time_asn1, asn1_format).map_err(|_e| {
+            format!("invalid asn1 time={time_asn1}: failed to parse ASN1 datetime format")
+        })?;
+    let time_i64 = time_primitivedatetime.assume_utc().unix_timestamp();
+    let time_u64 = u64::try_from(time_i64)
+        .map_err(|_e| format!("invalid asn1 time={time_asn1}: failed to convert to u64"))?;
+    Ok(time_u64)
 }

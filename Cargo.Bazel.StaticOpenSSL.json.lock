@@ -1,5 +1,5 @@
 {
-  "checksum": "b6e5c8a0ce1457ba267b7972d58c9953e9d6a45850a3f0e7e48124f962350241",
+  "checksum": "aaa4cfd9a8bd7f6ade3de73564040de44b2a8bbc7569a495b606ef9200e1d7cf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -9549,6 +9549,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "db",
+            "std"
+          ],
+          "selects": {}
+        },
         "edition": "2021",
         "version": "0.9.4"
       },
@@ -12416,6 +12423,8 @@
         "crate_features": {
           "common": [
             "alloc",
+            "derive",
+            "flagset",
             "oid",
             "pem",
             "std",
@@ -12430,6 +12439,10 @@
               "target": "const_oid"
             },
             {
+              "id": "flagset 0.4.3",
+              "target": "flagset"
+            },
+            {
               "id": "pem-rfc7468 0.7.0",
               "target": "pem_rfc7468"
             },
@@ -12441,6 +12454,15 @@
           "selects": {}
         },
         "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "der_derive 0.7.2",
+              "target": "der_derive"
+            }
+          ],
+          "selects": {}
+        },
         "version": "0.7.7"
       },
       "license": "Apache-2.0 OR MIT"
@@ -12517,6 +12539,53 @@
         "version": "8.2.0"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "der_derive 0.7.2": {
+      "name": "der_derive",
+      "version": "0.7.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/der_derive/0.7.2/download",
+          "sha256": "5fe87ce4529967e0ba1dcf8450bab64d97dfd5010a6256187ffe2e43e6f0e049"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "der_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "der_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.31",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.26",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.2"
+      },
+      "license": "Apache-2.0 OR MIT"
     },
     "derivative 2.2.0": {
       "name": "derivative",
@@ -13992,6 +14061,10 @@
               "target": "signal_hook_mio"
             },
             {
+              "id": "signature 2.1.0",
+              "target": "signature"
+            },
+            {
               "id": "simple_asn1 0.5.4",
               "target": "simple_asn1"
             },
@@ -14278,6 +14351,10 @@
             {
               "id": "wycheproof 0.5.1",
               "target": "wycheproof"
+            },
+            {
+              "id": "x509-cert 0.2.4",
+              "target": "x509_cert"
             },
             {
               "id": "x509-parser 0.14.0",
@@ -58839,6 +58916,73 @@
         "version": "0.5.1"
       },
       "license": "MIT"
+    },
+    "x509-cert 0.2.4": {
+      "name": "x509-cert",
+      "version": "0.2.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/x509-cert/0.2.4/download",
+          "sha256": "25eefca1d99701da3a57feb07e5079fc62abba059fc139e98c13bbb250f3ef29"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "x509_cert",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "x509_cert",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "builder",
+            "default",
+            "hazmat",
+            "pem",
+            "sha1",
+            "signature",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "const-oid 0.9.4",
+              "target": "const_oid"
+            },
+            {
+              "id": "der 0.7.7",
+              "target": "der"
+            },
+            {
+              "id": "sha1 0.10.5",
+              "target": "sha1"
+            },
+            {
+              "id": "signature 2.1.0",
+              "target": "signature"
+            },
+            {
+              "id": "spki 0.7.2",
+              "target": "spki"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.4"
+      },
+      "license": "Apache-2.0 OR MIT"
     },
     "x509-parser 0.14.0": {
       "name": "x509-parser",

@@ -584,10 +584,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
 #[test]
 fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
     let cert_without_corresponding_secret_key = X509PublicKeyCert {
-        certificate_der: generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER"),
+        certificate_der: generate_ed25519_cert().cert_der(),
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())

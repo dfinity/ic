@@ -1006,6 +1006,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "support-v0_7",
                 ],
             ),
+            "signature": crate.spec(
+                version = "^2.1.0",
+            ),
             "simple_asn1": crate.spec(
                 version = "^0.5.4",
             ),
@@ -1303,6 +1306,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "wiremock": crate.spec(
                 version = "^0.5.19",
+            ),
+            "x509-cert": crate.spec(
+                version = "^0.2.4",
+                features = [
+                    "builder",
+                    "hazmat",
+                ],
             ),
             "x509-parser": crate.spec(
                 version = "^0.15.1",

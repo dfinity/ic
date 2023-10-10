@@ -2442,6 +2442,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7ed52955ce76b1554f509074bb357d3fb8ac9b51288a65a3fd480d1dfba946"
 dependencies = [
  "const-oid",
+ "der_derive",
+ "flagset",
  "pem-rfc7468",
  "zeroize",
 ]
@@ -2458,6 +2460,17 @@ dependencies = [
  "num-bigint 0.4.3",
  "num-traits",
  "rusticata-macros",
+]
+
+[[package]]
+name = "der_derive"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fe87ce4529967e0ba1dcf8450bab64d97dfd5010a6256187ffe2e43e6f0e049"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.31",
+ "syn 2.0.26",
 ]
 
 [[package]]
@@ -2803,6 +2816,7 @@ dependencies = [
  "sha3 0.9.1",
  "signal-hook",
  "signal-hook-mio",
+ "signature 2.1.0",
  "simple_asn1 0.5.4",
  "simple_moving_average",
  "slog",
@@ -2878,6 +2892,7 @@ dependencies = [
  "wiremock",
  "wsl",
  "wycheproof",
+ "x509-cert",
  "x509-parser 0.14.0",
  "x509-parser 0.15.1",
  "yansi",
@@ -11326,6 +11341,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "x509-cert"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25eefca1d99701da3a57feb07e5079fc62abba059fc139e98c13bbb250f3ef29"
+dependencies = [
+ "const-oid",
+ "der 0.7.7",
+ "sha1",
+ "signature 2.1.0",
+ "spki",
 ]
 
 [[package]]

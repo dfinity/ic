@@ -6,7 +6,6 @@ use ic_crypto_test_utils_tls::x509_certificates::{
 };
 use ic_types::time::UNIX_EPOCH;
 use ic_types::PrincipalId;
-use openssl::hash::MessageDigest;
 use std::ops::Range;
 use std::str::FromStr;
 
@@ -66,9 +65,7 @@ fn should_fail_if_tls_certificate_has_invalid_subject_cn() {
         certificate_der: valid_cert_builder(node_id)
             .with_duplicate_subject_cn()
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -85,9 +82,7 @@ fn should_fail_if_tls_certificate_subject_cn_is_not_node_id() {
         certificate_der: CertWithPrivateKey::builder()
             .cn("incorrect node ID".to_string())
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -106,9 +101,7 @@ fn should_fail_if_tls_certificate_has_invalid_issuer_cn() {
         certificate_der: valid_cert_builder(node_id)
             .with_duplicate_issuer_cn()
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -123,11 +116,9 @@ fn should_fail_if_tls_certificate_issuer_cn_not_equal_subject_cn() {
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
-            .with_ca_signing(ed25519_key_pair(), "issuer CN, not node ID".to_string())
+            .with_ca_signing(ed25519_key_pair(), "issuer CN not node ID".to_string())
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -143,11 +134,9 @@ fn should_fail_if_tls_certificate_version_is_not_3() {
     let node_id = node_id(1);
     let cert = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
-            .version(2)
+            .version_1()
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -164,9 +153,7 @@ fn should_fail_if_tls_certificate_notbefore_date_is_in_the_future() {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(1)
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -194,9 +181,7 @@ fn should_fail_if_tls_certificate_notafter_date_is_not_99991231235959z() {
             .not_before_unix(0)
             .validity_days(42)
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -214,9 +199,7 @@ fn should_fail_if_tls_certificate_has_expired() {
             .not_before_unix(0)
             .validity_days(0)
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -233,9 +216,7 @@ fn should_fail_if_tls_certificate_signature_alg_is_not_ed25519() {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(0)
             .build_prime256v1()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -251,17 +232,15 @@ fn should_fail_if_tls_certificate_pubkey_is_malformed() {
     let key_pair_for_signing = ed25519_key_pair();
     let non_ed25519_key_pair = prime256v1_key_pair();
     assert_ne!(
-        non_ed25519_key_pair.public_key_to_der().unwrap(),
-        key_pair_for_signing.public_key_to_der().unwrap()
+        non_ed25519_key_pair.public_key_der(),
+        key_pair_for_signing.public_key_der()
     );
     let cert_with_invalid_sig = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(0)
             .with_ca_signing(key_pair_for_signing, node_id.get().to_string())
-            .build(non_ed25519_key_pair, MessageDigest::null())
-            .x509()
-            .to_der()
-            .unwrap(),
+            .build(non_ed25519_key_pair)
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert_with_invalid_sig, node_id, UNIX_EPOCH));
@@ -278,9 +257,7 @@ fn should_fail_if_tls_certificate_pubkey_verification_fails() {
         certificate_der: valid_cert_builder(node_id)
             .not_before_unix(0)
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
     replace_tls_certificate_pubkey_with_invalid_one(&mut cert);
 
@@ -297,17 +274,15 @@ fn should_fail_if_tls_certificate_signature_verification_fails() {
     let key_pair_for_signing = ed25519_key_pair();
     let key_pair = ed25519_key_pair();
     assert_ne!(
-        key_pair.public_key_to_der().unwrap(),
-        key_pair_for_signing.public_key_to_der().unwrap()
+        key_pair.public_key_der(),
+        key_pair_for_signing.public_key_der()
     );
     let cert_that_is_not_self_signed = X509PublicKeyCert {
         certificate_der: valid_cert_builder(node_id)
             .with_ca_signing(key_pair_for_signing, node_id.get().to_string())
             .not_before_unix(0)
-            .build(key_pair, MessageDigest::null())
-            .x509()
-            .to_der()
-            .unwrap(),
+            .build(key_pair)
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert_that_is_not_self_signed, node_id, UNIX_EPOCH));
@@ -324,9 +299,7 @@ fn should_fail_if_tls_certificate_is_ca() {
         certificate_der: valid_cert_builder(node_id)
             .set_ca_key_usage_extension()
             .build_ed25519()
-            .x509()
-            .to_der()
-            .unwrap(),
+            .cert_der(),
     };
 
     let result = ValidTlsCertificate::try_from((cert, node_id, UNIX_EPOCH));
@@ -342,8 +315,8 @@ fn valid_cert_builder(node_id: NodeId) -> CertBuilder {
 
 /// Replaces the TLS certificate's valid public key with an invalid one.
 /// The replacement is done by directly manipulating the DER encoding rather
-/// than using a respective API because such an API currently exists neither
-/// in the openssl crate nor in the x509_parser crate.
+/// than using a respective API because such an API currently does not exist
+/// in the x509_parser crate.
 fn replace_tls_certificate_pubkey_with_invalid_one(cert: &mut X509PublicKeyCert) {
     let x509_cert_der = &cert.certificate_der;
     let (_, x509_cert) = x509_parser::parse_x509_certificate(x509_cert_der).unwrap();
