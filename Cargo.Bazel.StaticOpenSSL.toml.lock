@@ -2610,7 +2610,7 @@ dependencies = [
  "cargo_metadata",
  "cc",
  "cddl",
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "chacha20poly1305",
  "chrono",
  "ciborium",
