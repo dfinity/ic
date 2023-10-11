@@ -1,0 +1,26 @@
+load("@python_deps//:requirements.bzl", "requirement")
+load("//bazel:candid.bzl", "did_git_test")
+
+did_git_test(
+    name = "example_did_git_test",
+    did = ":example.did",
+)
+
+py_test(
+    name = "candid_integration_tests",
+    srcs = ["candid_integration_tests.py"],
+    data = [
+        ":example.did",
+        ":example_backup.did",
+        ":example_did_git_test",
+        "//:WORKSPACE.bazel",
+    ],
+    env = {
+        "DID_FILE_PATH": "$(location :example.did)",
+        "BACKUP_DID_FILE_PATH": "$(location :example_backup.did)",
+        "TEST_BIN": "$(location :example_did_git_test)",
+        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+    },
+    tags = ["local"],
+    deps = [requirement("pytest")],
+)
