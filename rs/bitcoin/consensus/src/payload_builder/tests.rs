@@ -2,8 +2,9 @@ use crate::{payload_builder::parse, BitcoinPayloadBuilder};
 use ic_btc_interface::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
+    BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
 };
+use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload},
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -183,7 +184,7 @@ fn can_successfully_create_bitcoin_payload() {
 }
 
 #[test]
-fn includes_only_successful_responses_in_the_payload() {
+fn includes_responses_in_the_payload() {
     // Create a mock bitcoin adapter client that returns a successful response
     // for the first request and an error for the second.
     fn mock_adapter() -> MockBitcoinAdapterClient {
@@ -228,15 +229,26 @@ fn includes_only_successful_responses_in_the_payload() {
         registry_client,
         |validation_context, bitcoin_payload_builder| {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
-                .with_responses(vec![BitcoinAdapterResponse {
-                    response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                        GetSuccessorsResponseComplete {
-                            blocks: vec![],
-                            next: vec![],
-                        },
-                    ),
-                    callback_id: 0,
-                }])
+                .with_responses(vec![
+                    BitcoinAdapterResponse {
+                        response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                            GetSuccessorsResponseComplete {
+                                blocks: vec![],
+                                next: vec![],
+                            },
+                        ),
+                        callback_id: 0,
+                    },
+                    BitcoinAdapterResponse {
+                        response: BitcoinAdapterResponseWrapper::GetSuccessorsReject(
+                            BitcoinReject {
+                                reject_code: RejectCode::SysTransient,
+                                message: "ConnectionBroken".to_string(),
+                            },
+                        ),
+                        callback_id: 1,
+                    },
+                ])
                 .build();
             let expected_payload = parse::payload_to_bytes(
                 &expected_payload,

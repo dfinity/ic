@@ -91,6 +91,58 @@ pub fn push_response(
 
             Ok(())
         }
+        BitcoinAdapterResponseWrapper::GetSuccessorsReject(reject) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            let context = state
+                .metadata
+                .subnet_call_context_manager
+                .bitcoin_get_successors_contexts
+                .get_mut(&callback_id)
+                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
+                })?;
+
+            let reject_payload =
+                Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
+
+            // Add response to the consensus queue.
+            state.consensus_queue.push(Response {
+                originator: context.request.sender(),
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: callback_id,
+                refund: context.request.take_cycles(),
+                response_payload: reject_payload,
+            });
+
+            Ok(())
+        }
+        BitcoinAdapterResponseWrapper::SendTransactionReject(reject) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            let context = state
+                .metadata
+                .subnet_call_context_manager
+                .bitcoin_send_transaction_internal_contexts
+                .get_mut(&callback_id)
+                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
+                })?;
+
+            let reject_payload =
+                Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
+
+            // Add response to the consensus queue.
+            state.consensus_queue.push(Response {
+                originator: context.request.sender(),
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: callback_id,
+                refund: context.request.take_cycles(),
+                response_payload: reject_payload,
+            });
+
+            Ok(())
+        }
     }
 }
 

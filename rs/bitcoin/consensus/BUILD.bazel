@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/bitcoin/types/internal",
+    "//rs/types/error_types",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/adapter_client",

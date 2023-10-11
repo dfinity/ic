@@ -10,4 +10,7 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     version = "0.8.0",
+    deps = [
+        "@crate_index//:thiserror",
+    ],
 )

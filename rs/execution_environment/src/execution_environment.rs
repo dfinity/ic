@@ -965,8 +965,7 @@ impl ExecutionEnvironment {
                         request,
                         &mut state,
                     ) {
-                        Ok(Some(payload)) => Some(Ok(payload)),
-                        Ok(None) => None,
+                        Ok(()) => None,
                         Err(err) => Some(Err(err)),
                     }
                 }

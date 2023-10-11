@@ -229,7 +229,9 @@ fn sync_until_end_block(
                     anchor = headers.last().unwrap().clone();
                 }
             }
-            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_)) => {
+            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_))
+            | Ok(BitcoinAdapterResponseWrapper::GetSuccessorsReject(_))
+            | Ok(BitcoinAdapterResponseWrapper::SendTransactionReject(_)) => {
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
@@ -268,7 +270,9 @@ fn sync_blocks(
                     blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
                 }
             }
-            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_)) => {
+            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_))
+            | Ok(BitcoinAdapterResponseWrapper::GetSuccessorsReject(_))
+            | Ok(BitcoinAdapterResponseWrapper::SendTransactionReject(_)) => {
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
@@ -301,7 +305,9 @@ fn sync_blocks_at_once(
                     blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
                 }
             }
-            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_)) => {
+            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_))
+            | Ok(BitcoinAdapterResponseWrapper::GetSuccessorsReject(_))
+            | Ok(BitcoinAdapterResponseWrapper::SendTransactionReject(_)) => {
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers

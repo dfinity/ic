@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 strum_macros = "0.24"
+thiserror = "1.0"
