@@ -265,7 +265,8 @@ EOF
     # 1 Gigabit Ethernet Network Interfaces
     for interface in ${INTERFACES_1GBE[@]}; do
         (
-            if [ "${#INTERFACES_1GBE[@]}" -eq "1" ]; then
+            # As an aid in testing, attach the single 1G interface to bond6, if no 10G were found.
+            if [ "${#INTERFACES_10GBE[@]}" -eq "0" ] && [ "${#INTERFACES_1GBE[@]}" -eq "1" ]; then
                 local BOND="Bond=bond6"
             fi
             cat <<EOF
