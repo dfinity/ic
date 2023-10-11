@@ -17,22 +17,22 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_msg_method_name_size()".into(),
             Module::InspectMessage.from_ic0("msg_method_name_size", NoParams, Result::I32),
-            11_000_005,
+            517000510,
         ),
         common::Benchmark(
             "ic0_msg_method_name_copy()/1B".into(),
             Module::InspectMessage.from_ic0("msg_method_name_copy", Params3(0, 0, 1), Result::No),
-            34_000_005,
+            520000510,
         ),
         common::Benchmark(
             "ic0_msg_method_name_copy()/30B".into(),
             Module::InspectMessage.from_ic0("msg_method_name_copy", Params3(0, 0, 20), Result::No),
-            53_000_005,
+            539000510,
         ),
         common::Benchmark(
             "ic0_accept_message()*".into(),
             Module::InspectMessage.from_sections(("", "")), // inspect_message accepts by default
-            1,
+            505,
         ),
     ];
     common::run_benchmarks(
