@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+from unittest import mock
 
 import pytest
 
@@ -29,7 +30,8 @@ def run_example_did_git_test():
         [os.environ["TEST_BIN"]],
         env={
             "BUILD_WORKSPACE_DIRECTORY": workspace_dir,
-            "TEST_TMPDIR": os.environ["TEST_TMPDIR"]
+            "TEST_TMPDIR": os.environ["TEST_TMPDIR"],
+            "CI_MERGE_REQUEST_TITLE": os.environ.get("CI_MERGE_REQUEST_TITLE","")
         },
         capture_output=True
     )
@@ -121,6 +123,22 @@ def test_override_also_reverse():
     # When the merge request title contains the magic words, --also-reverse should be disabled.
     os.environ["CI_MERGE_REQUEST_TITLE"] = "Best change ever [override-also-reverse]"
     run_example_did_git_test(also_revers=True)
+
+@mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-didc-check]"})
+def test_override_didc_checks_skips_check():
+    res = run_example_did_git_test()
+
+    assert res.returncode == 0
+    assert "Found [override-didc-check] in merge request title. Skipping didc_check." in res.stdout.decode('utf-8')
+
+@mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-didc-check]"})
+def test_override_didc_checks_failing_check_succeeds():
+    modify_file_contents(path=did_file_path, find="happy; sad", replacement="happy")
+    res = run_example_did_git_test()
+
+    assert res.returncode == 0
+    assert "Found [override-didc-check] in merge request title. Skipping didc_check." in res.stdout.decode('utf-8')
+
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__]))
