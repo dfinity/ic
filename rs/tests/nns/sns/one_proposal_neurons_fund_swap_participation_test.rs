@@ -34,18 +34,34 @@ fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     const MIN_PARTICIPANTS: u64 = 4;
     let test_parameters = test_create_service_nervous_system_proposal(MIN_PARTICIPANTS);
     let test_swap_parameters = test_parameters.swap_parameters.as_ref().unwrap().clone();
+    let neurons_fund_investment = Tokens::from_e8s(
+        NEURONS_FUND_NUM_PARTICIPANTS
+            * test_swap_parameters
+                .minimum_participant_icp
+                .as_ref()
+                .unwrap()
+                .e8s
+                .unwrap(),
+    );
+    let minimum_icp = test_swap_parameters
+        .minimum_icp
+        .unwrap()
+        .checked_add(&neurons_fund_investment);
+    let maximum_icp = test_swap_parameters
+        .maximum_icp
+        .unwrap()
+        .checked_add(&neurons_fund_investment);
+    let maximum_participant_icp = test_swap_parameters
+        .maximum_participant_icp
+        .unwrap()
+        .checked_sub(&neurons_fund_investment);
     CreateServiceNervousSystem {
         swap_parameters: Some(
             ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
-                neurons_fund_investment_icp: Some(Tokens::from_e8s(
-                    NEURONS_FUND_NUM_PARTICIPANTS
-                        * test_swap_parameters
-                            .minimum_participant_icp
-                            .as_ref()
-                            .unwrap()
-                            .e8s
-                            .unwrap(),
-                )),
+                minimum_icp,
+                maximum_icp,
+                maximum_participant_icp,
+                neurons_fund_investment_icp: Some(neurons_fund_investment),
                 ..test_swap_parameters
             },
         ),
