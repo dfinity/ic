@@ -637,6 +637,7 @@ struct OriginalContext {
     freezing_threshold: Cycles,
     canister_id: CanisterId,
     subnet_memory_reservation: NumBytes,
+    instructions_executed: NumInstructions,
 }
 
 /// Struct used to hold necessary information for the
@@ -880,6 +881,7 @@ pub fn execute_response(
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
         subnet_memory_reservation,
+        instructions_executed: call_context.instructions_executed(),
     };
 
     let mut helper =
@@ -996,6 +998,7 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,

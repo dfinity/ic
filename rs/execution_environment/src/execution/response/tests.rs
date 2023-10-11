@@ -2935,3 +2935,50 @@ fn test_call_context_performance_counter_correctly_reported_on_reject() {
     assert!(counters[1] < counters[2]);
     assert!(counters[2] < counters[3]);
 }
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .stable_grow(1)
+        .stable64_write(2, &[3, 4])
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .call_simple(
+            a_id.get(),
+            "non-existent",
+            call_args().on_reject(wasm().trap()).on_cleanup(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    // Write the global data to the stable memory.
+                    .push_int(0)
+                    .get_global_data()
+                    .stable_write_offset_blob(),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    // The canister explicitly traps.
+    let _err = test.ingress(a_id, "update", a).unwrap_err();
+
+    let state = test.canister_state(a_id);
+    let stable_memory = &state.execution_state.as_ref().unwrap().stable_memory;
+    let page = stable_memory.page_map.get_page(0.into());
+    let counters = page[0..(std::mem::size_of::<u64>() * 3)]
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
+}

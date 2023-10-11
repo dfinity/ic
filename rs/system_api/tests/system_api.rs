@@ -773,6 +773,7 @@ fn test_cleanup_support() {
         ApiType::Cleanup {
             caller: PrincipalId::new_anonymous(),
             time: mock_time(),
+            call_context_instructions_executed: 0.into(),
         },
         &get_system_state(),
         cycles_account_manager,
