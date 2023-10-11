@@ -1010,7 +1010,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^2.1.0",
             ),
             "simple_asn1": crate.spec(
-                version = "^0.5.4",
+                version = "^0.6.2",
             ),
             "simple_moving_average": crate.spec(
                 version = "^0.1.2",

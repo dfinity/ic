@@ -14,7 +14,7 @@ p256 = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]

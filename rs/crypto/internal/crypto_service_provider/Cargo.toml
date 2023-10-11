@@ -45,7 +45,7 @@ rand_chacha = "0.3"
 rcgen = "0.10.0"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_cbor = "0.11.1"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

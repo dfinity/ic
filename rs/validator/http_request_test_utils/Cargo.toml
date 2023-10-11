@@ -17,7 +17,7 @@ ic-crypto-test-utils = { path = "../../crypto/test_utils" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-types = { path = "../../types/types" }
 rand = "0.8"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 strum = "0.23.0"
 strum_macros = "0.23.0"
 
