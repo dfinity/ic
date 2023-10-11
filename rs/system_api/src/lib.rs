@@ -344,6 +344,8 @@ pub enum ApiType {
     Cleanup {
         caller: PrincipalId,
         time: Time,
+        /// The total number of instructions executed in the call context
+        call_context_instructions_executed: NumInstructions,
     },
 }
 
@@ -1337,11 +1339,14 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 call_context_instructions_executed,
                 ..
+            }
+            | ApiType::Cleanup {
+                call_context_instructions_executed,
+                ..
             } => *call_context_instructions_executed,
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
-            | ApiType::Cleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }

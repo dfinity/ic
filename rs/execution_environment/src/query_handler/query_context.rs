@@ -541,6 +541,7 @@ impl<'a> QueryContext<'a> {
                         callback_err,
                         canister_current_memory_usage,
                         execution_parameters,
+                        call_context.instructions_executed(),
                     ),
                 }
             }
@@ -584,6 +585,7 @@ impl<'a> QueryContext<'a> {
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
+        call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
             CallOrigin::Ingress(_, _)
@@ -598,6 +600,7 @@ impl<'a> QueryContext<'a> {
                 ApiType::Cleanup {
                     caller: call_origin.get_principal(),
                     time,
+                    call_context_instructions_executed,
                 },
                 time,
                 canister.system_state.clone(),

@@ -162,6 +162,15 @@ impl PayloadBuilder {
         self
     }
 
+    /// Write a blob of `data` into the stable memory at the specified `offset`.
+    ///
+    /// The `offset` integer is expected to be on the stack first, followed by the
+    /// blob `data` to write.
+    pub fn stable_write_offset_blob(mut self) -> Self {
+        self.0.push(Ops::StableWrite as u8);
+        self
+    }
+
     pub fn stable64_write(mut self, offset: u64, data: &[u8]) -> Self {
         self = self.push_int64(offset);
         self = self.push_bytes(data);
