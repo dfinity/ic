@@ -5019,6 +5019,7 @@ version = "0.1.0"
 dependencies = [
  "ic-btc-interface",
  "ic-btc-types-internal",
+ "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-registry",
@@ -5075,6 +5076,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "ic-btc-interface",
+ "ic-error-types",
  "ic-protobuf",
  "serde",
  "serde_bytes",
@@ -8000,6 +8002,7 @@ name = "ic-interfaces-adapter-client"
 version = "0.8.0"
 dependencies = [
  "strum_macros 0.24.3",
+ "thiserror",
 ]
 
 [[package]]

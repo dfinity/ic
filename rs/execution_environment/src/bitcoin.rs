@@ -82,7 +82,7 @@ pub fn send_transaction_internal(
     privileged_access: &[CanisterId],
     request: &Request,
     state: &mut ReplicatedState,
-) -> Result<Option<Vec<u8>>, UserError> {
+) -> Result<(), UserError> {
     if !privileged_access.contains(&request.sender()) {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
@@ -103,7 +103,7 @@ pub fn send_transaction_internal(
                 ),
             );
 
-            Ok(None)
+            Ok(())
         }
         Err(err) => Err(err),
     }

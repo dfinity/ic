@@ -106,7 +106,7 @@ pub mod bitcoin_adapter_request_wrapper {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterResponseWrapper {
-    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "3, 4")]
+    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "3, 4, 5, 6")]
     pub r: ::core::option::Option<bitcoin_adapter_response_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterResponseWrapper`.
@@ -119,6 +119,10 @@ pub mod bitcoin_adapter_response_wrapper {
         GetSuccessorsResponse(super::GetSuccessorsResponseComplete),
         #[prost(message, tag = "4")]
         SendTransactionResponse(super::SendTransactionResponse),
+        #[prost(message, tag = "5")]
+        GetSuccessorsReject(super::GetSuccessorsReject),
+        #[prost(message, tag = "6")]
+        SendTransactionReject(super::SendTransactionReject),
     }
 }
 /// A Bitcoin Adapter request, used to store the requests in the
@@ -170,6 +174,26 @@ pub struct GetSuccessorsResponseComplete {
     pub blocks: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub next: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+/// A `GetSucceessors` reject response containing additional information about the rejection.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSuccessorsReject {
+    #[prost(uint64, tag = "1")]
+    pub reject_code: u64,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+/// A `SendTransaction` reject response containing additional information about the rejection.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SendTransactionReject {
+    #[prost(uint64, tag = "1")]
+    pub reject_code: u64,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
 }
 #[derive(
     serde::Serialize,
