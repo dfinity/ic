@@ -164,7 +164,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 features = ["runtime"],
             ),
             "bip32": crate.spec(
-                version = "^0.4.0",
+                version = "^0.5.0",
                 features = [
                     "secp256k1",
                 ],
