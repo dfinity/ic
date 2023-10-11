@@ -31,7 +31,12 @@ time = "^0.3.20"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "^0.2.2"
-tower-http = { version = "^0.4.4", features = ["trace", "request-id", "util"] }
+tower-http = { version = "^0.4.4", features = [
+    "trace",
+    "request-id",
+    "util",
+    "timeout",
+] }
 tempfile = "*"
 base64 = { workspace = true }
 wat = "1.0.52"

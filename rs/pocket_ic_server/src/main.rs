@@ -25,6 +25,7 @@ use std::{collections::HashMap, sync::atomic::AtomicU64};
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
+use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -131,6 +132,7 @@ async fn start(runtime: Arc<Runtime>) {
         // For examples on how to customize the logging spans:
         // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs#L45
         .layer(TraceLayer::new_for_http())
+        .layer(TimeoutLayer::new(Duration::from_secs(300)))
         .with_state(app_state.clone());
 
     // bind to port 0; the OS will give a specific port; communicate that to parent process
