@@ -12,7 +12,7 @@ num-traits = { version= "0.2.9", default-features = false, features = ["libm"] }
 pkcs8 = "0.10.2"
 sha2 = "0.10.2"
 serde = { version = "1.0.99", features = [ "derive" ] }
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 num-bigint = "~0.4.3"
 ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 

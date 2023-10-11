@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 hex = "0.4.2"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 ic-types = { path = "../../../../../types/types" }
 

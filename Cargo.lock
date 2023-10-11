@@ -4663,7 +4663,7 @@ dependencies = [
  "serde_cbor",
  "serde_repr",
  "sha2 0.10.6",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "thiserror",
  "time 0.3.22",
  "tokio",
@@ -5140,7 +5140,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "simple_asn1 0.6.2",
+ "simple_asn1",
 ]
 
 [[package]]
@@ -5580,7 +5580,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "simple_asn1 0.6.2",
+ "simple_asn1",
 ]
 
 [[package]]
@@ -5878,7 +5878,7 @@ dependencies = [
  "rsa",
  "serde",
  "sha2 0.10.6",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "slog",
  "strum 0.23.0",
  "strum_macros 0.23.1",
@@ -5899,7 +5899,7 @@ dependencies = [
  "num-bigint 0.4.3",
  "pem 1.1.1",
  "rand 0.8.5",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "wycheproof",
  "zeroize",
 ]
@@ -5918,7 +5918,7 @@ dependencies = [
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "wycheproof",
  "zeroize",
 ]
@@ -5981,7 +5981,7 @@ dependencies = [
  "ic-types",
  "serde",
  "serde_cbor",
- "simple_asn1 0.6.2",
+ "simple_asn1",
 ]
 
 [[package]]
@@ -5991,7 +5991,7 @@ dependencies = [
  "hex",
  "ic-crypto-internal-test-vectors",
  "ic-types",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "zeroize",
 ]
 
@@ -6012,7 +6012,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "wycheproof",
  "zeroize",
 ]
@@ -6035,7 +6035,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "wycheproof",
  "zeroize",
 ]
@@ -6064,7 +6064,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "serde_cbor",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "strum 0.23.0",
  "wycheproof",
  "zeroize",
@@ -6094,7 +6094,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "simple_asn1 0.6.2",
+ "simple_asn1",
 ]
 
 [[package]]
@@ -6124,7 +6124,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.6",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "wycheproof",
 ]
 
@@ -6226,7 +6226,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_cbor",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "slog",
  "slog-async",
  "strum 0.23.0",
@@ -6401,7 +6401,7 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-bls12381-der"
 version = "0.8.0"
 dependencies = [
- "simple_asn1 0.6.2",
+ "simple_asn1",
 ]
 
 [[package]]
@@ -6594,7 +6594,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "openssl",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "strum 0.23.0",
 ]
 
@@ -6954,7 +6954,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-types",
  "ic-protobuf",
- "simple_asn1 0.6.2",
+ "simple_asn1",
 ]
 
 [[package]]
@@ -8649,7 +8649,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha3 0.9.1",
- "simple_asn1 0.5.4",
+ "simple_asn1",
  "tempfile",
 ]
 
@@ -11163,7 +11163,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-types",
  "rand 0.8.5",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "strum 0.23.0",
  "strum_macros 0.23.1",
 ]
@@ -16261,18 +16261,6 @@ name = "similar"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "420acb44afdae038210c99e69aae24109f32f15500aa708e81d46c9f29d55fcf"
-
-[[package]]
-name = "simple_asn1"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eb4ea60fb301dc81dfc113df680571045d375ab7345d171c5dc7d7e13107a80"
-dependencies = [
- "chrono",
- "num-bigint 0.4.3",
- "num-traits",
- "thiserror",
-]
 
 [[package]]
 name = "simple_asn1"

@@ -1,5 +1,5 @@
 {
-  "checksum": "6961ac76d746a3aecca080663f3aa993a9ba05b63759fb4bcea3a816739f9468",
+  "checksum": "ee7db0b9ac681fb4627018220e81eda537f14aca3b2cf92edf9e56b3d43b17f6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8056,7 +8056,6 @@
         ],
         "crate_features": {
           "common": [
-            "alloc",
             "clock",
             "default",
             "libc",
@@ -14065,7 +14064,7 @@
               "target": "signature"
             },
             {
-              "id": "simple_asn1 0.5.4",
+              "id": "simple_asn1 0.6.2",
               "target": "simple_asn1"
             },
             {
@@ -45815,57 +45814,6 @@
         "version": "2.2.1"
       },
       "license": "Apache-2.0"
-    },
-    "simple_asn1 0.5.4": {
-      "name": "simple_asn1",
-      "version": "0.5.4",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/simple_asn1/0.5.4/download",
-          "sha256": "8eb4ea60fb301dc81dfc113df680571045d375ab7345d171c5dc7d7e13107a80"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "simple_asn1",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "simple_asn1",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "chrono 0.4.19",
-              "target": "chrono"
-            },
-            {
-              "id": "num-bigint 0.4.3",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-traits 0.2.15",
-              "target": "num_traits"
-            },
-            {
-              "id": "thiserror 1.0.43",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.5.4"
-      },
-      "license": "ISC"
     },
     "simple_asn1 0.6.2": {
       "name": "simple_asn1",

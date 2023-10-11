@@ -2817,7 +2817,7 @@ dependencies = [
  "signal-hook",
  "signal-hook-mio",
  "signature 2.1.0",
- "simple_asn1 0.5.4",
+ "simple_asn1",
  "simple_moving_average",
  "slog",
  "slog-async",
@@ -4298,7 +4298,7 @@ dependencies = [
  "serde_cbor",
  "serde_repr",
  "sha2 0.10.7",
- "simple_asn1 0.6.2",
+ "simple_asn1",
  "thiserror",
  "time 0.3.23",
  "tokio",
@@ -8847,18 +8847,6 @@ name = "similar"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "420acb44afdae038210c99e69aae24109f32f15500aa708e81d46c9f29d55fcf"
-
-[[package]]
-name = "simple_asn1"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eb4ea60fb301dc81dfc113df680571045d375ab7345d171c5dc7d7e13107a80"
-dependencies = [
- "chrono",
- "num-bigint 0.4.3",
- "num-traits",
- "thiserror",
-]
 
 [[package]]
 name = "simple_asn1"

@@ -13,7 +13,7 @@ p256 = { workspace = true }
 pem = "1.1.0"
 rand = "0.8"
 rand_chacha = "0.3"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 
 [dev-dependencies]
