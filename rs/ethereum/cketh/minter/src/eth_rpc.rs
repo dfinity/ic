@@ -452,9 +452,27 @@ impl ResponseTransform {
                 .into_bytes();
         }
 
+        fn redact_collection_response<T>(body: &mut Vec<u8>)
+        where
+            T: Serialize + DeserializeOwned,
+        {
+            let mut response: JsonRpcReply<Vec<T>> = match serde_json::from_slice(body) {
+                Ok(response) => response,
+                Err(_) => return,
+            };
+
+            if let JsonRpcResult::Result(ref mut result) = response.result {
+                sort_by_hash(result);
+            }
+
+            *body = serde_json::to_string(&response)
+                .expect("BUG: failed to serialize response")
+                .into_bytes();
+        }
+
         match self {
             Self::Block => redact_response::<Block>(body_bytes),
-            Self::LogEntries => redact_response::<Vec<LogEntry>>(body_bytes),
+            Self::LogEntries => redact_collection_response::<LogEntry>(body_bytes),
             Self::TransactionReceipt => redact_response::<TransactionReceipt>(body_bytes),
             Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
             Self::SendRawTransaction => {
@@ -684,4 +702,13 @@ fn is_successful_http_code(status: &u16) -> bool {
     const OK: u16 = 200;
     const REDIRECTION: u16 = 300;
     (OK..REDIRECTION).contains(status)
+}
+
+fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
+    use ic_crypto_sha3::Keccak256;
+    to_sort.sort_by(|a, b| {
+        let a_hash = Keccak256::hash(serde_json::to_vec(a).expect("BUG: failed to serialize"));
+        let b_hash = Keccak256::hash(serde_json::to_vec(b).expect("BUG: failed to serialize"));
+        a_hash.cmp(&b_hash)
+    });
 }

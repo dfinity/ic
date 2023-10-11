@@ -3,7 +3,7 @@ mod tests;
 
 use crate::address::Address;
 use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
-use crate::eth_rpc_client::EthRpcClient;
+use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LogIndex, Wei};
 use crate::state::read_state;
@@ -78,7 +78,7 @@ pub async fn last_received_eth_events(
     contract_address: Address,
     from: BlockNumber,
     to: BlockNumber,
-) -> (Vec<ReceivedEthEvent>, Vec<ReceivedEthEventError>) {
+) -> Result<(Vec<ReceivedEthEvent>, Vec<ReceivedEthEventError>), MultiCallError<Vec<LogEntry>>> {
     use crate::eth_rpc::GetLogsParam;
 
     if from > to {
@@ -88,15 +88,14 @@ pub async fn last_received_eth_events(
         ));
     }
 
-    let result: Vec<LogEntry> = read_state(EthRpcClient::from_state)
+    let result = read_state(EthRpcClient::from_state)
         .eth_get_logs(GetLogsParam {
             from_block: from.into(),
             to_block: to.into(),
             address: vec![contract_address],
             topics: vec![FixedSizeData(RECEIVED_ETH_EVENT_TOPIC)],
         })
-        .await
-        .expect("HTTP call failed");
+        .await?;
 
     let (ok, not_ok): (Vec<_>, Vec<_>) = result
         .into_iter()
@@ -104,7 +103,7 @@ pub async fn last_received_eth_events(
         .partition(Result::is_ok);
     let valid_transactions: Vec<ReceivedEthEvent> = ok.into_iter().map(Result::unwrap).collect();
     let errors: Vec<ReceivedEthEventError> = not_ok.into_iter().map(Result::unwrap_err).collect();
-    (valid_transactions, errors)
+    Ok((valid_transactions, errors))
 }
 
 pub fn report_transaction_error(error: ReceivedEthEventError) {
