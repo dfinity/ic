@@ -1,4 +1,5 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
+set -ue
 ##
 ## Compare performance of the local (new) changes vs remote (old) IC repository.
 ##
@@ -39,19 +40,17 @@ printf "%20s %s\n" \
     "QUICK :=" "${QUICK:=}" \
     "IGNORE_OLD_REPORT :=" "${IGNORE_OLD_REPORT:=}"
 echo
-echo "The configuration above could be overridden with environment variables."
-echo "Example:"
-echo "    OLD_BRANCH=my_branch QUICK=1 IGNORE_OLD_REPORT=1 ${0}"
+echo "The configuration above could be overridden with environment variables, i.e.:"
+echo "    QUICK=1 OLD_COMMIT=04f38ce0 ${0}"
 echo
 
 ## Other (hidden) options
-CACHE_DIR="${CACHE_DIR:-${HOME}/.cache/${0##*/}}"
-TMP_DIR="${TMP_DIR:-$(realpath ${0##*/}.tmp/)}"
-
-OLD_REPO_DIR="${OLD_REPO_DIR:-${TMP_DIR}/old-${OLD_BRANCH}-${OLD_COMMIT}}"
+NEW_COMMIT=$(git rev-parse --short=9 HEAD)
+CACHE_DIR="${CACHE_DIR:-${HOME}/.cache/${0##*/}/new-${NEW_COMMIT}/old-${OLD_BRANCH}-${OLD_COMMIT}}"
+OLD_REPO_DIR="${OLD_REPO_DIR:-${CACHE_DIR}/ic}"
 OLD_REPORT="${OLD_REPORT:-${OLD_REPO_DIR}/rs/execution_environment/benches/SYSTEM_API.md}"
 
-mkdir -p "${TMP_DIR}" "${CACHE_DIR}"
+mkdir -p "${CACHE_DIR}"
 
 ########################################################################
 ## Init and run benchmarks over the local (new) and remote (old) changes
@@ -66,8 +65,7 @@ init_new() {
 run_new() {
     bazel run //rs/execution_environment:execute_inspect_message_bench -- ${FILTER} ${NEW_BENCH_ARGS} \
         && bazel run //rs/execution_environment:execute_query_bench -- ${FILTER} ${NEW_BENCH_ARGS} \
-        && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${NEW_BENCH_ARGS} \
-        || exit 1
+        && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${NEW_BENCH_ARGS}
 }
 
 ## This function is called once to prepare remote (old) repository
@@ -108,8 +106,7 @@ run_old() {
         cd "${OLD_BENCHMARK_DIR}"
         bazel run //rs/execution_environment:execute_inspect_message_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
             && bazel run //rs/execution_environment:execute_query_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
-            && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
-            || exit 1
+            && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${OLD_BENCH_ARGS}
     )
 }
 
@@ -118,29 +115,27 @@ run_old() {
 ########################################################################
 
 print_git_header() {
-    printf "%s profile:%-11s commit:%s branch:%s\n" \
+    printf "%s commit:%s branch:%s\n" \
         "Remote (old)" \
-        "${OLD_PROFILE}" \
-        "$(git -C ${OLD_REPO_DIR} rev-parse --short=8 HEAD)" \
+        "$(git -C ${OLD_REPO_DIR} rev-parse --short=9 HEAD)" \
         "$(git -C ${OLD_REPO_DIR} describe --always --all | sed -e 's#heads/##')" \
         "Local  (new)" \
-        "${NEW_PROFILE}" \
-        "$(git rev-parse --short=8 HEAD)" \
+        "$(git rev-parse --short=9 HEAD)" \
         "$(git describe --always --all | sed -e 's#heads/##')"
     echo
 }
 
-print_md_header() {
-    if [ -z "$5" ]; then
-        printf "| %-42s | %-8s | %-8s | %-7s |\n" "$1" "$2" "$3" "$4" \
-            "$(printf -- '-%.0s' $(seq 42))" "$(printf -- '-%.0s' $(seq 8))" \
-            "$(printf -- '-%.0s' $(seq 8))" "$(printf -- '-%.0s' $(seq 7))"
-    else
-        printf "| %-42s | %-8s | %-8s | %-7s | %-10s |\n" "$1" "$2" "$3" "$4" "$5" \
-            "$(printf -- '-%.0s' $(seq 42))" "$(printf -- '-%.0s' $(seq 8))" \
-            "$(printf -- '-%.0s' $(seq 8))" "$(printf -- '-%.0s' $(seq 7))" \
-            "$(printf -- '-%.0s' $(seq 10))"
-    fi
+print_md_header4() {
+    printf "| %-42s | %-8s | %-8s | %-7s |\n" "$1" "$2" "$3" "$4" \
+        "$(printf -- '-%.0s' $(seq 42))" "$(printf -- '-%.0s' $(seq 8))" \
+        "$(printf -- '-%.0s' $(seq 8))" "$(printf -- '-%.0s' $(seq 7))"
+}
+
+print_md_header5() {
+    printf "| %-42s | %-8s | %-8s | %-7s | %-10s |\n" "$1" "$2" "$3" "$4" "$5" \
+        "$(printf -- '-%.0s' $(seq 42))" "$(printf -- '-%.0s' $(seq 8))" \
+        "$(printf -- '-%.0s' $(seq 8))" "$(printf -- '-%.0s' $(seq 7))" \
+        "$(printf -- '-%.0s' $(seq 10))"
 }
 
 cat_new_benchmark_names() {
@@ -154,7 +149,7 @@ print_max_throughput() {
     local file="${2}"
     ## Apply name transformations to match between local (new) and remote (old) benchmarks
     ## ic0.call()/1B -> ic0.*call\(\).*1B
-    match="$(echo ${name} | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -e 's#[()]#\\&#g' -e 's#_#.#g')"
+    match=$(echo "${name}" | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -e 's#[()]#\\&#g' -e 's#_#.#g')
     cat "${file}" | rg "${match}" --after-context 3 --max-count 1 | rg "thrpt:" \
         | sed -Ee 's#([.0-9]+ .?)elem/s#\n\1elem/s\n#g' | rg '^[0-9]' \
         | awk '
@@ -175,7 +170,7 @@ print_min_time() {
     local file="${2}"
     ## Apply name transformations to match between local (new) and remote (old) benchmarks
     ## ic0.call()/1B -> ic0.*call\(\).*1B
-    match="$(echo ${name} | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -e 's#[()]#\\&#g' -e 's#_#.#g')"
+    match=$(echo "${name}" | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -e 's#[()]#\\&#g' -e 's#_#.#g')
     cat "${file}" | rg "${match}" --after-context 3 --max-count 1 | rg "time:" \
         | sed -Ee 's#([.0-9]+ .?)s#\n\1s\n#g' | rg '^[0-9]' \
         | awk '
@@ -197,14 +192,12 @@ print_old_report_field() {
     local field="${3}"
     ## Apply name transformations to match between local (new) and remote (old) benchmarks
     ## ic0.call()/1B -> ic0.*call\(\).*1B
-    match="$(echo ${name} | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -e 's#[()]#\\&#g' -e 's#_#.#g')"
+    match=$(echo "${name}" | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -Ee 's#[()]#\\&#g' -Ee 's#_#.#g')
+    set -o pipefail
     cat "${OLD_REPORT}" | rg "${match}" | sed -Ee 's# +# #g' \
         | awk -F '|' "NR == ${line} {printf \$$((${field} + 1))} NR == 3 {exit 1}" \
-        || (
-            echo "Error printing old report field"
-            exit 1
-        )
-
+        || printf "-"
+    set +o pipefail
 }
 
 transform_elem_s() {
@@ -299,21 +292,44 @@ for i in $(seq ${REPEAT}); do
     if [ -s "${CACHE_DIR}/new-${i}-sum.txt" -a -z "${NEW_NO_CACHE}" ]; then
         echo "    CACHED"
     else
-        # exit 1
+        echo "    See full log: ${CACHE_DIR}/new-${i}.txt"
+        set -o pipefail
         run_new 2>&1 \
             | tee "${CACHE_DIR}/new-${i}.txt" \
             | rg --line-buffered "Benchmarking .*: Analyzing" --after-context 3 \
-            | tee "${CACHE_DIR}/new-${i}-sum.txt"
+            | tee "${CACHE_DIR}/new-${i}-sum.txt" \
+            | sed -e 's/^/    /' \
+            || (
+                echo "[...]"
+                tail -20 "${CACHE_DIR}/new-${i}.txt"
+                echo
+                echo "Error running the new benchmarks."
+                echo "For more details see: ${CACHE_DIR}/new-${i}.txt"
+                exit 1
+            )
+        set +o pipefail
     fi
     echo "==> Iteration ${i}: running remote (old) benchmarks..."
     if [ -n "${IGNORE_OLD_REPORT}" ]; then
         if [ -s "${CACHE_DIR}/old-${i}-sum.txt" -a -z "${OLD_NO_CACHE}" ]; then
             echo "    CACHED"
         else
+            echo "    See full log: ${CACHE_DIR}/old-${i}.txt"
+            set -o pipefail
             run_old 2>&1 \
                 | tee "${CACHE_DIR}/old-${i}.txt" \
                 | rg --line-buffered "Benchmarking .*: Analyzing" --after-context 3 \
-                | tee "${CACHE_DIR}/old-${i}-sum.txt"
+                | tee "${CACHE_DIR}/old-${i}-sum.txt" \
+                | sed -e 's/^/    /' \
+                || (
+                    echo "[...]"
+                    tail -20 ""${CACHE_DIR}/old-${i}.txt""
+                    echo
+                    echo "Error running the old benchmarks."
+                    echo "For more details see: "${CACHE_DIR}/old-${i}.txt""
+                    exit 1
+                )
+            set +o pipefail
         fi
     else
         echo "    OLD REPORT"
@@ -349,7 +365,7 @@ fi
     print_git_header
 
     ## For each benchmark, print max remote (old) and local (new) throughput
-    print_md_header "API Type / System API Call" "Old IPS" "New IPS" "Speedup" "Round Time"
+    print_md_header5 "API Type / System API Call" "Old IPS" "New IPS" "Speedup" "Round Time"
     cat_new_benchmark_names \
         | while read name; do
             printf "| ${name} | "
@@ -368,7 +384,7 @@ fi
     echo
 
     ## For each benchmark, print min remote (old) and local (new) time
-    print_md_header "API Type / System API Call (1M Iterations)" "Old Time" "New Time" "Speedup"
+    print_md_header4 "API Type / System API Call (1M Iterations)" "Old Time" "New Time" "Speedup"
     cat_new_benchmark_names \
         | while read name; do
             printf "| ${name} | "
@@ -383,8 +399,9 @@ fi
         done \
         | transform_s | transform_benchmark_name \
         | calculate_average_speedup "time"
+
     echo
 
     ## Print footer
-    echo "Note: marked calls have no loop, so those results should not be compared vs other calls"
+    echo "Note: marked calls have no loop, so those results should not be compared with other calls"
 ) | tee "${0##*/}-report.txt"

@@ -18,17 +18,17 @@ pub fn execute_query_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_data_certificate_size()".into(),
             Module::QueryTest.from_ic0("data_certificate_size", NoParams, Result::I32),
-            11_000_004,
+            517000005,
         ),
         common::Benchmark(
             "ic0_data_certificate_copy()/1B".into(),
             Module::QueryTest.from_ic0("data_certificate_copy", Params3(0, 0, 1), Result::No),
-            14_000_004,
+            520000005,
         ),
         common::Benchmark(
             "ic0_data_certificate_copy()/64B".into(),
             Module::QueryTest.from_ic0("data_certificate_copy", Params3(0, 0, 64), Result::No),
-            77_000_004,
+            583000005,
         ),
     ];
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
