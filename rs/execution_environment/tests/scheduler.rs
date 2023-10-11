@@ -19,9 +19,7 @@ fn scheduler_observes_inducted_messages_to_self() {
         .unwrap();
 
     // Canister A calls self
-    let a_calls_self_wasm = wasm()
-        .call_simple(a_id.get(), "update", call_args())
-        .build();
+    let a_calls_self_wasm = wasm().call_simple(a_id, "update", call_args()).build();
     let ingress_id = sm.send_ingress(
         PrincipalId::new_anonymous(),
         a_id,
@@ -65,9 +63,7 @@ fn scheduler_observes_inducted_messages_to_others() {
         .unwrap();
 
     // Canister A calls canister B
-    let a_calls_b_wasm = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let a_calls_b_wasm = wasm().call_simple(b_id, "update", call_args()).build();
     let ingress_id = sm.send_ingress(PrincipalId::new_anonymous(), a_id, "update", a_calls_b_wasm);
 
     assert!(matches!(

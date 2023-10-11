@@ -31,9 +31,7 @@ fn execute_response_when_stopping_status() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -93,7 +91,7 @@ fn execute_response_refunds_cycles() {
     // Canister A calls canister B.
     let cycles_sent = Cycles::new(1_000_000);
     let wasm_payload = wasm()
-        .call_with_cycles(b_id.get(), "update", call_args(), cycles_sent)
+        .call_with_cycles(b_id, "update", call_args(), cycles_sent)
         .build();
 
     // Enqueue ingress message to canister A and execute it.
@@ -145,9 +143,7 @@ fn execute_response_when_call_context_deleted() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -192,9 +188,7 @@ fn execute_response_successfully() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -250,7 +244,7 @@ fn execute_response_traps() {
 
     // Canister A calls canister B, traps when executing reply closure.
     let wasm_payload = wasm()
-        .inter_update(b_id.get(), call_args().on_reply(wasm().trap()))
+        .inter_update(b_id, call_args().on_reply(wasm().trap()))
         .build();
 
     // Enqueue ingress message to canister A and execute it.
@@ -301,7 +295,7 @@ fn execute_response_with_trapping_cleanup() {
     // Canister A calls canister B, traps when executing cleanup.
     let wasm_payload = wasm()
         .inter_update(
-            b_id.get(),
+            b_id,
             call_args()
                 .on_reply(wasm().trap())
                 .on_cleanup(wasm().trap()),
@@ -367,7 +361,7 @@ fn cycles_correct_if_response_fails() {
     // 2. Traps in the response callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -416,7 +410,7 @@ fn cycles_correct_if_cleanup_fails() {
     // 3. Traps in the cleanup callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -466,7 +460,7 @@ fn dts_works_in_response_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -547,7 +541,7 @@ fn dts_works_in_cleanup_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -626,7 +620,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -731,7 +725,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -832,7 +826,7 @@ fn dts_abort_works_in_response_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -928,7 +922,7 @@ fn dts_abort_works_in_cleanup_callback() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1011,7 +1005,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -1055,7 +1049,7 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     // 2. Traps in the response callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1113,7 +1107,7 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     // 3. Traps in the cleanup callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1280,13 +1274,13 @@ fn dts_response_concurrent_cycles_change_succeeds() {
 
     let a = wasm()
         .call_simple(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .instruction_counter_is_at_least(1_000_000)
                     .call_with_cycles(
-                        b_id.get(),
+                        b_id,
                         "update",
                         call_args().other_side(b.clone()),
                         transferred_cycles,
@@ -1399,13 +1393,13 @@ fn dts_response_concurrent_cycles_change_fails() {
 
     let a = wasm()
         .call_simple(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .instruction_counter_is_at_least(1_000_000)
                     .call_with_cycles(
-                        b_id.get(),
+                        b_id,
                         "update",
                         call_args().other_side(b.clone()),
                         transferred_cycles,
@@ -1537,7 +1531,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
 
     let a = wasm()
         .call_simple(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -1545,7 +1539,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
                     wasm()
                         .instruction_counter_is_at_least(1_000_000)
                         .call_with_cycles(
-                            b_id.get(),
+                            b_id,
                             "update",
                             call_args().other_side(b.clone()),
                             transferred_cycles,
@@ -1656,7 +1650,7 @@ fn cleanup_callback_cannot_accept_cycles() {
 
     let a = wasm()
         .call_simple(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1684,12 +1678,12 @@ fn cleanup_callback_cannot_make_calls() {
 
     let a = wasm()
         .call_simple(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
                 .on_reply(wasm().trap())
-                .on_cleanup(wasm().call_simple(b_id.get(), "update", call_args().other_side(b))),
+                .on_cleanup(wasm().call_simple(b_id, "update", call_args().other_side(b))),
         )
         .build();
     let err = test.ingress(a_id, "update", a).unwrap_err();
@@ -1716,7 +1710,7 @@ fn dts_uninstall_with_aborted_response() {
 
     let wasm_payload = wasm()
         .call_simple(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(wasm().push_bytes(&[42]).append_and_reply())
@@ -1782,7 +1776,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
     let transferred_cycles = initial_cycles.get() / 2;
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -1893,7 +1887,7 @@ fn response_callback_succeeds_with_memory_reservation() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2017,7 +2011,7 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2143,7 +2137,7 @@ fn subnet_available_memory_does_not_change_on_response_abort() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2220,7 +2214,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_abort() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2296,7 +2290,7 @@ fn subnet_available_memory_does_not_change_on_response_validation_failure() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2369,7 +2363,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2455,7 +2449,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -2532,7 +2526,7 @@ fn cycles_balance_changes_applied_correctly() {
         "update",
         wasm()
             .call_with_cycles(
-                a_id.get(),
+                a_id,
                 "update",
                 call_args().other_side(wasm().accept_cycles(Cycles::new(u128::MAX))),
                 Cycles::new(60_000_000_000),
@@ -2551,7 +2545,7 @@ fn cycles_balance_changes_applied_correctly() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             Cycles::new(5_000_000_000_000),
