@@ -8,6 +8,12 @@ def _did_git_test_impl(ctx):
 
 set -xeuo pipefail
 
+readonly mr_title=${{CI_MERGE_REQUEST_TITLE:-NONE}}
+if [[ $mr_title == *"[override-didc-check]"* ]]; then
+    echo "Found [override-didc-check] in merge request title. Skipping didc_check."
+    exit 0
+fi
+
 readonly merge_base=${{CI_MERGE_REQUEST_DIFF_BASE_SHA:-HEAD}}
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
@@ -35,7 +41,7 @@ echo DID_PATH={did_path}
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["CI_MERGE_REQUEST_DIFF_BASE_SHA"]),
+        RunEnvironmentInfo(inherited_environment = ["CI_MERGE_REQUEST_DIFF_BASE_SHA", "CI_MERGE_REQUEST_TITLE"]),
     ]
 
 CHECK_DID = attr.label(
