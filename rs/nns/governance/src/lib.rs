@@ -136,7 +136,7 @@ pub mod init;
 mod known_neuron_index;
 mod migrations;
 mod neuron;
-mod neuron_data_validation;
+pub mod neuron_data_validation;
 mod neuron_store;
 pub mod neurons_fund;
 pub mod pb;

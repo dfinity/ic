@@ -4,24 +4,30 @@ use crate::{
     storage::{Signed32, NEURON_INDEXES, STABLE_NEURON_STORE},
 };
 
+use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
-use std::{collections::VecDeque, marker::PhantomData};
+use serde::Serialize;
+use std::{
+    collections::{HashMap, VecDeque},
+    marker::PhantomData,
+    mem::{discriminant, Discriminant},
+};
 
 const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;
+const MAX_EXAMPLE_ISSUES_COUNT: usize = 10;
 
-#[derive(Debug, PartialEq)]
-enum ValidationIssue {
-    Unspecified,
+#[derive(Clone, Debug, PartialEq, CandidType, Serialize, Deserialize)]
+pub enum ValidationIssue {
     InactiveNeuronCardinalityMismatch {
         heap: u64,
         stable: u64,
     },
     NeuronCopyValueNotMatch(NeuronId),
-    NeuronStoreError(NeuronId, NeuronStoreError),
+    NeuronStoreError(String),
     SubaccountIndexCardinalityMismatch {
         primary: u64,
         index: u64,
@@ -57,16 +63,28 @@ enum ValidationIssue {
 }
 
 /// A summary of neuron data validation.
+#[derive(Debug, PartialEq, CandidType, Serialize, Deserialize)]
 pub struct NeuronDataValidationSummary {
     pub current_validation_started_time_seconds: Option<u64>,
     pub current_issues_summary: Option<IssuesSummary>,
     pub previous_issues_summary: Option<IssuesSummary>,
 }
 
+/// A group of validation issues, where we keep track of the count of issues and truncate the
+/// example issues to only 10.
+#[derive(Clone, Debug, Default, PartialEq, CandidType, Serialize, Deserialize)]
+pub struct IssueGroup {
+    /// Count of issues for a specific type.
+    pub issues_count: u64,
+    /// Up to 10 example issues of this type.
+    pub example_issues: Vec<ValidationIssue>,
+}
+
 /// A summary of validation issues.
+#[derive(Debug, PartialEq, CandidType, Serialize, Deserialize)]
 pub struct IssuesSummary {
     pub last_updated_time_seconds: u64,
-    // TODO(NNS1-2482): add more fields when we expose the summary through canister query method.
+    pub issue_groups: Vec<IssueGroup>,
 }
 
 /// A validator for secondary neuron data, such as indexes. It can be called in heartbeat to perform
@@ -127,16 +145,6 @@ impl NeuronDataValidator {
         true
     }
 
-    // TODO(NNS1-2482): this method is just for testing before summary() is ready.
-    #[cfg(test)]
-    fn issues(&self) -> Vec<&ValidationIssue> {
-        match &self.state {
-            State::NotStarted => vec![],
-            State::Validating { current_issues, .. } => current_issues.issues.iter().collect(),
-            State::Validated(issues) => issues.issues.iter().collect(),
-        }
-    }
-
     pub fn summary(&self) -> NeuronDataValidationSummary {
         match &self.state {
             State::NotStarted => NeuronDataValidationSummary {
@@ -159,6 +167,12 @@ impl NeuronDataValidator {
                 current_validation_started_time_seconds: None,
             },
         }
+    }
+}
+
+impl Default for NeuronDataValidator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -236,31 +250,40 @@ impl ValidationInProgress {
     }
 }
 
-/// Validation issues.
+/// Validation issues stored on the heap while the validation is running. This is not meant to be
+/// exposed through a query method (but IssuesSummary does).
 #[derive(Debug, Default, PartialEq)]
 struct Issues {
     last_updated_time_seconds: u64,
-    // TODO(NNS1-2482): define a 'summary' of issues, so that the memory needed for 'issues' won't
-    // be linear to the number of neurons.
-    issues: Vec<ValidationIssue>,
+    issue_groups_map: HashMap<Discriminant<ValidationIssue>, IssueGroup>,
 }
 
 impl Issues {
     fn new(now: u64) -> Self {
         Self {
             last_updated_time_seconds: now,
-            issues: Vec::new(),
+            issue_groups_map: HashMap::new(),
         }
     }
 
-    fn update(&mut self, now: u64, mut issues: Vec<ValidationIssue>) {
+    fn update(&mut self, now: u64, issues: Vec<ValidationIssue>) {
         self.last_updated_time_seconds = now;
-        self.issues.append(&mut issues);
+        for issue in issues {
+            let issue_group = self
+                .issue_groups_map
+                .entry(discriminant(&issue))
+                .or_insert(IssueGroup::default());
+            issue_group.issues_count += 1;
+            if issue_group.example_issues.len() < MAX_EXAMPLE_ISSUES_COUNT {
+                issue_group.example_issues.push(issue);
+            }
+        }
     }
 
     fn summary(&self) -> IssuesSummary {
         IssuesSummary {
             last_updated_time_seconds: self.last_updated_time_seconds,
+            issue_groups: self.issue_groups_map.values().cloned().collect(),
         }
     }
 }
@@ -412,7 +435,7 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
         let subaccount = get_neuron_subaccount(neuron_store, neuron_id);
         let subaccount = match subaccount {
             Ok(subaccount) => subaccount,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
         };
         let subaccount_in_index = NEURON_INDEXES.with(|indexes| {
             indexes
@@ -461,7 +484,7 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
         });
         let principal_ids = match principal_ids {
             Ok(principal_ids) => principal_ids,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
         };
         let missing_principal_ids: Vec<_> = principal_ids
             .into_iter()
@@ -521,7 +544,7 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
             neuron_store.with_neuron(&neuron_id, |neuron| neuron.topic_followee_pairs());
         let topic_followee_pairs = match topic_followee_pairs {
             Ok(topic_followee_pairs) => topic_followee_pairs,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
         };
         let missing_topic_followee_pairs: Vec<_> = topic_followee_pairs
             .into_iter()
@@ -581,7 +604,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
         let known_neuron_name = match known_neuron_name {
             // Most neurons aren't known neurons.
             Ok(None) => return None,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(neuron_id, error)),
+            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
             Ok(Some(known_neuron_name)) => known_neuron_name,
         };
         let index_has_entry = NEURON_INDEXES.with(|indexes| {
@@ -650,7 +673,11 @@ impl NeuronCopyValidator {
     ) -> Option<ValidationIssue> {
         let neuron_id = match stable_neuron.id.as_ref() {
             // Should be impossible, as stable_neuron should be coming straight from the store.
-            None => return Some(ValidationIssue::Unspecified),
+            None => {
+                return Some(ValidationIssue::NeuronStoreError(
+                    NeuronStoreError::NeuronIdIsNone.to_string(),
+                ));
+            }
             Some(id) => id,
         };
         match neuron_store.with_neuron(neuron_id, |neuron| {
@@ -664,8 +691,7 @@ impl NeuronCopyValidator {
         }) {
             Ok(maybe_issue) => maybe_issue,
             Err(neuron_store_error) => Some(ValidationIssue::NeuronStoreError(
-                stable_neuron.id.unwrap(),
-                neuron_store_error,
+                neuron_store_error.to_string(),
             )),
         }
     }
@@ -887,8 +913,7 @@ mod tests {
         assert_eq!(
             defects,
             vec![ValidationIssue::NeuronStoreError(
-                NeuronId { id: 3 },
-                NeuronStoreError::not_found(&NeuronId { id: 3 })
+                "Neuron not found: NeuronId { id: 3 }".to_string()
             ),]
         );
 
@@ -914,13 +939,13 @@ mod tests {
         while validator.maybe_validate(now, &neuron_store) {
             now += 1;
         }
-        // TODO(NNS1-2482) validate from a pub method that returns issues summary.
-        // assert_eq!(validator.issues.issues, vec![]);
+        let summary = validator.summary();
+        assert_eq!(summary.current_issues_summary.unwrap().issue_groups, vec![]);
     }
 
     #[test]
     fn test_validator_invalid_issues() {
-        // Cause as many issues as possible by having an inactive neuron (without adding it to
+        // Step 1: Cause as many issues as possible by having an inactive neuron (without adding it to
         // STABLE_NEURON_STORE, and remove the only neuron from indexes).
         let neuron = next_test_neuron();
         let neuron_store = NeuronStore::new_for_test(vec![neuron.clone()]);
@@ -928,62 +953,124 @@ mod tests {
             .with(|indexes| indexes.borrow_mut().remove_neuron(&neuron))
             .unwrap();
 
+        // Step 2: Validate and get validation summary.
         let mut validator = NeuronDataValidator::new();
         let mut now = 1;
         while validator.maybe_validate(now, &neuron_store) {
             now += 1;
         }
-        // TODO(NNS1-2482) validate from a pub method that returns issues summary.
-        let issues = validator.issues();
-        assert_eq!(issues.len(), 9);
-        assert!(matches!(
-            *issues[0],
-            ValidationIssue::SubaccountMissingFromIndex { neuron_id, subaccount: _ }
-            if neuron_id == neuron.id.unwrap()
-        ));
+        let summary = validator.summary();
+
+        // Step 3: Check validation summary for current issues.
+        let current_issue_groups = summary.current_issues_summary.unwrap().issue_groups;
+        assert_eq!(current_issue_groups.len(), 9);
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && issue_group.example_issues[0]
+                    == ValidationIssue::SubaccountIndexCardinalityMismatch {
+                        primary: 1,
+                        index: 0
+                    }));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && matches!(
+                    issue_group.example_issues[0],
+                    ValidationIssue::SubaccountMissingFromIndex { .. }
+                )));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && issue_group.example_issues[0]
+                    == ValidationIssue::PrincipalIndexCardinalityMismatch {
+                        primary: 3,
+                        index: 0
+                    }));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && matches!(
+                    &issue_group.example_issues[0],
+                    ValidationIssue::PrincipalIdMissingFromIndex { .. }
+                )));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && issue_group.example_issues[0]
+                    == ValidationIssue::FollowingIndexCardinalityMismatch {
+                        primary: 3,
+                        index: 0
+                    }));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && matches!(
+                    issue_group.example_issues[0],
+                    ValidationIssue::TopicFolloweePairsMissingFromIndex { .. }
+                )));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && issue_group.example_issues[0]
+                    == ValidationIssue::KnownNeuronIndexCardinalityMismatch {
+                        primary: 1,
+                        index: 0
+                    }));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && matches!(
+                    issue_group.example_issues[0],
+                    ValidationIssue::KnownNeuronMissingFromIndex { .. }
+                )));
+        assert!(current_issue_groups
+            .iter()
+            .any(|issue_group| issue_group.issues_count == 1
+                && matches!(
+                    issue_group.example_issues[0],
+                    ValidationIssue::InactiveNeuronCardinalityMismatch { .. }
+                )));
+
+        // Step 4: check that previous issues is empty and no running validation.
+        assert_eq!(summary.previous_issues_summary, None);
+        assert_eq!(summary.current_validation_started_time_seconds, None);
+
+        // Step 5: resume validation by advancing `now` that's passed in.
+        now += MAX_VALIDATION_AGE_SECONDS + 1;
+        assert!(validator.maybe_validate(now, &neuron_store));
+
+        // Step 6: check that previous_issues now have values and there is a running validation.
+        let summary = validator.summary();
         assert_eq!(
-            *issues[1],
-            ValidationIssue::SubaccountIndexCardinalityMismatch {
-                primary: 1,
-                index: 0
+            summary.previous_issues_summary.unwrap().issue_groups.len(),
+            9
+        );
+        assert_eq!(summary.current_validation_started_time_seconds, Some(now));
+    }
+
+    #[test]
+    fn test_validator_truncate_same_type_of_issues() {
+        // Create 11 issues of each type by adding 11 neurons and removing all of them from the
+        // indexes.
+        let neurons: Vec<_> = (0..=10).map(|_| next_test_neuron()).collect();
+        let neuron_store = NeuronStore::new_for_test(neurons.clone());
+        NEURON_INDEXES.with(|indexes| {
+            for neuron in neurons {
+                indexes.borrow_mut().remove_neuron(&neuron).unwrap()
             }
-        );
-        assert!(matches!(
-            *issues[2],
-            ValidationIssue::PrincipalIdMissingFromIndex { .. }
-        ));
-        assert_eq!(
-            *issues[3],
-            ValidationIssue::PrincipalIndexCardinalityMismatch {
-                primary: 3,
-                index: 0
-            }
-        );
-        assert!(matches!(
-            *issues[4],
-            ValidationIssue::TopicFolloweePairsMissingFromIndex { .. }
-        ));
-        assert_eq!(
-            *issues[5],
-            ValidationIssue::FollowingIndexCardinalityMismatch {
-                primary: 3,
-                index: 0
-            }
-        );
-        assert!(matches!(
-            *issues[6],
-            ValidationIssue::KnownNeuronMissingFromIndex { .. }
-        ));
-        assert_eq!(
-            *issues[7],
-            ValidationIssue::KnownNeuronIndexCardinalityMismatch {
-                primary: 1,
-                index: 0
-            }
-        );
-        assert_eq!(
-            *issues[8],
-            ValidationIssue::InactiveNeuronCardinalityMismatch { heap: 1, stable: 0 }
-        );
+        });
+
+        let mut validator = NeuronDataValidator::new();
+        let mut now = 1;
+        while validator.maybe_validate(now, &neuron_store) {
+            now += 1;
+        }
+
+        let summary = validator.summary();
+        let current_issue_groups = summary.current_issues_summary.unwrap().issue_groups;
+        for issue_group in current_issue_groups {
+            assert!(issue_group.example_issues.len() <= 10);
+        }
     }
 }

@@ -39,6 +39,7 @@ use ic_nns_governance::{
         BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
         TimeWarp,
     },
+    neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
         governance::GovernanceCachedMetrics,
@@ -912,6 +913,13 @@ fn get_most_recent_monthly_node_provider_rewards_() -> Option<MostRecentMonthlyN
         .heap_data
         .most_recent_monthly_node_provider_rewards
         .clone()
+}
+
+#[export_name = "canister_query get_neuron_data_validation_summary"]
+fn get_neuron_data_validation_summary() {
+    over(candid, |()| -> NeuronDataValidationSummary {
+        governance().neuron_data_validation_summary()
+    })
 }
 
 #[export_name = "canister_query http_request"]
