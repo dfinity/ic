@@ -105,12 +105,22 @@ pub async fn scrap_eth_logs_between(
                 last_scraped_block_number
             );
 
-            let (transaction_events, errors) = crate::eth_logs::last_received_eth_events(
+            let (transaction_events, errors) = match crate::eth_logs::last_received_eth_events(
                 contract_address,
                 from,
                 last_scraped_block_number,
             )
-            .await;
+            .await
+            {
+                Ok((events, errors)) => (events, errors),
+                Err(e) => {
+                    log!(
+                        INFO,
+                        "Failed to get ETH logs from block {from} to block {to}: {e:?}",
+                    );
+                    return from;
+                }
+            };
             let has_new_events = !transaction_events.is_empty();
             for event in transaction_events {
                 log!(
