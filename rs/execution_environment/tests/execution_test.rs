@@ -864,7 +864,7 @@ fn subnet_memory_reservation_works() {
     let a = wasm()
         .stable_grow(800)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -922,7 +922,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     let a = wasm()
         .stable_grow(800)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)

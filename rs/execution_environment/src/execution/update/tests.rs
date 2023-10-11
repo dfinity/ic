@@ -89,7 +89,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             transferred_cycles,
@@ -194,7 +194,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             transferred_cycles,
@@ -545,7 +545,7 @@ fn dts_abort_of_call_works() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -810,9 +810,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
     let b_id = test.universal_canister().unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
-        .build();
+    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
 
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -841,7 +839,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
 
     // Canister A calls canister B and then traps.
     let wasm_payload = wasm()
-        .call_simple(b_id.get(), "update", call_args())
+        .call_simple(b_id, "update", call_args())
         .trap()
         .build();
 

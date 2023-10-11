@@ -1244,7 +1244,7 @@ fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -1310,7 +1310,7 @@ fn ic0_msg_caller_size_and_copy_work_in_update_calls() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().caller().append_and_reply().build();
     let caller = wasm()
-        .call_simple(callee_id.get(), "update", call_args().other_side(callee))
+        .call_simple(callee_id, "update", call_args().other_side(callee))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(
@@ -1326,7 +1326,7 @@ fn ic0_msg_caller_size_and_copy_work_in_query_calls() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().caller().append_and_reply().build();
     let caller = wasm()
-        .call_simple(callee_id.get(), "query", call_args().other_side(callee))
+        .call_simple(callee_id, "query", call_args().other_side(callee))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(
@@ -1343,7 +1343,7 @@ fn ic0_msg_arg_data_copy_is_not_available_in_reject_callback() {
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -1419,7 +1419,7 @@ fn ic0_msg_caller_size_works_in_reply_callback() {
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -1445,7 +1445,7 @@ fn ic0_msg_caller_copy_works_in_reply_callback() {
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args().other_side(callee).on_reply(
                 wasm()
@@ -1466,7 +1466,7 @@ fn ic0_msg_caller_size_works_in_reject_callback() {
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -1492,7 +1492,7 @@ fn ic0_msg_caller_copy_works_in_reject_callback() {
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args().other_side(callee).on_reject(
                 wasm()
@@ -1513,7 +1513,7 @@ fn ic0_msg_caller_size_works_in_cleanup_callback() {
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -1556,7 +1556,7 @@ fn ic0_msg_caller_copy_works_in_cleanup_callback() {
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -1740,7 +1740,7 @@ fn ic0_msg_reject_code_works() {
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -1781,7 +1781,7 @@ fn ic0_msg_reject_msg_size_and_copy_work() {
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee.clone())
@@ -1834,7 +1834,7 @@ fn ic0_msg_reject_msg_copy_called_with_length_that_exceeds_message_length() {
     let callee = wasm().push_bytes("error".as_bytes()).reject().build();
     let caller = wasm()
         .call_simple(
-            callee_id.get(),
+            callee_id,
             "update",
             call_args()
                 .other_side(callee)
@@ -2706,7 +2706,7 @@ fn ic0_msg_cycles_available_works_for_calls() {
     let callee_id = test.canister_from_wat(wat).unwrap();
     let caller_id = test.universal_canister().unwrap();
     let caller = wasm()
-        .call_with_cycles(callee_id.get(), "test", call_args(), Cycles::from(50u128))
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
@@ -3917,7 +3917,7 @@ fn cycles_cannot_be_accepted_after_response() {
         .message_payload()
         .append_and_reply()
         .inter_update(
-            c_id.get(),
+            c_id,
             call_args()
                 .other_side(c.clone())
                 .on_reply(wasm().accept_cycles(transferred_cycles)),
@@ -3930,7 +3930,7 @@ fn cycles_cannot_be_accepted_after_response() {
     //    behaviour of the universal canister.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             transferred_cycles,
@@ -3997,7 +3997,7 @@ fn cycles_are_refunded_if_not_accepted() {
         .message_payload()
         .append_and_reply()
         .call_with_cycles(
-            c_id.get(),
+            c_id,
             "update",
             call_args().other_side(c.clone()),
             b_to_c_transferred,
@@ -4010,7 +4010,7 @@ fn cycles_are_refunded_if_not_accepted() {
     //    behaviour of the universal canister.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             a_to_b_transferred,
@@ -4076,7 +4076,7 @@ fn cycles_are_refunded_if_callee_traps() {
     // 2. Forwards the reject code and message in the reject callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -4132,7 +4132,7 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
     // 2. Calls trap in the reply callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()).on_reply(wasm().trap()),
             a_to_b_transferred,
@@ -4182,7 +4182,7 @@ fn cycles_are_refunded_if_callee_is_a_query() {
     //    behaviour of the universal canister.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "query",
             call_args().other_side(b.clone()),
             Cycles::from(a_to_b_transferred),
@@ -4225,7 +4225,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
     // 2. Forwards the reject code and message in the reject callback.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -4291,7 +4291,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     let b = wasm()
         .accept_cycles(a_to_b_accepted)
         .call_with_cycles(
-            c_id.get(),
+            c_id,
             "update",
             call_args().other_side(c.clone()),
             b_to_c_transferred,
@@ -4303,7 +4303,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     // 2. Forwards the reply of B to the ingress status.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -4397,7 +4397,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     let b = wasm()
         .accept_cycles(a_to_b_accepted)
         .call_with_cycles(
-            c_id.get(),
+            c_id,
             "update",
             call_args().other_side(c.clone()),
             b_to_c_transferred,
@@ -4409,7 +4409,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     // 2. Forwards the reply of B to the ingress status.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -4505,7 +4505,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     let b_1 = wasm()
         .accept_cycles(b_accepted_1)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b_2.clone()),
             b_transferred_2,
@@ -4518,7 +4518,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     let b_0 = wasm()
         .accept_cycles(a_to_b_accepted)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b_1.clone())
@@ -4532,7 +4532,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     // 2. Forwards the reject code and message to the ingress status.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b_0.clone())
@@ -4612,7 +4612,7 @@ fn cannot_send_request_to_stopping_canister() {
     // 2. Forwards the reply in the reply callback, which is the default
     //    behaviour of the universal canister.
     let a = wasm()
-        .call_simple(b_id.get(), "update", call_args().other_side(b))
+        .call_simple(b_id, "update", call_args().other_side(b))
         .build();
 
     // Move canister B to a stopping state before calling it.
@@ -4656,7 +4656,7 @@ fn cannot_send_request_to_stopped_canister() {
     // 2. Forwards the reply in the reply callback, which is the default
     //    behaviour of the universal canister.
     let a = wasm()
-        .call_simple(b_id.get(), "update", call_args().other_side(b))
+        .call_simple(b_id, "update", call_args().other_side(b))
         .build();
 
     // Stop canister B before calling it.
@@ -4697,7 +4697,7 @@ fn cannot_stop_canister_with_open_call_context() {
 
     // Canister A calls canister B.
     let a = wasm()
-        .call_simple(b_id.get(), "update", call_args().other_side(b.clone()))
+        .call_simple(b_id, "update", call_args().other_side(b.clone()))
         .build();
 
     // Enqueue ingress message to canister A but do not execute it (guaranteed
@@ -4952,7 +4952,7 @@ fn system_state_apply_change_fails() {
 
     let a = wasm()
         .call_simple(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b)
@@ -5019,7 +5019,7 @@ fn cycles_correct_if_update_fails() {
     // Canister A calls canister B and transfers cycles.
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b),
             transferred_cycles,

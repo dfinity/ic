@@ -1217,7 +1217,7 @@ fn dts_long_running_calls() {
             .build();
         let payload = wasm()
             .call_simple(
-                canister[(i + 1) % n].get(),
+                canister[(i + 1) % n],
                 "update",
                 call_args().other_side(work.clone()).on_reply(work),
             )
