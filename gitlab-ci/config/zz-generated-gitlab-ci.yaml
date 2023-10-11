@@ -1937,8 +1937,7 @@ benchmarks:
           "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
       done < <(find -L ./bazel-out -type d -path '*/new')
   tags:
-    - dfinity-ic
-    - bazel
+    - rust-benchmarks
   timeout: 12h
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
