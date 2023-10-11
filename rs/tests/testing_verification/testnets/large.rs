@@ -1,5 +1,5 @@
 // Set up a testnet containing:
-//   one 2-node System and two 2-node Application subnets, single boundary node, and a p8s (with grafana) VM.
+//   one 4-node System, one 4-node Application, and one 1-node Application subnets, a single boundary node, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 500 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
@@ -56,7 +56,8 @@ use ic_tests::nns_dapp::{
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
-const NUM_APP_SUBNETS: u64 = 2;
+const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
+const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
 const NUM_BN: u64 = 1;
 
 fn main() -> Result<()> {
@@ -75,19 +76,13 @@ pub fn setup(env: TestEnv) {
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
     };
-    let mut ic = InternetComputer::new();
-    ic = ic.add_subnet(
-        Subnet::new(SubnetType::System)
-            .with_default_vm_resources(vm_resources)
-            .add_nodes(2),
-    );
-    let nodes_per_app_subnet = if NUM_APP_SUBNETS <= 4 { 2 } else { 1 };
-    for _ in 0..NUM_APP_SUBNETS {
-        ic = ic.add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_per_app_subnet),
-        );
+    let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
+    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
+    for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
+        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
+    }
+    for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
+        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
     }
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
