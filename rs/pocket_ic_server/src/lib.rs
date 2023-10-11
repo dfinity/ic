@@ -38,7 +38,7 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
-use ::pocket_ic::common::blob::{BinaryBlob, BlobId};
+use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
 use axum::async_trait;
 use ic_crypto_sha2::Sha256;
 use ic_types::time::Time;

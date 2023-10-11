@@ -1,5 +1,5 @@
 use candid::{encode_one, Principal};
-use pocket_ic::{common::blob::BlobCompression, PocketIc, WasmResult};
+use pocket_ic::{common::rest::BlobCompression, PocketIc, WasmResult};
 use std::{io::Read, time::SystemTime};
 
 #[test]
