@@ -24,6 +24,12 @@ impl NeuronId {
     }
 }
 
+impl From<NeuronId> for u64 {
+    fn from(id: NeuronId) -> Self {
+        id.id
+    }
+}
+
 impl Storable for NeuronId {
     fn to_bytes(&self) -> Cow<[u8]> {
         self.id.to_bytes()
