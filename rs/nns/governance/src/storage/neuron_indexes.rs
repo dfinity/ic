@@ -8,6 +8,7 @@ use crate::{
     subaccount_index::NeuronSubaccountIndex,
 };
 
+use crate::storage::{NeuronIdU64, TopicSigned32};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{add_neuron_followees, remove_neuron_followees, StableNeuronFollowingIndex},
@@ -22,9 +23,6 @@ use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Display, Formatter},
 };
-
-type NeuronIdU64 = u64;
-type TopicSigned32 = Signed32;
 
 // Because many arguments are needed to construct a StableNeuronIndexes,
 // there is no natural argument order that StableNeuronIndexes::new would be able to

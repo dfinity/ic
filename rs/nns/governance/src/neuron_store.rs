@@ -10,7 +10,10 @@ use crate::{
         governance_error::ErrorType,
         GovernanceError, Neuron, NeuronState, Topic,
     },
-    storage::{neuron_indexes::CorruptedNeuronIndexes, NEURON_INDEXES, STABLE_NEURON_STORE},
+    storage::{
+        neuron_indexes::CorruptedNeuronIndexes, NeuronIdU64, TopicSigned32, NEURON_INDEXES,
+        STABLE_NEURON_STORE,
+    },
 };
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -172,7 +175,7 @@ pub struct NeuronStore {
     /// is saved and restored.
     ///
     /// (Topic, Followee) -> set of followers.
-    topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
+    topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
 
     /// Maps Principals to the Neuron IDs of all Neurons that have this
     /// Principal as their controller or as one of their hot keys
@@ -193,7 +196,7 @@ pub struct NeuronStore {
 impl NeuronStore {
     pub fn new(
         heap_neurons: BTreeMap<u64, Neuron>,
-        topic_followee_index: Option<HeapNeuronFollowingIndex<NeuronId, Topic>>,
+        topic_followee_index: Option<HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>>,
         indexes_migration: Migration,
     ) -> Self {
         // As an intermediate state, this may not be available post_upgrade.
@@ -766,13 +769,21 @@ impl NeuronStore {
         neuron_id: NeuronId,
         topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
     ) {
+        let topic_followee_pairs = topic_followee_pairs
+            .into_iter()
+            .map(|(topic, neuron_id)| (TopicSigned32::from(topic), NeuronIdU64::from(neuron_id)))
+            .collect();
+
         // TODO(NNS1-2409): Apply index updates to stable storage index.
         let already_present_topic_followee_pairs = add_neuron_followees(
             &mut self.topic_followee_index,
-            &neuron_id,
+            &NeuronIdU64::from(neuron_id),
             topic_followee_pairs,
         );
-        log_already_present_topic_followee_pairs(neuron_id, already_present_topic_followee_pairs);
+        log_already_present_topic_followee_pairs(
+            NeuronIdU64::from(neuron_id),
+            already_present_topic_followee_pairs,
+        );
     }
 
     pub fn remove_neuron_from_topic_followee_index(
@@ -780,13 +791,20 @@ impl NeuronStore {
         neuron_id: NeuronId,
         topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
     ) {
+        let topic_followee_pairs = topic_followee_pairs
+            .into_iter()
+            .map(|(topic, neuron_id)| (TopicSigned32::from(topic), NeuronIdU64::from(neuron_id)))
+            .collect();
         // TODO(NNS1-2409): Apply index updates to stable storage index.
         let already_absent_topic_followee_pairs = remove_neuron_followees(
             &mut self.topic_followee_index,
-            &neuron_id,
+            &NeuronIdU64::from(neuron_id),
             topic_followee_pairs,
         );
-        log_already_absent_topic_followee_pairs(neuron_id, already_absent_topic_followee_pairs);
+        log_already_absent_topic_followee_pairs(
+            NeuronIdU64::from(neuron_id),
+            already_absent_topic_followee_pairs,
+        );
     }
 
     pub fn update_neuron_followees_for_topic(
@@ -796,23 +814,34 @@ impl NeuronStore {
         old_followee_ids: BTreeSet<NeuronId>,
         new_followee_ids: BTreeSet<NeuronId>,
     ) {
+        let topic = TopicSigned32::from(topic);
+        let old_followee_ids = old_followee_ids
+            .into_iter()
+            .map(|neuron_id| NeuronIdU64::from(neuron_id))
+            .collect();
+
+        let new_followee_ids = new_followee_ids
+            .into_iter()
+            .map(|neuron_id| NeuronIdU64::from(neuron_id))
+            .collect();
+
         let (already_absent_old_followees, already_present_new_followees) =
             update_neuron_category_followees(
                 &mut self.topic_followee_index,
-                &follower_id,
+                &NeuronIdU64::from(follower_id),
                 topic,
                 old_followee_ids,
                 new_followee_ids,
             );
         log_already_present_topic_followee_pairs(
-            follower_id,
+            NeuronIdU64::from(follower_id),
             already_present_new_followees
                 .iter()
                 .map(|followee| (topic, *followee))
                 .collect(),
         );
         log_already_absent_topic_followee_pairs(
-            follower_id,
+            NeuronIdU64::from(follower_id),
             already_absent_old_followees
                 .iter()
                 .map(|followee| (topic, *followee))
@@ -840,7 +869,13 @@ impl NeuronStore {
         topic: Topic,
     ) -> Vec<NeuronId> {
         self.topic_followee_index
-            .get_followers_by_followee_and_category(&followee, topic)
+            .get_followers_by_followee_and_category(
+                &NeuronIdU64::from(followee),
+                TopicSigned32::from(topic),
+            )
+            .into_iter()
+            .map(|id| NeuronId { id })
+            .collect()
     }
 
     // Gets all neuron ids associated with the given principal id (hot-key or controller).
@@ -950,13 +985,25 @@ fn build_principal_to_neuron_ids_index(
 /// followees (per topic).
 fn build_topic_followee_index(
     heap_neurons: &BTreeMap<u64, Neuron>,
-) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
+) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
     let mut index = HeapNeuronFollowingIndex::new();
     for neuron in heap_neurons.values() {
-        let neuron_id = neuron.id.expect("Neuron must have an id");
-        let already_present_topic_followee_pairs =
-            add_neuron_followees(&mut index, &neuron_id, neuron.topic_followee_pairs());
-        log_already_present_topic_followee_pairs(neuron_id, already_present_topic_followee_pairs);
+        let neuron_id = NeuronIdU64::from(neuron.id.expect("Neuron must have an id"));
+        let already_present_topic_followee_pairs = add_neuron_followees(
+            &mut index,
+            &neuron_id,
+            neuron
+                .topic_followee_pairs()
+                .into_iter()
+                .map(|(topic, neuron_id)| {
+                    (TopicSigned32::from(topic), NeuronIdU64::from(neuron_id))
+                })
+                .collect(),
+        );
+        log_already_present_topic_followee_pairs(
+            NeuronIdU64::from(neuron_id),
+            already_present_topic_followee_pairs,
+        );
     }
     index
 }
@@ -972,8 +1019,8 @@ fn build_known_neuron_name_index(heap_neurons: &BTreeMap<u64, Neuron>) -> HashSe
 }
 
 fn log_already_present_topic_followee_pairs(
-    neuron_id: NeuronId,
-    already_present_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+    neuron_id: NeuronIdU64,
+    already_present_topic_followee_pairs: Vec<(TopicSigned32, NeuronIdU64)>,
 ) {
     for (topic, followee) in already_present_topic_followee_pairs {
         println!(
@@ -984,8 +1031,8 @@ fn log_already_present_topic_followee_pairs(
 }
 
 fn log_already_absent_topic_followee_pairs(
-    neuron_id: NeuronId,
-    already_absent_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+    neuron_id: NeuronIdU64,
+    already_absent_topic_followee_pairs: Vec<(TopicSigned32, NeuronIdU64)>,
 ) {
     for (topic, followee) in already_absent_topic_followee_pairs {
         println!(

@@ -1,4 +1,4 @@
-use crate::pb::v1::AuditEvent;
+use crate::pb::v1::{AuditEvent, Topic};
 
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -108,7 +108,7 @@ thread_local! {
 // only ic_stable_structures can implement their traits on foreign types, such
 // as i32.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct Signed32(pub i32);
+pub struct Signed32(pub i32);
 
 impl Signed32 {
     const MIN: Signed32 = Signed32(i32::MIN);
@@ -148,4 +148,16 @@ impl BoundedStorable for Signed32 {
     const MAX_SIZE: u32 =
         // A very long-winded way of saying "4".
         std::mem::size_of::<i32>() as u32;
+}
+
+// Types used in both NeuronStore and NeuronIndexes.  This indicates the need for some refactoring
+// so that neuron indexes are correctly owned by NeuronStore, which is blocked by changes needed
+// in Governance.
+pub type NeuronIdU64 = u64;
+pub type TopicSigned32 = Signed32;
+
+impl From<Topic> for TopicSigned32 {
+    fn from(topic: Topic) -> Self {
+        Self(topic as i32)
+    }
 }
