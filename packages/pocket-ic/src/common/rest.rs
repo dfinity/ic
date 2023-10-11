@@ -1,8 +1,9 @@
-//! Rust structs that reflect the structure of JSON-objects used in the v2-REST-API.
+//! The PocketIC server and the PocketIc library interface with HTTP/JSON.
+//! The types in this module are used to serialize and deserialize data
+//! from and to JSON, and are used by both crates.
 
 use crate::UserError;
 
-use super::blob::BlobId;
 use candid::Principal;
 use reqwest::blocking::Response;
 use serde::de::DeserializeOwned;
@@ -175,6 +176,21 @@ pub struct RawVerifyCanisterSigArg {
     pub pubkey: Vec<u8>,
     #[serde(with = "base64")]
     pub root_pubkey: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct BlobId(pub [u8; 32]);
+
+#[derive(Clone, Debug)]
+pub struct BinaryBlob {
+    pub data: Vec<u8>,
+    pub compression: BlobCompression,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlobCompression {
+    Gzip,
+    NoCompression,
 }
 
 // By default, serde serializes Vec<u8> to a list of numbers, which is inefficient.

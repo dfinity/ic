@@ -12,10 +12,7 @@ use clap::Parser;
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use pocket_ic::common::{
-    blob::{BinaryBlob, BlobCompression, BlobId},
-    rest::RawVerifyCanisterSigArg,
-};
+use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState, RouterExt},
     state::PocketIcApiStateBuilder,

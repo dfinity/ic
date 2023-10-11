@@ -1,10 +1,41 @@
-use crate::common::{
-    blob::{BlobCompression, BlobId},
-    rest::{
-        ApiResponse, CreateInstanceResponse, InstanceId, RawAddCycles, RawCanisterCall,
-        RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawTime,
-        RawWasmResult,
-    },
+//! # PocketIC: A Canister Testing Platform
+//!
+//! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
+//!
+//! It consists of the PocketIC-server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
+//!
+//! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
+//!
+//! ```rust
+//! use candid;
+//! use pocket_ic;
+//!
+//!  #[test]
+//!  fn test_counter_canister() {
+//!     let pic = PocketIc::new();
+//!     // Create an empty canister as the anonymous principal.
+//!     let canister_id = pic.create_canister(None);
+//!     pic.add_cycles(canister_id, 1_000_000_000_000_000);
+//!     let wasm_bytes = load_counter_wasm(...);
+//!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
+//!     // 'inc' is a counter canister method.
+//!     call_counter_canister(&pic, canister_id, "inc");
+//!     // Check if it had the desired effect.
+//!     let reply = call_counter_canister(&pic, canister_id, "read");
+//!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
+//!  }
+//!
+//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
+//!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
+//!         .expect("Failed to call counter canister")
+//! }
+//! ```
+//! For more information, see the [README](https://crates.io/crates/pocket_ic).
+//!
+use crate::common::rest::{
+    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, InstanceId, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory,
+    RawStableMemory, RawTime, RawWasmResult,
 };
 use candid::{
     decode_args, encode_args,
@@ -29,13 +60,16 @@ const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
 const PROCESSING_TIME_VALUE_MS: u64 = 300_000;
 const LOCALHOST: &str = "127.0.0.1";
 
+/// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
+    /// The unique ID of this PocketIC instance.
     pub instance_id: InstanceId,
     server_url: Url,
     reqwest_client: reqwest::blocking::Client,
 }
 
 impl PocketIc {
+    /// Creates a new PocketIC instance on the server. The server is started if it's not already running.
     pub fn new() -> Self {
         let server_url = crate::start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
@@ -58,6 +92,7 @@ impl PocketIc {
         }
     }
 
+    /// Upload and store a binary blob to the PocketIC server.
     pub fn upload_blob(&self, blob: Vec<u8>, compression: BlobCompression) -> BlobId {
         let mut request = self
             .reqwest_client
@@ -77,6 +112,8 @@ impl PocketIc {
         BlobId(hash.expect("Invalid hash"))
     }
 
+    /// Set stable memory of a canister. Optional GZIP compression can be used for reduced
+    /// data traffic.
     pub fn set_stable_memory(
         &self,
         canister_id: Principal,
@@ -94,6 +131,7 @@ impl PocketIc {
         );
     }
 
+    /// Get stable memory of a canister.
     pub fn get_stable_memory(&self, canister_id: Principal) -> Vec<u8> {
         let endpoint = "read/get_stable_memory";
         let RawStableMemory { blob } = self.post(
@@ -105,6 +143,7 @@ impl PocketIc {
         blob
     }
 
+    /// List all instances and their status.
     pub fn list_instances() -> Vec<String> {
         let url = crate::start_or_reuse_server().join("instances").unwrap();
         let instances: Vec<String> = reqwest::blocking::Client::new()
@@ -116,6 +155,7 @@ impl PocketIc {
         instances
     }
 
+    // Verify a canister signature.
     pub fn verify_canister_signature(
         &self,
         msg: Vec<u8>,
@@ -138,26 +178,26 @@ impl PocketIc {
             .expect("Failed to get json")
     }
 
+    /// Make the IC produce and progress by one block.
     pub fn tick(&self) {
         let endpoint = "update/tick";
         self.post::<(), _>(endpoint, "");
     }
 
+    /// Get the root key of this IC instance
     pub fn root_key(&self) -> Vec<u8> {
         let endpoint = "read/root_key";
         self.post::<Vec<u8>, _>(endpoint, "")
     }
 
+    /// Get the current time of the IC.
     pub fn get_time(&self) -> SystemTime {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint);
         SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
     }
 
-    pub fn time(&self) -> SystemTime {
-        self.get_time()
-    }
-
+    /// Set the current time of the IC.
     pub fn set_time(&self, time: SystemTime) {
         let endpoint = "update/set_time";
         self.post::<(), _>(
@@ -171,11 +211,13 @@ impl PocketIc {
         );
     }
 
+    /// Advance the time on the IC by some nanoseconds.
     pub fn advance_time(&self, duration: Duration) {
         let now = self.get_time();
         self.set_time(now + duration);
     }
 
+    /// Get the current cycles balance of a canister.
     pub fn cycle_balance(&self, canister_id: Principal) -> u128 {
         let endpoint = "read/get_cycles";
         let result: RawCycles = self.post(
@@ -187,6 +229,7 @@ impl PocketIc {
         result.cycles
     }
 
+    /// Add cycles to a canister. Returns the new balance.
     pub fn add_cycles(&self, canister_id: Principal, amount: u128) -> u128 {
         let endpoint = "update/add_cycles";
         let result: RawCycles = self.post(
@@ -199,6 +242,7 @@ impl PocketIc {
         result.cycles
     }
 
+    /// Execute an update call on a canister.
     pub fn update_call(
         &self,
         canister_id: Principal,
@@ -210,6 +254,7 @@ impl PocketIc {
         self.canister_call(endpoint, canister_id, sender, method, payload)
     }
 
+    /// Execute a query call on a canister.
     pub fn query_call(
         &self,
         canister_id: Principal,
@@ -221,6 +266,7 @@ impl PocketIc {
         self.canister_call(endpoint, canister_id, sender, method, payload)
     }
 
+    /// Create a canister with default settings.
     pub fn create_canister(&self, sender: Option<Principal>) -> CanisterId {
         let CanisterIdRecord { canister_id } = call_candid_as(
             self,
@@ -234,6 +280,7 @@ impl PocketIc {
         canister_id
     }
 
+    /// Create a canister with custom settings.
     pub fn create_canister_with_settings(
         &self,
         settings: Option<CanisterSettings>,
@@ -251,6 +298,7 @@ impl PocketIc {
         canister_id
     }
 
+    /// Install a WASM module on an existing canister.
     pub fn install_canister(
         &self,
         canister_id: CanisterId,
@@ -273,6 +321,7 @@ impl PocketIc {
         .unwrap();
     }
 
+    /// Upgrade a canister with a new WASM module.
     pub fn upgrade_canister(
         &self,
         canister_id: CanisterId,
@@ -294,6 +343,7 @@ impl PocketIc {
         )
     }
 
+    /// Reinstall a canister WASM module.
     pub fn reinstall_canister(
         &self,
         canister_id: CanisterId,
@@ -315,6 +365,7 @@ impl PocketIc {
         )
     }
 
+    /// Start a canister.
     pub fn start_canister(
         &self,
         canister_id: CanisterId,
@@ -329,6 +380,7 @@ impl PocketIc {
         )
     }
 
+    /// Stop a canister.
     pub fn stop_canister(
         &self,
         canister_id: CanisterId,
@@ -343,6 +395,7 @@ impl PocketIc {
         )
     }
 
+    /// Delete a canister.
     pub fn delete_canister(
         &self,
         canister_id: CanisterId,
@@ -357,6 +410,7 @@ impl PocketIc {
         )
     }
 
+    /// Checks whether the provided canister exists.
     pub fn canister_exists(&self, canister_id: CanisterId) -> bool {
         let endpoint = "read/canister_exists";
         let result: bool = self.post(
@@ -368,6 +422,7 @@ impl PocketIc {
         result
     }
 
+    /// Triggers the creation of a checkpoint on the IC.
     pub fn create_checkpoint(&self) {
         let endpoint = "update/create_checkpoint";
         self.post::<(), &str>(endpoint, "");
@@ -465,7 +520,7 @@ impl Drop for PocketIc {
 }
 
 /// Call a canister candid method, authenticated.
-/// The state machine executes update calls synchronously, so there is no need to poll for the result.
+/// PocketIC executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid_as<Input, Output>(
     env: &PocketIc,
     canister_id: Principal,
@@ -483,7 +538,7 @@ where
 }
 
 /// Call a canister candid method, anonymous.
-/// The state machine executes update calls synchronously, so there is no need to poll for the result.
+/// PocketIC executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid<Input, Output>(
     env: &PocketIc,
     canister_id: Principal,
@@ -554,6 +609,7 @@ where
     }
 }
 
+/// Error type for [`TryFrom<u64>`].
 #[derive(Clone, Copy, Debug)]
 pub enum TryFromError {
     ValueOutOfRange(u64),
@@ -681,12 +737,14 @@ impl std::fmt::Display for ErrorCode {
     }
 }
 
-/// The error that is sent back to users of IC if something goes
+/// The error that is sent back to users from the IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
-/// can persist it in ingress history.
+/// can persist it in the ingress history.
 #[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserError {
+    /// The error code.
     pub code: ErrorCode,
+    /// A human-readable description of the error.
     pub description: String,
 }
 
@@ -697,20 +755,21 @@ impl std::fmt::Display for UserError {
     }
 }
 
+/// This enum describes the different error types when invoking a canister.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum CallError {
     Reject(String),
     UserError(UserError),
 }
 
-/// This struct describes the different types that executing a Wasm function in
-/// a canister can produce
+/// This struct describes the different types that executing a WASM function in
+/// a canister can produce.
 #[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WasmResult {
-    /// Raw response, returned in a "happy" case
+    /// Raw response, returned in a successful case.
     Reply(#[serde(with = "serde_bytes")] Vec<u8>),
     /// Returned with an error message when the canister decides to reject the
-    /// message
+    /// message.
     Reject(String),
 }
 
