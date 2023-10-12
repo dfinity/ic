@@ -10,7 +10,7 @@ const INT128_BUF_SIZE: usize = 19;
 pub type Map = BTreeMap<String, Value>;
 pub type Hash = [u8; 32];
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     Blob(ByteBuf),
     Text(String),
@@ -28,6 +28,14 @@ impl Value {
 
     pub fn blob(t: impl Into<Vec<u8>>) -> Self {
         Self::Blob(ByteBuf::from(t.into()))
+    }
+
+    pub fn map<S, V>(v: V) -> Self
+    where
+        S: ToString,
+        V: IntoIterator<Item = (S, Value)>,
+    {
+        Self::Map(v.into_iter().map(|(s, v)| (s.to_string(), v)).collect())
     }
 
     /// Computes the representation-independent hash of a value.
@@ -81,6 +89,44 @@ impl Value {
                     hasher.update(&vhash[..]);
                 }
                 hasher.finalize().into()
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Blob(bytes) => write!(f, "{}", hex::encode(bytes.as_ref())),
+            Value::Text(text) => write!(f, "{}", text),
+            Value::Nat(nat) => write!(f, "{}", nat),
+            Value::Nat64(nat64) => write!(f, "{}", nat64),
+            Value::Int(int) => write!(f, "{}", int),
+            Value::Array(array) => {
+                write!(f, "Array(")?;
+                let mut first = true;
+                for e in array {
+                    if first {
+                        first = false
+                    } else {
+                        write!(f, ", ")?
+                    }
+                    write!(f, "{}", e)?;
+                }
+                write!(f, ")")
+            }
+            Value::Map(map) => {
+                write!(f, "Map(")?;
+                let mut first = true;
+                for (k, v) in map {
+                    if first {
+                        first = false
+                    } else {
+                        write!(f, ", ")?
+                    }
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, ")")
             }
         }
     }
