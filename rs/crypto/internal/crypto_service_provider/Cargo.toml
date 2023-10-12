@@ -65,7 +65,6 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-chrono = "0.4.19"
 ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-proptest-utils = { path = "./csp_proptest_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }
@@ -82,7 +81,6 @@ ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = "1.4.0"
 mockall = "0.7.2"
-openssl = "0.10.55"
 proptest = "1.0"
 proptest-derive = "0.3.0"
 rsa = "0.9"

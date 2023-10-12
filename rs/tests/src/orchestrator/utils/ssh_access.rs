@@ -11,9 +11,6 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_types::{time::current_time, SubnetId};
 use openssh_keys::PublicKey;
-use openssl::pkey::Private;
-use openssl::rsa::Rsa;
-use pem::{encode, Pem};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 use reqwest::Url;
@@ -25,22 +22,22 @@ use std::time::Duration;
 pub(crate) fn generate_key_strings() -> (String, String) {
     // Our keys are Ed25519, and not RSA. Once we figure out a direct way to encode
     // an Ed25519 private key the SSH way, we might consider switching to it.
-    let rsa = Rsa::generate(1024).unwrap();
+    let rsa = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 1024).expect("RSA keygen failed");
+    use rsa::traits::PublicKeyParts;
     let e = rsa.e();
     let n = rsa.n();
 
     let private_key = private_key_to_pem_string(&rsa);
-    let public_key = public_key_to_string(e.to_vec(), n.to_vec());
+    let public_key = public_key_to_string(e.to_bytes_be(), n.to_bytes_be());
+
     (private_key, public_key)
 }
 
-fn private_key_to_pem_string(rsa: &Rsa<Private>) -> String {
-    let private_key = rsa.private_key_to_der().unwrap();
-    let private_pem = Pem {
-        tag: String::from("RSA PRIVATE KEY"),
-        contents: private_key,
-    };
-    encode(&private_pem)
+fn private_key_to_pem_string(rsa: &rsa::RsaPrivateKey) -> String {
+    use rsa::pkcs1::EncodeRsaPrivateKey;
+    rsa.to_pkcs1_pem(rsa::pkcs1::LineEnding::CRLF)
+        .unwrap()
+        .to_string()
 }
 
 fn public_key_to_string(e: Vec<u8>, n: Vec<u8>) -> String {

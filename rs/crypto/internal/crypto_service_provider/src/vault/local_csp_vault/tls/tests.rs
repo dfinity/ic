@@ -25,16 +25,14 @@ mod keygen {
     use ic_test_utilities::MockTimeSource;
     use ic_types::time::Time;
     use mockall::Sequence;
-    use openssl::asn1::Asn1Time;
-    use openssl::asn1::Asn1TimeRef;
-    use openssl::bn::BigNum;
-    use openssl::nid::Nid;
-    use openssl::x509::{X509NameEntries, X509VerifyResult, X509};
     use proptest::proptest;
     use rand::SeedableRng;
     use rand::{CryptoRng, Rng};
     use std::collections::BTreeSet;
     use std::sync::Arc;
+    use time::macros::datetime;
+    use x509_parser::num_bigint;
+    use x509_parser::{certificate::X509Certificate, prelude::FromDer, x509::X509Name}; // re-export of num_bigint
 
     const NOT_AFTER: &str = "99991231235959Z";
     const NANOS_PER_SEC: i64 = 1_000_000_000;
@@ -83,11 +81,8 @@ mod keygen {
             .expect("Generation of TLS keys failed.");
 
         let x509_cert = &x509(&cert);
-        let public_key = x509_cert
-            .public_key()
-            .expect("Missing public key in a certificate.");
-        assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
+        assert_eq!(x509_cert.verify_signature(None), Ok(()));
+        assert_eq!(x509_cert.subject(), x509_cert.issuer());
     }
 
     #[test]
@@ -98,12 +93,8 @@ mod keygen {
             .expect("Generation of TLS keys failed.");
 
         let x509_cert = &x509(&cert);
-        assert_eq!(cn_entries(x509_cert).count(), 1);
-        let subject_cn = cn_entries(x509_cert)
-            .next()
-            .expect("Missing 'subject CN' entry in a certificate");
         let expected_subject_cn = node_test_id(NODE_1).get().to_string();
-        assert_eq!(expected_subject_cn.as_bytes(), subject_cn.data().as_slice());
+        assert_single_cn_eq(x509_cert.subject(), &expected_subject_cn);
     }
 
     #[test]
@@ -114,10 +105,7 @@ mod keygen {
             .expect("Generation of TLS keys failed.");
         let cert_x509 = x509(&cert);
 
-        let subject_cn = cn_entries(&cert_x509)
-            .next()
-            .expect("Missing 'subject CN' entry in a certificate");
-        assert_eq!(b"w43gn-nurca-aaaaa-aaaap-2ai", subject_cn.data().as_slice());
+        assert_single_cn_eq(cert_x509.subject(), "w43gn-nurca-aaaaa-aaaap-2ai");
     }
 
     #[test]
@@ -126,15 +114,10 @@ mod keygen {
         let cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
-        let cert_x509 = x509(&cert);
+        let cert_x509 = &x509(&cert);
 
-        let issuer_cn = cert_x509
-            .issuer_name()
-            .entries_by_nid(Nid::COMMONNAME)
-            .next()
-            .expect("Missing 'issuer CN' entry in a certificate");
-        let expected_issuer_cn = node_test_id(NODE_1).get().to_string();
-        assert_eq!(expected_issuer_cn.as_bytes(), issuer_cn.data().as_slice());
+        let expected_subject_cn = node_test_id(NODE_1).get().to_string();
+        assert_single_cn_eq(cert_x509.issuer(), &expected_subject_cn);
     }
 
     #[test]
@@ -144,8 +127,7 @@ mod keygen {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
 
-        let subject_alt_names = x509(&cert).subject_alt_names();
-        assert!(subject_alt_names.is_none());
+        assert_eq!(x509(&cert).subject_alternative_name(), Ok(None));
     }
 
     #[test]
@@ -158,13 +140,9 @@ mod keygen {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
 
-        let cert_serial = x509(&cert)
-            .serial_number()
-            .to_bn()
-            .expect("Failed parsing SN as BigNum.");
+        let cert_serial = &x509(&cert).serial;
         let expected_randomness = csprng_seeded_with(FIXED_SEED).gen::<[u8; 19]>();
-        let expected_serial =
-            BigNum::from_slice(&expected_randomness).expect("Failed parsing random bits as BigNum");
+        let expected_serial = &num_bigint::BigUint::from_bytes_be(&expected_randomness);
         assert_eq!(expected_serial, cert_serial);
     }
 
@@ -184,11 +162,9 @@ mod keygen {
 
     #[test]
     fn should_set_cert_not_before_correctly() {
-        use chrono::prelude::*;
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use ic_interfaces::time_source::TimeSource;
         use ic_types::time::Time;
-        use std::time::{Duration, UNIX_EPOCH};
 
         const NANOS_PER_SEC: u64 = 1_000_000_000;
         const MAX_TIME_SECS: u64 = u64::MAX / NANOS_PER_SEC;
@@ -229,24 +205,25 @@ mod keygen {
                     .get_relative_time()
                     .as_secs_since_unix_epoch()
                     .saturating_sub(GRACE_PERIOD_SECS);
-                let utc = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(secs));
-                utc.format("%b %e %H:%M:%S %Y GMT").to_string()
+                i64::try_from(secs).expect("invalid i64")
             };
 
-            assert_eq!(x509(&cert).not_before().to_string(), expected_not_before);
+            assert_eq!(
+                x509(&cert).validity().not_before.timestamp(),
+                expected_not_before
+            );
         }
     }
 
     #[test]
     fn should_set_cert_not_after_correctly() {
+        let not_after_unix = datetime!(9999-12-31 23:59:59 UTC).unix_timestamp();
+
         let csp_vault = LocalCspVault::builder_for_test().build();
         let cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
-        assert!(
-            x509(&cert).not_after()
-                == Asn1Time::from_str_x509(NOT_AFTER).expect("Failed parsing string as Asn1Time")
-        );
+        assert_eq!(x509(&cert).validity().not_after.timestamp(), not_after_unix);
     }
 
     #[test]
@@ -301,16 +278,10 @@ mod keygen {
             let cert = csp_vault
                 .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
                 .expect("Failed to generate certificate");
-            let cert_x509 = x509(&cert);
-            let not_before = cert_x509.not_before();
+            let not_before_unix_i64 = x509(&cert).validity().not_before.timestamp();
 
-            let expected_not_before: &Asn1TimeRef = &Asn1Time::from_unix(secs.saturating_sub(GRACE_PERIOD_SECS)).expect("failed to convert time");
-            let diff = not_before.diff(expected_not_before).expect("failed to obtain time diff");
-
-            assert_eq!(diff, openssl::asn1::TimeDiff{
-                days: 0,
-                secs: 0,
-            });
+            let expected_not_before_unix_i64 = secs.saturating_sub(GRACE_PERIOD_SECS);
+            assert_eq!(expected_not_before_unix_i64, not_before_unix_i64);
         }
     }
 
@@ -441,19 +412,26 @@ mod keygen {
         rand_chacha::ChaCha20Rng::seed_from_u64(seed)
     }
 
-    fn cn_entries(x509_cert: &X509) -> X509NameEntries {
-        x509_cert.subject_name().entries_by_nid(Nid::COMMONNAME)
+    fn serial_number(cert: &TlsPublicKeyCert) -> num_bigint::BigUint {
+        x509(cert).serial.clone()
     }
 
-    fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
-        x509(cert)
-            .serial_number()
-            .to_bn()
-            .expect("Failed parsing SN as BigNum")
+    fn x509(tls_cert: &TlsPublicKeyCert) -> X509Certificate {
+        let (remainder, x509_cert) =
+            X509Certificate::from_der(tls_cert.as_der()).expect("Error parsing DER");
+        assert!(remainder.is_empty());
+        x509_cert
     }
 
-    fn x509(tls_cert: &TlsPublicKeyCert) -> X509 {
-        X509::from_der(tls_cert.as_der()).expect("Error parsing DER")
+    fn assert_single_cn_eq(name: &X509Name<'_>, cn_str: &str) {
+        let mut cn_iter = name.iter_common_name();
+        let first_cn_str = cn_iter
+            .next()
+            .unwrap()
+            .as_str()
+            .expect("common name (CN) not a string");
+        assert_eq!(first_cn_str, cn_str);
+        assert_eq!(cn_iter.next(), None, "more than one common name");
     }
 }
 

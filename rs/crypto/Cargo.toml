@@ -13,6 +13,8 @@ ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
+ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
+ic-crypto-ecdsa-secp256k1 = { path = "ecdsa_secp256k1" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
@@ -91,7 +93,6 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 maplit = "1.0.2"
 mockall = "0.8.3"
-openssl = "0.10.55"
 proptest = "1.0"
 proptest-derive = "0.3.0"
 prost = { workspace = true }
