@@ -53,7 +53,7 @@ pub struct AppState {
     //
     pub api_state: ApiState,
     pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
-    pub last_request: Arc<RwLock<Instant>>,
+    pub min_alive_until: Arc<RwLock<Instant>>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
 }
@@ -477,7 +477,7 @@ pub async fn handler_set_stable_memory(
         instances_sequence_counter: _,
         api_state,
         checkpoints: _,
-        last_request: _,
+        min_alive_until: _,
         runtime: _,
         blob_store,
     }): State<AppState>,
@@ -540,7 +540,7 @@ pub async fn create_instance(
         instances_sequence_counter: _,
         api_state,
         checkpoints,
-        last_request: _,
+        min_alive_until: _,
         runtime,
         blob_store: _,
     }): State<AppState>,

@@ -13,6 +13,7 @@ use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
+use pocket_ic_server::state_api::routes::timeout_or_default;
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState, RouterExt},
     state::PocketIcApiStateBuilder,
@@ -93,13 +94,13 @@ async fn start(runtime: Arc<Runtime>) {
     let instance_map = Arc::new(RwLock::new(HashMap::new()));
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while
-    let last_request = Arc::new(RwLock::new(Instant::now()));
+    let min_alive_until = Arc::new(RwLock::new(Instant::now()));
     let app_state = AppState {
         instance_map,
         instances_sequence_counter: Arc::new(AtomicU64::from(0)),
         api_state,
         checkpoints: Arc::new(RwLock::new(HashMap::new())),
-        last_request,
+        min_alive_until,
         runtime,
         blob_store: Arc::new(InMemoryBlobStore::new()),
     };
@@ -154,7 +155,7 @@ async fn start(runtime: Arc<Runtime>) {
     // This is a safeguard against orphaning this child process.
     let shutdown_signal = async {
         loop {
-            let guard = app_state.last_request.read().await;
+            let guard = app_state.min_alive_until.read().await;
             if guard.elapsed() > Duration::from_secs(TTL_SEC) {
                 break;
             }
@@ -236,13 +237,23 @@ async fn bump_last_request_timestamp<B>(
         instances_sequence_counter: _,
         api_state: _,
         checkpoints: _,
-        last_request,
+        min_alive_until,
         ..
     }): State<AppState>,
+    headers: HeaderMap,
     request: http::Request<B>,
     next: Next<B>,
 ) -> Response {
-    *last_request.write().await = Instant::now();
+    // TTL should not decrease: If now + header_timeout is later
+    // than the current TTL (from previous requests), reset it.
+    // Otherwise, a previous request set a larger TTL and we don't
+    // touch it.
+    let timeout = timeout_or_default(headers).unwrap_or(Duration::from_secs(1));
+    let alive_until = Instant::now().checked_add(timeout).unwrap();
+    let mut min_alive_until = min_alive_until.write().await;
+    if *min_alive_until < alive_until {
+        *min_alive_until = alive_until;
+    }
     next.run(request).await
 }
 
