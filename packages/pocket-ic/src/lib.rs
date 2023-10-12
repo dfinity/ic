@@ -778,11 +778,19 @@ pub fn start_or_reuse_server() -> Url {
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
     let parent_pid = std::os::unix::process::parent_id();
-    Command::new(PathBuf::from(bin_path))
-        .arg("--pid")
-        .arg(parent_pid.to_string())
-        .spawn()
-        .expect("Failed to start PocketIC binary");
+    let mut cmd = Command::new(PathBuf::from(bin_path));
+
+    cmd.arg("--pid").arg(parent_pid.to_string());
+
+    if std::env::var("POCKET_IC_INHERIT_STDOUT").is_err() {
+        cmd.stdout(std::process::Stdio::null());
+    }
+
+    if std::env::var("POCKET_IC_INHERIT_STDERR").is_err() {
+        cmd.stderr(std::process::Stdio::null());
+    }
+
+    cmd.spawn().expect("Failed to start PocketIC binary");
 
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
