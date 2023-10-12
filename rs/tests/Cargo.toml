@@ -101,7 +101,7 @@ ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 indoc = "1.0.6"
 json5 = "0.4.1"
 k256 = { workspace = true }

@@ -38,7 +38,7 @@ ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 pretty-bytes = "0.2.2"
 proptest = "1.0"

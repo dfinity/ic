@@ -31,7 +31,7 @@ serde = "1.0"
 serde_bytes = "0.11.5"
 serde_cbor = "0.11.2"
 ic-icrc1 = { path = "../../icrc1" }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = {version = "0.2.15"}
 
 

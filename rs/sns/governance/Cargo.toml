@@ -49,7 +49,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 num-traits = "0.2.14"
 prost = { workspace = true }

@@ -38,7 +38,7 @@ ic-sns-governance = { path = "../governance" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.
 # ic-sns-root = { path = "../root" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = "0.10.5"
 lazy_static = "1.4.0"
 maplit = "1.0.2"
