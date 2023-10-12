@@ -14,14 +14,16 @@ base32 = "0.4.0"
 candid = { workspace = true }
 crc32fast = "1.2.0"
 hex = "0.4.2"
+num-bigint = "0.4"
+num-traits = "0.2.12"
 serde_bytes = "0.11"
 serde = "1"
 sha2 = "0.10"
-num-traits = "0.2.12"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
 hex = "0.4"
+proptest = "1.0.0"
 
 [features]
 experimental-api = []

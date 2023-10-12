@@ -1,6 +1,7 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
+use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -13,6 +14,7 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::BlockRange;
 use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
@@ -1382,6 +1384,23 @@ pub fn block_encoding_agrees_with_the_schema() {
                     e
                 ))
             })
+        })
+        .unwrap();
+}
+
+pub fn block_encoding_agreed_with_the_icrc3_schema() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        ..Default::default()
+    });
+    runner
+        .run(&arb_block(), |block| {
+            let encoded_block = block.encode();
+            let generic_block = encoded_block_to_generic_block(&encoded_block);
+            if let Err(errors) = icrc3::schema::validate(&generic_block) {
+                panic!("generic_block: {:?}, errors:\n{}", generic_block, errors);
+            }
+            Ok(())
         })
         .unwrap();
 }
