@@ -8,17 +8,25 @@ use crate::{
     subaccount_index::NeuronSubaccountIndex,
 };
 
-use crate::storage::{NeuronIdU64, TopicSigned32};
+use crate::{
+    pb::v1::Topic,
+    storage::{NeuronIdU64, TopicSigned32},
+};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
-    neuron_following::{add_neuron_followees, remove_neuron_followees, StableNeuronFollowingIndex},
+    neuron_following::{
+        add_neuron_followees, remove_neuron_followees, HeapNeuronFollowingIndex,
+        NeuronFollowingIndex, StableNeuronFollowingIndex,
+    },
     neuron_principal::{
         add_neuron_id_principal_ids, remove_neuron_id_principal_ids, NeuronPrincipalIndex,
         StableNeuronPrincipalIndex,
     },
 };
+use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::VectorMemory;
 use icp_ledger::Subaccount;
+use mockall::predicate::ne;
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Display, Formatter},
@@ -75,8 +83,8 @@ where
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct CorruptedNeuronIndexes {
-    neuron_id: NeuronIdU64,
-    indexes: Vec<NeuronIndexDefect>,
+    pub neuron_id: NeuronIdU64,
+    pub indexes: Vec<NeuronIndexDefect>,
 }
 
 impl Display for CorruptedNeuronIndexes {
@@ -123,7 +131,7 @@ impl Display for NeuronIndexDefect {
 }
 
 /// A common interface for neuron indexes for updating them in a unified way.
-trait NeuronIndex {
+pub trait NeuronIndex {
     /// Adds a neuron into indexes. An error signals something might be wrong with the indexes. The
     /// second time the exact same neuron gets added should have no effect (other than returning an
     /// error).
@@ -317,44 +325,99 @@ fn already_absent_topic_followee_pairs_to_result(
     }
 }
 
+fn following_index_add_neuron(
+    index: &mut dyn NeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    new_neuron: &Neuron,
+) -> Result<(), NeuronIndexDefect> {
+    // StableNeuronIndexes::add_neuron checks neuron id before calling this method.
+    let neuron_id = NeuronIdU64::from(new_neuron.id.expect("Neuron must have an id"));
+    let already_present_topic_followee_pairs = add_neuron_followees(
+        index,
+        &neuron_id,
+        new_neuron
+            .topic_followee_pairs()
+            .into_iter()
+            .map(|(topic, followee)| (TopicSigned32::from(topic), NeuronIdU64::from(followee)))
+            .collect(),
+    );
+
+    already_present_topic_followee_pairs_to_result(
+        already_present_topic_followee_pairs,
+        NeuronIdU64::from(neuron_id),
+    )
+}
+
+fn following_index_remove_neuron(
+    index: &mut dyn NeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    existing_neuron: &Neuron,
+) -> Result<(), NeuronIndexDefect> {
+    // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
+    let neuron_id = NeuronIdU64::from(existing_neuron.id.expect("Neuron must have an id"));
+    let already_absent_topic_followee_pairs = remove_neuron_followees(
+        index,
+        &neuron_id,
+        existing_neuron
+            .topic_followee_pairs()
+            .into_iter()
+            .map(|(topic, followee)| (TopicSigned32::from(topic), NeuronIdU64::from(followee)))
+            .collect(),
+    );
+
+    already_absent_topic_followee_pairs_to_result(
+        already_absent_topic_followee_pairs,
+        NeuronIdU64::from(neuron_id),
+    )
+}
+
+fn following_index_update_neuron(
+    index: &mut dyn NeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    old_neuron: &Neuron,
+    new_neuron: &Neuron,
+) -> Result<(), Vec<NeuronIndexDefect>> {
+    // StableNeuronIndexes::update_neuron calls validate_neuron which make sure id is valid.
+    let neuron_id = NeuronIdU64::from(old_neuron.id.expect("Neuron must have an id"));
+    let old_topic_followee_pairs = old_neuron.topic_followee_pairs();
+    let new_topic_followee_pairs = new_neuron.topic_followee_pairs();
+
+    // Set differences are used for preventing excessive stable storage writes, which are expensive especially when they are scattered.
+    let topic_followee_pairs_to_remove = old_topic_followee_pairs
+        .difference(&new_topic_followee_pairs)
+        .cloned()
+        .map(|(topic, followee)| (TopicSigned32::from(topic), NeuronIdU64::from(followee)))
+        .collect::<BTreeSet<_>>();
+    let topic_followee_pairs_to_add = new_topic_followee_pairs
+        .difference(&old_topic_followee_pairs)
+        .cloned()
+        .map(|(topic, followee)| (TopicSigned32::from(topic), NeuronIdU64::from(followee)))
+        .collect::<BTreeSet<_>>();
+
+    let already_absent_topic_followee_pairs =
+        remove_neuron_followees(index, &neuron_id, topic_followee_pairs_to_remove);
+    let already_present_topic_followee_pairs =
+        add_neuron_followees(index, &neuron_id, topic_followee_pairs_to_add);
+
+    let defect_remove = already_absent_topic_followee_pairs_to_result(
+        already_absent_topic_followee_pairs,
+        neuron_id,
+    );
+    let defect_add = already_present_topic_followee_pairs_to_result(
+        already_present_topic_followee_pairs,
+        neuron_id,
+    );
+
+    combine_index_defects(defect_remove, defect_add)
+}
+
 impl<Memory> NeuronIndex for StableNeuronFollowingIndex<NeuronIdU64, TopicSigned32, Memory>
 where
     Memory: ic_stable_structures::Memory,
 {
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
-        // StableNeuronIndexes::add_neuron checks neuron id before calling this method.
-        let neuron_id = new_neuron.id.expect("Neuron must have an id").id;
-        let already_present_topic_followee_pairs = add_neuron_followees(
-            self,
-            &neuron_id,
-            new_neuron
-                .topic_followee_pairs()
-                .iter()
-                .map(|(topic, followee)| (TopicSigned32::from(*topic as i32), followee.id))
-                .collect(),
-        );
-        already_present_topic_followee_pairs_to_result(
-            already_present_topic_followee_pairs,
-            neuron_id,
-        )
+        following_index_add_neuron(self, new_neuron)
     }
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
-        // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
-        let neuron_id = existing_neuron.id.expect("Neuron must have an id").id;
-        let already_absent_topic_followee_pairs = remove_neuron_followees(
-            self,
-            &neuron_id,
-            existing_neuron
-                .topic_followee_pairs()
-                .iter()
-                .map(|(topic, followee)| (TopicSigned32::from(*topic as i32), followee.id))
-                .collect(),
-        );
-        already_absent_topic_followee_pairs_to_result(
-            already_absent_topic_followee_pairs,
-            neuron_id,
-        )
+        following_index_remove_neuron(self, existing_neuron)
     }
 
     fn update_neuron(
@@ -362,38 +425,25 @@ where
         old_neuron: &Neuron,
         new_neuron: &Neuron,
     ) -> Result<(), Vec<NeuronIndexDefect>> {
-        // StableNeuronIndexes::update_neuron calls validate_neuron which make sure id is valid.
-        let neuron_id = old_neuron.id.unwrap().id;
-        let old_topic_followee_pairs = old_neuron.topic_followee_pairs();
-        let new_topic_followee_pairs = new_neuron.topic_followee_pairs();
+        following_index_update_neuron(self, old_neuron, new_neuron)
+    }
+}
 
-        // Set differences are used for preventing excessive stable storage writes, which are expensive especially when they are scattered.
-        let topic_followee_pairs_to_remove = old_topic_followee_pairs
-            .difference(&new_topic_followee_pairs)
-            .cloned()
-            .map(|(topic, followee)| (TopicSigned32::from(topic as i32), followee.id))
-            .collect::<BTreeSet<_>>();
-        let topic_followee_pairs_to_add = new_topic_followee_pairs
-            .difference(&old_topic_followee_pairs)
-            .cloned()
-            .map(|(topic, followee)| (TopicSigned32::from(topic as i32), followee.id))
-            .collect::<BTreeSet<_>>();
+impl NeuronIndex for HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
+    fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
+        following_index_add_neuron(self, new_neuron)
+    }
 
-        let already_absent_topic_followee_pairs =
-            remove_neuron_followees(self, &neuron_id, topic_followee_pairs_to_remove);
-        let already_present_topic_followee_pairs =
-            add_neuron_followees(self, &neuron_id, topic_followee_pairs_to_add);
+    fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
+        following_index_remove_neuron(self, existing_neuron)
+    }
 
-        let defect_remove = already_absent_topic_followee_pairs_to_result(
-            already_absent_topic_followee_pairs,
-            neuron_id,
-        );
-        let defect_add = already_present_topic_followee_pairs_to_result(
-            already_present_topic_followee_pairs,
-            neuron_id,
-        );
-
-        combine_index_defects(defect_remove, defect_add)
+    fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>> {
+        following_index_update_neuron(self, old_neuron, new_neuron)
     }
 }
 

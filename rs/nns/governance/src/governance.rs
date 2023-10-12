@@ -1,7 +1,3 @@
-use crate::neurons_fund::{
-    dec_to_u64, u64_to_dec, InvertibleFunction,
-    MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-};
 use crate::{
     governance::manage_neuron_request::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
@@ -12,6 +8,10 @@ use crate::{
     is_copy_inactive_neurons_to_stable_memory_enabled,
     migrations::{maybe_run_migrations, neuron_stable_indexes_building_is_enabled},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
+    neurons_fund::{
+        dec_to_u64, u64_to_dec, InvertibleFunction,
+        MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
+    },
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{LedgerParameters, SwapParameters},
@@ -6336,14 +6336,15 @@ impl Governance {
             ));
         }
 
-        let topic = Topic::from_i32(follow_request.topic).ok_or_else(|| {
+        // Validate topic exists
+        Topic::from_i32(follow_request.topic).ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
             )
         })?;
 
-        let old_followees = self.with_neuron_mut(id, |neuron| {
+        self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {
                 neuron.followees.remove(&follow_request.topic)
             } else {
@@ -6355,16 +6356,6 @@ impl Governance {
                 )
             }
         })?;
-        let old_followee_neuron_ids: BTreeSet<_> = old_followees
-            .map(|followees| followees.followees.iter().cloned().collect())
-            .unwrap_or_default();
-
-        self.neuron_store.update_neuron_followees_for_topic(
-            *id,
-            topic,
-            old_followee_neuron_ids,
-            follow_request.followees.iter().cloned().collect(),
-        );
 
         Ok(())
     }
