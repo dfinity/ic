@@ -18,7 +18,7 @@ ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 serde = "1.0"
 
 [features]

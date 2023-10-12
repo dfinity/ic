@@ -33,7 +33,7 @@ ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types" }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.85"

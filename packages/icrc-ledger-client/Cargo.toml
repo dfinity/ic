@@ -13,5 +13,5 @@ repository = "https://github.com/dfinity/ic"
 [dependencies]
 async-trait = "0.1.53"
 candid = { workspace = true }
-icrc-ledger-types = "0.1.2"
+icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.1.2" }
 serde = "1.0"
