@@ -6,6 +6,7 @@ use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPa
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_nns_constants::NNS_SUBNET_ID;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -42,6 +43,10 @@ pub(crate) fn get_root_threshold_public_key(
     version: RegistryVersion,
     nns_subnet_id: &SubnetId,
 ) -> Option<ThresholdSigPublicKey> {
+    // It is insecure to fetch the NNS public key for the IC mainnet from a single replica.
+    if *nns_subnet_id == *NNS_SUBNET_ID {
+        return None;
+    }
     match registry_client.get_threshold_signing_public_key_for_subnet(*nns_subnet_id, version) {
         Ok(Some(key)) => Some(key),
         Err(err) => {

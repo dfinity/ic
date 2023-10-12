@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/monitoring/pprof",
+    "//rs/nns/constants",
     "//rs/registry/helpers",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
