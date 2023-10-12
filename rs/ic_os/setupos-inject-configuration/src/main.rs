@@ -186,10 +186,12 @@ async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
     } = cfg;
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
+        // Always write 4 segments, even if our prefix is less.
+        let segments = ipv6_prefix.trunc().addr().segments();
         writeln!(
             &mut f,
-            "ipv6_prefix={}",
-            ipv6_prefix.addr().to_string().trim_end_matches("::")
+            "ipv6_prefix={:04x}:{:04x}:{:04x}:{:04x}",
+            segments[0], segments[1], segments[2], segments[3],
         )?;
 
         writeln!(&mut f, "ipv6_subnet=/{}", ipv6_prefix.prefix_len())?;
