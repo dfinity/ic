@@ -38,7 +38,7 @@ For larger test suites with more complex test setups, consider the [Internet Ide
 
 ## Getting Started 
 
-- Download the PocketIC binary for [Linux](https://download.dfinity.systems/ic/e097687da66b79be494909f6fdfa815c609b0ca6/openssl-static-binaries/x86_64-linux/pocket-ic.gz) or [MacOS](https://download.dfinity.systems/ic/e097687da66b79be494909f6fdfa815c609b0ca6/openssl-static-binaries/x86_64-darwin/pocket-ic.gz) and make it executable. 
+- Download the PocketIC binary for [Linux](https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/x86_64-linux/pocket-ic.gz) or [MacOS](https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/x86_64-darwin/pocket-ic.gz) and make it executable. 
 - Write the binary path into the environment variable `POCKET_IC_BIN`. You can also prepend `POCKET_IC_BIN=...` to your `cargo test` invocation. 
 - Add the pocket-ic crate to your Cargo.toml, or install it with `cargo install pocket-ic`.
 - Depending on your use case, you may also need the [candid crate](https://crates.io/crates/candid). 
