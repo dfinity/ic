@@ -776,7 +776,11 @@ pub enum WasmResult {
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    let bin_path = std::env::var_os("POCKET_IC_BIN")
+        .expect("Could not find the PocketIC binary. Please specify its location with the POCKET_IC_BIN \
+        environment variable (e.g., `POCKET_IC_BIN=/path/to/pocket_ic cargo test`). You can find instructions \
+        on how to download the PocketIC binary in the Getting Started section of the README.md");
+
     let parent_pid = std::os::unix::process::parent_id();
     let mut cmd = Command::new(PathBuf::from(bin_path));
 
