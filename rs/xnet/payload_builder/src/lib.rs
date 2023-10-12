@@ -630,7 +630,7 @@ impl XNetPayloadBuilderImpl {
             }
 
             // Ensure the message limit (dictated e.g. by the backlog size) is respected.
-            if let Some(msg_limit) = self.get_msg_limit(subnet_id, state) {
+            if let Some(msg_limit) = get_msg_limit(subnet_id, state) {
                 if messages.len() > msg_limit {
                     warn!(
                         self.log,
@@ -748,7 +748,7 @@ impl XNetPayloadBuilderImpl {
                     break;
                 }
 
-                let msg_limit = self.get_msg_limit(subnet_id, &state);
+                let msg_limit = get_msg_limit(subnet_id, &state);
                 let (slice, slice_bytes) = match slice_pool.take_slice(
                     subnet_id,
                     Some(&begin),
@@ -797,42 +797,42 @@ impl XNetPayloadBuilderImpl {
             byte_limit.get().saturating_sub(bytes_left as u64).into(),
         ))
     }
+}
 
-    /// Calculates an upper bound for how many messages can be included into a
-    /// block based on the size of the reverse stream, in an attempt to limit
-    /// the in-flight requests from and responses to a given subnet.
-    ///
-    /// In order to prevent mutual stalling, only applies to incoming NNS
-    /// streams; and to `Application`-subnet-to-`System`-subnet streams.
-    fn get_msg_limit(&self, subnet_id: SubnetId, state: &ReplicatedState) -> Option<usize> {
-        use SubnetType::*;
-        match state.metadata.own_subnet_type {
-            // No limits for now on application subnets.
-            Application | VerifiedApplication => None,
+/// Calculates an upper bound for how many messages can be included into a
+/// block based on the size of the reverse stream, in an attempt to limit
+/// the in-flight requests from and responses to a given subnet.
+///
+/// In order to prevent mutual stalling, only applies to incoming NNS
+/// streams; and to `Application`-subnet-to-`System`-subnet streams.
+pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usize> {
+    use SubnetType::*;
+    match state.metadata.own_subnet_type {
+        // No limits for now on application subnets.
+        Application | VerifiedApplication => None,
 
-            System => {
-                // If this is not the NNS subnet and the remote subnet is a system subnet, don't enforce the limit.
-                if state.metadata.own_subnet_id != state.metadata.network_topology.nns_subnet_id {
-                    let remote_subnet_type = state
-                        .metadata
-                        .network_topology
-                        .subnets
-                        .get(&subnet_id)
-                        .map(|subnet| subnet.subnet_type)
-                        .unwrap_or(Application); // Technically unwrap() would work here, but this is safer.
-                    if remote_subnet_type == System {
-                        return None;
-                    }
-                }
-
-                // Always stay below the limit on the NNS subnet; and on other system subnets for streams from application subnets.
-                state
-                    .streams()
+        System => {
+            // If this is not the NNS subnet and the remote subnet is a system subnet, don't enforce the limit.
+            if state.metadata.own_subnet_id != state.metadata.network_topology.nns_subnet_id {
+                let remote_subnet_type = state
+                    .metadata
+                    .network_topology
+                    .subnets
                     .get(&subnet_id)
-                    .map(|stream| stream.messages().len())
-                    .or(Some(0))
-                    .map(|len| SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(len))
+                    .map(|subnet| subnet.subnet_type)
+                    .unwrap_or(Application); // Technically unwrap() would work here, but this is safer.
+                if remote_subnet_type == System {
+                    return None;
+                }
             }
+
+            // Always stay below the limit on the NNS subnet; and on other system subnets for streams from application subnets.
+            state
+                .streams()
+                .get(&subnet_id)
+                .map(|stream| stream.messages().len())
+                .or(Some(0))
+                .map(|len| SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(len))
         }
     }
 }
