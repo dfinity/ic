@@ -5760,6 +5760,8 @@ dependencies = [
  "ic-base-types",
  "ic-certification-test-utils",
  "ic-config",
+ "ic-crypto-ecdsa-secp256k1",
+ "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -5820,7 +5822,6 @@ dependencies = [
  "ic-types-test-utils",
  "maplit",
  "mockall 0.8.3",
- "openssl",
  "parking_lot 0.12.1",
  "proptest",
  "proptest-derive",
@@ -6122,7 +6123,6 @@ dependencies = [
  "base64 0.13.1",
  "bincode",
  "bytes",
- "chrono",
  "educe",
  "hex",
  "ic-adapter-metrics",
@@ -6167,7 +6167,6 @@ dependencies = [
  "ic-utils 0.8.0",
  "lazy_static",
  "mockall 0.7.2",
- "openssl",
  "parking_lot 0.12.1",
  "proptest",
  "proptest-derive",
@@ -6458,7 +6457,6 @@ dependencies = [
  "ic-test-utilities",
  "ic-types",
  "ic-types-test-utils",
- "openssl",
  "tempfile",
  "tokio",
 ]
@@ -6514,7 +6512,6 @@ name = "ic-crypto-sha2"
 version = "0.8.0"
 dependencies = [
  "ic-crypto-internal-sha2",
- "openssl",
 ]
 
 [[package]]
@@ -6531,6 +6528,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "hex",
+ "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-cose",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -6545,7 +6543,8 @@ dependencies = [
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
- "openssl",
+ "p256",
+ "rand 0.8.5",
  "simple_asn1",
  "strum 0.23.0",
 ]
@@ -6622,13 +6621,11 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types",
  "ic-types-test-utils",
- "openssl",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
  "strum_macros 0.23.1",
  "tokio",
- "tokio-openssl",
 ]
 
 [[package]]
@@ -16995,7 +16992,6 @@ dependencies = [
  "num_cpus",
  "on_wire",
  "openssh-keys",
- "openssl",
  "pem 1.1.1",
  "phantom_newtype",
  "proptest",
@@ -17010,6 +17006,7 @@ dependencies = [
  "registry-canister",
  "reqwest",
  "ring",
+ "rsa",
  "rust_decimal",
  "rustls",
  "serde",

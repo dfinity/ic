@@ -170,22 +170,6 @@ fn test_sha256_with_empty_context_and_nonempty_input() {
     );
 }
 
-#[test]
-fn should_produce_same_sha256_digest_as_if_openssl_sha256_was_used_directly() {
-    let context = TestContext::new(b"context");
-
-    let mut lib_state = Sha256::new_with_context(&context);
-    lib_state.write(b"some data!");
-    let lib_digest = lib_state.finish();
-
-    let mut openssl_state = openssl::sha::Sha256::new();
-    openssl_state.update(context.as_bytes());
-    openssl_state.update(b"some data!");
-    let openssl_digest = openssl_state.finish();
-
-    assert_eq!(lib_digest, openssl_digest);
-}
-
 #[derive(Debug)]
 struct TestContext {
     bytes: Vec<u8>,

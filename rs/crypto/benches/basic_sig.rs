@@ -17,12 +17,6 @@ use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
-use openssl::bn::BigNumContext;
-use openssl::ec::{EcGroup, EcKey};
-use openssl::ecdsa::EcdsaSig;
-use openssl::nid::Nid;
-use openssl::sha::sha256;
-
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
@@ -255,8 +249,10 @@ fn request_id_signature_from_random_keypair<R: Rng + CryptoRng>(
             let public_key_bytes = signing_key.verification_key().to_bytes().to_vec();
             (signature_bytes, public_key_bytes)
         }
-        AlgorithmId::EcdsaP256 => generate_ecdsa_key_and_sig(Nid::X9_62_PRIME256V1, &bytes_to_sign),
-        AlgorithmId::EcdsaSecp256k1 => generate_ecdsa_key_and_sig(Nid::SECP256K1, &bytes_to_sign),
+        AlgorithmId::EcdsaP256 => ecdsa_secp256r1_signature_and_public_key(&bytes_to_sign, rng),
+        AlgorithmId::EcdsaSecp256k1 => {
+            ecdsa_secp256k1_signature_and_public_key(&bytes_to_sign, rng)
+        }
         AlgorithmId::RsaSha256 => generate_rsa_key_and_sig(rng, &bytes_to_sign),
         _ => panic!("Unexpected signature algorithm"),
     };
@@ -270,28 +266,24 @@ fn request_id_signature_from_random_keypair<R: Rng + CryptoRng>(
     (signature, public_key)
 }
 
-fn generate_ecdsa_key_and_sig(curve_name: Nid, bytes_to_sign: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let group = EcGroup::from_curve_name(curve_name).expect("unable to create EC group");
-    let ec_key = EcKey::generate(&group).expect("unable to generate EC key");
-    let mut ctx = BigNumContext::new().expect("unable to create BigNumContext");
+fn ecdsa_secp256r1_signature_and_public_key<R: Rng + CryptoRng>(
+    bytes_to_sign: &[u8],
+    rng: &mut R,
+) -> (Vec<u8>, Vec<u8>) {
+    let sk = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+    let signature = sk.sign_message(bytes_to_sign).to_vec();
+    let public_key = sk.public_key().serialize_sec1(false);
+    (signature, public_key)
+}
 
-    let public_key_bytes = ec_key
-        .public_key()
-        .to_bytes(
-            &group,
-            openssl::ec::PointConversionForm::UNCOMPRESSED,
-            &mut ctx,
-        )
-        .expect("unable to serialize EC public key");
-
-    let signature = EcdsaSig::sign(&sha256(bytes_to_sign), &ec_key).expect("ECDSA signing failed");
-    let r = signature.r().to_vec();
-    let padding1 = vec![0; 32 - r.len()];
-    let s = signature.s().to_vec();
-    let padding2 = vec![0; 32 - s.len()];
-    let signature_bytes = [padding1, r, padding2, s].concat();
-
-    (signature_bytes, public_key_bytes)
+fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
+    bytes_to_sign: &[u8],
+    rng: &mut R,
+) -> (Vec<u8>, Vec<u8>) {
+    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+    let signature = sk.sign_message(bytes_to_sign).to_vec();
+    let public_key = sk.public_key().serialize_sec1(false);
+    (signature, public_key)
 }
 
 fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(

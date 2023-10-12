@@ -4,13 +4,11 @@ use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
     ecdsa_p256_signature_from_der_bytes, user_public_key_from_bytes, KeyBytesContentType,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use simple_asn1::oid;
 
 use ic_types::crypto::AlgorithmId;
-use openssl::ec::{EcGroup, EcKey};
-use openssl::ecdsa::EcdsaSig;
-use openssl::nid::Nid;
-use openssl::pkey::PKey;
+use rand::{CryptoRng, Rng};
 
 const MESSAGE: &str = "some message";
 
@@ -79,7 +77,10 @@ fn should_fail_parse_raw_ed25519_pk() {
 
 #[test]
 fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
-    let (pk_der, _) = new_pk_and_sig_der(Nid::X9_62_PRIME256V1);
+    let rng = &mut ReproducibleRng::new();
+    let pk_der = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng)
+        .public_key()
+        .serialize_der();
     let (pk, bytes_type) = user_public_key_from_bytes(&pk_der).unwrap();
     assert_eq!(pk.algorithm_id, AlgorithmId::EcdsaP256);
     assert_eq!(bytes_type, KeyBytesContentType::EcdsaP256PublicKeyDer);
@@ -87,14 +88,16 @@ fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
 
 #[test]
 fn should_correctly_parse_der_encoded_ecdsa_p256_sig() {
-    let (_, sig_der) = new_pk_and_sig_der(Nid::X9_62_PRIME256V1);
+    let rng = &mut ReproducibleRng::new();
+    let (_, sig_der) = new_p256_pk_and_sig_der(rng);
     let sig = ecdsa_p256_signature_from_der_bytes(&sig_der).unwrap();
     assert_eq!(sig.0.len(), 64);
 }
 
 #[test]
 fn should_fail_parsing_corrupted_der_encoded_ecdsa_p256_sig() {
-    let (_, sig_der) = new_pk_and_sig_der(Nid::X9_62_PRIME256V1);
+    let rng = &mut ReproducibleRng::new();
+    let (_, sig_der) = new_p256_pk_and_sig_der(rng);
     let sig_result = ecdsa_p256_signature_from_der_bytes(&sig_der[1..]);
     assert!(sig_result.is_err());
 }
@@ -115,24 +118,32 @@ fn should_fail_parsing_corrupted_der_pk() {
 
 #[test]
 fn should_fail_parsing_ec_keys_on_unsupported_curves() {
-    for curve_name in [Nid::X9_62_PRIME192V1, Nid::X9_62_PRIME239V2].iter() {
-        let (pk_der, _) = new_pk_and_sig_der(*curve_name);
+    // valid public keys generated with openssl
+    const VALID_PRIME192V1_PUBKEY_DER_HEX: &str = "3049301306072a8648ce3d020106082a8648ce3d0301010332000425adc4047e9dcf0d7efbe6bb6e76794555c51f0dfd6f7f90f3067f69e17e989d5969f68e9aefbef70a1788af0b86c03e";
+    const VALID_PRIME239V2_PUBKEY_DER_HEX: &str = "3055301306072a8648ce3d020106082a8648ce3d030105033e00046e1e1bf9e0b7b341d118f6a9acb08c1300af5804617098387b37e705625d6ff0ba958781f35dcec26f568481777a4827aea87c92a6ee0e48c72ce733";
+
+    for valid_pubkey_der_hex in [
+        VALID_PRIME192V1_PUBKEY_DER_HEX,
+        VALID_PRIME239V2_PUBKEY_DER_HEX,
+    ]
+    .iter()
+    {
+        let pk_der = hex::decode(valid_pubkey_der_hex).expect("invalid hex");
         let pk_result = user_public_key_from_bytes(&pk_der);
         assert!(pk_result.is_err());
     }
 }
 
-// Generates a new EC key pair, and computes an ECDSA signature on MESSAGE.
+// Generates a new P256 key pair, and computes an ECDSA signature on MESSAGE.
 // Returns the generated public key and the signature, both DER-encoded.
-fn new_pk_and_sig_der(curve_name: Nid) -> (Vec<u8>, Vec<u8>) {
-    let group = EcGroup::from_curve_name(curve_name).expect("unable to create EC group");
-    let ec_key = EcKey::generate(&group).expect("unable to generate EC key");
-    let ecdsa_sig = EcdsaSig::sign(MESSAGE.as_ref(), &ec_key).expect("unable to sign");
-    let pkey = PKey::from_ec_key(ec_key).expect("unable to create PKey");
-
-    (
-        pkey.public_key_to_der()
-            .expect("unable to DER-encode public key"),
-        ecdsa_sig.to_der().expect("unable to DER-encode signature"),
-    )
+fn new_p256_pk_and_sig_der<R: Rng + CryptoRng>(rng: &mut R) -> (Vec<u8>, Vec<u8>) {
+    let sk = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+    let pk_der = sk.public_key().serialize_der();
+    let sig_raw = sk.sign_message(MESSAGE.as_bytes());
+    let sig_der = p256::ecdsa::Signature::from_slice(&sig_raw)
+        .expect("invalid P256 signature")
+        .to_der()
+        .as_bytes()
+        .to_vec();
+    (pk_der, sig_der)
 }
