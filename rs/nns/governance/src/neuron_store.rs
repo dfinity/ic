@@ -11,8 +11,8 @@ use crate::{
         GovernanceError, Neuron, NeuronState, Topic,
     },
     storage::{
-        neuron_indexes::CorruptedNeuronIndexes, NeuronIdU64, TopicSigned32, NEURON_INDEXES,
-        STABLE_NEURON_STORE,
+        neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
+        NeuronIdU64, TopicSigned32, NEURON_INDEXES, STABLE_NEURON_STORE,
     },
 };
 #[cfg(target_arch = "wasm32")]
@@ -20,8 +20,8 @@ use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{
-        add_neuron_followees, remove_neuron_followees, update_neuron_category_followees,
-        HeapNeuronFollowingIndex, NeuronFollowingIndex,
+        add_neuron_followees, remove_neuron_followees, HeapNeuronFollowingIndex,
+        NeuronFollowingIndex,
     },
     neuron_principal::{
         add_neuron_id_principal_ids, remove_neuron_id_principal_ids, HeapNeuronPrincipalIndex,
@@ -510,6 +510,21 @@ impl NeuronStore {
                 );
             }
         }
+
+        if let Err(defects) = self
+            .topic_followee_index
+            .update_neuron(old_neuron, new_neuron)
+        {
+            println!(
+                "{}WARNING: issues found when updating neuron indexes, possibly because of \
+                 neuron indexes are out-of-sync with neurons: {}",
+                LOG_PREFIX,
+                NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
+                    neuron_id: old_neuron.id.unwrap().id,
+                    indexes: defects,
+                })
+            );
+        };
     }
 
     fn is_indexes_migrated_for_neuron(indexes_migration: &Migration, neuron_id: NeuronId) -> bool {
@@ -804,48 +819,6 @@ impl NeuronStore {
         log_already_absent_topic_followee_pairs(
             NeuronIdU64::from(neuron_id),
             already_absent_topic_followee_pairs,
-        );
-    }
-
-    pub fn update_neuron_followees_for_topic(
-        &mut self,
-        follower_id: NeuronId,
-        topic: Topic,
-        old_followee_ids: BTreeSet<NeuronId>,
-        new_followee_ids: BTreeSet<NeuronId>,
-    ) {
-        let topic = TopicSigned32::from(topic);
-        let old_followee_ids = old_followee_ids
-            .into_iter()
-            .map(|neuron_id| NeuronIdU64::from(neuron_id))
-            .collect();
-
-        let new_followee_ids = new_followee_ids
-            .into_iter()
-            .map(|neuron_id| NeuronIdU64::from(neuron_id))
-            .collect();
-
-        let (already_absent_old_followees, already_present_new_followees) =
-            update_neuron_category_followees(
-                &mut self.topic_followee_index,
-                &NeuronIdU64::from(follower_id),
-                topic,
-                old_followee_ids,
-                new_followee_ids,
-            );
-        log_already_present_topic_followee_pairs(
-            NeuronIdU64::from(follower_id),
-            already_present_new_followees
-                .iter()
-                .map(|followee| (topic, *followee))
-                .collect(),
-        );
-        log_already_absent_topic_followee_pairs(
-            NeuronIdU64::from(follower_id),
-            already_absent_old_followees
-                .iter()
-                .map(|followee| (topic, *followee))
-                .collect(),
         );
     }
 
