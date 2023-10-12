@@ -1,5 +1,5 @@
 {
-  "checksum": "c3a83acd79bdffc1246ecc832950b04e2de6021a8a0a17dd7a17e1e276b30cf2",
+  "checksum": "cdde1106df8b5bc0f20fc7e212c70a3b11e5d560c47a24871a6ceba132d719a6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -50857,7 +50857,6 @@
             "compression-zstd",
             "default",
             "request-id",
-            "timeout",
             "tokio",
             "tokio-util",
             "tower",

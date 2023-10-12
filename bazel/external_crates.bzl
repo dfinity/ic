@@ -1196,7 +1196,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "request-id",
                     "util",
                     "compression-full",
-                    "timeout",
                 ],
             ),
             "tower_governor": crate.spec(
