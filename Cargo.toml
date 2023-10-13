@@ -383,6 +383,12 @@ opt-level = 'z'
 [profile.dev.package.ic_bls12_381]
 opt-level = 3
 
+[profile.dev.package.k256]
+opt-level = 3
+
+[profile.dev.package.p256]
+opt-level = 3
+
 [patch.crates-io]
 # Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
 # released this can be removed.
