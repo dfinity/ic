@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.3
+
+- Add `icrc3` module.
+
 ## 0.1.2
 
-- Change ICRC-1 Account to use the standard ICRC-1 Textual Representation
+- Change ICRC-1 Account to use the standard ICRC-1 Textual Representation.
 
 ## 0.1.1
 
