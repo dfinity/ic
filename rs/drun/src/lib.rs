@@ -30,7 +30,7 @@ use ic_test_utilities::consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::batch::BatchMessages;
+use ic_types::batch::{BatchMessages, BlockmakerMetrics};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::Batch,
@@ -347,6 +347,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],
+        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
     }
 }
 /// Block till the given ingress message has finished executing and

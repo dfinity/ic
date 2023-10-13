@@ -10,7 +10,9 @@ use crate::{
     ecdsa::utils::EcdsaBlockReaderImpl,
 };
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
-use ic_consensus_utils::{crypto_hashable_to_seed, get_block_hash_string, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
+};
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGResponse};
@@ -25,7 +27,7 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    batch::{Batch, BatchMessages},
+    batch::{Batch, BatchMessages, BlockmakerMetrics},
     consensus::{
         ecdsa::{self, CompletedSignature, EcdsaBlockReader},
         Block,
@@ -45,6 +47,7 @@ use std::collections::BTreeMap;
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn deliver_batches(
     message_routing: &dyn MessageRouting,
+    membership: &Membership,
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -150,6 +153,38 @@ pub fn deliver_batches(
                         .unwrap_or_default()
                 };
 
+                let Some(previous_beacon) = pool.get_random_beacon(last_delivered_batch_height)
+                else {
+                    warn!(
+                        every_n_seconds => 5,
+                        log,
+                        "No batch delivery at height {}: no random beacon found.",
+                        h
+                    );
+                    return Ok(last_delivered_batch_height);
+                };
+                let blockmaker_ranking = match membership.get_shuffled_nodes(
+                    block.height,
+                    &previous_beacon,
+                    &ic_crypto_prng::RandomnessPurpose::BlockmakerRanking,
+                ) {
+                    Ok(nodes) => nodes,
+                    Err(e) => {
+                        warn!(
+                            every_n_seconds => 5,
+                            log,
+                            "No batch delivery at height {}: membership error: {:?}",
+                            h,
+                            e
+                        );
+                        return Ok(last_delivered_batch_height);
+                    }
+                };
+                let blockmaker_metrics = BlockmakerMetrics {
+                    blockmaker: blockmaker_ranking[block.rank.0 as usize],
+                    failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
+                };
+
                 let batch = Batch {
                     batch_number: h,
                     requires_full_state_hash,
@@ -159,6 +194,7 @@ pub fn deliver_batches(
                     registry_version: block.context.registry_version,
                     time: block.context.time,
                     consensus_responses,
+                    blockmaker_metrics,
                 };
 
                 debug!(

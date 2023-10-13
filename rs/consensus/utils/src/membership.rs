@@ -67,7 +67,7 @@ impl Membership {
     // derived from the genesis random beacon at height 1 is predictable,
     // because the beacon from the genesis height is preconstructed and known in
     // advance
-    fn get_shuffled_nodes(
+    pub fn get_shuffled_nodes(
         &self,
         height: Height,
         previous_beacon: &RandomBeacon,

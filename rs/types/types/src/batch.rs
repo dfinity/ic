@@ -22,6 +22,7 @@ use super::{
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
 use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_base_types::NodeId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -49,6 +50,8 @@ pub struct Batch {
     pub time: Time,
     /// Responses to subnet calls that require consensus' involvement.
     pub consensus_responses: Vec<Response>,
+    /// Information about block makers
+    pub blockmaker_metrics: BlockmakerMetrics,
 }
 
 /// The context built by Consensus for deterministic processing. Captures all
@@ -119,6 +122,22 @@ impl BatchPayload {
             && self.canister_http.is_empty()
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockmakerMetrics {
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
+}
+
+impl BlockmakerMetrics {
+    pub fn new_for_test() -> Self {
+        Self {
+            blockmaker: NodeId::new(ic_base_types::PrincipalId::new_node_test_id(0)),
+            failed_blockmakers: vec![],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -94,6 +94,7 @@ impl Finalizer {
         // Try to deliver finalized batches to messaging
         let _ = deliver_batches(
             &*self.message_routing,
+            &self.membership,
             pool,
             &*self.registry_client,
             self.replica_config.subnet_id,
