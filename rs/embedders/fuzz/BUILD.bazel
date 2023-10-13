@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary_afl")
 
 package(default_visibility = ["//visibility:private"])
@@ -88,4 +89,21 @@ rust_fuzz_test_binary(
     srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = EMBEDDERS_FUZZER_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ws2wasm",
+    srcs = [
+        "fuzz_targets/ic_wasm.rs",
+        "fuzz_targets/ws2wasm.rs",
+    ],
+    proc_macro_deps = [],
+    version = "0.1.0",
+    deps = [
+        "//rs/test_utilities",
+        "@crate_index//:arbitrary",
+        "@crate_index//:clap",
+        "@crate_index//:wasm-smith",
+        "@crate_index//:wasmprinter",
+    ],
 )
