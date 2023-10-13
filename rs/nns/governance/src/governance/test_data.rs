@@ -157,6 +157,9 @@ lazy_static! {
             neurons_fund_investment_icp: Some(pb::Tokens {
                 e8s: Some(6_100_000_000),
             }),
+
+            // Disabled until IS_MATCHED_FUNDING_ENABLED == True
+            neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED { Some(true) } else { None },
         })
     };
 }

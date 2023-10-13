@@ -550,6 +550,7 @@ type SwapBackgroundInformation = record {
 type SwapDistribution = record { total : opt Tokens };
 type SwapParameters = record {
   minimum_participants : opt nat64;
+  neurons_fund_participation : opt bool;
   duration : opt Duration;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   confirmation_text : opt text;

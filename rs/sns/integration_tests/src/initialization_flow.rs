@@ -122,6 +122,7 @@ lazy_static! {
                 start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
                 duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
                 neurons_fund_investment_icp: Some(Tokens::from_tokens(100)),
+                neurons_fund_participation: None, // TODO NNS1-2569: Populate
             }),
             governance_parameters: Some(GovernanceParameters {
                 proposal_rejection_fee: Some(Tokens::from_e8s(1_000_000_000)),
