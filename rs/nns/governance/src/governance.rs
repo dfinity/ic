@@ -2190,10 +2190,6 @@ impl Governance {
                 NeuronId { id: neuron_id },
                 neuron.principal_ids_with_special_permissions(),
             );
-        self.neuron_store.add_neuron_to_topic_followee_index(
-            NeuronId { id: neuron_id },
-            neuron.topic_followee_pairs(),
-        );
 
         self.neuron_store.add_neuron(neuron)?;
 
