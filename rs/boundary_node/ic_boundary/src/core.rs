@@ -22,7 +22,7 @@ use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TEST
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use prometheus::{labels, Registry};
+use prometheus::Registry;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
@@ -43,8 +43,8 @@ use crate::{
     http::ReqwestClient,
     management,
     metrics::{
-        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricsCache, MetricsRunner,
-        WithMetrics, HTTP_DURATION_BUCKETS,
+        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsPersist,
+        MetricsCache, MetricsRunner, WithMetrics, WithMetricsPersist, HTTP_DURATION_BUCKETS,
     },
     nns::{Load, Loader},
     persist,
@@ -80,15 +80,10 @@ const MANAGEMENT_CANISTER_ID: &str = "aaaaa-aa";
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
     // Metrics
-    let registry: Registry = Registry::new_custom(
-        Some(SERVICE_NAME.into()),
-        Some(labels! {
-            "service".into() => SERVICE_NAME.into(),
-        }),
-    )?;
+    let registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
     info!(
-        msg = format!("Starting {SERVICE_NAME}"),
+        msg = format!("Starting ic-boundary"),
         metrics_addr = cli.monitoring.metrics_addr.to_string().as_str(),
     );
 
@@ -261,6 +256,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             ))
             .layer(middleware::from_fn(routes::postprocess_response));
 
+        let health_route = Router::new().route(routes::PATH_HEALTH, {
+            get(routes::health).with_state(h.clone())
+        });
+
         let btc_mw = ServiceBuilder::new()
             .layer(Extension((
                 Principal::from_text(MANAGEMENT_CANISTER_ID).expect("failed to parse"),
@@ -297,7 +296,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .layer(middleware::from_fn(routes::postprocess_response)),
         );
 
-        proxy_routes.merge(status_route)
+        proxy_routes.merge(status_route).merge(health_route)
     };
 
     #[cfg(feature = "tls")]
@@ -361,9 +360,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
 
     // Checks
-    let persister = WithMetrics(
+    let persister = WithMetricsPersist(
         persist::Persister::new(Arc::clone(&routing_table)),
-        MetricParams::new_with_opts(&registry, "persist", &[], None),
+        MetricParamsPersist::new(&registry),
     );
 
     let checker = Checker::new(http_client);

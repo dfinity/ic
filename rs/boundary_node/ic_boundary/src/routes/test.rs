@@ -1,6 +1,7 @@
 use super::*;
 
-use crate::persist::test::node;
+use std::sync::{Arc, Mutex};
+
 use anyhow::Error;
 use axum::{
     body::Body,
@@ -11,13 +12,27 @@ use axum::{
     Router,
 };
 use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
+use prometheus::Registry;
 use tower::{Service, ServiceBuilder};
 use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+
+use crate::{
+    metrics::{metrics_middleware_status, HttpMetricParamsStatus},
+    persist::test::node,
+};
 
 #[derive(Clone)]
 struct ProxyRouter {
     node: Node,
     root_key: Vec<u8>,
+    health: Arc<Mutex<ReplicaHealthStatus>>,
+}
+
+impl ProxyRouter {
+    fn set_health(&self, new: ReplicaHealthStatus) {
+        let mut h = self.health.lock().unwrap();
+        *h = new;
+    }
 }
 
 #[async_trait]
@@ -50,7 +65,7 @@ impl RootKey for ProxyRouter {
 #[async_trait]
 impl Health for ProxyRouter {
     async fn health(&self) -> ReplicaHealthStatus {
-        ReplicaHealthStatus::Healthy
+        *self.health.lock().unwrap()
     }
 }
 
@@ -62,6 +77,7 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     let proxy_router = Arc::new(ProxyRouter {
         node,
         root_key: root_key.clone(),
+        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
     });
 
     let (state_rootkey, state_health) = (
@@ -92,7 +108,7 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     assert_eq!(resp.status(), StatusCode::OK);
     let request_id = resp
         .headers()
-        .get("x-request-id")
+        .get(HEADER_X_REQUEST_ID)
         .unwrap()
         .to_str()
         .unwrap();
@@ -102,22 +118,24 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri("http://localhost/api/v2/status")
-        .header("x-request-id", "40a6d613-149e-4bde-8443-33593fd2fd17")
+        .header(HEADER_X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
-        resp.headers().get("x-request-id").unwrap(),
+        resp.headers().get(HEADER_X_REQUEST_ID).unwrap(),
         "40a6d613-149e-4bde-8443-33593fd2fd17"
     );
     // case 3: 'x-request-id' header contains an invalid uuid
-    let expected_failure =
-        "malformed_request: Value of 'x-request-id' header is not in version 4 uuid format\n";
+    #[allow(clippy::borrow_interior_mutable_const)]
+    let expected_failure = format!(
+        "malformed_request: value of '{HEADER_X_REQUEST_ID}' header is not in UUID format\n"
+    );
     let request = Request::builder()
         .method("GET")
         .uri("http://localhost/api/v2/status")
-        .header("x-request-id", "1")
+        .header(HEADER_X_REQUEST_ID, "1")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
@@ -129,7 +147,7 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri("http://localhost/api/v2/status")
-        .header("x-request-id", "40a6d613149e4bde844333593fd2fd17")
+        .header(HEADER_X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
@@ -141,7 +159,7 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri("http://localhost/api/v2/status")
-        .header("x-request-id", "")
+        .header(HEADER_X_REQUEST_ID, "")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
@@ -154,13 +172,53 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn test_status() -> Result<(), Error> {
+async fn test_health() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
 
     let proxy_router = Arc::new(ProxyRouter {
         node,
         root_key: root_key.clone(),
+        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
+    });
+
+    let state_health = proxy_router.clone() as Arc<dyn Health>;
+    let mut app = Router::new().route(PATH_HEALTH, get(health).with_state(state_health));
+
+    // Test healthy
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/health")
+        .body(Body::from(""))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Test starting
+    proxy_router.set_health(ReplicaHealthStatus::Starting);
+
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/health")
+        .body(Body::from(""))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_status() -> Result<(), Error> {
+    let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
+    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
+
+    let proxy_router = Arc::new(ProxyRouter {
+        node: node.clone(),
+        root_key: root_key.clone(),
+        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
     });
 
     let (state_rootkey, state_health) = (
@@ -168,13 +226,21 @@ async fn test_status() -> Result<(), Error> {
         proxy_router.clone() as Arc<dyn Health>,
     );
 
+    let registry: Registry = Registry::new_custom(None, None)?;
+    let metric_params = HttpMetricParamsStatus::new(&registry);
+
     let mut app = Router::new()
         .route(
             PATH_STATUS,
             get(status).with_state((state_rootkey, state_health)),
         )
+        .layer(middleware::from_fn_with_state(
+            metric_params,
+            metrics_middleware_status,
+        ))
         .layer(middleware::from_fn(validate_request));
 
+    // Test healthy
     let request = Request::builder()
         .method("GET")
         .uri("http://localhost/api/v2/status")
@@ -195,6 +261,28 @@ async fn test_status() -> Result<(), Error> {
     );
     assert_eq!(health.root_key.as_deref(), Some(&root_key),);
 
+    // Test starting
+    proxy_router.set_health(ReplicaHealthStatus::Starting);
+
+    let request = Request::builder()
+        .method("GET")
+        .uri("http://localhost/api/v2/status")
+        .body(Body::from(""))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let (_parts, body) = resp.into_parts();
+    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+
+    let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
+    assert_eq!(
+        health.replica_health_status,
+        Some(ReplicaHealthStatus::Starting)
+    );
+
     Ok(())
 }
 
@@ -205,6 +293,7 @@ async fn test_query() -> Result<(), Error> {
     let state = Arc::new(ProxyRouter {
         node: node.clone(),
         root_key,
+        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
     });
 
     let (state_lookup, state_proxy) = (

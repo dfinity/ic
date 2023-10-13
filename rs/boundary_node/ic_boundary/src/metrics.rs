@@ -15,9 +15,11 @@ use futures::task::{Context as FutContext, Poll};
 use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use http_body::Body as HttpBody;
 use ic_types::messages::ReplicaHealthStatus;
+use jemalloc_ctl::{epoch, stats};
 use prometheus::{
-    register_histogram_vec_with_registry, register_int_counter_vec_with_registry, Encoder,
-    HistogramOpts, HistogramVec, IntCounterVec, Registry, TextEncoder,
+    register_histogram_vec_with_registry, register_int_counter_vec_with_registry,
+    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
+    IntGauge, Registry, TextEncoder,
 };
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
@@ -68,15 +70,34 @@ pub struct MetricsRunner {
     cache: Arc<RwLock<MetricsCache>>,
     registry: Registry,
     encoder: TextEncoder,
+
+    mem_allocated: IntGauge,
+    mem_resident: IntGauge,
 }
 
 // Snapshots & encodes the metrics for the handler to export
 impl MetricsRunner {
     pub fn new(cache: Arc<RwLock<MetricsCache>>, registry: Registry) -> Self {
+        let mem_allocated = register_int_gauge_with_registry!(
+            format!("memory_allocated"),
+            format!("Allocated memory in bytes"),
+            registry
+        )
+        .unwrap();
+
+        let mem_resident = register_int_gauge_with_registry!(
+            format!("memory_resident"),
+            format!("Resident memory in bytes"),
+            registry
+        )
+        .unwrap();
+
         Self {
             cache,
             registry,
             encoder: TextEncoder::new(),
+            mem_allocated,
+            mem_resident,
         }
     }
 }
@@ -84,10 +105,17 @@ impl MetricsRunner {
 #[async_trait]
 impl Run for MetricsRunner {
     async fn run(&mut self) -> Result<(), Error> {
+        // Record jemalloc memory usage
+        epoch::advance().unwrap();
+        self.mem_allocated
+            .set(stats::allocated::read().unwrap() as i64);
+        self.mem_resident
+            .set(stats::resident::read().unwrap() as i64);
+
         // Get a snapshot of metrics
         let metric_families = self.registry.gather();
 
-        // Take a write lock, trim the vector and encode the metrics into it
+        // Take a write lock, truncate the vector and encode the metrics into it
         let mut cache = self.cache.write().await;
         cache.buffer.clear();
         self.encoder.encode(&metric_families, &mut cache.buffer)?;
@@ -250,6 +278,36 @@ impl MetricParams {
     }
 }
 
+pub struct WithMetricsPersist<T>(pub T, pub MetricParamsPersist);
+
+#[derive(Clone)]
+pub struct MetricParamsPersist {
+    pub ranges: IntGauge,
+    pub nodes: IntGauge,
+}
+
+impl MetricParamsPersist {
+    pub fn new(registry: &Registry) -> Self {
+        Self {
+            // Count
+            ranges: register_int_gauge_with_registry!(
+                format!("persist_ranges"),
+                format!("Number of cansiter ranges currently published"),
+                registry
+            )
+            .unwrap(),
+
+            // Duration
+            nodes: register_int_gauge_with_registry!(
+                format!("persist_nodes"),
+                format!("Number of nodes currently published"),
+                registry
+            )
+            .unwrap(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct HttpMetricParams {
     pub action: String,
@@ -327,10 +385,11 @@ pub async fn metrics_middleware_status(
     next: Next<Body>,
 ) -> impl IntoResponse {
     let response = next.run(request).await;
-    let health = format!(
-        "{:?}",
-        response.extensions().get::<ReplicaHealthStatus>().unwrap()
-    );
+    let health = response
+        .extensions()
+        .get::<ReplicaHealthStatus>()
+        .unwrap()
+        .to_string();
 
     let HttpMetricParamsStatus { counter } = metric_params;
     counter.with_label_values(&[health.as_str()]).inc();

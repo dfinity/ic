@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -7,7 +7,7 @@ use ethnum::u256;
 use tracing::{error, info};
 
 use crate::{
-    metrics::{MetricParams, WithMetrics},
+    metrics::{MetricParamsPersist, WithMetricsPersist},
     snapshot::{Node, Subnet},
 };
 
@@ -112,7 +112,7 @@ impl Persister {
 
 #[async_trait]
 impl Persist for Persister {
-    // Construct a lookup table based on provided routing table
+    // Construct a lookup table based on the provided subnet list
     async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
         if subnets.is_empty() {
             return PersistStatus::SkippedEmpty;
@@ -164,34 +164,26 @@ impl Persist for Persister {
 }
 
 #[async_trait]
-impl<T: Persist> Persist for WithMetrics<T> {
+impl<T: Persist> Persist for WithMetricsPersist<T> {
     async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
-        let start_time = Instant::now();
         let out = self.0.persist(subnets).await;
-        let duration = start_time.elapsed().as_secs_f64();
+        let MetricParamsPersist { nodes, ranges } = &self.1;
 
         match out {
             PersistStatus::SkippedEmpty => {
                 error!("Lookup table is empty");
             }
+
             PersistStatus::Completed(s) => {
+                nodes.set(s.nodes_new as i64);
+                ranges.set(s.ranges_new as i64);
+
                 info!(
                     "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
                     s.ranges_old, s.ranges_new, s.nodes_old, s.nodes_new,
                 );
             }
         }
-
-        let MetricParams {
-            action,
-            counter,
-            recorder,
-        } = &self.1;
-
-        counter.with_label_values(&[]).inc();
-        recorder.with_label_values(&[]).observe(duration);
-
-        info!(action, duration);
 
         out
     }
