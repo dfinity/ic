@@ -108,10 +108,7 @@ type RetrieveEthStatus = variant {
     // Transaction is not signed yet.
     TxCreated;
 
-    // Ethereum transaction is signed and ready to be sent.
-    TxSigned : record {transaction_hash : text};
-
-    // Ethereum transaction is sent to the network.
+    // Ethereum transaction was signed and is sent to the network.
     TxSent : record {transaction_hash : text};
 
     // Ethereum transaction is confirmed.

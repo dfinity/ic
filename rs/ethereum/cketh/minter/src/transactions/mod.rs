@@ -44,7 +44,6 @@ pub struct EthWithdrawalRequest {
 pub struct EthTransactions {
     withdrawal_requests: VecDeque<EthWithdrawalRequest>,
     created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
-    signed_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, SignedEip1559TransactionRequest>,
     sent_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedEip1559TransactionRequest>>,
     finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
     next_nonce: TransactionNonce,
@@ -57,17 +56,6 @@ pub enum CreateTransactionError {
         withdrawal_amount: Wei,
         max_transaction_fee: Wei,
     },
-}
-
-/// A transaction to re-submit to Ethereum.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ResubmitTransaction {
-    /// The transaction was changed (in comparison to the last sent transaction with that nonce);
-    /// e.g., the transaction fee was increased, and needs to be re-signed.
-    ToSign(Eip1559TransactionRequest),
-    /// The transaction was not changed (in comparison to the last sent transaction with that nonce);
-    /// and should be sent again as is
-    ToSend(SignedEip1559TransactionRequest),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -85,7 +73,6 @@ impl EthTransactions {
         Self {
             withdrawal_requests: VecDeque::new(),
             created_tx: MultiKeyMap::default(),
-            signed_tx: MultiKeyMap::default(),
             sent_tx: MultiKeyMap::default(),
             finalized_tx: MultiKeyMap::default(),
             next_nonce,
@@ -107,7 +94,6 @@ impl EthTransactions {
             .iter()
             .any(|r| r.ledger_burn_index == burn_index)
             || self.created_tx.contains_alt(&burn_index)
-            || self.signed_tx.contains_alt(&burn_index)
             || self.sent_tx.contains_alt(&burn_index)
             || self.finalized_tx.contains_alt(&burn_index)
         {
@@ -179,33 +165,12 @@ impl EthTransactions {
             .created_tx
             .remove_entry(&signed_transaction.nonce())
             .expect("BUG: missing created transaction");
-        assert_eq!(
-            self.signed_tx
-                .try_insert(nonce, ledger_burn_index, signed_transaction),
-            Ok(())
-        );
-    }
-
-    pub fn record_sent_transaction(&mut self, sent_transaction: SignedEip1559TransactionRequest) {
-        let signed_tx = self
-            .signed_tx
-            .get(&sent_transaction.nonce())
-            .expect("BUG: missing signed transaction");
-        assert_eq!(
-            signed_tx, &sent_transaction,
-            "BUG: mismatch between sent transaction and signed transaction"
-        );
-        let (nonce, ledger_burn_index, _signed_tx) = self
-            .signed_tx
-            .remove_entry(&sent_transaction.nonce())
-            .expect("BUG: missing created transaction");
-
-        if let Some(already_sent_transactions) = self.sent_tx.get_mut(&sent_transaction.nonce()) {
-            already_sent_transactions.push(sent_transaction);
+        if let Some(sent_tx) = self.sent_tx.get_mut(&nonce) {
+            sent_tx.push(signed_transaction);
         } else {
             assert_eq!(
                 self.sent_tx
-                    .try_insert(nonce, ledger_burn_index, vec![sent_transaction]),
+                    .try_insert(nonce, ledger_burn_index, vec![signed_transaction]),
                 Ok(())
             );
         }
@@ -223,7 +188,7 @@ impl EthTransactions {
         &self,
         latest_transaction_count: TransactionCount,
         current_transaction_price: TransactionPrice,
-    ) -> Vec<Result<ResubmitTransaction, ResubmitTransactionError>> {
+    ) -> Vec<Result<Eip1559TransactionRequest, ResubmitTransactionError>> {
         // If transaction count at block height H is c > 0, then transactions with nonces
         // 0, 1, ..., c - 1 were mined. If transaction count is 0, then no transactions were mined.
         // The nonce of the first pending transaction is then exactly c.
@@ -268,57 +233,25 @@ impl EthTransactions {
                     amount: new_amount,
                     ..last_tx
                 };
-                transactions_to_resubmit.push(Ok(ResubmitTransaction::ToSign(new_tx)));
+                transactions_to_resubmit.push(Ok(new_tx));
             } else {
                 // the transaction fee is still up-to-date but because the transaction did not get mined,
                 // we re-send it as is to be sure that it remains known to the mempool and hopefully be mined at some point.
-                transactions_to_resubmit
-                    .push(Ok(ResubmitTransaction::ToSend(last_signed_tx.clone())));
+                // Since we always re-send the last non-mined transactions in sent_tx, there is nothing to do.
             }
         }
         transactions_to_resubmit
     }
 
-    pub fn record_resubmit_transaction(&mut self, transaction: ResubmitTransaction) {
-        match transaction {
-            ResubmitTransaction::ToSign(new_tx) => {
-                self.record_resubmit_to_sign_tx(new_tx);
-            }
-            ResubmitTransaction::ToSend(signed_tx) => {
-                self.record_resubmit_to_send_tx(signed_tx);
-            }
-        }
-    }
-
-    fn record_resubmit_to_sign_tx(&mut self, new_tx: Eip1559TransactionRequest) {
+    pub fn record_resubmit_transaction(&mut self, new_tx: Eip1559TransactionRequest) {
         let (ledger_burn_index, last_sent_tx) =
             Self::expect_last_sent_tx_entry(&self.sent_tx, &new_tx.nonce);
         assert!(equal_ignoring_fee_and_amount(last_sent_tx.transaction(), &new_tx),
                 "BUG: mismatch between last sent transaction {last_sent_tx:?} and the transaction to resubmit {new_tx:?}");
-        Self::cleanup_failed_resubmitted_transactions(
-            &mut self.created_tx,
-            &mut self.signed_tx,
-            &new_tx.nonce,
-        );
+        Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &new_tx.nonce);
         assert_eq!(
             self.created_tx
                 .try_insert(new_tx.nonce, *ledger_burn_index, new_tx.clone()),
-            Ok(())
-        );
-    }
-
-    fn record_resubmit_to_send_tx(&mut self, signed_tx: SignedEip1559TransactionRequest) {
-        let (ledger_burn_index, last_sent_tx) =
-            Self::expect_last_sent_tx_entry(&self.sent_tx, &signed_tx.nonce());
-        assert_eq!(last_sent_tx, &signed_tx, "BUG: mismatch between last sent transaction {last_sent_tx:?} and the transaction to resubmit {signed_tx:?}");
-        Self::cleanup_failed_resubmitted_transactions(
-            &mut self.created_tx,
-            &mut self.signed_tx,
-            &signed_tx.nonce(),
-        );
-        assert_eq!(
-            self.signed_tx
-                .try_insert(signed_tx.nonce(), *ledger_burn_index, signed_tx),
             Ok(())
         );
     }
@@ -364,11 +297,7 @@ impl EthTransactions {
 
         let nonce = sent_tx.nonce();
         self.sent_tx.remove_entry(&nonce);
-        Self::cleanup_failed_resubmitted_transactions(
-            &mut self.created_tx,
-            &mut self.signed_tx,
-            &nonce,
-        );
+        Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
         assert_eq!(
             self.finalized_tx
                 .try_insert(nonce, ledger_burn_index, finalized_tx),
@@ -387,10 +316,6 @@ impl EthTransactions {
 
         if self.created_tx.contains_alt(burn_index) {
             return RetrieveEthStatus::TxCreated;
-        }
-
-        if let Some(tx) = self.signed_tx.get_alt(burn_index) {
-            return RetrieveEthStatus::TxSigned(EthTransaction::from(tx));
         }
 
         if let Some(tx) = self.sent_tx.get_alt(burn_index).and_then(|txs| txs.last()) {
@@ -431,8 +356,9 @@ impl EthTransactions {
         self.created_tx.iter()
     }
 
-    pub fn signed_transactions_iter(
+    pub fn transactions_to_send_iter(
         &self,
+        latest_transaction_count: TransactionCount,
     ) -> impl Iterator<
         Item = (
             &TransactionNonce,
@@ -440,7 +366,14 @@ impl EthTransactions {
             &SignedEip1559TransactionRequest,
         ),
     > {
-        self.signed_tx.iter()
+        let first_pending_tx_nonce: TransactionNonce = latest_transaction_count.change_units();
+        self.sent_tx
+            .iter()
+            .filter_map(move |(nonce, ledger_burn_index, txs)| {
+                txs.last()
+                    .map(|tx| (nonce, ledger_burn_index, tx))
+                    .filter(|(nonce, _ledger_burn_index, _tx)| *nonce >= &first_pending_tx_nonce)
+            })
     }
 
     pub fn sent_transactions_iter(
@@ -472,10 +405,7 @@ impl EthTransactions {
     }
 
     pub fn nothing_to_process(&self) -> bool {
-        self.withdrawal_requests.is_empty()
-            && self.created_tx.is_empty()
-            && self.signed_tx.is_empty()
-            && self.sent_tx.is_empty()
+        self.withdrawal_requests.is_empty() && self.created_tx.is_empty() && self.sent_tx.is_empty()
     }
 
     fn remove_withdrawal_request(&mut self, request: &EthWithdrawalRequest) {
@@ -499,20 +429,12 @@ impl EthTransactions {
 
     fn cleanup_failed_resubmitted_transactions(
         created_tx: &mut MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
-        signed_tx: &mut MultiKeyMap<
-            TransactionNonce,
-            LedgerBurnIndex,
-            SignedEip1559TransactionRequest,
-        >,
         nonce: &TransactionNonce,
     ) {
         use crate::logs::INFO;
         use ic_canister_log::log;
 
         if let Some((_nonce, _index, prev_resubmitted_tx)) = created_tx.remove_entry(nonce) {
-            log!(INFO, "[cleanup_failed_resubmitted_transactions]: removing previously resubmitted transaction {prev_resubmitted_tx:?} that failed to progress");
-        }
-        if let Some((_nonce, _index, prev_resubmitted_tx)) = signed_tx.remove_entry(nonce) {
             log!(INFO, "[cleanup_failed_resubmitted_transactions]: removing previously resubmitted transaction {prev_resubmitted_tx:?} that failed to progress");
         }
     }

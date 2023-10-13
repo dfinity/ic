@@ -76,7 +76,6 @@ pub enum RetrieveEthStatus {
     NotFound,
     Pending,
     TxCreated,
-    TxSigned(EthTransaction),
     TxSent(EthTransaction),
     TxConfirmed(EthTransaction),
 }
@@ -87,7 +86,6 @@ impl Display for RetrieveEthStatus {
             RetrieveEthStatus::NotFound => write!(f, "Not Found"),
             RetrieveEthStatus::Pending => write!(f, "Pending"),
             RetrieveEthStatus::TxCreated => write!(f, "Created"),
-            RetrieveEthStatus::TxSigned(tx) => write!(f, "Signed({})", tx.transaction_hash),
             RetrieveEthStatus::TxSent(tx) => write!(f, "Sent({})", tx.transaction_hash),
             RetrieveEthStatus::TxConfirmed(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
         }
