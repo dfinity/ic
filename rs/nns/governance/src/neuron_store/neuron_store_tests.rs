@@ -215,7 +215,7 @@ fn test_remove_neuron_after_indexes_migration() {
         },
     );
 
-    neuron_store.remove(&neuron.id.unwrap());
+    neuron_store.remove_neuron(&neuron.id.unwrap());
 
     let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
         indexes
@@ -354,7 +354,7 @@ fn test_remove_neuron_during_indexes_migration() {
 
     // Step 3: remove a neuron beyond the migration progress.
     let neuron = simple_neuron(NEURON_INDEXES_MIGRATION_BATCH_SIZE as u64 + 1);
-    neuron_store.remove(&neuron.id.unwrap());
+    neuron_store.remove_neuron(&neuron.id.unwrap());
 
     // Step 4: assert that the subaccount index does not have the removed neuron.
     let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
