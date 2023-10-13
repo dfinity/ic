@@ -125,7 +125,8 @@ RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninte
 RUN addgroup --system nonconfidential && \
     addgroup --system ic-csp-vault-socket && \
     addgroup --system vsock && \
-    addgroup --system ic-registry-local-store
+    addgroup --system ic-registry-local-store && \
+    addgroup --system metrics_reporter
 
 # The "ic-csp-vault" account. Used to run `ic-crypto-csp` binary and access the crypto key material.
 RUN addgroup ic-csp-vault && \
@@ -146,7 +147,8 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica nonconfidential && \
     adduser ic-replica ic-registry-local-store && \
     adduser ic-replica ic-http-adapter && \
-    adduser ic-replica vsock
+    adduser ic-replica vsock && \
+    adduser ic-replica metrics_reporter
 
 # Accounts to allow remote access to state bits
 
@@ -200,6 +202,10 @@ RUN addgroup node_exporter && \
                /usr/local/bin/node_exporter && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml
+
+RUN mkdir -p /run/node_exporter/collector_textfile && \
+    chown :metrics_reporter /run/node_exporter/collector_textfile && \
+    chmod g+rw /run/node_exporter/collector_textfile
 
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
