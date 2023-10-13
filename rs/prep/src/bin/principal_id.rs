@@ -1,6 +1,5 @@
 use clap::{ArgEnum, Parser};
 use ic_types::PrincipalId;
-use openssl::pkey;
 use std::{
     env,
     fs::File,
@@ -9,6 +8,8 @@ use std::{
     path::{Path, PathBuf},
     string::ToString,
 };
+use x509_cert::der; // re-export of der crate
+use x509_cert::spki; // re-export of spki crate
 
 #[derive(Debug, Clone, ArgEnum)]
 enum PemOrDer {
@@ -145,11 +146,33 @@ fn run_self_signed(fname: Option<PathBuf>, pod: Option<PemOrDer>) -> io::Result<
     //export it as der then calculate the principal_id. I chose to read the key
     //even when the input is supposed to be in der format as an extra validaton
     // step.
-    let pkey = match parser {
-        PemOrDer::Der => pkey::PKey::public_key_from_der(&buffer)?,
-        PemOrDer::Pem => pkey::PKey::public_key_from_pem(&buffer)?,
+    let pkey_spki = match parser {
+        PemOrDer::Der => {
+            use der::Decode;
+            spki::SubjectPublicKeyInfoOwned::from_der(&buffer).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("input is not a DER-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}.",),
+                )
+            })?
+        }
+        PemOrDer::Pem => {
+            use x509_cert::der::DecodePem;
+            spki::SubjectPublicKeyInfoOwned::from_pem(&buffer).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("input is not a PEM-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}.",),
+                )
+            })?
+        }
     };
-    let pkey_der = pkey.public_key_to_der()?;
+    use der::Encode;
+    let pkey_der = pkey_spki.to_der().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("failed to DER-encode public key: {e}."),
+        )
+    })?;
     println!("{:?}", PrincipalId::new_self_authenticating(&pkey_der));
     Ok(())
 }

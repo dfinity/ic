@@ -32,7 +32,6 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-types = { path = "../types/types" }
 json5 = "0.4.1"
-openssl = "0.10.55"
 maplit = "1.0.2"
 prost = { workspace = true }
 rand = "0.8"
@@ -46,6 +45,7 @@ slog = { version = "2.5.2", features = [
 tempfile = "3.1.0"
 thiserror = "1.0"
 url = "2.1.1"
+x509-cert = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1"

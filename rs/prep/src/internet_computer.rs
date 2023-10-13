@@ -8,17 +8,17 @@
 use std::{
     collections::BTreeMap,
     convert::TryInto,
-    fmt,
     fs::{self, File},
     io,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use openssl::pkey;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
+use x509_cert::der; // re-export of der crate
+use x509_cert::spki; // re-export of spki crate
 
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
@@ -173,21 +173,6 @@ impl TopologyConfig {
     }
 }
 
-#[derive(Clone)]
-pub struct NodeOperatorPublicKey {
-    pkey_wrapper: pkey::PKey<pkey::Public>,
-}
-
-// We need to implement a wrapper and the debug trait since PKey does not
-// implement Debug
-impl fmt::Debug for NodeOperatorPublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NodeOperatorPublicKey")
-            .field("pkey_wrapper", &self.pkey_wrapper.public_key_to_der())
-            .finish()
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct NodeOperatorEntry {
     _name: String,
@@ -292,12 +277,6 @@ pub enum InitializeError {
     JsonError {
         #[from]
         source: serde_json::Error,
-    },
-
-    #[error("OpenSSL error: {source}")]
-    OpenSslError {
-        #[from]
-        source: openssl::error::ErrorStack,
     },
 
     #[error("principal did not parse: {source}")]
@@ -788,7 +767,18 @@ impl IcConfig {
                     }),
                 }?;
                 let provider_buf: Vec<u8> = fs::read(provider_path.as_path())?;
-                let _ = pkey::PKey::public_key_from_der(&provider_buf)?;
+
+                // Sanity check that public key is in DER format.
+                use der::Decode;
+                spki::SubjectPublicKeyInfoOwned::from_der(&provider_buf).map_err(|e| {
+                    InitializeError::IoError {
+                        source: io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("input is not a DER-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}."),
+                        ),
+                    }
+                })?;
+
                 Some(PrincipalId::new_self_authenticating(&provider_buf))
             } else {
                 None
