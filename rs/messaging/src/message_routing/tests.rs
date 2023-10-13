@@ -27,6 +27,7 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_types::batch::BlockmakerMetrics;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -764,6 +765,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(network_topology, latest_state.metadata.network_topology);
@@ -1375,6 +1377,7 @@ fn process_batch_updates_subnet_metrics() {
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         });
 
         let latest_state = state_manager.get_latest_state().take();

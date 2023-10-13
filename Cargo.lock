@@ -5615,6 +5615,7 @@ dependencies = [
  "ic-consensus-utils",
  "ic-constants",
  "ic-crypto",
+ "ic-crypto-prng",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",

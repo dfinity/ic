@@ -69,7 +69,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::batch::{QueryStatsPayload, TotalQueryStats};
+use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats};
 pub use ic_types::canister_http::CanisterHttpRequestContext;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
@@ -885,6 +885,7 @@ impl StateMachine {
             registry_version: self.registry_client.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
             consensus_responses: payload.consensus_responses,
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         };
 
         self.message_routing
