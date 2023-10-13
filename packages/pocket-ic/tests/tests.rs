@@ -46,6 +46,8 @@ fn test_counter_canister() {
 
     let can_id = pic.create_canister(None);
     pic.add_cycles(can_id, 1_000_000_000_000_000_000);
+
+    // Open a wasm file and install it on the canister
     let wasm_path = std::env::var_os("COUNTER_WASM").expect("Missing counter wasm file");
     let counter_wasm = std::fs::read(wasm_path).unwrap();
     pic.install_canister(can_id, counter_wasm, vec![], None);

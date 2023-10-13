@@ -32,16 +32,18 @@ fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -
 ```
 ## Examples
 
-For a simple but complete example with the counter canister, [see here](https://raw.githubusercontent.com/dfinity/ic/master/packages/pocket-ic/tests/tests.rs). 
+For a simple but complete example with the counter canister, [see here](https://github.com/dfinity/ic/blob/master/packages/pocket-ic/tests/tests.rs#L44). 
 
-For larger test suites with more complex test setups, consider the [Internet Identity](https://github.com/dfinity/internet-identity/tree/main/src/internet_identity/tests) and the [OpenChat](https://github.com/open-chat-labs/open-chat/tree/master/backend/integration_tests) integration test suites.
+For larger test suites with more complex test setups, consider the [Internet Identity](https://github.com/dfinity/internet-identity/tree/main/src/internet_identity/tests) and the [OpenChat](https://github.com/open-chat-labs/open-chat/tree/master/backend/integration_tests/src) integration test suites.
 
 ## Getting Started 
 
-- Download the PocketIC binary for [Linux](https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/x86_64-linux/pocket-ic.gz) or [MacOS](https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/x86_64-darwin/pocket-ic.gz) and make it executable. 
-- Write the binary path into the environment variable `POCKET_IC_BIN`. You can also prepend `POCKET_IC_BIN=...` to your `cargo test` invocation. 
-- Add the pocket-ic crate to your Cargo.toml, or install it with `cargo install pocket-ic`.
-- Depending on your use case, you may also need the [candid crate](https://crates.io/crates/candid). 
+- Download the **PocketIC binary** for [Linux](https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/x86_64-linux/pocket-ic.gz) or [macOS](https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/x86_64-darwin/pocket-ic.gz), unzip and make it executable.
+- Leave the binary in your current working directory, or specify the path to the binary by setting the `POCKET_IC_BIN` environment variable before running your tests.
+- Add PocketIC to your project with `cargo add pocket-ic`.
+- Import PocketIC with `use pocket_ic::PocketIc`, and create a new PocketIC instance with `let pic = PocketIc::new()` in your Rust code and start testing!
+
+For a more detailed installation guide, see [INSTALLATION.md](INSTALLATION.md).
 
 ## Why PocketIC? 
 
