@@ -30,5 +30,5 @@ use serde_bytes::ByteBuf;
 
 pub const MAIN_DERIVATION_PATH: Vec<ByteBuf> = vec![];
 pub const SCRAPPING_ETH_LOGS_INTERVAL: Duration = Duration::from_secs(3 * 60);
-pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(15);
+pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(6 * 60);
 pub const MINT_RETRY_DELAY: Duration = Duration::from_secs(3 * 60);

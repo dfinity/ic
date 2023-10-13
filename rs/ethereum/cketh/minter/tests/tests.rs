@@ -708,6 +708,17 @@ impl CkEthSetup {
             "eth_feeHistory",
             eth_get_fee_history(),
         );
+        tick_until_next_http_request(&self.env, "eth_getTransactionCount");
+        self.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_getTransactionCount",
+            eth_get_transaction_count(0),
+        );
+        self.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_getTransactionCount",
+            eth_get_transaction_count(0),
+        );
         assert_eq!(
             self.retrieve_eth_status(block_index),
             RetrieveEthStatus::TxCreated
