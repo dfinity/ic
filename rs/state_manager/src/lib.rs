@@ -3003,7 +3003,14 @@ impl StateManager for StateManagerImpl {
                 } else {
                     self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
                 }
-                state.clone()
+                {
+                    let _timer = self
+                        .metrics
+                        .checkpoint_op_duration
+                        .with_label_values(&["copy_state"])
+                        .start_timer();
+                    state.clone()
+                }
             }
         };
 

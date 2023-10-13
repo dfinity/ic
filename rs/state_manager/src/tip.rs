@@ -349,6 +349,7 @@ pub(crate) fn spawn_tip_thread(
                             states,
                             persist_metadata_guard,
                         } => {
+                            let _timer = request_timer(&metrics, "compute_manifest");
                             handle_compute_manifest_request(
                                 &mut thread_pool,
                                 &metrics,
