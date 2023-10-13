@@ -12,7 +12,6 @@ rust_library(
     srcs = glob(
         ["src/**"],
     ),
-    crate_features = ["experimental-api"],
     deps = [
         "@crate_index//:base32",
         "@crate_index//:candid",
