@@ -1,5 +1,5 @@
 {
-  "checksum": "cdde1106df8b5bc0f20fc7e212c70a3b11e5d560c47a24871a6ceba132d719a6",
+  "checksum": "ea2db1c0fe6f304acd466f3b246c14686ca09bac86fa8b2d56db19ce1dfd06f3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3983,13 +3983,10 @@
           "common": [
             "arc-swap",
             "default",
-            "openssl",
             "pin-project-lite",
             "rustls",
             "rustls-pemfile",
-            "tls-openssl",
             "tls-rustls",
-            "tokio-openssl",
             "tokio-rustls"
           ],
           "selects": {}
@@ -4021,10 +4018,6 @@
               "target": "hyper"
             },
             {
-              "id": "openssl 0.10.55",
-              "target": "openssl"
-            },
-            {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
             },
@@ -4039,10 +4032,6 @@
             {
               "id": "tokio 1.32.0",
               "target": "tokio"
-            },
-            {
-              "id": "tokio-openssl 0.6.3",
-              "target": "tokio_openssl"
             },
             {
               "id": "tokio-rustls 0.24.1",
