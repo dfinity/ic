@@ -9098,7 +9098,6 @@ dependencies = [
  "ic-types",
  "json5",
  "maplit",
- "openssl",
  "pretty_assertions 0.6.1",
  "prost",
  "rand 0.8.5",
@@ -9109,6 +9108,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "url",
+ "x509-cert",
 ]
 
 [[package]]
