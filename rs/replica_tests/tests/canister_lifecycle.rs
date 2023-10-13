@@ -970,11 +970,9 @@ fn test_canister_skip_upgrade() {
 
         // Set pre_upgrade to trap.
         assert_matches!(
-            canister.update(wasm().call_simple(
-                canister_id,
-                "update",
-                call_args().other_side(set_trap_pre_upgrade),
-            )),
+            canister.update(
+                wasm().inter_update(canister_id, call_args().other_side(set_trap_pre_upgrade),)
+            ),
             Ok(WasmResult::Reply(_))
         );
 

@@ -1243,9 +1243,8 @@ fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reject(wasm().msg_arg_data_size().int_to_blob().append_and_reply()),
@@ -1310,7 +1309,7 @@ fn ic0_msg_caller_size_and_copy_work_in_update_calls() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().caller().append_and_reply().build();
     let caller = wasm()
-        .call_simple(callee_id, "update", call_args().other_side(callee))
+        .inter_update(callee_id, call_args().other_side(callee))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(
@@ -1326,7 +1325,7 @@ fn ic0_msg_caller_size_and_copy_work_in_query_calls() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().caller().append_and_reply().build();
     let caller = wasm()
-        .call_simple(callee_id, "query", call_args().other_side(callee))
+        .inter_query(callee_id, call_args().other_side(callee))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(
@@ -1342,9 +1341,8 @@ fn ic0_msg_arg_data_copy_is_not_available_in_reject_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reject(wasm().msg_arg_data_copy(0, 1).append_and_reply()),
@@ -1418,9 +1416,8 @@ fn ic0_msg_caller_size_works_in_reply_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reply(wasm().msg_caller_size().int_to_blob().append_and_reply()),
@@ -1444,9 +1441,8 @@ fn ic0_msg_caller_copy_works_in_reply_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args().other_side(callee).on_reply(
                 wasm()
                     .msg_caller_copy(0, test.user_id().get().to_vec().len() as u32)
@@ -1465,9 +1461,8 @@ fn ic0_msg_caller_size_works_in_reject_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reject(wasm().msg_caller_size().int_to_blob().append_and_reply()),
@@ -1491,9 +1486,8 @@ fn ic0_msg_caller_copy_works_in_reject_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args().other_side(callee).on_reject(
                 wasm()
                     .msg_caller_copy(0, test.user_id().get().to_vec().len() as u32)
@@ -1512,9 +1506,8 @@ fn ic0_msg_caller_size_works_in_cleanup_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reply(wasm().trap())
@@ -1555,9 +1548,8 @@ fn ic0_msg_caller_copy_works_in_cleanup_callback() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reply().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reply(wasm().trap())
@@ -1739,9 +1731,8 @@ fn ic0_msg_reject_code_works() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reject(wasm().reject_code().int_to_blob().append_and_reply()),
@@ -1780,9 +1771,8 @@ fn ic0_msg_reject_msg_size_and_copy_work() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().message_payload().reject().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee.clone())
                 .on_reject(wasm().reject_message().append_and_reply()),
@@ -1833,9 +1823,8 @@ fn ic0_msg_reject_msg_copy_called_with_length_that_exceeds_message_length() {
     let callee_id = test.universal_canister().unwrap();
     let callee = wasm().push_bytes("error".as_bytes()).reject().build();
     let caller = wasm()
-        .call_simple(
+        .inter_update(
             callee_id,
-            "update",
             call_args()
                 .other_side(callee)
                 .on_reject(wasm().msg_reject_msg_copy(0, 8).append_and_reply()),
@@ -4611,9 +4600,7 @@ fn cannot_send_request_to_stopping_canister() {
     // 1. Calls canister B and transfers some cycles to it.
     // 2. Forwards the reply in the reply callback, which is the default
     //    behaviour of the universal canister.
-    let a = wasm()
-        .call_simple(b_id, "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
 
     // Move canister B to a stopping state before calling it.
     test.stop_canister(b_id);
@@ -4655,9 +4642,7 @@ fn cannot_send_request_to_stopped_canister() {
     // 1. Calls canister B and transfers some cycles to it.
     // 2. Forwards the reply in the reply callback, which is the default
     //    behaviour of the universal canister.
-    let a = wasm()
-        .call_simple(b_id, "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
 
     // Stop canister B before calling it.
     test.stop_canister(b_id);
@@ -4697,7 +4682,7 @@ fn cannot_stop_canister_with_open_call_context() {
 
     // Canister A calls canister B.
     let a = wasm()
-        .call_simple(b_id, "update", call_args().other_side(b.clone()))
+        .inter_update(b_id, call_args().other_side(b.clone()))
         .build();
 
     // Enqueue ingress message to canister A but do not execute it (guaranteed
@@ -4951,9 +4936,8 @@ fn system_state_apply_change_fails() {
         .build();
 
     let a = wasm()
-        .call_simple(
+        .inter_update(
             b_id,
-            "update",
             call_args()
                 .other_side(b)
                 .on_reject(wasm().reject_code().reject_message().reject()),
@@ -5686,9 +5670,8 @@ fn stable_grow_does_not_check_freezing_threshold_in_reply() {
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let body = wasm()
-        .call_simple(
+        .inter_update(
             callee,
-            "update",
             call_args()
                 .other_side(wasm().message_payload().append_and_reply())
                 .on_reply(wasm().stable_grow(10_000).build()),
@@ -5712,9 +5695,8 @@ fn stable_grow_does_not_check_freezing_threshold_in_reject() {
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let body = wasm()
-        .call_simple(
+        .inter_update(
             callee,
-            "update",
             call_args()
                 .other_side(wasm().build())
                 .on_reject(wasm().stable_grow(10_000).build()),

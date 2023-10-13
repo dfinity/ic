@@ -31,7 +31,7 @@ fn execute_response_when_stopping_status() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -143,7 +143,7 @@ fn execute_response_when_call_context_deleted() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -188,7 +188,7 @@ fn execute_response_successfully() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -1273,9 +1273,8 @@ fn dts_response_concurrent_cycles_change_succeeds() {
         .build();
 
     let a = wasm()
-        .call_simple(
+        .inter_update(
             b_id,
-            "update",
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .instruction_counter_is_at_least(1_000_000)
@@ -1392,9 +1391,8 @@ fn dts_response_concurrent_cycles_change_fails() {
         .build();
 
     let a = wasm()
-        .call_simple(
+        .inter_update(
             b_id,
-            "update",
             call_args().other_side(b.clone()).on_reply(
                 wasm()
                     .instruction_counter_is_at_least(1_000_000)
@@ -1530,9 +1528,8 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
         .build();
 
     let a = wasm()
-        .call_simple(
+        .inter_update(
             b_id,
-            "update",
             call_args()
                 .other_side(b.clone())
                 .on_reply(
@@ -1649,9 +1646,8 @@ fn cleanup_callback_cannot_accept_cycles() {
     let b = wasm().message_payload().append_and_reply().build();
 
     let a = wasm()
-        .call_simple(
+        .inter_update(
             b_id,
-            "update",
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
@@ -1677,13 +1673,12 @@ fn cleanup_callback_cannot_make_calls() {
     let b = wasm().message_payload().append_and_reply().build();
 
     let a = wasm()
-        .call_simple(
+        .inter_update(
             b_id,
-            "update",
             call_args()
                 .other_side(b.clone())
                 .on_reply(wasm().trap())
-                .on_cleanup(wasm().call_simple(b_id, "update", call_args().other_side(b))),
+                .on_cleanup(wasm().inter_update(b_id, call_args().other_side(b))),
         )
         .build();
     let err = test.ingress(a_id, "update", a).unwrap_err();
@@ -1709,9 +1704,8 @@ fn dts_uninstall_with_aborted_response() {
     let b_id = test.universal_canister().unwrap();
 
     let wasm_payload = wasm()
-        .call_simple(
+        .inter_update(
             b_id,
-            "update",
             call_args()
                 .other_side(wasm().push_bytes(&[42]).append_and_reply())
                 .on_reply(
@@ -2538,7 +2532,7 @@ fn cycles_balance_changes_applied_correctly() {
     let mut b = wasm().accept_cycles(Cycles::new(u128::MAX));
 
     for _ in 0..400 {
-        b = b.call_simple(a_id, "update", call_args());
+        b = b.inter_update(a_id, call_args());
     }
 
     let b = b.push_int(42).reply_int().build();
