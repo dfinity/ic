@@ -150,7 +150,7 @@ fn test_add_neuron_after_indexes_migration() {
         },
     );
     let neuron_2 = simple_neuron(2);
-    neuron_store.upsert(neuron_2.clone());
+    neuron_store.add_neuron(neuron_2.clone()).unwrap();
 
     let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
         indexes
@@ -187,7 +187,7 @@ fn test_add_neuron_during_indexes_migration_smaller_id() {
 
     // Step 3: insert a neuron whose id has been passed by the migration progress.
     let neuron = simple_neuron(3);
-    neuron_store.upsert(neuron.clone());
+    neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 4: assert that the neuron can be looked up by subaccount index.
     let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {
@@ -298,7 +298,7 @@ fn test_add_neuron_during_indexes_migration() {
 
     // Step 3: insert a neuron beyond the migration progress.
     let neuron = simple_neuron(NEURON_INDEXES_MIGRATION_BATCH_SIZE as u64 + 2);
-    neuron_store.upsert(neuron.clone());
+    neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 4: assert that the subaccount index has not picked up the neuron.
     let neuron_id_found_by_subaccount_index = NEURON_INDEXES.with(|indexes| {

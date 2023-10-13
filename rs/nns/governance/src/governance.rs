@@ -2195,7 +2195,7 @@ impl Governance {
             neuron.topic_followee_pairs(),
         );
 
-        self.neuron_store.upsert(neuron);
+        self.neuron_store.add_neuron(neuron)?;
 
         Ok(())
     }
