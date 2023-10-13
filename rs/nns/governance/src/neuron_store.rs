@@ -56,6 +56,7 @@ pub enum NeuronStoreError {
         old_subaccount: Subaccount,
         new_subaccount: Subaccount,
     },
+    NeuronAlreadyExists(NeuronId),
 }
 
 impl NeuronStoreError {
@@ -130,6 +131,13 @@ impl Display for NeuronStoreError {
                 "Attempting to modify neuron subaccount from {:?} to {:?}",
                 old_subaccount, new_subaccount
             ),
+            NeuronStoreError::NeuronAlreadyExists(neuron_id) => {
+                write!(
+                    f,
+                    "Attempting to add a neuron with an existing ID: {:?}",
+                    neuron_id
+                )
+            }
         }
     }
 }
@@ -143,6 +151,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::InvalidSubaccount { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronIdModified { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::SubaccountModified { .. } => ErrorType::PreconditionFailed,
+            NeuronStoreError::NeuronAlreadyExists(_) => ErrorType::PreconditionFailed,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -285,9 +294,14 @@ impl NeuronStore {
         self.heap_neurons.len()
     }
 
-    /// Insert or update a Neuron
-    pub fn upsert(&mut self, neuron: Neuron) {
+    /// Add a new neuron
+    pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
         let neuron_id = neuron.id.expect("Neuron must have an id");
+
+        // TODO check stable storage also
+        if self.contains(neuron_id) {
+            return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
+        }
 
         if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, neuron_id) {
             if let Err(error) =
@@ -302,6 +316,8 @@ impl NeuronStore {
         }
 
         self.heap_neurons.insert(neuron_id.id, neuron);
+
+        Ok(neuron_id)
     }
 
     /// Remove a Neuron by id
