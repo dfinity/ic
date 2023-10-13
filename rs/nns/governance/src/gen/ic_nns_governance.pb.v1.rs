@@ -1935,6 +1935,10 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "11")]
         pub neurons_fund_investment_icp:
             ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        /// Whether Neurons' Fund participation is requested.
+        /// Cannot be set to true until Matched Funding is released
+        #[prost(bool, optional, tag = "14")]
+        pub neurons_fund_participation: ::core::option::Option<bool>,
     }
     /// Nested message and enum types in `SwapParameters`.
     pub mod swap_parameters {

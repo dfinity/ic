@@ -168,7 +168,8 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 duration: Some(nervous_system_pb::Duration {
                     seconds: Some(7 * SECONDS_PER_DAY),
                 }),
-                neurons_fund_investment_icp: Some(nervous_system_pb::Tokens::from_tokens(2))
+                neurons_fund_investment_icp: Some(nervous_system_pb::Tokens::from_tokens(2)),
+                neurons_fund_participation: None, // TODO NNS1-2569: Populate
             }),
             ledger_parameters: Some(LedgerParameters {
                 transaction_fee: Some(nervous_system_pb::Tokens { e8s: Some(10_000) }),

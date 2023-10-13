@@ -790,7 +790,9 @@ impl Swap {
 
             start_time,
             duration,
+
             neurons_fund_investment_icp,
+            neurons_fund_participation: None, // TODO NNS1-2569: Populate
         }
     }
 }
