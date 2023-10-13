@@ -494,6 +494,7 @@ function generate_certificate_issuer_config() {
             "certificate_issuer_acme_id") readonly CERTIFICATE_ISSUER_ACME_ID="${value:-}" ;;
             "certificate_issuer_acme_key") readonly CERTIFICATE_ISSUER_ACME_KEY="${value:-}" ;;
             "certificate_issuer_cloudflare_api_key") readonly CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY="${value:-}" ;;
+            "certificate_issuer_important_domains") readonly CERTIFICATE_ISSUER_IMPORTANT_DOMAINS="${value:-}" ;;
         esac
     done <"${CERTIFICATE_ISSUER_CREDENTIALS}"
 
@@ -523,6 +524,7 @@ certificate_issuer_acme_provider_url=${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}
 certificate_issuer_acme_id=${CERTIFICATE_ISSUER_ACME_ID}
 certificate_issuer_acme_key=${CERTIFICATE_ISSUER_ACME_KEY}
 certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
+certificate_issuer_important_domains=${CERTIFICATE_ISSUER_IMPORTANT_DOMAINS}
 EOF
         fi
     done

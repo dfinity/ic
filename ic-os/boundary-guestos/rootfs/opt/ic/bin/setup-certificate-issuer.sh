@@ -37,6 +37,7 @@ function read_variables() {
             "certificate_issuer_task_delay_sec") TASK_DELAY_SEC="${value}" ;;
             "certificate_issuer_task_error_delay_sec") TASK_ERROR_DELAY_SEC="${value}" ;;
             "certificate_issuer_peek_sleep_sec") PEEK_SLEEP_SEC="${value}" ;;
+            "certificate_issuer_important_domains") IMPORTANT_DOMAINS="${value}" ;;
         esac
     done <"${BOOT_DIR}/certificate_issuer.conf"
 }
@@ -72,6 +73,7 @@ CLOUDFLARE_API_KEY_PATH=${CFG_DIR}/cloudflare_api_key.txt
 TASK_DELAY_SEC=${TASK_DELAY_SEC:-}
 TASK_ERROR_DELAY_SEC=${TASK_ERROR_DELAY_SEC:-}
 PEEK_SLEEP_SEC=${PEEK_SLEEP_SEC:-}
+IMPORTANT_DOMAINS=${IMPORTANT_DOMAINS:-}
 EOF
 }
 
