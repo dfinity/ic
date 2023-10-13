@@ -1,6 +1,6 @@
 use crate::address::Address;
 use crate::eth_logs::{report_transaction_error, ReceivedEthEventError};
-use crate::eth_rpc::{Block, BlockSpec};
+use crate::eth_rpc::BlockSpec;
 use crate::eth_rpc_client::EthRpcClient;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -203,24 +203,44 @@ pub async fn scrap_eth_logs() {
             return;
         }
     };
+    let last_block_number = match update_last_observed_block_number().await {
+        Some(block_number) => block_number,
+        None => {
+            log!(
+                DEBUG,
+                "[scrap_eth_logs]: skipping scrapping ETH logs: no last observed block number"
+            );
+            return;
+        }
+    };
     let mut last_scraped_block_number = read_state(|s| s.last_scraped_block_number);
-    let last_queried_block_number = update_last_observed_block_number().await;
-    while last_scraped_block_number < last_queried_block_number {
+    while last_scraped_block_number < last_block_number {
         last_scraped_block_number = scrap_eth_logs_between(
             contract_address,
             last_scraped_block_number,
-            last_queried_block_number,
+            last_block_number,
         )
         .await;
     }
 }
 
-pub async fn update_last_observed_block_number() -> BlockNumber {
-    let finalized_block: Block = read_state(EthRpcClient::from_state)
-        .eth_get_block_by_number(BlockSpec::Tag(read_state(State::ethereum_block_height)))
+pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
+    let block_height = read_state(State::ethereum_block_height);
+    match read_state(EthRpcClient::from_state)
+        .eth_get_block_by_number(BlockSpec::Tag(block_height))
         .await
-        .expect("HTTP call failed");
-    let block_number = finalized_block.number;
-    mutate_state(|s| s.last_observed_block_number = Some(block_number));
-    block_number
+    {
+        Ok(latest_block) => {
+            let block_number = Some(latest_block.number);
+            mutate_state(|s| s.last_observed_block_number = block_number);
+            block_number
+        }
+        Err(e) => {
+            log!(
+                INFO,
+                "Failed to get the latest {block_height} block number: {e:?}"
+            );
+            read_state(|s| s.last_observed_block_number)
+        }
+    }
 }

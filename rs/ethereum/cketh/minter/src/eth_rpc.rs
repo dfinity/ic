@@ -196,6 +196,16 @@ impl From<CandidBlockTag> for BlockTag {
     }
 }
 
+impl Display for BlockTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Latest => write!(f, "latest"),
+            Self::Safe => write!(f, "safe"),
+            Self::Finalized => write!(f, "finalized"),
+        }
+    }
+}
+
 /// The block specification indicating which block to query.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
@@ -412,17 +422,6 @@ pub struct JsonRpcReply<T> {
 pub enum JsonRpcResult<T> {
     Result(T),
     Error { code: i64, message: String },
-}
-
-impl<T> JsonRpcResult<T> {
-    pub fn unwrap(self) -> T {
-        match self {
-            Self::Result(t) => t,
-            Self::Error { code, message } => panic!(
-                "expected JSON RPC call to succeed, got an error: error_code = {code}, message = {message}"
-            ),
-        }
-    }
 }
 
 /// Describes a payload transformation to execute before passing the HTTP response to consensus.

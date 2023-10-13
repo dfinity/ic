@@ -4,8 +4,8 @@ use crate::eth_rpc::{
 };
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
+use crate::eth_rpc_client::{EthRpcClient, SingleCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{LedgerBurnIndex, TransactionCount};
@@ -33,7 +33,17 @@ pub async fn process_retrieve_eth_requests() {
         return;
     }
 
-    let transaction_price = estimate_transaction_price(&eth_fee_history().await);
+    let fee_history = match eth_fee_history().await {
+        Ok(fee_history) => fee_history,
+        Err(e) => {
+            log!(
+                INFO,
+                "Failed retrieving fee history to process ETH requests: {e:?}",
+            );
+            return;
+        }
+    };
+    let transaction_price = estimate_transaction_price(&fee_history);
     let max_transaction_fee = transaction_price.max_transaction_fee();
     log!(
         INFO,
@@ -282,7 +292,7 @@ async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallErro
         .reduce_with_equality()
 }
 
-pub async fn eth_fee_history() -> FeeHistory {
+pub async fn eth_fee_history() -> Result<FeeHistory, SingleCallError> {
     read_state(EthRpcClient::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
@@ -290,6 +300,4 @@ pub async fn eth_fee_history() -> FeeHistory {
             reward_percentiles: vec![20],
         })
         .await
-        .expect("HTTP call failed")
-        .unwrap()
 }
