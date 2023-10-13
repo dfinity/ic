@@ -806,12 +806,10 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "openssl",
  "pin-project-lite",
  "rustls",
  "rustls-pemfile",
  "tokio",
- "tokio-openssl",
  "tokio-rustls",
  "tower-service",
 ]
