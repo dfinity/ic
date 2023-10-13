@@ -810,7 +810,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
     let b_id = test.universal_canister().unwrap();
 
     // Canister A calls canister B.
-    let wasm_payload = wasm().call_simple(b_id, "update", call_args()).build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
@@ -838,10 +838,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
     let b_id = test.universal_canister().unwrap();
 
     // Canister A calls canister B and then traps.
-    let wasm_payload = wasm()
-        .call_simple(b_id, "update", call_args())
-        .trap()
-        .build();
+    let wasm_payload = wasm().inter_update(b_id, call_args()).trap().build();
 
     // Enqueue ingress message to canister A.
     let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;

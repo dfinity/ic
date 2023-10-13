@@ -1216,9 +1216,8 @@ fn dts_long_running_calls() {
             .append_and_reply()
             .build();
         let payload = wasm()
-            .call_simple(
+            .inter_update(
                 canister[(i + 1) % n],
-                "update",
                 call_args().other_side(work.clone()).on_reply(work),
             )
             .build();
@@ -1601,7 +1600,7 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .stable64_grow(1)
         .stable64_fill(0, 0, 10_000)
         .stable64_fill(0, 0, 10_000)
-        .call_simple(b_id, "update", call_args().other_side(b))
+        .inter_update(b_id, call_args().other_side(b))
         .build();
 
     let original_time = env.time();

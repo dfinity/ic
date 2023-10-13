@@ -377,15 +377,9 @@ fn response_callback_can_reject() {
     let c = wasm().reply().build();
     let b_callback = wasm().push_bytes("error".as_bytes()).reject().build();
     let b = wasm()
-        .call_simple(
-            c_id,
-            "update",
-            call_args().other_side(c).on_reply(b_callback),
-        )
+        .inter_update(c_id, call_args().other_side(c).on_reply(b_callback))
         .build();
-    let a = wasm()
-        .call_simple(b_id, "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
 
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
@@ -432,15 +426,9 @@ fn canister_cannot_reply_twice() {
     let b_callback = wasm().push_bytes("error".as_bytes()).reject().build();
     let b = wasm()
         .reply()
-        .call_simple(
-            c_id,
-            "update",
-            call_args().other_side(c).on_reply(b_callback),
-        )
+        .inter_update(c_id, call_args().other_side(c).on_reply(b_callback))
         .build();
-    let a = wasm()
-        .call_simple(b_id, "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
 
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
@@ -465,9 +453,7 @@ fn stopping_canister_rejects_requests() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     let b = wasm().reply().build();
-    let a = wasm()
-        .call_simple(b_id, "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
     test.induct_messages();
@@ -512,9 +498,7 @@ fn stopped_canister_rejects_requests() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     let b = wasm().reply().build();
-    let a = wasm()
-        .call_simple(b_id, "update", call_args().other_side(b))
-        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
     test.ingress_raw(a_id, "update", a);
     test.execute_message(a_id);
     test.induct_messages();
