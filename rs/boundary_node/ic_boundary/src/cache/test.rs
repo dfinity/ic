@@ -15,7 +15,7 @@ use crate::routes::ANONYMOUS_PRINCIPAL;
 const CANISTER_1: &str = "sqjm4-qahae-aq";
 const CANISTER_2: &str = "sxiki-5ygae-aq";
 const MAX_RESP_SIZE: usize = 1024;
-const MAX_MEM_SIZE: usize = 8192;
+const MAX_MEM_SIZE: usize = 32768;
 
 fn gen_request_with_params(
     canister_id: &str,
@@ -92,9 +92,6 @@ async fn test_cache() -> Result<(), Error> {
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Miss);
 
-    // TODO remove, some race condition?
-    tokio::time::sleep(Duration::from_micros(100)).await;
-
     let req = gen_request(CANISTER_1, false);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
@@ -105,9 +102,6 @@ async fn test_cache() -> Result<(), Error> {
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Miss);
-
-    // TODO remove, some race condition?
-    tokio::time::sleep(Duration::from_micros(100)).await;
 
     let req = gen_request(CANISTER_2, false);
     let res = app.call(req).await.unwrap();

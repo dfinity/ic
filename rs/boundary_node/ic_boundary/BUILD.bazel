@@ -39,6 +39,8 @@ DEPENDENCIES = [
     "@crate_index//:hyper-rustls",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:instant-acme",
+    "@crate_index//:jemallocator",
+    "@crate_index//:jemalloc-ctl",
     "@crate_index//:lazy_static",
     "@crate_index//:mockall",
     "@crate_index//:prometheus",

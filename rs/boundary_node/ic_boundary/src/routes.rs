@@ -63,12 +63,15 @@ const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status")
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
     HeaderName::from_static("x-ic-cache-bypass-reason");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
 // Rust const/static concat is non-existent, so we have to repeat
 pub const PATH_STATUS: &str = "/api/v2/status";
 pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
 pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
 pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
+pub const PATH_HEALTH: &str = "/health";
 
 lazy_static! {
     pub static ref UUID_REGEX: Regex =
@@ -471,15 +474,16 @@ pub async fn validate_request(
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if let Some(id_header) = request.headers().get("x-request-id") {
+    if let Some(id_header) = request.headers().get(HEADER_X_REQUEST_ID) {
         let is_valid_id = id_header
             .to_str()
             .map(|id| UUID_REGEX.is_match(id))
             .unwrap_or(false);
         if !is_valid_id {
-            return Err(ErrorCause::MalformedRequest(
-                "Value of 'x-request-id' header is not in version 4 uuid format".to_string(),
-            )
+            #[allow(clippy::borrow_interior_mutable_const)]
+            return Err(ErrorCause::MalformedRequest(format!(
+                "value of '{HEADER_X_REQUEST_ID}' header is not in UUID format"
+            ))
             .into());
         }
     }
@@ -600,7 +604,18 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     response
 }
 
-// Handler: processess IC status call
+// Handler: emit an HTTP status code that signals the service's state
+pub async fn health(State(h): State<Arc<dyn Health>>) -> impl IntoResponse {
+    let health = h.health().await;
+
+    if health == ReplicaHealthStatus::Healthy {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+// Handler: processes IC status call
 pub async fn status(
     State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
 ) -> impl IntoResponse {

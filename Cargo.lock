@@ -4861,6 +4861,8 @@ dependencies = [
  "ic-test-utilities-registry",
  "ic-types",
  "instant-acme",
+ "jemalloc-ctl",
+ "jemallocator",
  "lazy_static",
  "mockall 0.11.4",
  "prometheus",

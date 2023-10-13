@@ -220,11 +220,11 @@ impl<P: Persist, C: Check> Runner<P, C> {
 #[async_trait]
 impl<P: Persist, C: Check> Run for Runner<P, C> {
     async fn run(&mut self) -> Result<(), Error> {
-        // Clone the the latest routing table from the registry if there's one
+        // Clone the the latest registry snapshot if there's one
         let snapshot = self
             .published_registry_snapshot
             .load_full()
-            .ok_or_else(|| anyhow!("no routing table published"))?
+            .ok_or_else(|| anyhow!("no registry snapshot available"))?
             .as_ref()
             .clone();
 
