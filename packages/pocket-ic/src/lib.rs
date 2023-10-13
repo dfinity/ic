@@ -30,7 +30,7 @@
 //!         .expect("Failed to call counter canister")
 //! }
 //! ```
-//! For more information, see the [README](https://crates.io/crates/pocket_ic).
+//! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
     ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, InstanceId, RawAddCycles,
@@ -50,7 +50,7 @@ use ic_cdk::api::management_canister::{
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     time::{Duration, Instant, SystemTime},
 };
@@ -775,12 +775,30 @@ pub enum WasmResult {
 
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
-    // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-    let bin_path = std::env::var_os("POCKET_IC_BIN")
-        .expect("Could not find the PocketIC binary. Please specify its location with the POCKET_IC_BIN \
-        environment variable (e.g., `POCKET_IC_BIN=/path/to/pocket_ic cargo test`). You can find instructions \
-        on how to download the PocketIC binary in the Getting Started section of the README.md");
+    let bin_path = match std::env::var_os("POCKET_IC_BIN") {
+        None => "./pocket-ic".to_string(),
+        Some(path) => path
+            .clone()
+            .into_string()
+            .unwrap_or_else(|_| panic!("Invalid string path for {path:?}")),
+    };
 
+    if !Path::new(&bin_path).exists() {
+        panic!("
+Could not find the PocketIC binary.
+
+The PocketIC binary could not be found at {:?}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
+or place it in your current working directory (you are running PocketIC from {:?}).
+
+Run the following commands to get the binary:
+    curl -sLO https://download.dfinity.systems/ic/307d5847c1d2fe1f5e19181c7d0fcec23f4658b3/openssl-static-binaries/$platform/pocket-ic.gz
+    gzip -d pocket-ic.gz
+    chmod +x pocket-ic
+where $platform is 'x86_64-linux' for Linux and 'x86_64-darwin' for Intel/rosetta-enabled Darwin.
+        ", &bin_path, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+    }
+
+    // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let parent_pid = std::os::unix::process::parent_id();
     let mut cmd = Command::new(PathBuf::from(bin_path));
 
