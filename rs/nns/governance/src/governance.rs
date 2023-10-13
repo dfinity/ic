@@ -2219,10 +2219,7 @@ impl Governance {
                 neuron.principal_ids_with_special_permissions(),
             );
         self.neuron_store
-            .remove_neuron_from_topic_followee_index(neuron_id, neuron.topic_followee_pairs());
-
-        self.neuron_store
-            .remove(&neuron.id.expect("Neuron must have an id"));
+            .remove_neuron(&neuron.id.expect("Neuron must have an id"));
 
         Ok(())
     }

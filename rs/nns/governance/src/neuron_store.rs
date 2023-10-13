@@ -19,10 +19,7 @@ use crate::{
 use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
-    neuron_following::{
-        add_neuron_followees, remove_neuron_followees, HeapNeuronFollowingIndex,
-        NeuronFollowingIndex,
-    },
+    neuron_following::{add_neuron_followees, HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::{
         add_neuron_id_principal_ids, remove_neuron_id_principal_ids, HeapNeuronPrincipalIndex,
         NeuronPrincipalIndex,
@@ -31,7 +28,7 @@ use ic_nervous_system_governance::index::{
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, HashSet},
     fmt::{Display, Formatter},
     ops::RangeBounds,
 };
@@ -339,7 +336,7 @@ impl NeuronStore {
     }
 
     /// Remove a Neuron by id
-    pub fn remove(&mut self, neuron_id: &NeuronId) {
+    pub fn remove_neuron(&mut self, neuron_id: &NeuronId) {
         let removed_neuron = self.heap_neurons.remove(&neuron_id.id);
 
         let removed_neuron = match removed_neuron {
@@ -350,9 +347,14 @@ impl NeuronStore {
             }
         };
 
-        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, *neuron_id) {
+        self.remove_neuron_from_indexes(&removed_neuron);
+    }
+
+    fn remove_neuron_from_indexes(&mut self, neuron: &Neuron) {
+        let neuron_id = neuron.id.expect("Neuron must have id");
+        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, neuron_id) {
             if let Err(error) =
-                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().remove_neuron(&removed_neuron))
+                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().remove_neuron(neuron))
             {
                 println!(
                     "{}WARNING: issues found when adding neuron to indexes, possibly because of \
@@ -361,6 +363,18 @@ impl NeuronStore {
                 );
             }
         }
+
+        if let Err(defects) = self.topic_followee_index.remove_neuron(neuron) {
+            println!(
+                "{}WARNING: issues found when adding neuron to indexes, possibly because \
+                 neuron indexes are out-of-sync with neurons: {}",
+                LOG_PREFIX,
+                NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
+                    neuron_id: neuron.id.unwrap().id,
+                    indexes: vec![defects],
+                })
+            );
+        };
     }
 
     /// Get NeuronId for a particular subaccount.
@@ -813,27 +827,6 @@ impl NeuronStore {
         }
     }
 
-    pub fn remove_neuron_from_topic_followee_index(
-        &mut self,
-        neuron_id: NeuronId,
-        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
-    ) {
-        let topic_followee_pairs = topic_followee_pairs
-            .into_iter()
-            .map(|(topic, neuron_id)| (TopicSigned32::from(topic), NeuronIdU64::from(neuron_id)))
-            .collect();
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        let already_absent_topic_followee_pairs = remove_neuron_followees(
-            &mut self.topic_followee_index,
-            &NeuronIdU64::from(neuron_id),
-            topic_followee_pairs,
-        );
-        log_already_absent_topic_followee_pairs(
-            NeuronIdU64::from(neuron_id),
-            already_absent_topic_followee_pairs,
-        );
-    }
-
     pub fn add_known_neuron_to_index(&mut self, known_neuron_name: &str) {
         // TODO(NNS1-2409): Apply index updates to stable storage index.
         self.known_neuron_name_set
@@ -1010,18 +1003,6 @@ fn log_already_present_topic_followee_pairs(
     for (topic, followee) in already_present_topic_followee_pairs {
         println!(
             "{} Topic {:?} and followee {:?} already present in the index for neuron {:?}",
-            LOG_PREFIX, topic, followee, neuron_id
-        );
-    }
-}
-
-fn log_already_absent_topic_followee_pairs(
-    neuron_id: NeuronIdU64,
-    already_absent_topic_followee_pairs: Vec<(TopicSigned32, NeuronIdU64)>,
-) {
-    for (topic, followee) in already_absent_topic_followee_pairs {
-        println!(
-            "{} Topic {:?} and followee {:?} already absent in the index for neuron {:?}",
             LOG_PREFIX, topic, followee, neuron_id
         );
     }
