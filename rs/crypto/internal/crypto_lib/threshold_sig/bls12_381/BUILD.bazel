@@ -4,7 +4,6 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = [
     "//rs/certification/test-utils:__subpackages__",
     "//rs/crypto:__subpackages__",
-    "//rs/rosetta-api:__pkg__",
     "//rs/state_machine_tests:__pkg__",
     "//rs/validator/http_request_test_utils:__subpackages__",
 ])

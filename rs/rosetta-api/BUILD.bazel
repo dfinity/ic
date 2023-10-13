@@ -15,7 +15,6 @@ DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/constants",
-    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
