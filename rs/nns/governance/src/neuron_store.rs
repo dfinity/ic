@@ -303,21 +303,39 @@ impl NeuronStore {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
 
-        if Self::is_indexes_migrated_for_neuron(&self.indexes_migration, neuron_id) {
+        self.add_neuron_to_indexes(&neuron);
+        self.heap_neurons.insert(neuron_id.id, neuron);
+
+        Ok(neuron_id)
+    }
+
+    fn add_neuron_to_indexes(&mut self, neuron: &Neuron) {
+        if Self::is_indexes_migrated_for_neuron(
+            &self.indexes_migration,
+            neuron.id.expect("Neuron must have an id."),
+        ) {
             if let Err(error) =
-                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().add_neuron(&neuron))
+                NEURON_INDEXES.with(|indexes| indexes.borrow_mut().add_neuron(neuron))
             {
                 println!(
-                    "{}WARNING: issues found when adding neuron to indexes, possibly because of \
+                    "{}WARNING: issues found when adding neuron to indexes, possibly because \
                      neuron indexes are out-of-sync with neurons: {}",
                     LOG_PREFIX, error
                 );
             }
         }
 
-        self.heap_neurons.insert(neuron_id.id, neuron);
-
-        Ok(neuron_id)
+        if let Err(defects) = self.topic_followee_index.add_neuron(neuron) {
+            println!(
+                "{}WARNING: issues found when adding neuron to indexes, possibly because \
+                 neuron indexes are out-of-sync with neurons: {}",
+                LOG_PREFIX,
+                NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
+                    neuron_id: neuron.id.unwrap().id,
+                    indexes: vec![defects],
+                })
+            );
+        };
     }
 
     /// Remove a Neuron by id
@@ -793,28 +811,6 @@ impl NeuronStore {
                 LOG_PREFIX, principal_id, neuron_id
             );
         }
-    }
-
-    pub fn add_neuron_to_topic_followee_index(
-        &mut self,
-        neuron_id: NeuronId,
-        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
-    ) {
-        let topic_followee_pairs = topic_followee_pairs
-            .into_iter()
-            .map(|(topic, neuron_id)| (TopicSigned32::from(topic), NeuronIdU64::from(neuron_id)))
-            .collect();
-
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        let already_present_topic_followee_pairs = add_neuron_followees(
-            &mut self.topic_followee_index,
-            &NeuronIdU64::from(neuron_id),
-            topic_followee_pairs,
-        );
-        log_already_present_topic_followee_pairs(
-            NeuronIdU64::from(neuron_id),
-            already_present_topic_followee_pairs,
-        );
     }
 
     pub fn remove_neuron_from_topic_followee_index(
