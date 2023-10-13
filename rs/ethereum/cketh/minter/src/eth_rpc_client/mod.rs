@@ -169,10 +169,18 @@ impl EthRpcClient {
     pub async fn eth_fee_history(
         &self,
         params: FeeHistoryParams,
-    ) -> HttpOutcallResult<JsonRpcResult<FeeHistory>> {
+    ) -> Result<FeeHistory, SingleCallError> {
         // A typical response is slightly above 300 bytes.
-        self.sequential_call_until_ok("eth_feeHistory", params, ResponseSizeEstimate::new(512))
+        match self
+            .sequential_call_until_ok("eth_feeHistory", params, ResponseSizeEstimate::new(512))
             .await
+        {
+            Ok(JsonRpcResult::Result(fee_history)) => Ok(fee_history),
+            Ok(JsonRpcResult::Error { code, message }) => {
+                Err(SingleCallError::JsonRpcError { code, message })
+            }
+            Err(e) => Err(SingleCallError::HttpOutcallError(e)),
+        }
     }
 
     pub async fn eth_send_raw_transaction(
@@ -267,6 +275,11 @@ impl<T: PartialEq> MultiCallResults<T> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum SingleCallError {
+    HttpOutcallError(HttpOutcallError),
+    JsonRpcError { code: i64, message: String },
+}
 #[derive(Debug, PartialEq, Eq)]
 pub enum MultiCallError<T> {
     ConsistentHttpOutcallError(HttpOutcallError),

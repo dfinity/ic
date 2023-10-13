@@ -119,7 +119,11 @@ async fn smart_contract_address() -> String {
 #[update]
 #[candid_method(update)]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
-    let transaction_price = estimate_transaction_price(&eth_fee_history().await);
+    let transaction_price = estimate_transaction_price(
+        &eth_fee_history()
+            .await
+            .expect("ERROR: failed to retrieve fee history"),
+    );
     Eip1559TransactionPrice::from(transaction_price)
 }
 
