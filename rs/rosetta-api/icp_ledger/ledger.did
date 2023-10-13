@@ -368,10 +368,10 @@ type ApproveArgs = record {
     spender : Account;
     amount : Icrc1Tokens;
     expected_allowance : opt Icrc1Tokens;
-    expires_at : opt TimeStamp;
+    expires_at : opt Icrc1Timestamp;
     fee : opt Icrc1Tokens;
     memo : opt blob;
-    created_at_time: opt TimeStamp;
+    created_at_time: opt Icrc1Timestamp;
 };
 
 type ApproveError = variant {
