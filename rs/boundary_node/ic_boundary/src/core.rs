@@ -105,10 +105,18 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .with_custom_certificate_verifier(Arc::new(tls_verifier))
         .with_no_client_auth();
 
+    // TODO move to cli if it helps
+    let keepalive = Duration::from_secs(15);
+
     // HTTP Client
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(cli.listen.http_timeout))
         .connect_timeout(Duration::from_secs(cli.listen.http_timeout_connect))
+        .pool_idle_timeout(Some(Duration::from_secs(180))) // After this duration the idle connection is closed (default 90s)
+        .http2_keep_alive_interval(Some(keepalive)) // Keepalive interval for http2 connections
+        .http2_keep_alive_timeout(Duration::from_secs(5)) // Close connection if no reply after timeout
+        .http2_keep_alive_while_idle(true) // Also ping connections that have no streams open
+        .tcp_keepalive(Some(keepalive)) // Enable TCP keepalives
         .use_preconfigured_tls(rustls_config)
         .dns_resolver(Arc::new(dns_resolver))
         .build()
