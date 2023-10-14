@@ -543,3 +543,20 @@ fn allowance_table_select_approvals_for_trimming() {
         approvals_len as usize - 2
     );
 }
+
+#[test]
+fn arrival_table_updated_correctly() {
+    let mut table = TestAllowanceTable::default();
+
+    // Adding approvals for the same (account, spender) pair more than 2 times
+    // resulted in the arrival_queue not being updated correctly. The old elements
+    // were left in the queue instead of being replaced by new elements.
+    // If not fixed, this would trigger the debug_assert in check_postconditions.
+    // Fixed in https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/15265
+    // Released as https://dashboard.internetcomputer.org/proposal/125000
+    for i in 0..6 {
+        table
+            .approve(&Account(1), &Account(2), tokens(i), None, ts(i), None)
+            .unwrap();
+    }
+}
