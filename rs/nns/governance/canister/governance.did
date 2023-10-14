@@ -316,6 +316,7 @@ type Neuron = record {
   created_timestamp_seconds : nat64;
   auto_stake_maturity : opt bool;
   aging_since_timestamp_seconds : nat64;
+  is_genesis : opt bool;
   hot_keys : vec principal;
   account : vec nat8;
   joined_community_fund_timestamp_seconds : opt nat64;
@@ -355,6 +356,7 @@ type NeuronInfo = record {
   recent_ballots : vec BallotInfo;
   created_timestamp_seconds : nat64;
   state : int32;
+  is_genesis : opt bool;
   stake_e8s : nat64;
   joined_community_fund_timestamp_seconds : opt nat64;
   retrieved_at_timestamp_seconds : nat64;

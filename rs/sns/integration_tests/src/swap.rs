@@ -699,6 +699,7 @@ lazy_static! {
         auto_stake_maturity: None,
         not_for_profit: false,
         known_neuron_data: None,
+        is_genesis: Some(false),
     };
 }
 

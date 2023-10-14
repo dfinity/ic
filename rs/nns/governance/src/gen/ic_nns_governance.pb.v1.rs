@@ -86,6 +86,9 @@ pub struct NeuronInfo {
     /// If this neuron is a known neuron, this is data associated with it, including the neuron's name and (optionally) a description.
     #[prost(message, optional, tag = "10")]
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
+    /// If set to Some(true), this neuron a genesis neuron, or a descendent of one
+    #[prost(bool, optional, tag = "11")]
+    pub is_genesis: ::core::option::Option<bool>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -234,6 +237,9 @@ pub struct Neuron {
     /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
     #[prost(message, optional, tag = "18")]
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
+    /// If set to Some(true), this neuron a genesis neuron, or a descendent of one
+    #[prost(bool, optional, tag = "22")]
+    pub is_genesis: ::core::option::Option<bool>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///

@@ -189,6 +189,7 @@ pub struct NeuronBuilder {
     joined_community_fund: Option<u64>,
     do_not_create_subaccount: bool,
     spawn_at_timestamp_seconds: Option<u64>,
+    is_genesis: Option<bool>,
 }
 
 impl From<Neuron> for NeuronBuilder {
@@ -214,6 +215,7 @@ impl From<Neuron> for NeuronBuilder {
             joined_community_fund: neuron.joined_community_fund_timestamp_seconds,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            is_genesis: neuron.is_genesis,
         }
     }
 }
@@ -237,6 +239,7 @@ impl NeuronBuilder {
             joined_community_fund: None,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            is_genesis: Some(false),
         }
     }
 
@@ -258,6 +261,7 @@ impl NeuronBuilder {
             joined_community_fund: None,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            is_genesis: Some(false),
         }
     }
 
@@ -352,6 +356,11 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_is_genesis(mut self, is_genesis: bool) -> Self {
+        self.is_genesis = Some(is_genesis);
+        self
+    }
+
     pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
         let subaccount = match self.do_not_create_subaccount {
             false => {
@@ -391,6 +400,7 @@ impl NeuronBuilder {
             followees: self.followees,
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
+            is_genesis: self.is_genesis,
             ..Neuron::default()
         }
     }

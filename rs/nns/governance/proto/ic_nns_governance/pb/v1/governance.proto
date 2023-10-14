@@ -197,6 +197,8 @@ message NeuronInfo {
   optional uint64 joined_community_fund_timestamp_seconds = 9;
   // If this neuron is a known neuron, this is data associated with it, including the neuron's name and (optionally) a description.
   optional KnownNeuronData known_neuron_data = 10;
+  // If set to Some(true), this neuron a genesis neuron, or a descendent of one
+  optional bool is_genesis = 11;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -373,6 +375,9 @@ message Neuron {
 
   // If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
   optional KnownNeuronData known_neuron_data = 18;
+
+  // If set to Some(true), this neuron a genesis neuron, or a descendent of one
+  optional bool is_genesis = 22;
 }
 
 // The types of votes the Neuron can issue.
