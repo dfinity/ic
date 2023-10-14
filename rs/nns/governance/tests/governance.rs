@@ -4114,6 +4114,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             aging_since_timestamp_seconds: driver.now(),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             kyc_verified: true,
+            is_genesis: Some(false),
             ..Default::default()
         }
     );
@@ -5194,6 +5195,7 @@ fn test_neuron_split() {
                 parent_neuron.dissolve_delay_seconds(driver.get_fake_env().now())
             )),
             kyc_verified: true,
+            is_genesis: Some(false),
             ..Default::default()
         }
     );
@@ -5349,6 +5351,7 @@ fn test_neuron_spawn() {
             )),
             kyc_verified: true,
             maturity_e8s_equivalent: parent_maturity_e8s_equivalent,
+            is_genesis: Some(false),
             ..Default::default()
         }
     );
@@ -5390,6 +5393,7 @@ fn test_neuron_spawn() {
             )),
             kyc_verified: true,
             maturity_e8s_equivalent: 0,
+            is_genesis: Some(false),
             ..Default::default()
         }
     );
@@ -5553,6 +5557,7 @@ fn test_neuron_spawn_with_subaccount() {
             )),
             kyc_verified: true,
             maturity_e8s_equivalent: 0,
+            is_genesis: Some(false),
             ..Default::default()
         }
     );
@@ -5708,6 +5713,7 @@ fn assert_neuron_spawn_partial(
             )),
             kyc_verified: true,
             maturity_e8s_equivalent: 0,
+            is_genesis: Some(false),
             ..Default::default()
         }
     );
@@ -6028,6 +6034,7 @@ fn test_disburse_to_neuron() {
             aging_since_timestamp_seconds: driver.now(),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(24 * 60 * 60)),
             kyc_verified: true,
+            is_genesis: Some(false),
             ..Default::default()
         }
     );

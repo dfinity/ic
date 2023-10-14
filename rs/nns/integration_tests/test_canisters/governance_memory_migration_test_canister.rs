@@ -264,6 +264,7 @@ fn allocate_neuron(id: u64) -> Neuron {
         joined_community_fund_timestamp_seconds: None,
         known_neuron_data: None,
         spawn_at_timestamp_seconds: None,
+        is_genesis: None,
     }
 }
 

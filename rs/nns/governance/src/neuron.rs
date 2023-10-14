@@ -643,6 +643,7 @@ impl Neuron {
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
             known_neuron_data: self.known_neuron_data.as_ref().cloned(),
+            is_genesis: self.is_genesis,
         }
     }
 

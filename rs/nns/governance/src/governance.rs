@@ -2761,6 +2761,7 @@ impl Governance {
                 .joined_community_fund_timestamp_seconds,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            is_genesis: parent_neuron.is_genesis,
         };
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
@@ -3036,6 +3037,7 @@ impl Governance {
             // considered part of the community fund.
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
+            is_genesis: Some(false),
         };
 
         // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
@@ -3172,7 +3174,7 @@ impl Governance {
     /// equal to that amount, minus the transfer fee.
     ///
     /// The child neuron doesn't inherit any of the properties of the parent
-    /// neuron, except its following.
+    /// neuron, except its following and whether it's a genesis neuron.
     ///
     /// On success returns the newly created neuron's id.
     ///
@@ -3328,6 +3330,8 @@ impl Governance {
             MAX_DISSOLVE_DELAY_SECONDS,
         );
 
+        let is_genesis = parent_neuron.is_genesis;
+
         // Before we do the transfer, we need to save the neuron in the map
         // otherwise a trap after the transfer is successful but before this
         // method finishes would cause the funds to be lost.
@@ -3355,6 +3359,7 @@ impl Governance {
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            is_genesis,
         };
 
         self.add_neuron(child_nid.id, child_neuron.clone())?;
@@ -4139,6 +4144,7 @@ impl Governance {
                     joined_community_fund_timestamp_seconds: None,
                     known_neuron_data: None,
                     spawn_at_timestamp_seconds: None,
+                    is_genesis: Some(false),
                 };
                 self.add_neuron(nid.id, neuron)
             }
@@ -6571,6 +6577,7 @@ impl Governance {
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
             spawn_at_timestamp_seconds: None,
+            is_genesis: Some(false),
         };
 
         // This also verifies that there are not too many neurons already.
