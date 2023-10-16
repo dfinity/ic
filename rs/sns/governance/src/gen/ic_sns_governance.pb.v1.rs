@@ -394,6 +394,17 @@ pub mod transfer_sns_treasury_funds {
         }
     }
 }
+/// A proposal function that changes the ledger's parameters.
+/// Fields with None values will remain unchanged.
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManageLedgerParameters {
+    #[prost(uint64, optional, tag = "1")]
+    pub transfer_fee: ::core::option::Option<u64>,
+    #[prost(message, optional, tag = "2")]
+    pub set_fee_collector: ::core::option::Option<Account>,
+}
 /// A proposal function to change the values of SNS metadata.
 /// Fields with None values will remain unchanged.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -474,7 +485,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -565,6 +576,9 @@ pub mod proposal {
         /// Id = 11.
         #[prost(message, tag = "15")]
         DeregisterDappCanisters(super::DeregisterDappCanisters),
+        /// Id = 12
+        #[prost(message, tag = "16")]
+        ManageLedgerParameters(super::ManageLedgerParameters),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -771,6 +785,7 @@ pub struct ProposalData {
     /// Id 7 - UpgradeSnsToNextVersion proposals.
     /// Id 8 - ManageSnsMetadata proposals.
     /// Id 9 - TransferSnsTreasuryFunds proposals.
+    /// Id 12 - ManageLedgerParameters proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map

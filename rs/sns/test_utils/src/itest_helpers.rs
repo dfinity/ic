@@ -21,6 +21,7 @@ use ic_sns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         self as sns_governance_pb, get_neuron_response, get_proposal_response,
+        governance::Version,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
             configure::Operation,
@@ -74,6 +75,13 @@ pub const RETRIES_FOR_UPGRADE: u64 = 200;
 /// Constant that defines the number of retries to attempt while waiting for a proposal to
 /// execute or fail.
 pub const RETRIES_FOR_PROPOSAL_EXECUTION_OR_FAILURE: u64 = 200;
+
+pub const GOVERNANCE_BINARY_NAME: &str = "sns-governance-canister";
+pub const LEDGER_BINARY_NAME: &str = "ic-icrc1-ledger";
+pub const INDEX_BINARY_NAME: &str = "ic-icrc1-index";
+pub const ROOT_BINARY_NAME: &str = "sns-root-canister";
+pub const SWAP_BINARY_NAME: &str = "sns-swap-canister";
+pub const SNS_WASM_BINARY_NAME: &str = "sns-wasm-canister";
 
 /// Packages commonly used test data into a single struct.
 #[derive(Clone)]
@@ -397,6 +405,24 @@ impl SnsCanisters<'_> {
                     .push((aid, n.cached_neuron_stake_e8s.into()));
             }
         }
+
+        let (governance_wasm, ledger_wasm, root_wasm, swap_wasm, index_wasm) = futures::join!(
+            compile_rust_canister(GOVERNANCE_BINARY_NAME, &[]),
+            compile_rust_canister(LEDGER_BINARY_NAME, &[]),
+            compile_rust_canister(ROOT_BINARY_NAME, &[]),
+            compile_rust_canister(SWAP_BINARY_NAME, &[]),
+            compile_rust_canister(INDEX_BINARY_NAME, &[]),
+        );
+
+        // put wasm hashes into governance deployed_version.
+        init_payloads.governance.deployed_version = Some(Version {
+            root_wasm_hash: root_wasm.sha256_hash().to_vec(),
+            governance_wasm_hash: governance_wasm.sha256_hash().to_vec(),
+            ledger_wasm_hash: ledger_wasm.sha256_hash().to_vec(),
+            swap_wasm_hash: swap_wasm.sha256_hash().to_vec(),
+            archive_wasm_hash: vec![], // tests don't need it for now so we don't compile it.
+            index_wasm_hash: index_wasm.sha256_hash().to_vec(),
+        });
 
         // Install canisters
         futures::join!(
@@ -1252,14 +1278,7 @@ impl SnsCanisters<'_> {
     }
 }
 
-/// Installs a rust canister with the provided memory allocation.
-pub async fn install_rust_canister_with_memory_allocation(
-    canister: &mut Canister<'_>,
-    binary_name: impl AsRef<str>,
-    cargo_features: &[&str],
-    canister_init_payload: Option<Vec<u8>>,
-    memory_allocation: u64, // in bytes
-) {
+pub async fn compile_rust_canister(binary_name: impl AsRef<str>, cargo_features: &[&str]) -> Wasm {
     // Some ugly code to allow copying AsRef<Path> and features (an array slice) into new thread
     // neither of these implement Send or have a way to clone the whole structure's data
     let binary_name_ = binary_name.as_ref().to_string();
@@ -1285,10 +1304,37 @@ pub async fn install_rust_canister_with_memory_allocation(
 
     println!("Done compiling the wasm for {}", binary_name.as_ref());
 
+    wasm
+}
+
+pub async fn install_rust_canister_with_wasm_and_memory_allocation(
+    canister: &mut Canister<'_>,
+    wasm: Wasm,
+    canister_init_payload: Option<Vec<u8>>,
+    memory_allocation: u64, // in bytes
+) -> Result<(), String> {
     wasm.install_with_retries_onto_canister(
         canister,
         canister_init_payload,
         Some(memory_allocation),
+    )
+    .await
+}
+
+/// Installs a rust canister with the provided memory allocation.
+pub async fn install_rust_canister_with_memory_allocation(
+    canister: &mut Canister<'_>,
+    binary_name: impl AsRef<str>,
+    cargo_features: &[&str],
+    canister_init_payload: Option<Vec<u8>>,
+    memory_allocation: u64, // in bytes
+) {
+    let wasm = compile_rust_canister(binary_name.as_ref(), cargo_features).await;
+    install_rust_canister_with_wasm_and_memory_allocation(
+        canister,
+        wasm,
+        canister_init_payload,
+        memory_allocation,
     )
     .await
     .unwrap_or_else(|e| panic!("Could not install {} due to {}", binary_name.as_ref(), e));
@@ -1315,7 +1361,7 @@ where
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns-governance-canister",
+        GOVERNANCE_BINARY_NAME,
         &[],
         Some(CandidOne(init_payload).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
@@ -1340,7 +1386,7 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "ic-icrc1-ledger",
+        LEDGER_BINARY_NAME,
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
@@ -1362,7 +1408,7 @@ pub async fn install_index_canister<'runtime, 'a>(
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "ic-icrc1-index",
+        INDEX_BINARY_NAME,
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
@@ -1374,7 +1420,7 @@ pub async fn install_index_canister<'runtime, 'a>(
 pub async fn install_root_canister(canister: &mut Canister<'_>, args: SnsRootCanister) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns-root-canister",
+        ROOT_BINARY_NAME,
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
@@ -1393,7 +1439,7 @@ pub async fn set_up_root_canister(runtime: &'_ Runtime, args: SnsRootCanister) -
 pub async fn install_swap_canister(canister: &mut Canister<'_>, args: SwapInit) {
     install_rust_canister_with_memory_allocation(
         canister,
-        "sns-swap-canister",
+        SWAP_BINARY_NAME,
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,

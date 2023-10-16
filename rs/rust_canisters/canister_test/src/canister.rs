@@ -3,6 +3,7 @@ use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
 use ic_config::Config;
+use ic_crypto_sha2::Sha256;
 use ic_ic00_types::CanisterStatusType::Stopped;
 pub use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
@@ -236,6 +237,12 @@ impl Wasm {
                 }
             }
         }
+    }
+
+    pub fn sha256_hash(&self) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.write(&self.0);
+        hasher.finish()
     }
 }
 

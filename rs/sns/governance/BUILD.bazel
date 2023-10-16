@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",

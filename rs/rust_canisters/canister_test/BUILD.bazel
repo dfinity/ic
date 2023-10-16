@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/config",
+    "//rs/crypto/sha2",    
     "//rs/registry/transport",
     "//rs/replica_tests",
     "//rs/rust_canisters/dfn_candid",

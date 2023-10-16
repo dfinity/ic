@@ -345,6 +345,13 @@ message TransferSnsTreasuryFunds {
   optional Subaccount to_subaccount = 5;
 }
 
+// A proposal function that changes the ledger's parameters.
+// Fields with None values will remain unchanged.
+message ManageLedgerParameters {
+  optional uint64 transfer_fee = 1;
+  optional Account set_fee_collector = 2;
+}
+
 // A proposal function to change the values of SNS metadata.
 // Fields with None values will remain unchanged.
 message ManageSnsMetadata {
@@ -474,6 +481,9 @@ message Proposal {
     //
     // Id = 11.
     DeregisterDappCanisters deregister_dapp_canisters = 15;
+    
+    // Id = 12
+    ManageLedgerParameters manage_ledger_parameters = 16;
   }
 }
 
@@ -651,6 +661,7 @@ message ProposalData {
   // Id 7 - UpgradeSnsToNextVersion proposals.
   // Id 8 - ManageSnsMetadata proposals.
   // Id 9 - TransferSnsTreasuryFunds proposals.
+  // Id 12 - ManageLedgerParameters proposals.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
