@@ -11382,22 +11382,22 @@ lazy_static! {
             sns_swap_pb::CfParticipant {
                 hotkey_principal: principal(1).to_string(),
                 cf_neurons: vec![
-                    sns_swap_pb::CfNeuron {
-                        nns_neuron_id: 1,
-                        amount_icp_e8s: COMMUNITY_FUND_INVESTMENT_E8S * 60 / 100,
-                    },
-                    sns_swap_pb::CfNeuron {
-                        nns_neuron_id: 2,
-                        amount_icp_e8s: COMMUNITY_FUND_INVESTMENT_E8S * 10 / 100,
-                    },
+                    sns_swap_pb::CfNeuron::try_new(
+                        1,
+                        COMMUNITY_FUND_INVESTMENT_E8S * 60 / 100,
+                    ).unwrap(),
+                    sns_swap_pb::CfNeuron::try_new(
+                        2,
+                        COMMUNITY_FUND_INVESTMENT_E8S * 10 / 100
+                    ).unwrap(),
                 ],
             },
             sns_swap_pb::CfParticipant {
                 hotkey_principal: principal(2).to_string(),
-                cf_neurons: vec![sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 3,
-                    amount_icp_e8s: COMMUNITY_FUND_INVESTMENT_E8S * 30 / 100,
-                }],
+                cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(
+                    3,
+                    COMMUNITY_FUND_INVESTMENT_E8S * 30 / 100,
+                ).unwrap()],
             },
         ];
 
@@ -12272,6 +12272,7 @@ fn assert_neurons_fund_decremented(
             let CfNeuron {
                 nns_neuron_id,
                 amount_icp_e8s,
+                has_created_neuron_recipes: _,
             } = nf_neuron;
 
             let current_neuron_maturity = gov

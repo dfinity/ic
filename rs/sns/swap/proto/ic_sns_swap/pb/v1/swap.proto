@@ -481,6 +481,12 @@ message CfNeuron {
   // The amount of ICP that the Neurons' Fund invests associated
   // with this neuron.
   uint64 amount_icp_e8s = 2;
+
+  // Idempotency flag indicating whether the neuron recipes have been created for
+  // the CfNeuron. When set to true, it signifies that the action of creating neuron
+  // recipes has been performed on this structure. If the action is retried, this flag
+  // can be checked to avoid duplicate operations.
+  optional bool has_created_neuron_recipes = 3;
 }
 
 // Represents a Neurons' Fund participant, possibly with several neurons.
@@ -633,6 +639,12 @@ message BuyerState {
   // * COMMITTED - owned by the SNS governance canister, can be transferred out
   // * ABORTED - owned by the buyer, can be transferred out
   TransferableAmount icp = 5;
+
+  // Idempotency flag indicating whether the neuron recipes have been created for
+  // the BuyerState. When set to true, it signifies that the action of creating neuron
+  // recipes has been performed on this structure. If the action is retried, this flag
+  // can be checked to avoid duplicate operations.
+  optional bool has_created_neuron_recipes = 6;
 }
 
 // Information about a direct investor.

@@ -567,10 +567,7 @@ fn assert_clean_refund(
     let mut extra_cf_participants = cf_participants.clone();
     let mut expected_failed_refunds = vec![];
     if !extra_cf_participants.is_empty() {
-        let cf_neuron = sns_swap_pb::CfNeuron {
-            nns_neuron_id: 688477,
-            amount_icp_e8s: 592,
-        };
+        let cf_neuron = sns_swap_pb::CfNeuron::try_new(688477, 592).unwrap();
         extra_cf_participants
             .get_mut(0)
             .unwrap()
@@ -589,14 +586,8 @@ fn assert_clean_refund(
     let cf_participant = sns_swap_pb::CfParticipant {
         hotkey_principal: PrincipalId::new_user_test_id(301590).to_string(),
         cf_neurons: vec![
-            sns_swap_pb::CfNeuron {
-                nns_neuron_id: 875889,
-                amount_icp_e8s: 591,
-            },
-            sns_swap_pb::CfNeuron {
-                nns_neuron_id: 734429,
-                amount_icp_e8s: 917,
-            },
+            sns_swap_pb::CfNeuron::try_new(875889, 591).unwrap(),
+            sns_swap_pb::CfNeuron::try_new(734429, 917).unwrap(),
         ],
     };
     extra_cf_participants.push(cf_participant.clone());
@@ -700,22 +691,13 @@ fn draw_funds_from_the_community_fund_typical() {
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_1.to_string(),
             cf_neurons: vec![
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 1,
-                    amount_icp_e8s: 10 * E8,
-                },
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 3,
-                    amount_icp_e8s: 30 * E8,
-                },
+                sns_swap_pb::CfNeuron::try_new(1, 10 * E8).unwrap(),
+                sns_swap_pb::CfNeuron::try_new(3, 30 * E8).unwrap(),
             ],
         },
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_2.to_string(),
-            cf_neurons: vec![sns_swap_pb::CfNeuron {
-                nns_neuron_id: 2,
-                amount_icp_e8s: 20 * E8,
-            }],
+            cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(2, 20 * E8).unwrap()],
         },
     ];
     expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
@@ -756,22 +738,13 @@ fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_1.to_string(),
             cf_neurons: vec![
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 1,
-                    amount_icp_e8s: 5 * E8,
-                },
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 3,
-                    amount_icp_e8s: 15 * E8,
-                },
+                sns_swap_pb::CfNeuron::try_new(1, 5 * E8).unwrap(),
+                sns_swap_pb::CfNeuron::try_new(3, 15 * E8).unwrap(),
             ],
         },
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_2.to_string(),
-            cf_neurons: vec![sns_swap_pb::CfNeuron {
-                nns_neuron_id: 2,
-                amount_icp_e8s: 10 * E8,
-            }],
+            cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(2, 10 * E8).unwrap()],
         },
     ];
     expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
@@ -812,22 +785,13 @@ fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_1.to_string(),
             cf_neurons: vec![
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 1,
-                    amount_icp_e8s: 10 * E8,
-                },
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 3,
-                    amount_icp_e8s: 30 * E8,
-                },
+                sns_swap_pb::CfNeuron::try_new(1, 10 * E8).unwrap(),
+                sns_swap_pb::CfNeuron::try_new(3, 30 * E8).unwrap(),
             ],
         },
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_2.to_string(),
-            cf_neurons: vec![sns_swap_pb::CfNeuron {
-                nns_neuron_id: 2,
-                amount_icp_e8s: 20 * E8,
-            }],
+            cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(2, 20 * E8).unwrap()],
         },
     ];
     expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
@@ -896,22 +860,13 @@ fn draw_funds_from_the_community_fund_cf_not_large_enough() {
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_1.to_string(),
             cf_neurons: vec![
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 1,
-                    amount_icp_e8s: 100 * E8,
-                },
-                sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 3,
-                    amount_icp_e8s: 300 * E8,
-                },
+                sns_swap_pb::CfNeuron::try_new(1, 100 * E8).unwrap(),
+                sns_swap_pb::CfNeuron::try_new(3, 300 * E8).unwrap(),
             ],
         },
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_2.to_string(),
-            cf_neurons: vec![sns_swap_pb::CfNeuron {
-                nns_neuron_id: 2,
-                amount_icp_e8s: 200 * E8,
-            }],
+            cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(2, 200 * E8).unwrap()],
         },
     ];
     expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
@@ -956,17 +911,11 @@ fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
     let mut expected_cf_neurons = vec![
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_1.to_string(),
-            cf_neurons: vec![sns_swap_pb::CfNeuron {
-                nns_neuron_id: 3,
-                amount_icp_e8s: 225 * E8,
-            }],
+            cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(3, 225 * E8).unwrap()],
         },
         sns_swap_pb::CfParticipant {
             hotkey_principal: PRINCIPAL_ID_2.to_string(),
-            cf_neurons: vec![sns_swap_pb::CfNeuron {
-                nns_neuron_id: 2,
-                amount_icp_e8s: 200 * E8,
-            }],
+            cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(2, 200 * E8).unwrap()],
         },
     ];
     expected_cf_neurons.sort_by(|n1, n2| n1.hotkey_principal.cmp(&n2.hotkey_principal));
@@ -1037,22 +986,13 @@ fn sum_cf_participants_e8s_nonempty() {
             sns_swap_pb::CfParticipant {
                 hotkey_principal: PRINCIPAL_ID_1.to_string(),
                 cf_neurons: vec![
-                    sns_swap_pb::CfNeuron {
-                        nns_neuron_id: 1,
-                        amount_icp_e8s: 100,
-                    },
-                    sns_swap_pb::CfNeuron {
-                        nns_neuron_id: 3,
-                        amount_icp_e8s: 300,
-                    },
+                    sns_swap_pb::CfNeuron::try_new(1, 100,).unwrap(),
+                    sns_swap_pb::CfNeuron::try_new(3, 300,).unwrap(),
                 ],
             },
             sns_swap_pb::CfParticipant {
                 hotkey_principal: PRINCIPAL_ID_2.to_string(),
-                cf_neurons: vec![sns_swap_pb::CfNeuron {
-                    nns_neuron_id: 2,
-                    amount_icp_e8s: 200,
-                }],
+                cf_neurons: vec![sns_swap_pb::CfNeuron::try_new(2, 200,).unwrap()],
             },
         ]),
         600,
@@ -1542,22 +1482,13 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let neurons_fund_participants = vec![
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(1).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 1,
-                    amount_icp_e8s: 10 * E8,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(1, 10 * E8).unwrap()],
             },
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(2).to_string(),
                 cf_neurons: vec![
-                    CfNeuron {
-                        nns_neuron_id: 2,
-                        amount_icp_e8s: 11 * E8,
-                    },
-                    CfNeuron {
-                        nns_neuron_id: 3,
-                        amount_icp_e8s: 12 * E8,
-                    },
+                    CfNeuron::try_new(2, 11 * E8).unwrap(),
+                    CfNeuron::try_new(3, 12 * E8).unwrap(),
                 ],
             },
         ];

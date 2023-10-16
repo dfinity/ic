@@ -685,6 +685,7 @@ impl BuyerState {
                 amount_transferred_e8s: Some(0),
                 transfer_fee_paid_e8s: Some(0),
             }),
+            has_created_neuron_recipes: Some(false),
         }
     }
     pub fn validate(&self) -> Result<(), String> {
@@ -899,6 +900,17 @@ impl CfParticipant {
 }
 
 impl CfNeuron {
+    pub fn try_new(nns_neuron_id: u64, amount_icp_e8s: u64) -> Result<Self, String> {
+        let cf_neuron = Self {
+            nns_neuron_id,
+            amount_icp_e8s,
+            has_created_neuron_recipes: Some(false),
+        };
+
+        cf_neuron.validate()?;
+        Ok(cf_neuron)
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.nns_neuron_id == 0 {
             return Err("nns_neuron_id must be specified".to_string());
@@ -1216,10 +1228,7 @@ mod tests {
             params: Some(PARAMS),
             cf_participants: vec![CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(423939).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 42,
-                    amount_icp_e8s: 99,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(42 ,99).unwrap()],
             },],
             open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         };
@@ -1344,14 +1353,8 @@ mod tests {
         let participant = CfParticipant {
             hotkey_principal: "".to_string(),
             cf_neurons: vec![
-                CfNeuron {
-                    nns_neuron_id: 0,
-                    amount_icp_e8s: u64::MAX,
-                },
-                CfNeuron {
-                    nns_neuron_id: 0,
-                    amount_icp_e8s: u64::MAX,
-                },
+                CfNeuron::try_new(1, u64::MAX).unwrap(),
+                CfNeuron::try_new(2, u64::MAX).unwrap(),
             ],
         };
         let total = participant.participant_total_icp_e8s();
@@ -1367,10 +1370,7 @@ mod tests {
         let cf_participant = CfParticipant {
             hotkey_principal: PrincipalId::new_user_test_id(789362).to_string(),
             cf_neurons: (0..neurons_per_principal)
-                .map(|_| CfNeuron {
-                    nns_neuron_id: 592523,
-                    amount_icp_e8s: 1_000 * E8,
-                })
+                .map(|_| CfNeuron::try_new(592523, 1_000 * E8).unwrap())
                 .collect(),
         };
 
@@ -1614,27 +1614,15 @@ mod tests {
         let neurons_fund_participant_a = CfParticipant {
             hotkey_principal: "HotKeyA".to_string(),
             cf_neurons: vec![
-                CfNeuron {
-                    nns_neuron_id: 26_101_u64,
-                    amount_icp_e8s: 26_101_u64,
-                },
-                CfNeuron {
-                    nns_neuron_id: 26_102_u64,
-                    amount_icp_e8s: 26_102_u64,
-                },
+                CfNeuron::try_new(26_101_u64, 26_101_u64).unwrap(),
+                CfNeuron::try_new(26_102_u64, 26_102_u64).unwrap(),
             ],
         };
         let neurons_fund_participant_b = CfParticipant {
             hotkey_principal: "HotKeyB".to_string(),
             cf_neurons: vec![
-                CfNeuron {
-                    nns_neuron_id: 26_201_u64,
-                    amount_icp_e8s: 26_201_u64,
-                },
-                CfNeuron {
-                    nns_neuron_id: 26_202_u64,
-                    amount_icp_e8s: 26_202_u64,
-                },
+                CfNeuron::try_new(26_201_u64, 26_201_u64).unwrap(),
+                CfNeuron::try_new(26_202_u64, 26_202_u64).unwrap(),
             ],
         };
         init.neurons_fund_participants = Some(NeuronsFundParticipants {

@@ -8419,10 +8419,13 @@ fn draw_funds_from_the_community_fund(
             principal_id_to_cf_neurons
                 .entry(neuron.controller.expect("Neuron has no controller."))
                 .or_insert_with(Vec::new)
-                .push(sns_swap_pb::CfNeuron {
-                    nns_neuron_id: neuron.id.as_ref().expect("Neuron lacks an id.").id,
-                    amount_icp_e8s: neuron_contribution_e8s,
-                });
+                .push(
+                    sns_swap_pb::CfNeuron::try_new(
+                        neuron.id.as_ref().expect("Neuron lacks an id.").id,
+                        neuron_contribution_e8s,
+                    )
+                    .unwrap(),
+                );
 
             // Deduct contribution from maturity.
             neuron.maturity_e8s_equivalent -= neuron_contribution_e8s;
