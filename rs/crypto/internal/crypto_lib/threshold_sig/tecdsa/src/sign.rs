@@ -421,7 +421,15 @@ pub fn derive_public_key(
         AlgorithmId::EcdsaSecp256k1 => {
             EccPoint::deserialize(EccCurveType::K256, &master_public_key.public_key)?
         }
-        _ => return Err(ThresholdEcdsaError::CurveMismatch),
+        AlgorithmId::EcdsaP256 => {
+            EccPoint::deserialize(EccCurveType::P256, &master_public_key.public_key)?
+        }
+        unsupported => {
+            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+                "derive_public_key does not support alg {}",
+                unsupported
+            )));
+        }
     };
     // Compute tweak
     let (key_tweak, chain_key) = derivation_path.derive_tweak(&raw_master_pk)?;

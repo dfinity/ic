@@ -1,10 +1,28 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
+use rand::{CryptoRng, RngCore};
 
-fn gen_private_keys(curve: EccCurveType, cnt: usize) -> (Vec<MEGaPrivateKey>, Vec<MEGaPublicKey>) {
-    let rng = &mut reproducible_rng();
+fn alg_for_curve(curve: EccCurveType) -> AlgorithmId {
+    match curve {
+        EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
+        EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
+    }
+}
+
+fn wrong_curve(curve: EccCurveType) -> EccCurveType {
+    match curve {
+        EccCurveType::K256 => EccCurveType::P256,
+        EccCurveType::P256 => EccCurveType::K256,
+    }
+}
+
+fn gen_private_keys<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    curve: EccCurveType,
+    cnt: usize,
+) -> (Vec<MEGaPrivateKey>, Vec<MEGaPublicKey>) {
     let mut public_keys = Vec::with_capacity(cnt);
     let mut private_keys = Vec::with_capacity(cnt);
 
@@ -19,78 +37,82 @@ fn gen_private_keys(curve: EccCurveType, cnt: usize) -> (Vec<MEGaPrivateKey>, Ve
 
 #[test]
 fn create_random_dealing() -> Result<(), IdkgCreateDealingInternalError> {
-    let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
-    let associated_data = vec![1, 2, 3];
-    let (private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 2;
-    let dealer_index = 0;
 
-    let shares = SecretShares::Random;
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 2;
+        let dealer_index = 0;
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        dealer_index,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    )?;
+        let shares = SecretShares::Random;
 
-    match dealing.commitment {
-        PolynomialCommitment::Pedersen(c) => {
-            assert_eq!(c.points.len(), threshold);
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )?;
+
+        match dealing.commitment {
+            PolynomialCommitment::Pedersen(c) => {
+                assert_eq!(c.points.len(), threshold);
+            }
+            _ => panic!("Unexpected commitment type for random dealing"),
         }
-        _ => panic!("Unexpected commitment type for random dealing"),
-    }
 
-    match dealing.ciphertext {
-        MEGaCiphertext::Pairs(p) => {
-            assert_eq!(p.ctexts.len(), private_keys.len())
+        match dealing.ciphertext {
+            MEGaCiphertext::Pairs(p) => {
+                assert_eq!(p.ctexts.len(), private_keys.len())
+            }
+            _ => panic!("Unexpected ciphertext type for random dealing"),
         }
-        _ => panic!("Unexpected ciphertext type for random dealing"),
-    }
 
-    assert!(dealing.proof.is_none()); // random dealings have no associated proof
+        assert!(dealing.proof.is_none()); // random dealings have no associated proof
+    }
 
     Ok(())
 }
 
 #[test]
 fn create_reshare_unmasked_dealing() -> Result<(), IdkgCreateDealingInternalError> {
-    let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
-    let associated_data = vec![1, 2, 3];
-    let (private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 2;
-    let dealer_index = 0;
 
-    let secret = EccScalar::random(curve, rng);
-    let shares = SecretShares::ReshareOfUnmasked(secret);
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 2;
+        let dealer_index = 0;
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        dealer_index,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    )?;
+        let secret = EccScalar::random(curve, rng);
+        let shares = SecretShares::ReshareOfUnmasked(secret);
 
-    match dealing.commitment {
-        PolynomialCommitment::Simple(c) => {
-            assert_eq!(c.points.len(), threshold);
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )?;
+
+        match dealing.commitment {
+            PolynomialCommitment::Simple(c) => {
+                assert_eq!(c.points.len(), threshold);
+            }
+            _ => panic!("Unexpected commitment type for reshare unmasked dealing"),
         }
-        _ => panic!("Unexpected commitment type for reshare unmasked dealing"),
-    }
 
-    match dealing.ciphertext {
-        MEGaCiphertext::Single(p) => {
-            assert_eq!(p.ctexts.len(), private_keys.len())
+        match dealing.ciphertext {
+            MEGaCiphertext::Single(p) => {
+                assert_eq!(p.ctexts.len(), private_keys.len())
+            }
+            _ => panic!("Unexpected ciphertext type for reshare unmasked dealing"),
         }
-        _ => panic!("Unexpected ciphertext type for reshare unmasked dealing"),
     }
 
     Ok(())
@@ -98,39 +120,41 @@ fn create_reshare_unmasked_dealing() -> Result<(), IdkgCreateDealingInternalErro
 
 #[test]
 fn create_reshare_masked_dealings() -> Result<(), IdkgCreateDealingInternalError> {
-    let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
-    let associated_data = vec![1, 2, 3];
-    let (private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 2;
-    let dealer_index = 0;
 
-    let secret = EccScalar::random(curve, rng);
-    let mask = EccScalar::random(curve, rng);
-    let shares = SecretShares::ReshareOfMasked(secret, mask);
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 2;
+        let dealer_index = 0;
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        dealer_index,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    )?;
+        let secret = EccScalar::random(curve, rng);
+        let mask = EccScalar::random(curve, rng);
+        let shares = SecretShares::ReshareOfMasked(secret, mask);
 
-    match dealing.commitment {
-        PolynomialCommitment::Simple(c) => {
-            assert_eq!(c.points.len(), threshold);
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )?;
+
+        match dealing.commitment {
+            PolynomialCommitment::Simple(c) => {
+                assert_eq!(c.points.len(), threshold);
+            }
+            _ => panic!("Unexpected commitment type for reshare masked dealing"),
         }
-        _ => panic!("Unexpected commitment type for reshare masked dealing"),
-    }
 
-    match dealing.ciphertext {
-        MEGaCiphertext::Single(p) => {
-            assert_eq!(p.ctexts.len(), private_keys.len())
+        match dealing.ciphertext {
+            MEGaCiphertext::Single(p) => {
+                assert_eq!(p.ctexts.len(), private_keys.len())
+            }
+            _ => panic!("Unexpected ciphertext type for reshare masked dealing"),
         }
-        _ => panic!("Unexpected ciphertext type for reshare masked dealing"),
     }
 
     Ok(())
@@ -138,40 +162,42 @@ fn create_reshare_masked_dealings() -> Result<(), IdkgCreateDealingInternalError
 
 #[test]
 fn create_mult_dealing() -> Result<(), IdkgCreateDealingInternalError> {
-    let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
-    let associated_data = vec![1, 2, 3];
-    let (private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 2;
-    let dealer_index = 0;
 
-    let lhs = EccScalar::random(curve, rng);
-    let rhs = EccScalar::random(curve, rng);
-    let mask = EccScalar::random(curve, rng);
-    let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 2;
+        let dealer_index = 0;
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        dealer_index,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    )?;
+        let lhs = EccScalar::random(curve, rng);
+        let rhs = EccScalar::random(curve, rng);
+        let mask = EccScalar::random(curve, rng);
+        let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
 
-    match dealing.commitment {
-        PolynomialCommitment::Pedersen(c) => {
-            assert_eq!(c.points.len(), threshold);
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )?;
+
+        match dealing.commitment {
+            PolynomialCommitment::Pedersen(c) => {
+                assert_eq!(c.points.len(), threshold);
+            }
+            _ => panic!("Unexpected commitment type for mult dealing"),
         }
-        _ => panic!("Unexpected commitment type for mult dealing"),
-    }
 
-    match dealing.ciphertext {
-        MEGaCiphertext::Pairs(p) => {
-            assert_eq!(p.ctexts.len(), private_keys.len())
+        match dealing.ciphertext {
+            MEGaCiphertext::Pairs(p) => {
+                assert_eq!(p.ctexts.len(), private_keys.len())
+            }
+            _ => panic!("Unexpected ciphertext type for mult dealing"),
         }
-        _ => panic!("Unexpected ciphertext type for mult dealing"),
     }
 
     Ok(())
@@ -179,52 +205,55 @@ fn create_mult_dealing() -> Result<(), IdkgCreateDealingInternalError> {
 
 #[test]
 fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalError> {
-    let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
-    let associated_data = vec![1, 2, 3];
-    let (private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 2;
-    let dealer_index = 0;
 
-    let shares = SecretShares::Random;
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 2;
+        let dealer_index = 0;
 
-    // invalid threshold
-    assert!(create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        dealer_index,
-        NumberOfNodes::from(private_keys.len() as u32 + 1),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    )
-    .is_err());
+        let shares = SecretShares::Random;
 
-    let (_wrong_private_keys, wrong_public_keys) = gen_private_keys(EccCurveType::P256, 5);
+        // invalid threshold
+        assert!(create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(private_keys.len() as u32 + 1),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )
+        .is_err());
 
-    // bad public keys
-    assert!(create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        dealer_index,
-        NumberOfNodes::from(threshold),
-        &wrong_public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    )
-    .is_err());
+        let (_wrong_private_keys, wrong_public_keys) = gen_private_keys(rng, wrong_curve(curve), 5);
 
-    // wrong algorithm id
-    assert!(create_dealing(
-        AlgorithmId::Groth20_Bls12_381,
-        &associated_data,
-        dealer_index,
-        NumberOfNodes::from(threshold),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    )
-    .is_err());
+        // bad public keys
+        // Note this test case becomes valid usage once CRP-2161 is completed
+        assert!(create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold),
+            &wrong_public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )
+        .is_err());
+
+        // wrong algorithm id
+        assert!(create_dealing(
+            AlgorithmId::Groth20_Bls12_381,
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )
+        .is_err());
+    }
 
     Ok(())
 }
@@ -277,10 +306,7 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
 }
 
 fn flip_curve(s: &EccScalar) -> EccScalar {
-    let wrong_curve = match s.curve_type() {
-        EccCurveType::K256 => EccCurveType::P256,
-        EccCurveType::P256 => EccCurveType::K256,
-    };
+    let wrong_curve = wrong_curve(s.curve_type());
 
     let s_bytes = s.serialize();
 
@@ -292,28 +318,29 @@ fn flip_curve(s: &EccScalar) -> EccScalar {
 fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), ThresholdEcdsaError> {
     let rng = &mut reproducible_rng();
 
-    let curve = EccCurveType::K256;
-    let associated_data = vec![1, 2, 3];
-    let (_private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 3;
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (_private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 3;
 
-    let secret = EccScalar::random(curve, rng);
-    let shares = SecretShares::ReshareOfUnmasked(flip_curve(&secret));
+        let secret = EccScalar::random(curve, rng);
+        let shares = SecretShares::ReshareOfUnmasked(flip_curve(&secret));
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        0,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    );
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            0,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        );
 
-    assert_eq!(
-        dealing.unwrap_err(),
-        IdkgCreateDealingInternalError::InvalidSecretShare
-    );
+        assert_eq!(
+            dealing.unwrap_err(),
+            IdkgCreateDealingInternalError::InvalidSecretShare
+        );
+    }
 
     Ok(())
 }
@@ -322,29 +349,30 @@ fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), ThresholdEcdsaError>
 fn wrong_curve_reshare_of_masked_rejected() -> Result<(), ThresholdEcdsaError> {
     let rng = &mut reproducible_rng();
 
-    let curve = EccCurveType::K256;
-    let associated_data = vec![1, 2, 3];
-    let (_private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 3;
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (_private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 3;
 
-    let secret = EccScalar::random(curve, rng);
-    let mask = EccScalar::random(curve, rng);
-    let shares = SecretShares::ReshareOfMasked(flip_curve(&secret), mask);
+        let secret = EccScalar::random(curve, rng);
+        let mask = EccScalar::random(curve, rng);
+        let shares = SecretShares::ReshareOfMasked(flip_curve(&secret), mask);
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        0,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    );
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            0,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        );
 
-    assert_eq!(
-        dealing.unwrap_err(),
-        IdkgCreateDealingInternalError::InvalidSecretShare
-    );
+        assert_eq!(
+            dealing.unwrap_err(),
+            IdkgCreateDealingInternalError::InvalidSecretShare
+        );
+    }
 
     Ok(())
 }
@@ -353,48 +381,50 @@ fn wrong_curve_reshare_of_masked_rejected() -> Result<(), ThresholdEcdsaError> {
 fn wrong_curve_mul_share_rejected() -> Result<(), ThresholdEcdsaError> {
     let rng = &mut reproducible_rng();
 
-    let curve = EccCurveType::K256;
-    let associated_data = vec![1, 2, 3];
-    let (_private_keys, public_keys) = gen_private_keys(curve, 5);
-    let threshold = 3;
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (_private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 3;
 
-    let lhs = EccScalar::random(curve, rng);
-    let rhs = EccScalar::random(curve, rng);
-    let mask = EccScalar::random(curve, rng);
+        let lhs = EccScalar::random(curve, rng);
+        let rhs = EccScalar::random(curve, rng);
+        let mask = EccScalar::random(curve, rng);
 
-    let shares = SecretShares::UnmaskedTimesMasked(flip_curve(&lhs), (rhs.clone(), mask.clone()));
+        let shares =
+            SecretShares::UnmaskedTimesMasked(flip_curve(&lhs), (rhs.clone(), mask.clone()));
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        0,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    );
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            0,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        );
 
-    assert_eq!(
-        dealing.unwrap_err(),
-        IdkgCreateDealingInternalError::InvalidSecretShare
-    );
+        assert_eq!(
+            dealing.unwrap_err(),
+            IdkgCreateDealingInternalError::InvalidSecretShare
+        );
 
-    let shares = SecretShares::UnmaskedTimesMasked(lhs, (flip_curve(&rhs), mask));
+        let shares = SecretShares::UnmaskedTimesMasked(lhs, (flip_curve(&rhs), mask));
 
-    let dealing = create_dealing(
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        &associated_data,
-        0,
-        NumberOfNodes::from(threshold as u32),
-        &public_keys,
-        &shares,
-        Seed::from_rng(rng),
-    );
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            0,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        );
 
-    assert_eq!(
-        dealing.unwrap_err(),
-        IdkgCreateDealingInternalError::InvalidSecretShare
-    );
+        assert_eq!(
+            dealing.unwrap_err(),
+            IdkgCreateDealingInternalError::InvalidSecretShare
+        );
+    }
 
     Ok(())
 }
@@ -405,79 +435,91 @@ mod privately_verify {
     #[test]
     fn should_fail_on_private_key_curve_mismatch() {
         let rng = &mut reproducible_rng();
-        let setup = Setup::new_with_k256_keys_and_dealing(rng);
-        let private_key = MEGaPrivateKey::generate(EccCurveType::P256, rng);
 
-        assert_eq!(
-            setup.dealing_internal.privately_verify(
-                EccCurveType::K256,
-                &private_key,
-                &setup.public_key,
-                &setup.associated_data,
-                setup.dealer_index,
-                0
-            ),
-            Err(ThresholdEcdsaError::CurveMismatch)
-        );
+        for curve_type in EccCurveType::all() {
+            let setup = Setup::new(curve_type, rng);
+            let private_key = MEGaPrivateKey::generate(wrong_curve(curve_type), rng);
+
+            assert_eq!(
+                setup.dealing_internal.privately_verify(
+                    curve_type,
+                    &private_key,
+                    &setup.public_key,
+                    &setup.associated_data,
+                    setup.dealer_index,
+                    0
+                ),
+                Err(ThresholdEcdsaError::CurveMismatch)
+            );
+        }
     }
 
     #[test]
     fn should_fail_on_public_key_curve_mismatch() {
         let rng = &mut reproducible_rng();
-        let setup = Setup::new_with_k256_keys_and_dealing(rng);
-        let private_key = MEGaPrivateKey::generate(EccCurveType::P256, rng);
-        let public_key = private_key.public_key();
 
-        assert_eq!(
-            setup.dealing_internal.privately_verify(
-                EccCurveType::K256,
-                &setup.private_key,
-                &public_key,
-                &setup.associated_data,
-                setup.dealer_index,
-                0
-            ),
-            Err(ThresholdEcdsaError::CurveMismatch)
-        );
+        for curve_type in EccCurveType::all() {
+            let setup = Setup::new(curve_type, rng);
+            let private_key = MEGaPrivateKey::generate(wrong_curve(curve_type), rng);
+            let public_key = private_key.public_key();
+
+            assert_eq!(
+                setup.dealing_internal.privately_verify(
+                    curve_type,
+                    &setup.private_key,
+                    &public_key,
+                    &setup.associated_data,
+                    setup.dealer_index,
+                    0
+                ),
+                Err(ThresholdEcdsaError::CurveMismatch)
+            );
+        }
     }
 
     #[test]
     fn should_fail_on_commitment_constant_curve_type_mismatch() {
         let rng = &mut reproducible_rng();
-        let setup = Setup::new_with_k256_keys_and_dealing(rng);
-        let private_key = MEGaPrivateKey::generate(EccCurveType::P256, rng);
-        let public_key = private_key.public_key();
 
-        assert_eq!(
-            setup.dealing_internal.privately_verify(
-                EccCurveType::P256,
-                &private_key,
-                &public_key,
-                &setup.associated_data,
-                setup.dealer_index,
-                0
-            ),
-            Err(ThresholdEcdsaError::CurveMismatch)
-        );
+        for curve_type in EccCurveType::all() {
+            let setup = Setup::new(curve_type, rng);
+            let private_key = MEGaPrivateKey::generate(wrong_curve(curve_type), rng);
+            let public_key = private_key.public_key();
+
+            assert_eq!(
+                setup.dealing_internal.privately_verify(
+                    wrong_curve(curve_type),
+                    &private_key,
+                    &public_key,
+                    &setup.associated_data,
+                    setup.dealer_index,
+                    0
+                ),
+                Err(ThresholdEcdsaError::CurveMismatch)
+            );
+        }
     }
 
     #[test]
     fn should_fail_if_decryption_and_check_of_internal_ciphertext_fails() {
         let rng = &mut reproducible_rng();
-        let setup = Setup::new_with_k256_keys_and_dealing(rng);
-        let another_setup = Setup::new_with_k256_keys_and_dealing(rng);
 
-        assert_eq!(
-            another_setup.dealing_internal.privately_verify(
-                EccCurveType::K256,
-                &setup.private_key,
-                &setup.public_key,
-                &setup.associated_data,
-                setup.dealer_index,
-                0
-            ),
-            Err(ThresholdEcdsaError::InvalidCommitment)
-        );
+        for curve_type in EccCurveType::all() {
+            let setup = Setup::new(curve_type, rng);
+            let another_setup = Setup::new(curve_type, rng);
+
+            assert_eq!(
+                another_setup.dealing_internal.privately_verify(
+                    curve_type,
+                    &setup.private_key,
+                    &setup.public_key,
+                    &setup.associated_data,
+                    setup.dealer_index,
+                    0
+                ),
+                Err(ThresholdEcdsaError::InvalidCommitment)
+            );
+        }
     }
 }
 
@@ -491,21 +533,24 @@ mod privately_verify_dealing {
     #[test]
     fn should_fail_for_unsupported_algorithms() {
         let rng = &mut reproducible_rng();
-        let setup = Setup::new_with_k256_keys_and_dealing(rng);
-        for algorithm_id in AlgorithmId::iter() {
-            if algorithm_id != AlgorithmId::ThresholdEcdsaSecp256k1 {
-                assert_eq!(
-                    privately_verify_dealing(
-                        algorithm_id,
-                        &setup.dealing_internal,
-                        &setup.private_key,
-                        &setup.public_key,
-                        &setup.associated_data,
-                        setup.dealer_index,
-                        0
-                    ),
-                    Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)
-                );
+
+        for curve_type in EccCurveType::all() {
+            let setup = Setup::new(curve_type, rng);
+            for algorithm_id in AlgorithmId::iter() {
+                if EccCurveType::from_algorithm(algorithm_id).is_none() {
+                    assert_eq!(
+                        privately_verify_dealing(
+                            algorithm_id,
+                            &setup.dealing_internal,
+                            &setup.private_key,
+                            &setup.public_key,
+                            &setup.associated_data,
+                            setup.dealer_index,
+                            0
+                        ),
+                        Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)
+                    );
+                }
             }
         }
     }
@@ -520,16 +565,20 @@ struct Setup {
 }
 
 impl Setup {
-    fn new_with_k256_keys_and_dealing(rng: &mut ReproducibleRng) -> Self {
-        let curve = EccCurveType::K256;
+    fn new<R: RngCore + CryptoRng>(curve: EccCurveType, rng: &mut R) -> Self {
         let associated_data = vec![1, 2, 3];
-        let (private_keys, public_keys) = gen_private_keys(curve, 5);
+        let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
         let threshold = 2;
         let dealer_index = 0;
         let shares = SecretShares::Random;
 
+        let algorithm_id = match curve {
+            EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
+        };
+
         let dealing_internal = create_dealing(
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            algorithm_id,
             &associated_data,
             dealer_index,
             NumberOfNodes::from(threshold as u32),

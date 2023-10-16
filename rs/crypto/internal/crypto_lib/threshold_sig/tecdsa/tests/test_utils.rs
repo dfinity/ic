@@ -7,6 +7,31 @@ use ic_types::*;
 use rand::{seq::IteratorRandom, Rng};
 use std::collections::BTreeMap;
 
+fn verify_ecdsa_signature_using_third_party(
+    alg: AlgorithmId,
+    pk: &[u8],
+    sig: &[u8],
+    msg: &[u8],
+) -> bool {
+    match alg {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => {
+            use k256::ecdsa::signature::Verifier;
+            let vk =
+                k256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Failed to parse public key");
+            let sig = k256::ecdsa::Signature::try_from(sig).expect("Failed to parse signature");
+            vk.verify(msg, &sig).is_ok()
+        }
+        AlgorithmId::ThresholdEcdsaSecp256r1 => {
+            use p256::ecdsa::signature::Verifier;
+            let vk =
+                p256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Failed to parse public key");
+            let sig = p256::ecdsa::Signature::try_from(sig).expect("Failed to parse signature");
+            vk.verify(msg, &sig).is_ok()
+        }
+        _ => panic!("Unexpected algorithm ID for checking ECDSA signature"),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ProtocolSetup {
     alg: AlgorithmId,
@@ -28,11 +53,7 @@ impl ProtocolSetup {
     ) -> Result<Self, ThresholdEcdsaError> {
         let alg = match curve {
             EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
-            _ => {
-                return Err(ThresholdEcdsaError::InvalidArguments(
-                    "Unsupported curve".to_string(),
-                ))
-            }
+            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
         };
 
         let rng = &mut seed.into_rng();
@@ -737,8 +758,13 @@ impl SignatureProtocolSetup {
     }
 
     pub fn public_key(&self, path: &DerivationPath) -> Result<EcdsaPublicKey, ThresholdEcdsaError> {
+        let mpk_alg = match self.setup.alg {
+            AlgorithmId::ThresholdEcdsaSecp256r1 => AlgorithmId::EcdsaP256,
+            AlgorithmId::ThresholdEcdsaSecp256k1 => AlgorithmId::EcdsaSecp256k1,
+            _ => panic!("Unknown algorithm in ProtocolSetup"),
+        };
         let master_public_key = MasterEcdsaPublicKey {
-            algorithm_id: AlgorithmId::EcdsaSecp256k1,
+            algorithm_id: mpk_alg,
             public_key: self.key.transcript.constant_term().serialize(),
         };
         ic_crypto_internal_threshold_sig_ecdsa::sign::derive_public_key(&master_public_key, path)
@@ -850,15 +876,12 @@ impl SignatureProtocolExecution {
         // If verification succeeded, check with RustCrypto's ECDSA also
         let pk = self.setup.public_key(&self.derivation_path)?;
 
-        use k256::ecdsa::signature::Verifier;
-
-        let vk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&pk.public_key)
-            .expect("Failed to parse public key");
-
-        let sig = k256::ecdsa::Signature::try_from(sig.serialize().as_ref())
-            .expect("Failed to parse signature");
-
-        assert!(vk.verify(&self.signed_message, &sig).is_ok());
+        assert!(verify_ecdsa_signature_using_third_party(
+            self.setup.setup.alg,
+            &pk.public_key,
+            &sig.serialize(),
+            &self.signed_message
+        ));
 
         Ok(())
     }

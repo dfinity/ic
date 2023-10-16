@@ -78,7 +78,7 @@ fn check_shares(
 }
 
 #[test]
-fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdEcdsaError> {
+fn verify_protocol_output_remains_unchanged_over_time_k256() -> Result<(), ThresholdEcdsaError> {
     let nodes = 5;
     let threshold = 2;
 
@@ -195,6 +195,123 @@ fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdE
 }
 
 #[test]
+fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), ThresholdEcdsaError> {
+    let nodes = 5;
+    let threshold = 2;
+
+    let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-stability-test");
+
+    let setup = SignatureProtocolSetup::new(
+        EccCurveType::P256,
+        nodes,
+        threshold,
+        0,
+        seed.derive("setup"),
+    )?;
+
+    check_dealings(
+        "key",
+        &setup.key,
+        "dc918ee1d73355e5",
+        "f8bbd6baf59737c6",
+        &[
+            (0, "e86a88a44f693f00"),
+            (1, "f46e7cef32a25a0b"),
+            (2, "b9498502dabac019"),
+            (3, "afee7214cc5f3699"),
+            (4, "91ee02132762390d"),
+        ],
+    )?;
+
+    check_dealings(
+        "key*lambda",
+        &setup.key_times_lambda,
+        "d80ba060e9d626ee",
+        "19d079d4653de58a",
+        &[
+            (0, "89edf2b0c56e2973"),
+            (1, "62737b2926c8459c"),
+            (2, "657fe16995b9e60d"),
+            (3, "19bbaa2ec157b080"),
+            (4, "b5f00531d057abe2"),
+        ],
+    )?;
+
+    check_dealings(
+        "lambda",
+        &setup.lambda,
+        "526fc2021f8437b9",
+        "fcf8db82d75a2721",
+        &[
+            (0, "cc8222bf553ba800"),
+            (1, "80d9b8d52a64060d"),
+            (2, "56ebb454140f84d0"),
+            (3, "a14f4e83ca79ec5f"),
+            (4, "356a4e85b188afb9"),
+        ],
+    )?;
+
+    check_dealings(
+        "kappa",
+        &setup.kappa,
+        "5ac536fcb96011e7",
+        "9ee8551c0a991ace",
+        &[
+            (0, "191bd6e1a3049b2d"),
+            (1, "23c892f03b2b6681"),
+            (2, "5119183f814da146"),
+            (3, "010eb6aa49124a01"),
+            (4, "f1ec18388ea33870"),
+        ],
+    )?;
+
+    check_dealings(
+        "kappa*lambda",
+        &setup.kappa_times_lambda,
+        "d147b2e286a0601f",
+        "39eee21a5fca606b",
+        &[
+            (0, "d1f72446c7d1e70d"),
+            (1, "9a2d6e1f48c38cfb"),
+            (2, "77a2e31612dc689d"),
+            (3, "b726a8253f12e6b0"),
+            (4, "1c4624d5b02e91f9"),
+        ],
+    )?;
+
+    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let random_beacon =
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+
+    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+    let proto =
+        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+
+    let shares = proto.generate_shares()?;
+
+    check_shares(
+        &shares,
+        &[
+            (0, "dcd41127ca62253e"),
+            (1, "d14ed8886a1cb164"),
+            (2, "bb8bbcd522414b82"),
+            (3, "e63f19db064fd61b"),
+            (4, "83033dc640e40a83"),
+        ],
+    )?;
+
+    let sig = proto.generate_signature(&shares).unwrap();
+
+    verify_data(
+        "signature".to_string(),
+        "751198d811154531",
+        &sig.serialize(),
+    );
+
+    Ok(())
+}
+
+#[test]
 fn verify_fixed_serialization_continues_to_be_accepted() -> Result<(), ThresholdEcdsaError> {
     let dealing_bits = [
         include_str!("data/dealing_random.hex"),
@@ -301,8 +418,8 @@ fn commitment_opening_k256_serialization_is_stable() -> Result<(), ThresholdEcds
         "431fb614454b7c1f2ec2bd76832daf4ec6cadaa38bfbfb801a6d209b275af28d"
     );
 
-    let s1_bytes = EccScalarBytes::try_from(&s1).expect("Deserialization failed");
-    let s2_bytes = EccScalarBytes::try_from(&s2).expect("Deserialization failed");
+    let s1_bytes = EccScalarBytes::try_from(&s1).expect("Serialization failed");
+    let s2_bytes = EccScalarBytes::try_from(&s2).expect("Serialization failed");
 
     let simple = CommitmentOpeningBytes::Simple(s1_bytes.clone());
 
@@ -313,6 +430,39 @@ fn commitment_opening_k256_serialization_is_stable() -> Result<(), ThresholdEcds
 
     assert_eq!(hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
             "a168506564657273656e82a1644b32353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884a1644b32353698201843181f18b6141845184b187c181f182e18c218bd18761883182d18af184e18c618ca18da18a3188b18fb18fb1880181a186d1820189b1827185a18f2188d");
+
+    Ok(())
+}
+
+#[test]
+fn commitment_opening_p256_serialization_is_stable() -> Result<(), ThresholdEcdsaError> {
+    let rng = &mut Seed::from_bytes(b"ic-crypto-commitment-opening-serialization-stability-test")
+        .into_rng();
+
+    let s1 = EccScalar::random(EccCurveType::P256, rng);
+    let s2 = EccScalar::random(EccCurveType::P256, rng);
+
+    assert_eq!(
+        hex::encode(s1.serialize()),
+        "533db71736dbb11c23fd9a6cd703d37afd5173b943dc932d387dc17c89aaad84"
+    );
+    assert_eq!(
+        hex::encode(s2.serialize()),
+        "431fb614454b7c1f2ec2bd76832daf4ec6cadaa38bfbfb801a6d209b275af28d"
+    );
+
+    let s1_bytes = EccScalarBytes::try_from(&s1).expect("Serialization failed");
+    let s2_bytes = EccScalarBytes::try_from(&s2).expect("Serialization failed");
+
+    let simple = CommitmentOpeningBytes::Simple(s1_bytes.clone());
+
+    assert_eq!(hex::encode(serde_cbor::to_vec(&simple).unwrap()),
+               "a16653696d706c65a1645032353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884");
+
+    let pedersen = CommitmentOpeningBytes::Pedersen(s1_bytes, s2_bytes);
+
+    assert_eq!(hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
+               "a168506564657273656e82a1645032353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884a1645032353698201843181f18b6141845184b187c181f182e18c218bd18761883182d18af184e18c618ca18da18a3188b18fb18fb1880181a186d1820189b1827185a18f2188d");
 
     Ok(())
 }
