@@ -124,10 +124,7 @@ impl MEGaPrivateKey {
 
 impl Debug for MEGaPrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.secret {
-            EccScalar::K256(_) => write!(f, "MEGaPrivateKey(EccScalar::K256) - REDACTED"),
-            EccScalar::P256(_) => write!(f, "MEGaPrivateKey(EccScalar::P256) - REDACTED"),
-        }
+        write!(f, "MEGaPrivateKey({}) - REDACTED", self.curve_type())
     }
 }
 

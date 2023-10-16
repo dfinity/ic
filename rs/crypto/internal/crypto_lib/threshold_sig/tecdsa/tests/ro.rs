@@ -72,26 +72,26 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_random_oracle_max_outputs() -> ThresholdEcdsaResult<()> {
-    let curve_type = EccCurveType::K256;
+    for curve_type in EccCurveType::all() {
+        /*
+        Our XMD hash_to_scalar construction consumes 256+128 bits per
+        scalar. XMD with SHA-256 can produce at most 255*32 = 8160 bytes.
+        Thus we can produce at most exactly 170 challenges (which ought to
+        be enough for anyone!) - verify that we Err appropriately for
+        larger requests.
+         */
 
-    /*
-    Our XMD hash_to_scalar construction consumes 256+128 bits per
-    scalar. XMD with SHA-256 can produce at most 255*32 = 8160 bytes.
-    Thus we can produce at most exactly 170 challenges (which ought to
-    be enough for anyone!) - verify that we Err appropriately for
-    larger requests.
-    */
+        for i in 1..170 {
+            let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+            ro.add_usize("input", i)?;
+            assert_eq!(ro.output_scalars(curve_type, i).unwrap().len(), i);
+        }
 
-    for i in 1..170 {
-        let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
-        ro.add_usize("input", i)?;
-        assert_eq!(ro.output_scalars(curve_type, i).unwrap().len(), i);
-    }
-
-    for i in 171..256 {
-        let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
-        ro.add_usize("input", i)?;
-        assert!(ro.output_scalars(curve_type, i).is_err());
+        for i in 171..256 {
+            let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+            ro.add_usize("input", i)?;
+            assert!(ro.output_scalars(curve_type, i).is_err());
+        }
     }
 
     Ok(())
@@ -99,9 +99,11 @@ fn test_random_oracle_max_outputs() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_random_oracle_min_inputs() -> ThresholdEcdsaResult<()> {
-    let curve_type = EccCurveType::K256;
-    let ro = ro::RandomOracle::new("ic-test-domain-sep");
-    assert!(ro.output_scalar(curve_type).is_err());
+    for curve_type in EccCurveType::all() {
+        let ro = ro::RandomOracle::new("ic-test-domain-sep");
+        assert!(ro.output_scalar(curve_type).is_err());
+    }
+
     Ok(())
 }
 
