@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use axum::{
     body::Body,
     routing::{get, post},
@@ -12,10 +12,11 @@ use ic_agent::{
 };
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
-    common::storage::storage_client::StorageClient,
-    ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks, AppState,
+    common::storage::{storage_client::StorageClient, types::MetadataEntry},
+    ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks,
+    AppState, Metadata,
 };
-use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
 use std::{net::TcpListener, sync::Arc};
 use std::{path::PathBuf, process};
@@ -50,6 +51,12 @@ enum NetworkType {
 struct Args {
     #[arg(short, long)]
     ledger_id: CanisterId,
+
+    #[arg(long)]
+    icrc1_symbol: Option<String>,
+
+    #[arg(long)]
+    icrc1_decimals: Option<u8>,
 
     /// The port to which Rosetta will bind.
     /// If not set then it will be 0.
@@ -116,6 +123,10 @@ impl Args {
             }
         })
     }
+
+    fn are_metadata_args_set(&self) -> bool {
+        self.icrc1_symbol.is_some() && self.icrc1_decimals.is_some()
+    }
 }
 
 fn init_logs(log_level: Level) {
@@ -152,6 +163,84 @@ fn add_request_span() -> FnTraceLayer {
     })
 }
 
+async fn load_metadata(
+    args: &Args,
+    icrc1_agent: &Icrc1Agent,
+    storage: &StorageClient,
+) -> anyhow::Result<Metadata> {
+    if args.offline {
+        let db_metadata_entries = storage.read_metadata()?;
+        // If metadata is empty and the args are not set, bail out.
+        if db_metadata_entries.is_empty() && !args.are_metadata_args_set() {
+            bail!("Metadata must be initialized by starting Rosetta in online mode first or by providing ICRC-1 metadata arguments.");
+        }
+
+        // If metadata is set in args and not entries are found in the database,
+        // return the metadata from the args.
+        if args.are_metadata_args_set() && db_metadata_entries.is_empty() {
+            return Ok(Metadata::from_args(
+                args.icrc1_symbol.clone().unwrap(),
+                args.icrc1_decimals.unwrap(),
+            ));
+        }
+
+        // Populate a metadata object with the database entries.
+        let db_metadata = Metadata::from_metadata_entries(&db_metadata_entries)?;
+        // If the metadata args are not set, return using the db metadata.
+        if !args.are_metadata_args_set() {
+            return Ok(db_metadata);
+        }
+
+        // Extract the symbol and decimals from the arguments.
+        let symbol = args
+            .icrc1_symbol
+            .clone()
+            .context("ICRC-1 symbol should be provided in offline mode.")?;
+        let decimals = args
+            .icrc1_decimals
+            .context("ICRC-1 decimals should be provided in offline mode.")?;
+
+        // If the database entries is empty, return the metadata as no validation
+        // can be done.
+        if db_metadata_entries.is_empty() {
+            return Ok(Metadata::from_args(symbol, decimals));
+        }
+
+        // Populate a metadata object with the database entries.
+        let db_metadata = Metadata::from_metadata_entries(&db_metadata_entries)?;
+
+        // If the symbols do not match, bail out.
+        if db_metadata.symbol != symbol {
+            bail!(
+                "Provided symbol does not match symbol retrieved in online mode. Expected: {}",
+                db_metadata.symbol
+            );
+        }
+
+        // If the decimals do not match, bail out.
+        if db_metadata.decimals != decimals {
+            bail!(
+                "Provided decimals does not match symbol retrieved in online mode. Expected: {}",
+                db_metadata.decimals
+            );
+        }
+
+        return Ok(db_metadata);
+    }
+
+    let ic_metadata_entries = icrc1_agent
+        .metadata(CallMode::Update)
+        .await
+        .map_err(|e| anyhow::Error::msg(format!("Failed to get metadata: {:?}", e)))?
+        .iter()
+        .map(|(key, value)| MetadataEntry::from_metadata_value(key, value))
+        .collect::<Result<Vec<MetadataEntry>>>()?;
+
+    storage.write_metadata(ic_metadata_entries.clone())?;
+
+    Metadata::from_metadata_entries(&ic_metadata_entries)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -161,11 +250,6 @@ async fn main() -> Result<()> {
     let storage = Arc::new(match args.store_type {
         StoreType::InMemory => StorageClient::new_in_memory()?,
         StoreType::File => StorageClient::new_persistent(&args.store_file)?,
-    });
-
-    let shared_state = Arc::new(AppState {
-        ledger_id: args.ledger_id,
-        storage: storage.clone(),
     });
 
     let network_url = args.effective_network_url();
@@ -210,6 +294,13 @@ async fn main() -> Result<()> {
     if args.exit_on_sync {
         process::exit(0);
     }
+
+    let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
+    let shared_state = Arc::new(AppState {
+        ledger_id: args.ledger_id,
+        storage: storage.clone(),
+        metadata,
+    });
 
     let app = Router::new()
         .route("/health", get(health))

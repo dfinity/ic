@@ -3,6 +3,7 @@ use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
@@ -730,6 +731,24 @@ pub fn valid_transactions_strategy(
         now,
     )
     .prop_map(|res| res.transactions)
+}
+
+fn decimals_strategy() -> impl Strategy<Value = u8> {
+    0..u8::MAX
+}
+
+pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>> {
+    let symbol_strategy =
+        prop::string::string_regex("[A-Za-z0-9]{1,5}").expect("failed to make generator");
+    (symbol_strategy, decimals_strategy()).prop_map(|(symbol, decimals)| {
+        vec![
+            ("icrc1:symbol".to_string(), MetadataValue::Text(symbol)),
+            (
+                "icrc1:decimals".to_string(),
+                MetadataValue::Nat(candid::Nat::from(decimals)),
+            ),
+        ]
+    })
 }
 
 #[cfg(test)]

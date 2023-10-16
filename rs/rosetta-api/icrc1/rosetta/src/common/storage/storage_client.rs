@@ -1,4 +1,7 @@
-use super::{storage_operations, types::RosettaBlock};
+use super::{
+    storage_operations,
+    types::{MetadataEntry, RosettaBlock},
+};
 use anyhow::Result;
 use ic_icrc1::Transaction;
 use ic_icrc1_tokens_u64::U64;
@@ -103,8 +106,27 @@ impl StorageClient {
         storage_operations::get_transaction_at_idx(&open_connection, block_idx)
     }
 
+    pub fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_metadata(&open_connection)
+    }
+
+    pub fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::store_metadata(&open_connection, metadata)
+    }
+
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
         let open_connection = self.storage_connection.lock().unwrap();
+        open_connection.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS metadata (
+                key TEXT PRIMARY KEY,
+                value BLOB NOT NULL
+            );
+            "#,
+            [],
+        )?;
         open_connection.execute(
             r#"
             CREATE TABLE IF NOT EXISTS blocks (
@@ -153,10 +175,11 @@ impl StorageClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::utils::unit_test_utils::create_tmp_dir;
+
+    use crate::{common::utils::unit_test_utils::create_tmp_dir, Metadata};
     use ic_icrc1::Block;
     use ic_icrc1_test_utils::{
-        arb_small_amount, blocks_strategy, valid_blockchain_with_gaps_strategy,
+        arb_small_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
     };
     use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
@@ -275,6 +298,18 @@ mod tests {
            else{
                assert!(derived_gaps.is_empty())
            }
+        }
+
+        #[test]
+        fn test_read_and_write_metadata(metadata in metadata_strategy()) {
+            let storage_client_memory = StorageClient::new_in_memory().unwrap();
+            let entries_write = metadata.iter().map(|(key, value)| MetadataEntry::from_metadata_value(key, value)).collect::<Result<Vec<MetadataEntry>>>().unwrap();
+            let metadata_write = Metadata::from_metadata_entries(&entries_write).unwrap();
+            storage_client_memory.write_metadata(entries_write).unwrap();
+            let entries_read = storage_client_memory.read_metadata().unwrap();
+            let metadata_read = Metadata::from_metadata_entries(&entries_read).unwrap();
+
+            assert_eq!(metadata_write, metadata_read);
         }
     }
 }

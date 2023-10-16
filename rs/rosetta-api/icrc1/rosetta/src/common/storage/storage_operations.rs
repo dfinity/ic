@@ -1,4 +1,4 @@
-use crate::common::storage::types::RosettaBlock;
+use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
@@ -11,6 +11,41 @@ use rusqlite::{Connection, Statement, ToSql};
 use serde_bytes::ByteBuf;
 
 type Tokens = U64;
+
+pub fn store_metadata(connection: &Connection, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
+    connection.execute_batch("BEGIN TRANSACTION;")?;
+
+    let mut stmt_metadata = connection.prepare("INSERT INTO metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?;
+
+    for entry in metadata.into_iter() {
+        match execute(&mut stmt_metadata, params![entry.key.clone(), entry.value]) {
+            Ok(_) => (),
+            Err(e) => {
+                connection.execute_batch("ROLLBACK TRANSACTION;")?;
+                return Err(e);
+            }
+        };
+    }
+
+    connection.execute_batch("COMMIT TRANSACTION;")?;
+    Ok(())
+}
+
+pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry>> {
+    let mut stmt_metadata = connection.prepare("SELECT key, value FROM metadata")?;
+    let rows = stmt_metadata.query_map(params![], |row| {
+        Ok(MetadataEntry {
+            key: row.get(0)?,
+            value: row.get(1)?,
+        })
+    })?;
+    let mut result = vec![];
+    for row in rows {
+        let entry = row?;
+        result.push(entry);
+    }
+    Ok(result)
+}
 
 // Stores a batch of RosettaBlocks
 pub fn store_blocks(

@@ -4,6 +4,7 @@ use ic_icrc1::{Block, Transaction};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -73,5 +74,26 @@ impl RosettaBlock {
         Ok(Block::decode(self.encoded_block.clone())
             .map_err(anyhow::Error::msg)?
             .transaction)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct MetadataEntry {
+    pub key: String,
+    pub value: Vec<u8>,
+}
+
+impl MetadataEntry {
+    pub fn from_metadata_value(key: &str, value: &MetadataValue) -> anyhow::Result<Self> {
+        let value = candid::encode_one(value)?;
+
+        Ok(Self {
+            key: key.to_string(),
+            value,
+        })
+    }
+
+    pub fn value(&self) -> anyhow::Result<MetadataValue> {
+        Ok(candid::decode_one(&self.value)?)
     }
 }
