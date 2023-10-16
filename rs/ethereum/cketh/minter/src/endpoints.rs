@@ -146,6 +146,7 @@ pub mod events {
     use crate::lifecycle::init::InitArg;
     use crate::lifecycle::upgrade::UpgradeArg;
     use candid::{CandidType, Deserialize, Nat, Principal};
+    use serde_bytes::ByteBuf;
 
     #[derive(CandidType, Deserialize, Debug, Clone)]
     pub struct GetEventsArg {
@@ -169,6 +170,41 @@ pub mod events {
     pub struct EventSource {
         pub transaction_hash: String,
         pub log_index: Nat,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct AccessListItem {
+        pub address: String,
+        pub storage_keys: Vec<ByteBuf>,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct UnsignedTransaction {
+        pub chain_id: Nat,
+        pub nonce: Nat,
+        pub max_priority_fee_per_gas: Nat,
+        pub max_fee_per_gas: Nat,
+        pub gas_limit: Nat,
+        pub destination: String,
+        pub value: Nat,
+        pub data: ByteBuf,
+        pub access_list: Vec<AccessListItem>,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub enum TransactionStatus {
+        Success,
+        Failure,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub struct TransactionReceipt {
+        pub block_hash: String,
+        pub block_number: Nat,
+        pub effective_gas_price: Nat,
+        pub gas_used: Nat,
+        pub status: TransactionStatus,
+        pub transaction_hash: String,
     }
 
     #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -199,17 +235,21 @@ pub mod events {
             destination: String,
             ledger_burn_index: Nat,
         },
-        SignedTx {
+        CreatedTransaction {
             withdrawal_id: Nat,
-            raw_tx: String,
+            transaction: UnsignedTransaction,
         },
-        SentTransaction {
+        SignedTransaction {
             withdrawal_id: Nat,
-            transaction_hash: String,
+            raw_transaction: String,
+        },
+        ReplacedTransaction {
+            withdrawal_id: Nat,
+            transaction: UnsignedTransaction,
         },
         FinalizedTransaction {
             withdrawal_id: Nat,
-            transaction_hash: String,
+            transaction_receipt: TransactionReceipt,
         },
     }
 }

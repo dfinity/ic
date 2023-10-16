@@ -213,8 +213,11 @@ mod eth_transactions {
             .unwrap();
 
             expect_panic_with_message(
-                || transactions.record_created_transaction(withdrawal_request, tx),
-                "withdrawal request not found",
+                || {
+                    transactions
+                        .record_created_transaction(withdrawal_request.ledger_burn_index, tx)
+                },
+                "withdrawal request 15 not found",
             );
         }
 
@@ -239,7 +242,7 @@ mod eth_transactions {
             expect_panic_with_message(
                 || {
                     transactions.record_created_transaction(
-                        withdrawal_request.clone(),
+                        withdrawal_request.ledger_burn_index,
                         tx_with_wrong_destination,
                     )
                 },
@@ -256,8 +259,10 @@ mod eth_transactions {
             assert_ne!(correct_tx, tx_with_wrong_amount);
             expect_panic_with_message(
                 || {
-                    transactions
-                        .record_created_transaction(withdrawal_request, tx_with_wrong_amount)
+                    transactions.record_created_transaction(
+                        withdrawal_request.ledger_burn_index,
+                        tx_with_wrong_amount,
+                    )
                 },
                 "amount deducted from transaction fees",
             );
@@ -281,7 +286,7 @@ mod eth_transactions {
                 .unwrap();
 
                 expect_panic_with_message(
-                    || transactions.record_created_transaction(withdrawal_request, tx_with_wrong_nonce),
+                    || transactions.record_created_transaction(withdrawal_request.ledger_burn_index, tx_with_wrong_nonce),
                     "nonce mismatch",
                 );
             }
@@ -580,7 +585,10 @@ mod eth_transactions {
                         .unwrap(),
                     ..initial_tx
                 };
-                assert_eq!(resubmitted_txs, vec![Ok(expected_resubmitted_tx)]);
+                assert_eq!(
+                    resubmitted_txs,
+                    vec![Ok((ledger_burn_index, expected_resubmitted_tx))]
+                );
             }
         }
 
@@ -613,16 +621,13 @@ mod eth_transactions {
             let resubmitted_txs = transactions
                 .create_resubmit_transactions(TransactionCount::from(30_u8), higher_price.clone());
             assert_eq!(resubmitted_txs.len(), 70);
-            for (i, resubmitted_tx) in resubmitted_txs
+            for (i, (withdrawal_id, resubmitted_tx)) in resubmitted_txs
                 .into_iter()
                 .map(|res| res.unwrap())
                 .enumerate()
             {
-                let initial_transaction = transactions
-                    .sent_tx
-                    .get_alt(&LedgerBurnIndex::new(15 + i as u64))
-                    .unwrap()[0]
-                    .transaction();
+                let initial_transaction =
+                    transactions.sent_tx.get_alt(&withdrawal_id).unwrap()[0].transaction();
                 assert_eq!(
                     resubmitted_tx,
                     Eip1559TransactionRequest {
@@ -796,7 +801,7 @@ mod eth_transactions {
             let expected_resubmitted_tx1 = resubmitted_tx1.clone();
             assert_eq!(
                 resubmitted_txs_1,
-                vec![Ok(expected_resubmitted_tx1.clone())]
+                vec![Ok((ledger_burn_index, expected_resubmitted_tx1.clone()))]
             );
             transactions.record_resubmit_transaction(expected_resubmitted_tx1);
             assert_eq!(
@@ -826,7 +831,7 @@ mod eth_transactions {
             let expected_resubmitted_tx2 = resubmitted_tx2.clone();
             assert_eq!(
                 resubmitted_txs_2,
-                vec![Ok(expected_resubmitted_tx2.clone())]
+                vec![Ok((ledger_burn_index, expected_resubmitted_tx2.clone()))]
             );
             transactions.record_resubmit_transaction(expected_resubmitted_tx2);
             assert_eq!(
@@ -1355,7 +1360,7 @@ mod withdrawal_flow {
 
         proptest!(|(transaction_price in arb_non_overflowing_transaction_price(), transaction_count in arb_checked_amount_of())| {
             let resubmit_txs = wrapped_txs.borrow().create_resubmit_transactions(transaction_count, transaction_price.clone());
-            for resubmit_tx in resubmit_txs.into_iter().flatten() {
+            for (_withdrawal_id, resubmit_tx) in resubmit_txs.into_iter().flatten() {
                 wrapped_txs.borrow_mut().record_resubmit_transaction(resubmit_tx);
             }
 
@@ -1368,7 +1373,7 @@ mod withdrawal_flow {
                     transaction_price.clone(),
                     EthereumNetwork::Sepolia,
                 ){
-                    wrapped_txs.borrow_mut().record_created_transaction(request, created_tx);
+                    wrapped_txs.borrow_mut().record_created_transaction(request.ledger_burn_index, created_tx);
                 }
             }
 
@@ -1662,7 +1667,7 @@ fn create_and_record_transaction(
         EthereumNetwork::Sepolia,
     )
     .expect("failed to create transaction");
-    transactions.record_created_transaction(withdrawal_request, tx);
+    transactions.record_created_transaction(withdrawal_request.ledger_burn_index, tx);
     transactions
         .created_tx
         .get_alt(&burn_index)

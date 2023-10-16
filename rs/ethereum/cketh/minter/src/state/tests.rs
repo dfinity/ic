@@ -3,6 +3,7 @@ use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
@@ -409,7 +410,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    fn arb_signed_tx()(
+    fn arb_unsigned_tx()(
         chain_id in any::<u64>(),
         nonce in arb_checked_amount_of(),
         max_priority_fee_per_gas in arb_checked_amount_of(),
@@ -419,28 +420,63 @@ prop_compose! {
         amount in arb_checked_amount_of(),
         data in pvec(any::<u8>(), 0..20),
         access_list in arb_access_list(),
+    ) -> Eip1559TransactionRequest {
+         Eip1559TransactionRequest {
+            chain_id,
+            nonce,
+            max_priority_fee_per_gas,
+            max_fee_per_gas,
+            gas_limit,
+            destination,
+            amount,
+            data,
+            access_list,
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_signed_tx()(
+        unsigned_tx in arb_unsigned_tx(),
         r in arb_u256(),
         s in arb_u256(),
         signature_y_parity in any::<bool>(),
     ) -> SignedEip1559TransactionRequest {
         SignedEip1559TransactionRequest::from((
-             Eip1559TransactionRequest {
-                chain_id,
-                nonce,
-                max_priority_fee_per_gas,
-                max_fee_per_gas,
-                gas_limit,
-                destination,
-                amount,
-                data,
-                access_list,
-            },
+            unsigned_tx,
             Eip1559Signature {
                 r,
                 s,
                 signature_y_parity,
             }
         ))
+    }
+}
+
+fn arb_transaction_status() -> impl Strategy<Value = TransactionStatus> {
+    prop_oneof![
+        Just(TransactionStatus::Success),
+        Just(TransactionStatus::Failure),
+    ]
+}
+
+prop_compose! {
+    fn arb_tx_receipt()(
+        block_hash in arb_hash(),
+        block_number in arb_checked_amount_of(),
+        effective_gas_price in arb_checked_amount_of(),
+        gas_used in arb_checked_amount_of(),
+        status in arb_transaction_status(),
+        transaction_hash in arb_hash(),
+    ) -> TransactionReceipt {
+        TransactionReceipt {
+            block_hash,
+            block_number,
+            effective_gas_price,
+            gas_used,
+            status,
+            transaction_hash,
+        }
     }
 }
 
@@ -460,22 +496,28 @@ fn arb_event_type() -> impl Strategy<Value = EventType> {
             }
         }),
         arb_checked_amount_of().prop_map(|block_number| EventType::SyncedToBlock { block_number }),
-        (any::<u64>(), arb_signed_tx()).prop_map(|(withdrawal_id, tx)| {
-            EventType::SignedTx {
+        (any::<u64>(), arb_unsigned_tx()).prop_map(|(withdrawal_id, transaction)| {
+            EventType::CreatedTransaction {
                 withdrawal_id: withdrawal_id.into(),
-                tx,
+                transaction,
             }
         }),
-        (any::<u64>(), arb_hash()).prop_map(|(withdrawal_id, txhash)| {
-            EventType::SentTransaction {
+        (any::<u64>(), arb_signed_tx()).prop_map(|(withdrawal_id, transaction)| {
+            EventType::SignedTransaction {
                 withdrawal_id: withdrawal_id.into(),
-                txhash,
+                transaction,
             }
         }),
-        (any::<u64>(), arb_hash()).prop_map(|(withdrawal_id, txhash)| {
+        (any::<u64>(), arb_unsigned_tx()).prop_map(|(withdrawal_id, transaction)| {
+            EventType::ReplacedTransaction {
+                withdrawal_id: withdrawal_id.into(),
+                transaction,
+            }
+        }),
+        (any::<u64>(), arb_tx_receipt()).prop_map(|(withdrawal_id, transaction_receipt)| {
             EventType::FinalizedTransaction {
                 withdrawal_id: withdrawal_id.into(),
-                txhash,
+                transaction_receipt,
             }
         }),
     ]

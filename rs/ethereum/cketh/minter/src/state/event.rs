@@ -1,9 +1,9 @@
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
-use crate::eth_rpc::Hash;
+use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
 use crate::transactions::EthWithdrawalRequest;
-use crate::tx::SignedEip1559TransactionRequest;
+use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
 use minicbor::{Decode, Encode};
 
 /// The event describing the ckETH minter state transition.
@@ -49,33 +49,42 @@ pub enum EventType {
     /// The minter accepted a new ETH withdrawal request.
     #[n(7)]
     AcceptedEthWithdrawalRequest(#[n(0)] EthWithdrawalRequest),
-    /// The minter signed a transaction.
+    /// The minter created a new transaction to handle a withdrawal request.
     #[n(8)]
-    SignedTx {
+    CreatedTransaction {
+        #[cbor(n(0), with = "crate::cbor::id")]
+        withdrawal_id: LedgerBurnIndex,
+        #[n(1)]
+        transaction: Eip1559TransactionRequest,
+    },
+    /// The minter signed a transaction.
+    #[n(9)]
+    SignedTransaction {
         /// The withdrawal identifier.
         #[cbor(n(0), with = "crate::cbor::id")]
         withdrawal_id: LedgerBurnIndex,
         /// The signed transaction.
         #[n(1)]
-        tx: SignedEip1559TransactionRequest,
+        transaction: SignedEip1559TransactionRequest,
     },
-    /// The minter sent the transaction to the Ethereum network.
-    #[n(9)]
-    SentTransaction {
+    #[n(10)]
+    ReplacedTransaction {
         /// The withdrawal identifier.
         #[cbor(n(0), with = "crate::cbor::id")]
         withdrawal_id: LedgerBurnIndex,
+        /// The replacement transaction.
         #[n(1)]
-        txhash: Hash,
+        transaction: Eip1559TransactionRequest,
     },
     /// The minter observed the transaction being included in a finalized Ethereum block.
-    #[n(10)]
+    #[n(11)]
     FinalizedTransaction {
         /// The withdrawal identifier.
         #[cbor(n(0), with = "crate::cbor::id")]
         withdrawal_id: LedgerBurnIndex,
+        /// The receipt for the finalized transaction.
         #[n(1)]
-        txhash: Hash,
+        transaction_receipt: TransactionReceipt,
     },
 }
 

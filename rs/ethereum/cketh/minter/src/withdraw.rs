@@ -9,6 +9,7 @@ use crate::eth_rpc_client::{EthRpcClient, SingleCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{LedgerBurnIndex, TransactionCount};
+use crate::state::audit::{process_event, EventType};
 use crate::state::{mutate_state, read_state, State, TaskType};
 use crate::transactions::{create_transaction, CreateTransactionError};
 use crate::tx::{estimate_transaction_price, TransactionPrice};
@@ -91,14 +92,22 @@ async fn resubmit_transactions_batch(
         s.eth_transactions
             .create_resubmit_transactions(latest_transaction_count, transaction_price.clone())
     });
-    for tx in transactions_to_resubmit {
-        match tx {
-            Ok(resubmit_tx) => {
+    for result in transactions_to_resubmit {
+        match result {
+            Ok((withdrawal_id, transaction)) => {
                 log!(
                     INFO,
-                    "[resubmit_transactions_batch]: transactions to resubmit {resubmit_tx:?}"
+                    "[resubmit_transactions_batch]: transactions to resubmit {transaction:?}"
                 );
-                mutate_state(|s| s.eth_transactions.record_resubmit_transaction(resubmit_tx));
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::ReplacedTransaction {
+                            withdrawal_id,
+                            transaction,
+                        },
+                    )
+                });
             }
             Err(e) => {
                 log!(INFO, "Failed to resubmit transaction: {e:?}");
@@ -113,13 +122,21 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
         let ethereum_network = read_state(State::ethereum_network);
         let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
         match create_transaction(&request, nonce, transaction_price.clone(), ethereum_network) {
-            Ok(tx) => {
+            Ok(transaction) => {
                 log!(
                     DEBUG,
-                    "[create_transactions_batch]: created transaction {tx:?}",
+                    "[create_transactions_batch]: created transaction {transaction:?}",
                 );
 
-                mutate_state(|s| s.eth_transactions.record_created_transaction(request, tx));
+                mutate_state(|s| {
+                    process_event(
+                        s,
+                        EventType::CreatedTransaction {
+                            withdrawal_id: request.ledger_burn_index,
+                            transaction,
+                        },
+                    );
+                });
             }
             Err(CreateTransactionError::InsufficientAmount {
                 ledger_burn_index,
@@ -142,18 +159,28 @@ async fn sign_transactions_batch() {
     let transactions_batch: Vec<_> = read_state(|s| {
         s.eth_transactions
             .created_transactions_iter()
-            .map(|(_nonce, _ledger_burn_index, tx)| tx)
-            .cloned()
+            .map(|(_nonce, withdrawal_id, tx)| (*withdrawal_id, tx.clone()))
             .collect()
     });
     log!(DEBUG, "Signing transactions {transactions_batch:?}");
-    let results = join_all(transactions_batch.into_iter().map(|tx| tx.sign())).await;
+    let results = join_all(
+        transactions_batch
+            .into_iter()
+            .map(|(withdrawal_id, tx)| async move { (withdrawal_id, tx.sign().await) }),
+    )
+    .await;
     let mut errors = Vec::new();
-    for result in results {
+    for (withdrawal_id, result) in results {
         match result {
-            Ok(signed_tx) => {
-                mutate_state(|s| s.eth_transactions.record_signed_transaction(signed_tx))
-            }
+            Ok(transaction) => mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::SignedTransaction {
+                        withdrawal_id,
+                        transaction,
+                    },
+                )
+            }),
             Err(e) => errors.push(e),
         }
     }
@@ -267,10 +294,15 @@ async fn finalize_transactions_batch() {
                 expected_finalized_withdrawal_ids, actual_finalized_withdrawal_ids,
                 "ERROR: unexpected transaction receipts for some withdrawal IDs"
             );
-            for (withdrawal_id, receipt) in receipts {
+            for (withdrawal_id, transaction_receipt) in receipts {
                 mutate_state(|s| {
-                    s.eth_transactions
-                        .record_finalized_transaction(withdrawal_id, receipt)
+                    process_event(
+                        s,
+                        EventType::FinalizedTransaction {
+                            withdrawal_id,
+                            transaction_receipt,
+                        },
+                    );
                 });
             }
         }

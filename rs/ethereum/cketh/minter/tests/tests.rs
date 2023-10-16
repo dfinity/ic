@@ -5,7 +5,10 @@ use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
 };
 use ic_cketh_minter::address::Address;
-use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource, GetEventsResult};
+use ic_cketh_minter::endpoints::events::{
+    Event, EventPayload, EventSource, GetEventsResult, TransactionReceipt, TransactionStatus,
+    UnsignedTransaction,
+};
 use ic_cketh_minter::endpoints::RetrieveEthStatus::Pending;
 use ic_cketh_minter::endpoints::{
     EthTransaction, RetrieveEthRequest, RetrieveEthStatus, RetrieveEthStatus::TxConfirmed,
@@ -31,6 +34,9 @@ const CKETH_TRANSFER_FEE: u64 = 10;
 const MAX_TICKS: usize = 10;
 const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
 const DEFAULT_DEPOSIT_LOG_INDEX: u64 = 0x24;
+const DEFAULT_BLOCK_HASH: &str =
+    "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4";
+const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -123,12 +129,11 @@ fn should_deposit_and_withdraw() {
     // Withdraw
 
     cketh.approve_minter(caller, EXPECTED_BALANCE, None);
+    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let destination = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string();
 
-    let message_id = cketh.call_minter_withdraw(
-        caller,
-        Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE),
-        "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string(),
-    );
+    let message_id =
+        cketh.call_minter_withdraw(caller, withdrawal_amount.clone(), destination.clone());
 
     let block_index = Decode!(&assert_reply(
         cketh
@@ -138,16 +143,69 @@ fn should_deposit_and_withdraw() {
     ), Result<RetrieveEthRequest, WithdrawalError>)
     .unwrap()
     .unwrap()
-    .block_index
-    .0
-    .to_u64()
-    .unwrap();
+    .block_index;
+
+    let block_index_u64 = block_index.0.to_u64().unwrap();
 
     cketh.wait_and_validate_withdrawal(
         "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
-        block_index,
+        block_index_u64,
     );
     assert_eq!(cketh.balance_of(caller), Nat::from(0));
+
+    let events = cketh.get_all_events();
+    assert_contains_unique_event(
+        &events,
+        EventPayload::AcceptedEthWithdrawalRequest {
+            withdrawal_amount: withdrawal_amount.clone(),
+            destination: destination.clone(),
+            ledger_burn_index: block_index.clone(),
+        },
+    );
+
+    let max_fee_per_gas = Nat::from(33003708258u64);
+    let gas_limit = Nat::from(21_000);
+
+    assert_contains_unique_event(
+        &events,
+        EventPayload::CreatedTransaction {
+            withdrawal_id: block_index.clone(),
+            transaction: UnsignedTransaction {
+                chain_id: Nat::from(1),
+                nonce: Nat::from(0),
+                max_priority_fee_per_gas: Nat::from(1_500_000_000),
+                max_fee_per_gas: max_fee_per_gas.clone(),
+                gas_limit: gas_limit.clone(),
+                destination,
+                value: withdrawal_amount - max_fee_per_gas * gas_limit,
+                data: Default::default(),
+                access_list: vec![],
+            },
+        },
+    );
+
+    assert_contains_unique_event(
+        &events,
+        EventPayload::SignedTransaction {
+            withdrawal_id: block_index.clone(),
+            raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+        },
+    );
+    assert_contains_unique_event(
+        &events,
+        EventPayload::FinalizedTransaction {
+            withdrawal_id: block_index,
+            transaction_receipt: TransactionReceipt {
+                block_hash: DEFAULT_BLOCK_HASH.to_string(),
+                block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
+                effective_gas_price: Nat::from(4277923390u64),
+                gas_used: Nat::from(21_000),
+                status: TransactionStatus::Success,
+                transaction_hash:
+                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+            },
+        },
+    );
 }
 
 #[test]
@@ -283,9 +341,9 @@ fn should_block_blocked_addresses() {
 
 fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {
     match events.iter().filter(|e| e.payload == payload).count() {
-        0 => panic!("missing the event payload {payload:?} in audit log {events:?}"),
+        0 => panic!("missing the event payload {payload:#?} in audit log {events:#?}"),
         1 => (),
-        n => panic!("event payload {payload:?} appears {n} times in audit log {events:?}"),
+        n => panic!("event payload {payload:#?} appears {n} times in audit log {events:#?}"),
     }
 }
 
@@ -435,8 +493,8 @@ fn eth_get_transaction_receipt(transaction_hash: String) -> Vec<u8> {
     "jsonrpc":"2.0",
     "id":1,
     "result":{
-     "blockHash": "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4",
-        "blockNumber": "0x4132ec",
+     "blockHash": DEFAULT_BLOCK_HASH,
+        "blockNumber": format!("0x{:x}", DEFAULT_BLOCK_NUMBER),
         "contractAddress": null,
         "cumulativeGasUsed": "0x8b2e10",
         "effectiveGasPrice": "0xfefbee3e",
