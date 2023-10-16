@@ -40,7 +40,6 @@ if ! which dfx >/dev/null; then
     exit 1
 fi
 
-PEM=$NNS_TOOLS_DIR/test_user.pem
 dfx identity import --force --disable-encryption nns_test_user_dfx_identity $PEM
 dfx identity use nns_test_user_dfx_identity
 PRINCIPAL=$(dfx identity get-principal)

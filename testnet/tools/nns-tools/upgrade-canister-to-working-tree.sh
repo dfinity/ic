@@ -32,9 +32,6 @@ NEURON_ID=${3:-$NEURON_ID}
 ensure_variable_set NNS_URL || help
 ensure_variable_set NEURON_ID || help
 
-# Allow overriding PEM file, but default to shared identity
-export PEM=${PEM:-$NNS_TOOLS_DIR/test_user.pem}
-
 build_canister_and_propose_upgrade_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME"
 
 # Wait for upgrade.

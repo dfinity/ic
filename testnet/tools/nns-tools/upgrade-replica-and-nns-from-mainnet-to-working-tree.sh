@@ -17,8 +17,11 @@ TESTNET=$1
 CUSTOM_GIT_SHA=$2
 NNS_DAPP_RELEASE="proposal-123301"
 
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
+
 get_latest_nns_proposal() {
-    dfx canister \
+    __dfx canister \
         --network "${NNS_URL}" \
         call "${GOVERNANCE}" \
         --candid ../../../rs/nns/governance/canister/governance.did \
