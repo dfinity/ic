@@ -20,9 +20,9 @@ fn insufficient_dealings(r: Result<ProtocolRound, ThresholdEcdsaError>) {
 fn should_reshare_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
     let mut rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(&mut rng);
-        let setup = ProtocolSetup::new(curve_type, 4, 2, random_seed)?;
+        let setup = ProtocolSetup::new(cfg, 4, 2, random_seed)?;
 
         let no_corruption = 0; // number of corrupted dealings == 0
         let corrupted_dealings = 1;
@@ -86,9 +86,9 @@ fn should_reshare_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
 fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
     let mut rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(&mut rng);
-        let setup = ProtocolSetup::new(curve_type, 4, 2, random_seed)?;
+        let setup = ProtocolSetup::new(cfg, 4, 2, random_seed)?;
 
         let dealers = 4;
         let corrupted_dealings = 1;
@@ -126,9 +126,9 @@ fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
 fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
     let mut rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(&mut rng);
-        let mut setup = ProtocolSetup::new(curve_type, 5, 2, random_seed)?;
+        let mut setup = ProtocolSetup::new(cfg, 5, 2, random_seed)?;
 
         let no_corruption = 0; // number of corrupted dealings == 0
         let corrupted_dealings = 1;
@@ -170,9 +170,9 @@ fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEc
 fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
     let mut rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(&mut rng);
-        let mut setup = ProtocolSetup::new(curve_type, 5, 2, random_seed)?;
+        let mut setup = ProtocolSetup::new(cfg, 5, 2, random_seed)?;
 
         let corrupted_dealings = 1;
 
@@ -247,11 +247,11 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
 
     let rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(rng);
 
         let setup = SignatureProtocolSetup::new(
-            curve_type,
+            cfg,
             nodes,
             threshold,
             number_of_dealings_corrupted,
@@ -310,11 +310,11 @@ fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
 
     let rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(rng);
 
         let setup = SignatureProtocolSetup::new(
-            curve_type,
+            cfg,
             nodes,
             threshold,
             number_of_dealings_corrupted,
@@ -359,7 +359,7 @@ fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
         assert!(proto.verify_signature(&sig_with_s_eq_zero).is_err());
 
         let sig_with_high_s = {
-            let s = EccScalar::deserialize(curve_type, &sig[half_sig..])
+            let s = EccScalar::deserialize(cfg.signature_curve(), &sig[half_sig..])
                 .unwrap()
                 .negate();
 
