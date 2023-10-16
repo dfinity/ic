@@ -7136,7 +7136,10 @@ impl Governance {
         let now_seconds = self.env.now();
         // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
         // No neuron in stable storage should have staked maturity.
-        for nid in self.neuron_store.list_staked_maturity_neuron_ids() {
+        for neuron_id in self
+            .neuron_store
+            .list_neurons_ready_to_unstake_maturity(now_seconds)
+        {
             let proposals = &self.heap_data.proposals;
             let in_flight_commands = &self.heap_data.in_flight_commands;
             let is_neuron_inactive =
@@ -7144,8 +7147,8 @@ impl Governance {
 
             let unstake_result =
                 self.neuron_store
-                    .with_neuron_mut(&nid, is_neuron_inactive, |neuron| {
-                        neuron.unstake_maturity_if_dissolved(now_seconds)
+                    .with_neuron_mut(&neuron_id, is_neuron_inactive, |neuron| {
+                        neuron.unstake_maturity(now_seconds)
                     });
 
             match unstake_result {
@@ -7153,7 +7156,7 @@ impl Governance {
                 Err(e) => {
                     println!(
                         "{}Error in heartbeat when moving staked maturity for neuron {:?}: {:?}",
-                        LOG_PREFIX, nid, e
+                        LOG_PREFIX, neuron_id, e
                     );
                 }
             };
