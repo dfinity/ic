@@ -134,6 +134,27 @@ type EventSource = record {
     log_index : nat;
 };
 
+type TransactionReceipt = record {
+    block_hash : text;
+    block_number : nat;
+    effective_gas_price : nat;
+    gas_used : nat;
+    status : variant { Success; Failure };
+    transaction_hash : text;
+};
+
+type UnsignedTransaction = record {
+    chain_id : nat;
+    nonce : nat;
+    max_priority_fee_per_gas : nat;
+    max_fee_per_gas : nat;
+    gas_limit : nat;
+    destination : text;
+    value : nat;
+    data : blob;
+    access_list : vec record { address : text; storage_keys : vec blob };
+};
+
 type Event = record {
     timestamp : nat64;
     payload : variant {
@@ -163,17 +184,21 @@ type Event = record {
             destination : text;
             ledger_burn_index : nat;
         };
-        SignedTx : record {
+        CreatedTransaction : record {
             withdrawal_id : nat;
-            raw_tx : text;
+            transaction : UnsignedTransaction;
         };
-        SentTransaction : record {
+        SignedTransaction : record {
             withdrawal_id : nat;
-            transaction_hash : text;
+            raw_transaction : text;
+        };
+        ReplacedTransaction : record {
+            withdrawal_id : nat;
+            transaction : UnsignedTransaction;
         };
         FinalizedTransaction : record {
             withdrawal_id : nat;
-            transaction_hash : text;
+            transaction_receipt : TransactionReceipt;
         };
     };
 };

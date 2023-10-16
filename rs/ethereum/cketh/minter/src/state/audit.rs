@@ -31,8 +31,42 @@ fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::SyncedToBlock { block_number } => {
             state.last_scraped_block_number = *block_number;
         }
-        e => {
-            unimplemented!("Handling {e:?} is not yet implemlemented");
+        EventType::AcceptedEthWithdrawalRequest(request) => {
+            state
+                .eth_transactions
+                .record_withdrawal_request(request.clone());
+        }
+        EventType::CreatedTransaction {
+            withdrawal_id,
+            transaction,
+        } => {
+            state
+                .eth_transactions
+                .record_created_transaction(*withdrawal_id, transaction.clone());
+        }
+        EventType::SignedTransaction {
+            withdrawal_id: _,
+            transaction,
+        } => {
+            state
+                .eth_transactions
+                .record_signed_transaction(transaction.clone());
+        }
+        EventType::ReplacedTransaction {
+            withdrawal_id: _,
+            transaction,
+        } => {
+            state
+                .eth_transactions
+                .record_resubmit_transaction(transaction.clone());
+        }
+        EventType::FinalizedTransaction {
+            withdrawal_id,
+            transaction_receipt,
+        } => {
+            state
+                .eth_transactions
+                .record_finalized_transaction(*withdrawal_id, transaction_receipt.clone());
         }
     }
 }

@@ -119,9 +119,15 @@ impl EthTransactions {
 
     pub fn record_created_transaction(
         &mut self,
-        withdrawal_request: EthWithdrawalRequest,
+        withdrawal_id: LedgerBurnIndex,
         transaction: Eip1559TransactionRequest,
     ) {
+        let withdrawal_request = self
+            .withdrawal_requests
+            .iter()
+            .find(|req| req.ledger_burn_index == withdrawal_id)
+            .cloned()
+            .unwrap_or_else(|| panic!("BUG: withdrawal request {withdrawal_id} not found"));
         assert!(
             self.withdrawal_requests.contains(&withdrawal_request),
             "BUG: withdrawal request not found"
@@ -188,7 +194,7 @@ impl EthTransactions {
         &self,
         latest_transaction_count: TransactionCount,
         current_transaction_price: TransactionPrice,
-    ) -> Vec<Result<Eip1559TransactionRequest, ResubmitTransactionError>> {
+    ) -> Vec<Result<(LedgerBurnIndex, Eip1559TransactionRequest), ResubmitTransactionError>> {
         // If transaction count at block height H is c > 0, then transactions with nonces
         // 0, 1, ..., c - 1 were mined. If transaction count is 0, then no transactions were mined.
         // The nonce of the first pending transaction is then exactly c.
@@ -233,7 +239,7 @@ impl EthTransactions {
                     amount: new_amount,
                     ..last_tx
                 };
-                transactions_to_resubmit.push(Ok(new_tx));
+                transactions_to_resubmit.push(Ok((*burn_index, new_tx)));
             } else {
                 // the transaction fee is still up-to-date but because the transaction did not get mined,
                 // we re-send it as is to be sure that it remains known to the mempool and hopefully be mined at some point.

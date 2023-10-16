@@ -15,7 +15,7 @@ use ic_cketh_minter::guard::retrieve_eth_guard;
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, Wei};
-use ic_cketh_minter::state::audit::{Event, EventType};
+use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
 use ic_cketh_minter::transactions::EthWithdrawalRequest;
 use ic_cketh_minter::tx::estimate_transaction_price;
@@ -192,8 +192,10 @@ async fn withdraw_eth(
             );
 
             mutate_state(|s| {
-                s.eth_transactions
-                    .record_withdrawal_request(withdrawal_request.clone())
+                process_event(
+                    s,
+                    EventType::AcceptedEthWithdrawalRequest(withdrawal_request.clone()),
+                );
             });
             Ok(RetrieveEthRequest::from(withdrawal_request))
         }
@@ -248,6 +250,14 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 #[query]
 #[candid_method(query)]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
+    use ic_cketh_minter::endpoints::events::{
+        AccessListItem, TransactionReceipt as CandidTransactionReceipt,
+        TransactionStatus as CandidTransactionStatus, UnsignedTransaction,
+    };
+    use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
+    use ic_cketh_minter::tx::Eip1559TransactionRequest;
+    use serde_bytes::ByteBuf;
+
     const MAX_EVENTS_PER_RESPONSE: u64 = 100;
 
     fn map_event_source(
@@ -259,6 +269,47 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         CandidEventSource {
             transaction_hash: transaction_hash.to_string(),
             log_index: log_index.into(),
+        }
+    }
+
+    fn map_unsigned_transaction(tx: Eip1559TransactionRequest) -> UnsignedTransaction {
+        UnsignedTransaction {
+            chain_id: tx.chain_id.into(),
+            nonce: tx.nonce.into(),
+            max_priority_fee_per_gas: tx.max_priority_fee_per_gas.into(),
+            max_fee_per_gas: tx.max_fee_per_gas.into(),
+            gas_limit: tx.gas_limit.into(),
+            destination: tx.destination.to_string(),
+            value: tx.amount.into(),
+            data: ByteBuf::from(tx.data),
+            access_list: tx
+                .access_list
+                .0
+                .iter()
+                .map(|item| AccessListItem {
+                    address: item.address.to_string(),
+                    storage_keys: item
+                        .storage_keys
+                        .iter()
+                        .map(|key| ByteBuf::from(key.0.to_vec()))
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+
+    fn map_transaction_receipt(receipt: TransactionReceipt) -> CandidTransactionReceipt {
+        use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
+        CandidTransactionReceipt {
+            block_hash: receipt.block_hash.to_string(),
+            block_number: receipt.block_number.into(),
+            effective_gas_price: receipt.effective_gas_price.into(),
+            gas_used: receipt.gas_used.into(),
+            status: match receipt.status {
+                TransactionStatus::Success => CandidTransactionStatus::Success,
+                TransactionStatus::Failure => CandidTransactionStatus::Failure,
+            },
+            transaction_hash: receipt.transaction_hash.to_string(),
         }
     }
 
@@ -310,23 +361,33 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
                 },
-                EventType::SignedTx { withdrawal_id, tx } => EP::SignedTx {
-                    withdrawal_id: withdrawal_id.get().into(),
-                    raw_tx: tx.raw_transaction_hex(),
-                },
-                EventType::SentTransaction {
+                EventType::CreatedTransaction {
                     withdrawal_id,
-                    txhash,
-                } => EP::SentTransaction {
+                    transaction,
+                } => EP::CreatedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
-                    transaction_hash: txhash.to_string(),
+                    transaction: map_unsigned_transaction(transaction),
+                },
+                EventType::SignedTransaction {
+                    withdrawal_id,
+                    transaction,
+                } => EP::SignedTransaction {
+                    withdrawal_id: withdrawal_id.get().into(),
+                    raw_transaction: transaction.raw_transaction_hex(),
+                },
+                EventType::ReplacedTransaction {
+                    withdrawal_id,
+                    transaction,
+                } => EP::ReplacedTransaction {
+                    withdrawal_id: withdrawal_id.get().into(),
+                    transaction: map_unsigned_transaction(transaction),
                 },
                 EventType::FinalizedTransaction {
                     withdrawal_id,
-                    txhash,
+                    transaction_receipt,
                 } => EP::FinalizedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
-                    transaction_hash: txhash.to_string(),
+                    transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
             },
         }
