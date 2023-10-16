@@ -16,7 +16,7 @@ get_info() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx -q canister --network "$NETWORK" info "$CANISTER_ID"
+    __dfx -q canister --network "$NETWORK" info "$CANISTER_ID"
 }
 
 nns_canister_hash() {
@@ -57,7 +57,7 @@ canister_git_version() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx -q canister --network "$NETWORK" metadata \
+    __dfx -q canister --network "$NETWORK" metadata \
         "$CANISTER_ID" git_commit_id
 }
 

@@ -36,8 +36,7 @@ ensure_variable_set NNS_URL
 ensure_variable_set SUBNET_URL
 ensure_variable_set NEURON_ID
 ensure_variable_set WALLET_CANISTER
-
-PEM="$NNS_TOOLS_DIR/test_user.pem"
+ensure_variable_set PEM
 
 # Install the sns binary corresponding to the latest NNS Governance canister
 SNS_CLI_VERSION=$(nns_canister_git_version "${NNS_URL}" "governance")
@@ -88,9 +87,37 @@ upgrade_sns() {
     sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER_ID" 0
 }
 
+upgrade_nns_governance_to_test_version() {
+    NNS_URL=$1
+    NEURON_ID=$2
+    PEM=$3
+
+    GOVERNANCE_CANISTER_ID=$(nns_canister_id governance)
+    GIT_COMMIT=$(canister_git_version "${NNS_URL}" "${GOVERNANCE_CANISTER_ID}")
+    DOWNLOAD_NAME="governance-canister_test"
+    WASM_GZ_FILE=$(_download_canister_gz "${DOWNLOAD_NAME}" "${GIT_COMMIT}")
+    WASM_SHA=$(sha_256 "${WASM_GZ_FILE}")
+
+    if nns_canister_has_file_contents_installed "${NNS_URL}" "governance" "${WASM_GZ_FILE}"; then
+        print_green "Governance already on the correct version."
+        return 0
+    fi
+
+    propose_upgrade_nns_canister_wasm_file_pem "${NNS_URL}" "${NEURON_ID}" "${PEM}" "governance" "${WASM_GZ_FILE}"
+
+    if ! wait_for_nns_canister_has_file_contents "${NNS_URL}" "governance" "${WASM_GZ_FILE}"; then
+        print_red "Could not upgrade NNS Governance to its test version at version ${GIT_COMMIT}"
+        exit 1
+    fi
+
+    print_green "Upgraded NNS Governance to its test build for Git Commit ${GIT_COMMIT}. Its hash is ${WASM_SHA}"
+}
+
+upgrade_nns_governance_to_test_version "${NNS_URL}" "${NEURON_ID}" "${PEM}"
+
 echo "$PERMUTATIONS" | while read -r ORDERING; do
 
-    echo "Reset versions to mainnet"
+    echo "Reset versions to mainnet" | tee -a "${LOG_FILE}"
     reset_sns_w_versions_to_mainnet "$NNS_URL" "$NEURON_ID"
     # propose new SNS
     echo "Proposing new SNS!" | tee -a "${LOG_FILE}"
@@ -102,7 +129,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
     # get the canister ID for the new SNS Governance
     echo "Proposed new SNS" | tee -a $LOG_FILE
 
-    # Get the latest SNS canisters and create the sns_canister_ids.json file
+    echo "Get the latest SNS canisters and create the sns_canister_ids.json file ..." | tee -a $LOG_FILE
     SNS=$(list_deployed_snses "${NNS_URL}" | $IDL2JSON | jq '.instances[-1]')
     echo "$SNS" | jq '{
             governance_canister_id: .governance_canister_id[0],
@@ -119,20 +146,20 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
     SWAP_CANISTER_ID=$(sns_canister_id_for_sns_canister_type swap)
     LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
-    # Participate in Swap to commit it (this spawns the archive canister)
-    sns_quill_participate_in_sale "${NNS_URL}" "${SUBNET_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
+    echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
+    sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
 
-    # Wait for finalization to complete
+    echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
     if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
         print_red "Swap finalization failed, cannot continue with upgrade testing"
         exit 1
     fi
 
-    # Add the archive canister to sns_canister_ids.json for use during upgrade testing
+    echo "Add the archive canister to sns_canister_ids.json for use during upgrade testing ..." | tee -a $LOG_FILE
     ARCHIVE_CANISTER_ID=$(sns_get_archive "${SUBNET_URL}" "${LEDGER_CANISTER_ID}")
     add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
 
-    # Assert that all canisters have the mainnet hashes so our test is legitimate
+    echo "Assert that all canisters have the mainnet hashes so our test is legitimate ..." | tee -a $LOG_FILE
     canister_has_hash_installed $SUBNET_URL \
         $(sns_canister_id_for_sns_canister_type governance) $(sns_mainnet_latest_wasm_hash governance)
     canister_has_hash_installed $SUBNET_URL \

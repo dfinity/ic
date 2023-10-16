@@ -19,8 +19,8 @@ fallback_controller_principals:
 dapp_canisters: []
 
 Token:
-    name: Batman
-    symbol: BTM
+    name: MyTestnetToken
+    symbol: MTT
     transaction_fee: 1 e8s
     logo: test.png
 
@@ -60,33 +60,29 @@ Distribution:
           vesting_period: 1 year 1 second
 
     InitialBalances:
-        governance: 60 tokens
-        swap: 40 tokens
+        governance: 50 tokens
+        swap: 30_000 tokens
 
-    # Optional, but highly recommended. This is a literal
-    # checksum.
-    total: 115 tokens # 60 + 40 + 15
+    total: 30_065 tokens
 
 Swap:
-    minimum_participants: 50
+    minimum_participants: 1
 
-    minimum_icp: 123 tokens
-    maximum_icp: 65000 tokens
+    minimum_icp: 1000000000 e8s
+    maximum_icp: 3000000000000 e8s
 
-    minimum_participant_icp: 650 tokens
-    maximum_participant_icp: 6500 tokens
+    minimum_participant_icp: 1000000000 e8s
+    maximum_participant_icp: 3000000000000 e8s
 
-    confirmation_text: Hello, world?
+#    confirmation_text: Hello, world?
 
-    restricted_countries:
-        - US
-        - CH
+#    restricted_countries: []
 
     VestingSchedule:
         events: 3000
-        interval: 17 days
+        interval: 100 seconds
 
-    start_time: 12:00 UTC
+#     start_time: 12:00 UTC
     duration: 7 days
 
-    neurons_fund_investment_icp: 1_000 tokens
+    neurons_fund_investment_icp: 0 tokens

@@ -34,32 +34,32 @@ reset_sns_w_versions_to_mainnet() {
 
     upload_canister_git_version_to_sns_wasm \
         "$NNS_URL" "$NEURON_ID" \
-        "$NNS_TOOLS_DIR"/test_user.pem \
+        "$PEM" \
         root $(sns_mainnet_git_commit_id root)
 
     upload_canister_git_version_to_sns_wasm \
         "$NNS_URL" "$NEURON_ID" \
-        "$NNS_TOOLS_DIR"/test_user.pem \
+        "$PEM" \
         governance $(sns_mainnet_git_commit_id governance)
 
     upload_canister_git_version_to_sns_wasm \
         "$NNS_URL" "$NEURON_ID" \
-        "$NNS_TOOLS_DIR"/test_user.pem \
+        "$PEM" \
         ledger $(sns_mainnet_git_commit_id ledger)
 
     upload_canister_git_version_to_sns_wasm \
         "$NNS_URL" "$NEURON_ID" \
-        "$NNS_TOOLS_DIR"/test_user.pem \
+        "$PEM" \
         archive $(sns_mainnet_git_commit_id archive)
 
     upload_canister_git_version_to_sns_wasm \
         "$NNS_URL" "$NEURON_ID" \
-        "$NNS_TOOLS_DIR"/test_user.pem \
+        "$PEM" \
         swap $(sns_mainnet_git_commit_id swap)
 
     upload_canister_git_version_to_sns_wasm \
         "$NNS_URL" "$NEURON_ID" \
-        "$NNS_TOOLS_DIR"/test_user.pem \
+        "$PEM" \
         index $(sns_mainnet_git_commit_id index)
 }
 
@@ -116,7 +116,7 @@ propose_new_sns() {
 
     set +e
 
-    OUT=$($SNS_CLI propose --network "${NNS_URL}" \
+    OUT=$(HOME=${DFX_HOME:-HOME} $SNS_CLI propose --network "${NNS_URL}" \
         --neuron-id "${NEURON_ID}" \
         "${CONFIG_FILE}")
     set -e
@@ -140,7 +140,7 @@ set_sns_wasms_allowed_subnets() {
     #  Remove all from current list
     #  and add new one
 
-    CURRENT_SUBNETS=$(dfx -q canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
+    CURRENT_SUBNETS=$(__dfx -q canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
         | grep principal \
         | sed 's/.*"\(.*\)";/\1/')
 
