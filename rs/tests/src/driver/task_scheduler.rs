@@ -33,6 +33,7 @@ pub struct TaskScheduler {
     pub start_times: BTreeMap<TaskId, SystemTime>,
     pub end_times: BTreeMap<TaskId, SystemTime>,
     pub log: Logger,
+    pub test_name: String,
 }
 
 impl TaskScheduler {
@@ -75,7 +76,7 @@ impl TaskScheduler {
                             th.cancel();
 
                             if dbg_keepalive && task_id.to_string() == "report" {
-                                let report = self.create_report();
+                                let report = self.create_report(self.test_name.clone());
                                 let event: log_events::LogEvent<_> = report.clone().into();
                                 event.emit_log(log);
                                 info!(log, "Report:\n{}", report.pretty_print());
@@ -159,7 +160,7 @@ impl TaskScheduler {
         )
     }
 
-    pub fn create_report(&self) -> SystemGroupSummary {
+    pub fn create_report(&self, test_name: String) -> SystemGroupSummary {
         let mut success = vec![];
         let mut failure = vec![];
         let mut skipped = vec![];
@@ -201,6 +202,7 @@ impl TaskScheduler {
             }
         }
         SystemGroupSummary {
+            test_name,
             success,
             failure,
             skipped,

@@ -8,11 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::driver::event::TaskId;
 
-use super::{
-    action_graph::{ActionGraph, Node},
-    group::is_task_visible_to_user,
-};
-
+#[allow(dead_code)]
 fn get_duration(
     task_id: &TaskId,
     start_times: &BTreeMap<TaskId, SystemTime>,
@@ -30,58 +26,9 @@ fn get_duration(
     )
 }
 
-pub fn create_report(
-    action_graph: &ActionGraph<TaskId>,
-    start_times: &BTreeMap<TaskId, SystemTime>,
-    end_times: &BTreeMap<TaskId, SystemTime>,
-) -> SystemGroupSummary {
-    let mut success = vec![];
-    let mut failure = vec![];
-    let mut skipped = vec![];
-    for (node, maybe_task_id) in action_graph.task_iter() {
-        if let Some(task_id) = maybe_task_id {
-            if !is_task_visible_to_user(&task_id) {
-                continue;
-            }
-            let duration = get_duration(&task_id, start_times, end_times)
-                .unwrap_or_else(|| Duration::from_secs(0));
-            match node {
-                Node::Running { active: _, message } => {
-                    // TODO: handle this with proper message/failure types
-                    if message.is_some() && message.clone().unwrap().contains("Task skipped.") {
-                        skipped.push(TaskReport {
-                            name: task_id.to_string(),
-                            runtime: duration.as_secs_f64(),
-                            message,
-                        });
-                    } else {
-                        success.push(TaskReport {
-                            name: task_id.to_string(),
-                            runtime: duration.as_secs_f64(),
-                            message,
-                        });
-                    }
-                }
-                Node::Failed { reason } => {
-                    failure.push(TaskReport {
-                        name: task_id.to_string(),
-                        runtime: duration.as_secs_f64(),
-                        message: reason,
-                    });
-                }
-                _ => {}
-            }
-        }
-    }
-    SystemGroupSummary {
-        success,
-        failure,
-        skipped,
-    }
-}
-
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct SystemGroupSummary {
+    pub test_name: String,
     pub success: Vec<TaskReport>,
     pub failure: Vec<TaskReport>,
     pub skipped: Vec<TaskReport>,
@@ -107,8 +54,15 @@ impl SystemGroupSummary {
             out_lines.append(&mut res.pretty_print(max_name_len, "SKIPPED"));
         }
         let mx_len = out_lines.iter().max_by_key(|x| x.len()).unwrap().len();
+        let test_name = if let Ok(test_target) = std::env::var("TEST_TARGET") {
+            test_target
+        } else {
+            self.test_name.clone()
+        };
+        let title = format!(" Summary for {} ", test_name);
+        let mx_len = std::cmp::max(mx_len, title.len() + 10);
         let mx_len = std::cmp::min(mx_len, 200);
-        let start = format!("{:=^mx_len$}", " Summary ");
+        let start = format!("{:=^mx_len$}", title);
         let end = format!("{:=^mx_len$}", "");
         let mut summary = vec![];
         summary.push(start);
