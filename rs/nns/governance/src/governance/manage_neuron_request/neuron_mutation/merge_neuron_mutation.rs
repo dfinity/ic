@@ -39,13 +39,6 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
 
         let transaction_fees_e8s = gov.transaction_fee();
 
-        if source_neuron.is_genesis.unwrap_or(false) || target_neuron.is_genesis.unwrap_or(false) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot merge genesis neuron",
-            ));
-        }
-
         // ICP stake transfer
         let source_stake_e8s = source_neuron.minted_stake_e8s();
         let source_stake_less_transaction_fee_e8s =

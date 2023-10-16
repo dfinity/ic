@@ -219,16 +219,6 @@ fn test_merge_neurons_fails() {
                 .set_kyc_verified(true)
                 .set_not_for_profit(true),
         )
-        .add_neuron(
-            NeuronBuilder::new(22, icp_to_e8s(3_456), principal(123))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_is_genesis(false),
-        )
-        .add_neuron(
-            NeuronBuilder::new(23, icp_to_e8s(3_456), principal(123))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_is_genesis(true),
-        )
         .create();
 
     // 1. Source id and target id cannot be the same
@@ -487,17 +477,6 @@ fn test_merge_neurons_fails() {
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == PreconditionFailed as i32 &&
            msg == "ManageNeuron following of source and target does not match");
-
-    // 18. Neurons with unequal is_genesis can't be merged
-    assert_matches!(
-        nns.merge_neurons(
-            &NeuronId { id: 22 },
-            &principal(123),
-            &NeuronId { id: 23 },
-        ),
-        Err(GovernanceError{error_type: code, error_message: msg})
-        if code == PreconditionFailed as i32 &&
-            msg == "Cannot merge genesis neuron");
 }
 
 #[test]
