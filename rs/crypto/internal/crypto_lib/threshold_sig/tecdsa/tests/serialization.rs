@@ -22,7 +22,7 @@ fn verify_data(tag: String, expected: &str, serialized: &[u8]) {
         which will update this file with the produced values.
          */
         assert_eq!(hex_encoding, expected, "{}", tag);
-        // println!("perl -pi -e s/{}/{}/g tests/serialization.rs", expected, hex_encoding);
+        //println!("perl -pi -e s/{}/{}/g tests/serialization.rs", expected, hex_encoding);
     }
 }
 
@@ -85,7 +85,7 @@ fn verify_protocol_output_remains_unchanged_over_time_k256() -> Result<(), Thres
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
 
     let setup = SignatureProtocolSetup::new(
-        EccCurveType::K256,
+        TestConfig::new(EccCurveType::K256),
         nodes,
         threshold,
         0,
@@ -202,7 +202,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Thres
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-stability-test");
 
     let setup = SignatureProtocolSetup::new(
-        EccCurveType::P256,
+        TestConfig::new(EccCurveType::P256),
         nodes,
         threshold,
         0,
@@ -305,6 +305,124 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Thres
     verify_data(
         "signature".to_string(),
         "751198d811154531",
+        &sig.serialize(),
+    );
+
+    Ok(())
+}
+
+#[test]
+fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
+) -> Result<(), ThresholdEcdsaError> {
+    let nodes = 5;
+    let threshold = 2;
+
+    let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-sig-and-k256-mega");
+
+    let setup = SignatureProtocolSetup::new(
+        TestConfig::new_mixed(EccCurveType::P256, EccCurveType::K256),
+        nodes,
+        threshold,
+        0,
+        seed.derive("setup"),
+    )?;
+
+    check_dealings(
+        "key",
+        &setup.key,
+        "4d9040a1feeec927",
+        "4bf89efcb451357e",
+        &[
+            (0, "1a2aaa14df6a9f94"),
+            (1, "3ae09ff1b237fa72"),
+            (2, "671cd863a272c52d"),
+            (3, "5f06286179bddad7"),
+            (4, "ddaeec0c1c078794"),
+        ],
+    )?;
+
+    check_dealings(
+        "key*lambda",
+        &setup.key_times_lambda,
+        "7a73f78ed62eef95",
+        "0fddc53737adbdfe",
+        &[
+            (0, "dd0502015735bc00"),
+            (1, "4ecb20719862a1e5"),
+            (2, "2b468d8042cd0610"),
+            (3, "f7732f23ce42839a"),
+            (4, "c6c51f23968c9eed"),
+        ],
+    )?;
+
+    check_dealings(
+        "lambda",
+        &setup.lambda,
+        "e8b34856638342f4",
+        "95c003633b20c504",
+        &[
+            (0, "9495b2456e5ef5b6"),
+            (1, "b1816dc6a89c4f76"),
+            (2, "9b125b5fdbfaa750"),
+            (3, "59b0cd35f87e8928"),
+            (4, "cc9f2d420f2c208b"),
+        ],
+    )?;
+
+    check_dealings(
+        "kappa",
+        &setup.kappa,
+        "71fe8d76f790e4d9",
+        "f0e92fcf6ad2623f",
+        &[
+            (0, "697115459c795774"),
+            (1, "3139ee79fe726241"),
+            (2, "e5dda8ab6919d7f4"),
+            (3, "13100f6d0cfe9e12"),
+            (4, "7907d0f49a92df09"),
+        ],
+    )?;
+
+    check_dealings(
+        "kappa*lambda",
+        &setup.kappa_times_lambda,
+        "956b943e0c856668",
+        "e3751d0d2a9b3bc7",
+        &[
+            (0, "a6798556cb3a72b7"),
+            (1, "aec9625b6ca14d07"),
+            (2, "f7c40b4cec507004"),
+            (3, "44ac292c7e9185b9"),
+            (4, "89c3575da08a7e09"),
+        ],
+    )?;
+
+    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let random_beacon =
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+
+    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+    let proto =
+        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+
+    let shares = proto.generate_shares()?;
+
+    check_shares(
+        &shares,
+        &[
+            (0, "ec49c07026fad455"),
+            (1, "204a07eaecef9521"),
+            (2, "395636ecd1a40ee0"),
+            (3, "d4c1a235edb058d4"),
+            (4, "074a90109c969974"),
+        ],
+    )?;
+
+    let sig = proto.generate_signature(&shares).unwrap();
+
+    verify_data(
+        "signature".to_string(),
+        "b1522949be1e9cab",
         &sig.serialize(),
     );
 

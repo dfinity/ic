@@ -317,12 +317,12 @@ pub fn create_dealing(
     shares: &SecretShares,
     seed: Seed,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
-    let curve = EccCurveType::from_algorithm(algorithm_id)
+    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
         .ok_or(IdkgCreateDealingInternalError::UnsupportedAlgorithm)?;
 
     IDkgDealingInternal::new(
         shares,
-        curve,
+        signature_curve,
         seed,
         threshold.get() as usize,
         recipients,
@@ -561,12 +561,15 @@ pub fn publicly_verify_dealing(
     number_of_receivers: NumberOfNodes,
     associated_data: &[u8],
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let curve = EccCurveType::from_algorithm(algorithm_id)
+    let key_curve = EccCurveType::K256;
+
+    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     dealing
         .publicly_verify(
-            curve,
+            key_curve,
+            signature_curve,
             transcript_type,
             reconstruction_threshold,
             dealer_index,
@@ -591,12 +594,15 @@ pub fn privately_verify_dealing(
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let curve = EccCurveType::from_algorithm(algorithm_id)
+    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
+
+    let key_curve = private_key.curve_type();
 
     dealing
         .privately_verify(
-            curve,
+            key_curve,
+            signature_curve,
             private_key,
             public_key,
             associated_data,

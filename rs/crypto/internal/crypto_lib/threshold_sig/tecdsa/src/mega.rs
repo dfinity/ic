@@ -215,25 +215,25 @@ impl MEGaCiphertext {
     pub fn verify_is(
         &self,
         ctype: MEGaCiphertextType,
-        curve: EccCurveType,
+        key_curve: EccCurveType,
+        plaintext_curve: EccCurveType,
     ) -> ThresholdEcdsaResult<()> {
-        if self.ephemeral_key().curve_type() != curve {
+        if self.ephemeral_key().curve_type() != key_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        if self.pop_public_key().curve_type() != curve {
+        if self.pop_public_key().curve_type() != key_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
-        if self.pop_proof().curve_type()? != curve {
+        if self.pop_proof().curve_type()? != key_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
         let curves_ok = match self {
-            MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == curve),
-            MEGaCiphertext::Pairs(c) => c
-                .ctexts
-                .iter()
-                .all(|(x, y)| x.curve_type() == curve && y.curve_type() == curve),
+            MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == plaintext_curve),
+            MEGaCiphertext::Pairs(c) => c.ctexts.iter().all(|(x, y)| {
+                x.curve_type() == plaintext_curve && y.curve_type() == plaintext_curve
+            }),
         };
 
         if !curves_ok {
@@ -312,7 +312,7 @@ impl From<MEGaCiphertextPair> for MEGaCiphertext {
 fn check_plaintexts(
     plaintexts: &[EccScalar],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<EccCurveType> {
+) -> ThresholdEcdsaResult<(EccCurveType, EccCurveType)> {
     if plaintexts.len() != recipients.len() {
         return Err(ThresholdEcdsaError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
@@ -325,27 +325,29 @@ fn check_plaintexts(
         ));
     }
 
-    let curve_type = plaintexts[0].curve_type();
+    let plaintext_curve = plaintexts[0].curve_type();
 
     for pt in plaintexts {
-        if pt.curve_type() != curve_type {
+        if pt.curve_type() != plaintext_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
+
+    let key_curve = recipients[0].curve_type();
 
     for recipient in recipients {
-        if recipient.curve_type() != curve_type {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+        if recipient.curve_type() != key_curve {
+            return Err(ThresholdEcdsaError::InvalidRecipients);
         }
     }
 
-    Ok(curve_type)
+    Ok((plaintext_curve, key_curve))
 }
 
 fn check_plaintexts_pair(
     plaintexts: &[(EccScalar, EccScalar)],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<EccCurveType> {
+) -> ThresholdEcdsaResult<(EccCurveType, EccCurveType)> {
     if plaintexts.len() != recipients.len() {
         return Err(ThresholdEcdsaError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
@@ -358,24 +360,27 @@ fn check_plaintexts_pair(
         ));
     }
 
-    let curve_type = plaintexts[0].0.curve_type();
+    let plaintext_curve = plaintexts[0].0.curve_type();
 
     for pt in plaintexts {
-        if pt.0.curve_type() != curve_type || pt.1.curve_type() != curve_type {
+        if pt.0.curve_type() != plaintext_curve || pt.1.curve_type() != plaintext_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
+
+    let key_curve = recipients[0].curve_type();
 
     for recipient in recipients {
-        if recipient.curve_type() != curve_type {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+        if recipient.curve_type() != key_curve {
+            return Err(ThresholdEcdsaError::InvalidRecipients);
         }
     }
 
-    Ok(curve_type)
+    Ok((plaintext_curve, key_curve))
 }
 
 fn mega_hash_to_scalars(
+    plaintext_curve: EccCurveType,
     ctype: MEGaCiphertextType,
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
@@ -384,8 +389,6 @@ fn mega_hash_to_scalars(
     ephemeral_key: &EccPoint,
     shared_secret: &EccPoint,
 ) -> ThresholdEcdsaResult<Vec<EccScalar>> {
-    let curve_type = public_key.curve_type();
-
     let count = match ctype {
         MEGaCiphertextType::Single => 1,
         MEGaCiphertextType::Pairs => 2,
@@ -398,7 +401,7 @@ fn mega_hash_to_scalars(
     ro.add_point("public_key", public_key)?;
     ro.add_point("ephemeral_key", ephemeral_key)?;
     ro.add_point("shared_secret", shared_secret)?;
-    ro.output_scalars(curve_type, count)
+    ro.output_scalars(plaintext_curve, count)
 }
 
 /// Compute the Proof Of Possession (PoP) base element
@@ -490,12 +493,12 @@ impl MEGaCiphertextSingle {
         dealer_index: NodeIndex,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        let curve_type = check_plaintexts(plaintexts, recipients)?;
+        let (plaintext_curve, key_curve) = check_plaintexts(plaintexts, recipients)?;
 
         let ctype = MEGaCiphertextType::Single;
 
         let (beta, v, pop_public_key, pop_proof) =
-            compute_eph_key_and_pop(ctype, curve_type, seed, associated_data, dealer_index)?;
+            compute_eph_key_and_pop(ctype, key_curve, seed, associated_data, dealer_index)?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -503,6 +506,7 @@ impl MEGaCiphertextSingle {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
             let hm = mega_hash_to_scalars(
+                plaintext_curve,
                 ctype,
                 dealer_index,
                 index as NodeIndex,
@@ -554,7 +558,10 @@ impl MEGaCiphertextSingle {
             ));
         }
 
+        let plaintext_curve = self.ctexts[recipient_index as usize].curve_type();
+
         let hm = mega_hash_to_scalars(
+            plaintext_curve,
             MEGaCiphertextType::Single,
             dealer_index,
             recipient_index,
@@ -601,12 +608,12 @@ impl MEGaCiphertextPair {
         dealer_index: NodeIndex,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        let curve_type = check_plaintexts_pair(plaintexts, recipients)?;
+        let (plaintext_curve, key_curve) = check_plaintexts_pair(plaintexts, recipients)?;
 
         let ctype = MEGaCiphertextType::Pairs;
 
         let (beta, v, pop_public_key, pop_proof) =
-            compute_eph_key_and_pop(ctype, curve_type, seed, associated_data, dealer_index)?;
+            compute_eph_key_and_pop(ctype, key_curve, seed, associated_data, dealer_index)?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -614,6 +621,7 @@ impl MEGaCiphertextPair {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
             let hm = mega_hash_to_scalars(
+                plaintext_curve,
                 ctype,
                 dealer_index,
                 index as NodeIndex,
@@ -666,7 +674,10 @@ impl MEGaCiphertextPair {
             ));
         }
 
+        let plaintext_curve = self.ctexts[recipient_index as usize].0.curve_type();
+
         let hm = mega_hash_to_scalars(
+            plaintext_curve,
             MEGaCiphertextType::Pairs,
             dealer_index,
             recipient_index,

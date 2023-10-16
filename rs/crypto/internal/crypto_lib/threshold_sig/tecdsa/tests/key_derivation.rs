@@ -16,7 +16,13 @@ fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), Thre
 
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation_max_length");
 
-    let setup = SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, threshold, seed)?;
+    let setup = SignatureProtocolSetup::new(
+        TestConfig::new(EccCurveType::K256),
+        nodes,
+        threshold,
+        threshold,
+        seed,
+    )?;
 
     for i in 0..=255 {
         let path = vec![i as u32; i];
@@ -267,7 +273,14 @@ fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), ThresholdEcdsa
     let threshold = nodes / 3;
 
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation");
-    let setup = SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, threshold, seed)?;
+
+    let setup = SignatureProtocolSetup::new(
+        TestConfig::new(EccCurveType::K256),
+        nodes,
+        threshold,
+        threshold,
+        seed,
+    )?;
 
     let master_key = setup.public_key(&DerivationPath::new(vec![]))?;
     assert_eq!(
@@ -323,8 +336,13 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Threshol
     let rng = &mut reproducible_rng();
     let random_seed = Seed::from_rng(rng);
 
-    let setup =
-        SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, threshold, random_seed)?;
+    let setup = SignatureProtocolSetup::new(
+        TestConfig::new(EccCurveType::K256),
+        nodes,
+        threshold,
+        threshold,
+        random_seed,
+    )?;
 
     // zeros the high bit to avoid requesting hardened derivation, which we do not support
     let path = (0..255)

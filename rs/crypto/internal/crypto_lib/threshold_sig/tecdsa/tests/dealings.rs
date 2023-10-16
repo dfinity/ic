@@ -227,21 +227,6 @@ fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalErro
         )
         .is_err());
 
-        let (_wrong_private_keys, wrong_public_keys) = gen_private_keys(rng, wrong_curve(curve), 5);
-
-        // bad public keys
-        // Note this test case becomes valid usage once CRP-2161 is completed
-        assert!(create_dealing(
-            alg_for_curve(curve),
-            &associated_data,
-            dealer_index,
-            NumberOfNodes::from(threshold),
-            &wrong_public_keys,
-            &shares,
-            Seed::from_rng(rng),
-        )
-        .is_err());
-
         // wrong algorithm id
         assert!(create_dealing(
             AlgorithmId::Groth20_Bls12_381,
@@ -443,6 +428,7 @@ mod privately_verify {
             assert_eq!(
                 setup.dealing_internal.privately_verify(
                     curve_type,
+                    curve_type,
                     &private_key,
                     &setup.public_key,
                     &setup.associated_data,
@@ -465,6 +451,7 @@ mod privately_verify {
 
             assert_eq!(
                 setup.dealing_internal.privately_verify(
+                    curve_type,
                     curve_type,
                     &setup.private_key,
                     &public_key,
@@ -489,6 +476,7 @@ mod privately_verify {
             assert_eq!(
                 setup.dealing_internal.privately_verify(
                     wrong_curve(curve_type),
+                    wrong_curve(curve_type),
                     &private_key,
                     &public_key,
                     &setup.associated_data,
@@ -510,6 +498,7 @@ mod privately_verify {
 
             assert_eq!(
                 another_setup.dealing_internal.privately_verify(
+                    curve_type,
                     curve_type,
                     &setup.private_key,
                     &setup.public_key,

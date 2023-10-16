@@ -50,9 +50,9 @@ fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), Thresho
 
     let mut rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(&mut rng);
-        let setup = ProtocolSetup::new(curve_type, nodes, threshold, random_seed)?;
+        let setup = ProtocolSetup::new(cfg, nodes, threshold, random_seed)?;
         let random = ProtocolRound::random(&setup, nodes, corrupted)?;
         let reshared = ProtocolRound::reshare_of_masked(&setup, &random, nodes, corrupted)?;
         let product = ProtocolRound::multiply(&setup, &random, &reshared, nodes, corrupted)?;
@@ -86,9 +86,9 @@ fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), Thresho
 
     let mut rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(&mut rng);
-        let setup = ProtocolSetup::new(curve_type, nodes, threshold, random_seed)?;
+        let setup = ProtocolSetup::new(cfg, nodes, threshold, random_seed)?;
         let random = ProtocolRound::random(&setup, nodes, corrupted)?;
         let reshared = ProtocolRound::reshare_of_masked(&setup, &random, nodes, corrupted)?;
         let product = ProtocolRound::multiply(&setup, &random, &reshared, nodes, corrupted)?;
@@ -118,9 +118,9 @@ fn should_verify_transcript_reject_if_dealing_is_duplicated() -> Result<(), Thre
 
     let mut rng = &mut reproducible_rng();
 
-    for curve_type in EccCurveType::all() {
+    for cfg in TestConfig::all() {
         let random_seed = Seed::from_rng(&mut rng);
-        let setup = ProtocolSetup::new(curve_type, nodes, threshold, random_seed)?;
+        let setup = ProtocolSetup::new(cfg, nodes, threshold, random_seed)?;
         let random = ProtocolRound::random(&setup, nodes, corrupted)?;
         let reshared = ProtocolRound::reshare_of_masked(&setup, &random, nodes, corrupted)?;
         let product = ProtocolRound::multiply(&setup, &random, &reshared, nodes, corrupted)?;
