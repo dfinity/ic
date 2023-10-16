@@ -457,9 +457,9 @@ impl NeuronStore {
     }
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
-    pub fn list_staked_maturity_neuron_ids(&self) -> Vec<NeuronId> {
-        let filter = |n: &Neuron| n.staked_maturity_e8s_equivalent.unwrap_or_default() > 0;
-        self.map_heap_neurons_filtered(filter, |n| n.id)
+    pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
+        let filter = |neuron: &Neuron| neuron.ready_to_unstake_maturity(now_seconds);
+        self.map_heap_neurons_filtered(filter, |neuron| neuron.id)
             .into_iter()
             .flatten()
             .collect()

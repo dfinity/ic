@@ -253,10 +253,13 @@ impl Neuron {
         }
     }
 
-    pub(crate) fn unstake_maturity_if_dissolved(&mut self, now_seconds: u64) {
-        if self.state(now_seconds) == NeuronState::Dissolved
+    pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
+        self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
-        {
+    }
+
+    pub(crate) fn unstake_maturity(&mut self, now_seconds: u64) {
+        if self.ready_to_unstake_maturity(now_seconds) {
             self.maturity_e8s_equivalent = self
                 .maturity_e8s_equivalent
                 .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0));
