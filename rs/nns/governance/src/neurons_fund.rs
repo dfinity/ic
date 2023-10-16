@@ -4,6 +4,8 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+use std::cmp::Ordering;
+
 use ic_nervous_system_common::E8;
 use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
 use rust_decimal::{
@@ -397,15 +399,184 @@ impl TryFrom<NeuronsFundParticipationConstraints> for ValidatedNeuronsFundPartic
     }
 }
 
-/// An invertible function is a function that has an inverse.
+// TODO: Make this available only for tests.
+#[derive(Clone, Copy, Debug)]
+pub struct BinSearchIter {
+    left: u128,
+    x: u64,
+    right: u128,
+    y: Decimal,
+}
+
+/// An invertible function is a function that has an inverse (a.k.a. monotonically non-decreasing).
 ///
 /// Say we have an invertible function `f(x: u64) -> u64` and its inverse is `g(y: u64) -> u64`.
 /// Then the equality `g(f(x)) = x` must hold for all `x` s.t. `g(f(x))` is defined.
 ///
 /// Additionally, the equality `f(g(y)) = y` must hold for all `y` s.t. `f(g(y))` is defined.
 pub trait InvertibleFunction {
+    /// A monotonically non-decreasing function.
     fn apply(&self, x: u64) -> Decimal;
-    fn invert(&self, x: Decimal) -> Result<u64, String>;
+
+    /// This method searches an inverse of `y` given the function defined by `apply`.
+    ///
+    /// An error is returned if the function defined by `apply` is not monotonically increasing.
+    fn invert(&self, target_y: Decimal) -> Result<u64, String> {
+        let (_, result) = self.invert_with_tracing(target_y);
+        result
+    }
+
+    /// Like `invert`, but with extra output that can be used for testing and debugging.
+    fn invert_with_tracing(&self, target_y: Decimal) -> (Vec<BinSearchIter>, Result<u64, String>) {
+        // Used for testing and debugging
+        let mut trace = vec![];
+        if target_y.is_sign_negative() {
+            return (
+                trace,
+                Err(format!("Cannot invert negative value {}.", target_y)),
+            );
+        }
+
+        let mut left: u128 = 0;
+        let mut right: u128 = u64::MAX.into();
+        // Declaring `x` and `y` outside of the loop to be able to return the "best effort" result
+        // in case the exact search fails (e.g., due to rounding errors).
+        let mut x = ((left + right) / 2) as u64;
+        let mut y = self.apply(x);
+
+        // Stores the previously computed coordinates needed for monotonicity checks.
+        let mut prev_coords: Option<(u64, Decimal)> = None;
+
+        // This loop can run at least one and at most 64 iterations.
+        while left <= right {
+            // [Spec] assume loop guard: left <= right
+            // [Spec] assume invariant (I): 0 <= left <= right+1, 0 <= right <= u64::MAX
+            // [Spec] assume invariant (II): let((x0,_))=prev_coords && left < right+1 ==> x0 != ((left + right) / 2)
+
+            x = ((left + right) / 2) as u64;
+            // [Spec] assert(*) left <= x <= right
+
+            y = self.apply(x);
+
+            trace.push(BinSearchIter { left, x, right, y });
+
+            // Error out if the function is not monotonic between x0 and x.
+            if let Some((x0, y0)) = prev_coords {
+                // The following assertion cannot fail due to invariant (II) in conjunction with
+                // the loop guard.
+                assert!(
+                    x != x0,
+                    "Invariant violated in InvertibleFunction.invert({})",
+                    target_y
+                );
+                if (x > x0 && y < y0) || (x < x0 && y > y0) {
+                    return (
+                        trace,
+                        Err(format!(
+                        "Cannot invert value {} of a function that is not monotonically increasing \
+                        between {:?} and {:?}.",
+                        target_y,
+                        std::cmp::min((x0, y0), (x, y)),
+                        std::cmp::max((x0, y0), (x, y)),
+                    )),
+                    );
+                }
+            }
+            prev_coords = Some((x, y));
+
+            match y.cmp(&target_y) {
+                Ordering::Equal => {
+                    return (trace, Ok(x));
+                }
+                Ordering::Less => {
+                    // y is too small <==> x is too small.
+                    left = (x as u128) + 1;
+
+                    // [Spec] assert invariant (I): 0 <= left <= right+1, 0 <= right <= u64::MAX
+                    // [Spec] -- `left==x+1`; `right` did not change.
+                    // [Spec] assert invariant (I): 0 <= x+1 <= right+1
+                    // [Spec] -- given `0 <= x` from (*), we know that `0 <= x+1`.
+                    // [Spec] -- `x+1 <= right+1`  <==>  `x <= right`.
+                    // [Spec] -- `x <= right` follows from (*). QED (I)
+                    // ---------------------------------------------------------------------------------
+                    // [Spec] assert invariant (II): let((x0,_))=prev_coords && left < right+1 ==> x0 != ((left + right) / 2)
+                    // [Spec] -- `prev_coords==(x, y)`; `left==x+1`; `right` did not change.
+                    // [Spec] -- Assume left-hand side of `==>`: `let((x,_))=prev_coords && x < right`.
+                    // [Spec] -- To prove: right-hand side of `==>`: `x != (x+1 + right) / 2`.
+                    // [Spec] assert invariant (II): x != (x+1 + right) / 2
+                    // [Spec] assert invariant (II): 2*x != (x+1 + right) + d
+                    // [Spec] -- for some `d`: `0.0 <= d < 1.0`
+                    // [Spec] assert invariant (II): x != right + (d + 1)
+                    // [Spec] -- given `x < right` from left-hand side, we know that `x < right + 1 + d`. QED (II)
+                }
+                Ordering::Greater if x == 0 => {
+                    // This currently cannot happen for a subtle reason (unless `target_y` is an
+                    // invalid value). `x == 0` implies that either (1) `x==left==right==0`,
+                    // or (2) `x==left==0` and `right==1`.
+                    //
+                    // Option (1) would mean that the measured value `y` is `f(x)`, which by
+                    // assumption that the function cannot decrease, implies that `y` is the global
+                    // minimum of `f`; thus, it cannot be that `y > target_y`, unless the caller
+                    // is trying to invert a value that cannot be inverted.
+                    //
+                    // Option (2) would mean that the search has always been taking the `Ordering::Less`
+                    // branch; otherwise, `left` would not still be at `0`. However, by moving `right`
+                    // from its original value `u64::MAX` towards zero, one cannot reach `right==1`.
+                    //
+                    // This strategy can be described as "error-out if invalid inputs are detected;
+                    // otherwise, round to the nearest". For example, for a function `f` s.t.
+                    // `f(0) = 1.0000001` and `target_t = 1.0`, the result is an error (the input
+                    // is deemed invalid as there does not exist an inverse in `1.0`). However, for
+                    // a function `f` s.t. `f(100) = 0.0`, `f(101) = 1.0000001`, and `target_t = 1.0`,
+                    // the result is `Ok(101)`, as we round to the nearest.
+                    return (
+                        trace,
+                        Err(format!("Cannot invert small value {}.", target_y)),
+                    );
+                }
+                Ordering::Greater => {
+                    // `x == 0` is covered by the special case above.
+                    // [Spec] assert x > 0
+
+                    // y is too large <==> x is too large.
+
+                    // [Spec] assert(**) 0 < x
+                    right = (x as u128) - 1;
+
+                    // [Spec] assert invariant (I): 0 <= left <= right+1, 0 <= right <= u64::MAX
+                    // [Spec] -- `left` did not change; `right==x-1`.
+                    // [Spec] assert: 0 <= left <= x-1+1, 0 <= x-1 <= u64::MAX
+                    // [Spec] assert: 0 <= left <= x,     0 <= x-1 <= u64::MAX
+                    // [Spec] -- `left <= x` follows from (*).
+                    // [Spec] -- given `0 < x` from (**), we know that `0 <= x-1`. QED (I)
+                    // ---------------------------------------------------------------------------------
+                    // [Spec] assert invariant (II): let((x0,_))=prev_coords && left < right+1 ==> x0 != ((left + right) / 2)
+                    // [Spec] -- `prev_coords==(x, y)`; `left` did not change; `right==x-1`.
+                    // [Spec] -- Assume left-hand side if `==>`: `let((x,_))=prev_coords && left < x`.
+                    // [Spec] -- To prove: right-hand side of `==>`: `x != (left + x-1) / 2`.
+                    // [Spec] assert: x != (left + x-1) / 2
+                    // [Spec] assert: 2*x != (left + x-1) + d
+                    // [Spec] -- for some `d`: `0.0 <= d < 1.0`
+                    // [Spec] assert: x + (1-d) != left
+                    // [Spec] -- `0.0 < 1-d <= 1.0`.
+                    // [Spec] given `left < x` from assumed left-hand side, we know that `x + (1-d) != left`. QED (II)
+                }
+            }
+        }
+        // If the search did not find the exact inverse value of `target_y`, we return the best of
+        // the last two values.
+        if let Some((x0, y0)) = prev_coords {
+            if (target_y - y).abs() < (target_y - y0).abs() {
+                (trace, Ok(x))
+            } else {
+                // Pretend that we knew the last iteration of the loop has been redundant.
+                trace.pop();
+                (trace, Ok(x0))
+            }
+        } else {
+            unreachable!("Found a bug in InvertibleFunction.invert({:?})", target_y);
+        }
+    }
 }
 
 pub struct SimpleLinearFunction {}
@@ -413,11 +584,6 @@ pub struct SimpleLinearFunction {}
 impl InvertibleFunction for SimpleLinearFunction {
     fn apply(&self, x: u64) -> Decimal {
         u64_to_dec(x)
-    }
-
-    fn invert(&self, x: Decimal) -> Result<u64, String> {
-        x.to_u64()
-            .ok_or_else(|| format!("{:?} cannot be converted to u64", x))
     }
 }
 
@@ -447,18 +613,45 @@ pub trait IntervalPartition<I> {
         I: Interval,
     {
         let intervals = &self.intervals();
+        if intervals.is_empty() {
+            return None;
+        }
         let mut i = 0_usize;
+        // Cannot underflow as intervals.len() >= 1.
         let mut j = intervals.len() - 1;
         while i <= j {
-            let m = (i + j) / 2;
+            // [Spec] assume loop guard: i <= j
+            // [Spec] assume invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
+
+            // Without `as u32`, an overflow would occur if e.g. `i==j==usize::MAX-1`
+            // Converting back to usize is safe, as the average is npt greater than `j: usize`.
+            let m = (((i as u32) + (j as u32)) / 2) as usize;
+            // [Spec] assert(*) i <= m <= j  -- from math.
             if intervals[m].to() <= x {
                 // If x == intervals[m].to, then x \in intervals[m+1]; move rightwards.
                 // ... [intervals[m].from, intervals[m].to) ... x ...
                 i = m + 1;
+                // [Spec] assert invariant: 0 <= i   <= j+1, 0 <= j < intervals.len()
+                // [Spec] -- `i==m+1`; `j` did not change.
+                // [Spec] assert: 0 <= m+1 <= j+1
+                // [Spec] -- given `0 <= m` from (*), we know that `0 <= m+1`.
+                // [Spec] -- `m+1 <= j+1`  <==>  `m <= j`.
+                // [Spec] -- `m <= j` follows from (*). QED
             } else if x < intervals[m].from() {
                 // exclusive, since x==intervals[m].from ==> x \in intervals[m]; move leftwards.
                 // ... x ... [intervals[m].from, intervals[m].to) ...
+                if m == 0 {
+                    // The leftmost interval starts from a value greated than `x`.
+                    return None;
+                }
+                // [Spec] assert(**) 0 < m
                 j = m - 1;
+                // [Spec] assert invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
+                // [Spec] -- `i` did not change; `j==m-1`.
+                // [Spec] assert: 0 <= i <= m-1+1, 0 <= m-1 < intervals.len()
+                // [Spec] assert: 0 <= i <= m,     0 <= m-1 < intervals.len()
+                // [Spec] -- `i <= m` follows from (*).
+                // [Spec] -- given `0 < m` from (**), we know that `0 <= m-1`. QED
             } else {
                 // x \in intervals[m]
                 return Some(intervals[m]);
@@ -508,7 +701,6 @@ impl MatchedParticipationFunction {
         function: Box<dyn Fn(u64) -> Decimal>,
         params: ValidatedNeuronsFundParticipationConstraints,
     ) -> Result<Self, String> {
-        // TODO[NNS1-2619]: validate params
         Ok(Self { function, params })
     }
 
@@ -614,6 +806,17 @@ mod tests {
         Decimal,
     };
     use rust_decimal_macros::dec;
+
+    /// Used for testing; should be implemented as a closed form formula.
+    trait AnalyticallyInvertibleFunction {
+        fn invert_analytically(&self, target_y: Decimal) -> Result<u64, String>;
+    }
+
+    impl AnalyticallyInvertibleFunction for SimpleLinearFunction {
+        fn invert_analytically(&self, target_y: Decimal) -> Result<u64, String> {
+            dec_to_u64(target_y)
+        }
+    }
 
     #[test]
     fn test_simple_linear_function() {
@@ -721,5 +924,150 @@ mod tests {
             dec_to_u64(g.apply(u64::MAX)).unwrap(),
             max_neurons_fund_participation_icp_e8s
         );
+    }
+
+    const POTENTIALLY_INTERESTING_TARGET_Y_VALUES: &[&std::ops::RangeInclusive<u64>] = &[
+        // The first 101 values of the the u64 range.
+        &(0..=100_u64),
+        // The last 101 values of the first one-third of the u64 range.
+        &(6_148_914_691_236_516_764..=6_148_914_691_236_516_864),
+        // The last 101 values of the u64 range.
+        &(18_446_744_073_709_551_515..=u64::MAX),
+    ];
+
+    fn generate_potentially_intresting_target_values() -> Vec<u64> {
+        POTENTIALLY_INTERESTING_TARGET_Y_VALUES
+            .iter()
+            .flat_map(|rs| {
+                let rs = (*rs).clone();
+                rs.collect::<Vec<u64>>()
+            })
+            .collect()
+    }
+
+    fn run_inverse_function_test<F>(function: &F, target_y: Decimal)
+    where
+        F: InvertibleFunction + AnalyticallyInvertibleFunction,
+    {
+        let Ok(expected) = function.invert_analytically(target_y) else {
+            println!(
+                "Cannot run inverse test as a u64 analytical inverse does not exist for {}.",
+                target_y,
+            );
+            return;
+        };
+        let (trace, observed) = match function.invert_with_tracing(target_y) {
+            (_, Err(err)) => {
+                panic!("Expected inverse value, got error: {}", err);
+            }
+            (trace, Ok(observed)) => (trace, observed),
+        };
+        println!(
+            "{}, target_y = {target_y} -- trace(len={}): {trace:?}",
+            std::any::type_name::<F>(),
+            trace.len(),
+        );
+
+        // Sometimes exact equality cannot be reached with our search strategy. We tolerate errors
+        // up to 1 E8.
+        assert!(
+            observed.max(expected) - observed.min(expected) <= 1,
+            "Deviation bigger than 1 E8.\n\
+            Expected: {expected}\n\
+            Observed: {observed}"
+        );
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_basic_linear_function() {
+        let f = SimpleLinearFunction {};
+        for i in generate_potentially_intresting_target_values() {
+            run_inverse_function_test(&f, u64_to_dec(i));
+        }
+    }
+
+    pub struct LinearFunction {
+        slope: Decimal,
+        intercept: Decimal,
+    }
+
+    impl AnalyticallyInvertibleFunction for LinearFunction {
+        fn invert_analytically(&self, target_y: Decimal) -> Result<u64, String> {
+            if self.slope.is_zero() {
+                return Err("Cannot invert constant function.".to_string());
+            }
+            dec_to_u64((target_y - self.intercept) / self.slope)
+        }
+    }
+
+    impl InvertibleFunction for LinearFunction {
+        fn apply(&self, x: u64) -> Decimal {
+            let x = u64_to_dec(x);
+            (x * self.slope) + self.intercept
+        }
+    }
+
+    // TODO: Add tests for failing cases.
+
+    #[test]
+    fn test_inverse_corner_cases_with_slow_linear_function() {
+        let slopes = vec![
+            dec!(0.0001),
+            dec!(0.0003),
+            dec!(0.0005),
+            dec!(0.001),
+            dec!(0.003),
+            dec!(0.005),
+            dec!(0.01),
+            dec!(0.03),
+            dec!(0.05),
+            dec!(0.1),
+            dec!(0.3),
+            dec!(0.5),
+            dec!(1.0),
+            dec!(3.0),
+            dec!(5.0),
+            dec!(10.0),
+        ];
+        let intercepts = vec![
+            dec!(0.0),
+            dec!(-0.0001),
+            dec!(-0.0003),
+            dec!(-0.0005),
+            dec!(-0.001),
+            dec!(-0.003),
+            dec!(-0.005),
+            dec!(-0.01),
+            dec!(-0.03),
+            dec!(-0.05),
+            dec!(-0.1),
+            dec!(-0.3),
+            dec!(-0.5),
+            dec!(-1.0),
+            dec!(-3.0),
+            dec!(-5.0),
+            dec!(-10.0),
+            dec!(-30.0),
+            dec!(-50.0),
+            dec!(-100.0),
+            dec!(-300.0),
+            dec!(-500.0),
+            dec!(-1000.0),
+            dec!(-3000.0),
+            dec!(-5000.0),
+            dec!(-10000.0),
+            dec!(-30000.0),
+            dec!(-50000.0),
+        ];
+        for intercept in intercepts {
+            for slope in slopes.iter().cloned() {
+                let f = LinearFunction { slope, intercept };
+                for i in generate_potentially_intresting_target_values() {
+                    let target_y = u64_to_dec(i);
+                    println!("Inverting linear function {target_y} = f(x) = {slope} * x + {intercept} ...");
+                    run_inverse_function_test(&f, target_y);
+                }
+            }
+        }
     }
 }
