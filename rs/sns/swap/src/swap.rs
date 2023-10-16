@@ -289,28 +289,22 @@ impl NeuronBasketConstructionParameters {
     ///
     /// # Arguments
     /// * `total_amount_e8s` - The total amount of tokens (in e8s) to be chopped up.
-    fn generate_vesting_schedule(&self, total_amount_e8s: u64) -> Vec<ScheduledVestingEvent> {
-        assert!(
-            self.count > 0,
-            "NeuronBasketConstructionParameters.count must be greater than zero"
-        );
-        // For the new single-proposal flow, the parameters of this formula are
-        // validated in `SnsInitPayload::validate_neuron_basket_construction_params`.
+    fn generate_vesting_schedule(
+        &self,
+        total_amount_e8s: u64,
+    ) -> Result<Vec<ScheduledVestingEvent>, String> {
+        if self.count == 0 {
+            return Err(
+                "NeuronBasketConstructionParameters.count must be greater than zero".to_string(),
+            );
+        }
+
         let dissolve_delay_seconds_list = (0..(self.count))
             .map(|i| i * self.dissolve_delay_interval_seconds)
             .collect::<Vec<u64>>();
 
-        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count)
-            // TODO: Bubble up. The only cases in which AAE returns Err are
-            // 1. the second argument is nonzero, but we already asserted that
-            // it isn't 2. AAE detects that it has a bug, but ofc, we do not
-            // know how that can happen (other than the fact that humans are
-            // fallible).
-            .expect("Internal bug.");
-
-        assert_eq!(dissolve_delay_seconds_list.len(), chunks_e8s.len());
-
-        dissolve_delay_seconds_list
+        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count)?;
+        Ok(dissolve_delay_seconds_list
             .into_iter()
             .zip(chunks_e8s.into_iter())
             .map(
@@ -319,7 +313,7 @@ impl NeuronBasketConstructionParameters {
                     amount_e8s,
                 },
             )
-            .collect()
+            .collect())
     }
 }
 
@@ -349,12 +343,9 @@ pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>,
     // Divvy out the remainder: Starting from the last element, increment
     // elements by 1. The number of such increments performed here is remainder,
     // bringing our total back to the desired amount.
-    assert!(
-        remainder < result.len() as u64, // By Euclid's Division Theorem,
-        "{} vs. {}",
-        remainder,
-        result.len(),
-    );
+    if remainder >= result.len() as u64 {
+        return Err(format!("Could not apportion {total} into {len} pieces"));
+    }
     let mut iter_mut = result.iter_mut();
     for _ in 0..remainder {
         let element: &mut u64 = iter_mut
@@ -890,9 +881,14 @@ impl Swap {
         if !self.can_commit(now_seconds) {
             return false;
         }
-        self.neuron_recipes = self
-            .create_sns_neuron_recipes()
-            .expect("Expected creation of SNS Neuron Recipes to succeed");
+
+        let sweep_result = self.create_sns_neuron_recipes();
+        // Assert that no failures occurred when creating SnsNeuronRecipes.
+        // Panic and rollback this message if not.
+        assert_eq!(sweep_result.failure, 0, "{:?}", sweep_result);
+        assert_eq!(sweep_result.invalid, 0, "{:?}", sweep_result);
+        assert_eq!(sweep_result.global_failures, 0, "{:?}", sweep_result);
+
         self.set_lifecycle(Lifecycle::Committed);
 
         true
@@ -900,108 +896,214 @@ impl Swap {
 
     /// Create the SNS Neuron recipes for direct participants and Neurons' Fund
     /// participants of the SNS token swap.
-    fn create_sns_neuron_recipes(&self) -> Result<Vec<SnsNeuronRecipe>, String> {
-        // Safe as `params` must be specified in call to `open`.
-        let params = self.params.as_ref().expect("Expected params to be set");
+    ///
+    /// This method assumes that all direct participants and neurons' fund
+    /// participants have been set in the state of the Swap canister.
+    ///
+    /// This method is meant to be idempotent. It can be called multiple times
+    /// but will only create a participant's `SnsNeuronRecipe` once. On the first
+    /// call to create_sns_neuron_recipes, newly created recipes will increment
+    /// the `success` field of the SweepResult. On successive calls, the
+    /// `skipped` field of SweepResult will be incremented.
+    pub fn create_sns_neuron_recipes(&mut self) -> SweepResult {
+        let Some(params) = self.params.as_ref() else {
+            log!(
+                ERROR,
+                "Halting create_sns_neuron_recipes(). Params is missing",
+            );
+            return SweepResult::new_with_global_failures(1);
+        };
 
-        let neuron_basket_construction_parameters = params
-            .neuron_basket_construction_parameters
-            .as_ref()
-            .expect("Expected neuron_basket_construction_parameters to be set");
+        let Some(neuron_basket_construction_parameters) =
+            params.neuron_basket_construction_parameters.as_ref()
+        else {
+            log!(
+                ERROR,
+                "Halting create_sns_neuron_recipes(). Neuron_basket_construction_parameters is missing",
+            );
+            return SweepResult::new_with_global_failures(1);
+        };
 
-        let nns_governance_canister_id = self
-            .init_or_panic()
-            .nns_governance()
-            .expect("Expected nns_governance_id to be set.");
+        let init = match self.init_and_validate() {
+            Ok(init) => init,
+            Err(error_message) => {
+                log!(
+                    ERROR,
+                    "Halting create_sns_neuron_recipes(). Init is missing or corrupted: {:?}",
+                    error_message
+                );
+                return SweepResult::new_with_global_failures(1);
+            }
+        };
+        // The following methods are safe to call since we validated Init in the above block
+        let nns_governance_canister_id = init.nns_governance_or_panic();
+
+        let mut sweep_result = SweepResult::default();
 
         // We are selling SNS tokens for the base token (ICP), or, in
         // general, whatever token the ledger referred to as the ICP
         // ledger holds.
         let sns_being_offered_e8s = params.sns_token_e8s;
-        // This must hold as the swap cannot transition to state
-        // OPEN without transferring tokens being offered to the swap canister.
-        assert!(sns_being_offered_e8s > 0);
         // Note that this value has to be > 0 as we have > 0
         // participants each with > 0 ICP contributed.
-        let total_participant_icp_e8s =
-            NonZeroU64::try_from(self.current_total_participation_e8s())
-                .expect("participant_total_icp_e8s must be greater than 0");
+        let total_participant_icp_e8s = match NonZeroU64::try_from(
+            self.current_total_participation_e8s(),
+        ) {
+            Ok(total_participant_icp_e8s) => total_participant_icp_e8s,
+            Err(error_message) => {
+                log!(
+                    ERROR,
+                    "Halting create_sns_neuron_recipes(). Swap is finalizing with 0 total participation: {:?}",
+                    error_message
+                );
+                return SweepResult::new_with_global_failures(1);
+            }
+        };
+
         // Keep track of SNS tokens sold just to check that the amount
         // is correct at the end.
         let mut total_sns_tokens_sold_e8s: u64 = 0;
-        // Vector of neuron recipes.
-        let mut neurons = Vec::new();
+
         // =====================================================================
         // ===            This is where the actual swap happens              ===
         // =====================================================================
-        for (buyer_principal, buyer_state) in self.buyers.iter() {
+        for (buyer_principal, buyer_state) in self.buyers.iter_mut() {
+            // The case that on a previous attempt at creating this neuron recipe, it was
+            // successfully created and recorded. Count the number of neuron recipes that
+            // would have been created.
+            if buyer_state.has_created_neuron_recipes == Some(true) {
+                sweep_result.skipped += neuron_basket_construction_parameters.count as u32;
+                continue;
+            }
+
             let amount_sns_e8s = Swap::scale(
                 buyer_state.amount_icp_e8s(),
                 sns_being_offered_e8s,
                 total_participant_icp_e8s,
             );
 
-            let parsed_principal = string_to_principal(buyer_principal).unwrap();
-            let direct_participant_sns_neuron_recipes =
-                create_sns_neuron_basket_for_direct_participant(
-                    &parsed_principal,
-                    amount_sns_e8s,
-                    neuron_basket_construction_parameters,
-                    NEURON_BASKET_MEMO_RANGE_START,
-                );
-            neurons.extend(direct_participant_sns_neuron_recipes);
-
-            total_sns_tokens_sold_e8s = total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
+            let Some(parsed_principal) = string_to_principal(buyer_principal) else {
+                sweep_result.invalid += neuron_basket_construction_parameters.count as u32;
+                continue;
+            };
+            match create_sns_neuron_basket_for_direct_participant(
+                &parsed_principal,
+                amount_sns_e8s,
+                neuron_basket_construction_parameters,
+                NEURON_BASKET_MEMO_RANGE_START,
+            ) {
+                Ok(direct_participant_sns_neuron_recipes) => {
+                    self.neuron_recipes
+                        .extend(direct_participant_sns_neuron_recipes);
+                    total_sns_tokens_sold_e8s =
+                        total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
+                    sweep_result.success += neuron_basket_construction_parameters.count as u32;
+                    buyer_state.has_created_neuron_recipes = Some(true);
+                }
+                Err(error_message) => {
+                    log!(
+                        ERROR,
+                        "Error creating a neuron basked for identity {}. Reason: {}",
+                        parsed_principal,
+                        error_message
+                    );
+                    sweep_result.failure += neuron_basket_construction_parameters.count as u32;
+                    continue;
+                }
+            };
         }
 
-        // Create the neuron basket for the Community Fund investors. The unique
+        // Create the neuron basket for the Neuron Fund investors. The unique
         // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
-        // is a hash of PrincipalId and some unique memo. Since CF
+        // is a hash of PrincipalId and some unique memo. Since NF
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
-        // for all CF investors.
+        // for all NF investors.
         let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
-        for cf_participant in self.cf_participants.iter() {
-            for cf_neuron in cf_participant.cf_neurons.iter() {
-                let amount_sns_e8s = Swap::scale(
-                    cf_neuron.amount_icp_e8s,
-                    sns_being_offered_e8s,
-                    total_participant_icp_e8s,
-                );
+        for cf_participant in self.cf_participants.iter_mut() {
+            for cf_neuron in cf_participant.cf_neurons.iter_mut() {
+                // Create a closure to ensure `global_cf_memo` is incremented in all cases
+                let mut process_cf_neuron = || {
+                    // The case that on a previous attempt at creating this neuron recipe, it was
+                    // successfully created and recorded. Count the number of neuron recipes that
+                    // would have been created.
+                    if cf_neuron.has_created_neuron_recipes == Some(true) {
+                        sweep_result.skipped += neuron_basket_construction_parameters.count as u32;
+                        return;
+                    }
 
-                let parsed_principal =
-                    string_to_principal(&cf_participant.hotkey_principal).unwrap();
-                let cf_participants_sns_neuron_recipes =
-                    create_sns_neuron_basket_for_cf_participant(
+                    let amount_sns_e8s = Swap::scale(
+                        cf_neuron.amount_icp_e8s,
+                        sns_being_offered_e8s,
+                        total_participant_icp_e8s,
+                    );
+
+                    let Some(parsed_principal) =
+                        string_to_principal(&cf_participant.hotkey_principal)
+                    else {
+                        sweep_result.invalid += neuron_basket_construction_parameters.count as u32;
+                        return;
+                    };
+                    match create_sns_neuron_basket_for_cf_participant(
                         &parsed_principal,
                         cf_neuron.nns_neuron_id,
                         amount_sns_e8s,
                         neuron_basket_construction_parameters,
                         global_cf_memo,
                         nns_governance_canister_id.get(),
-                    );
+                    ) {
+                        Ok(cf_participants_sns_neuron_recipes) => {
+                            sweep_result.success +=
+                                neuron_basket_construction_parameters.count as u32;
+                            self.neuron_recipes
+                                .extend(cf_participants_sns_neuron_recipes);
+                            total_sns_tokens_sold_e8s =
+                                total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
+                            cf_neuron.has_created_neuron_recipes = Some(true);
+                        }
+                        Err(error_message) => {
+                            log!(
+                                ERROR,
+                                "Error creating a neuron basked for identity {}. Reason: {}",
+                                parsed_principal,
+                                error_message
+                            );
+                            sweep_result.failure +=
+                                neuron_basket_construction_parameters.count as u32;
+                        }
+                    };
+                };
 
-                // Increment the memo by the number of neuron recipes created.
-                global_cf_memo = global_cf_memo
-                    .checked_add(cf_participants_sns_neuron_recipes.len() as u64)
-                    .unwrap();
+                // Call the closure
+                process_cf_neuron();
 
-                neurons.extend(cf_participants_sns_neuron_recipes);
-                total_sns_tokens_sold_e8s =
-                    total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
+                // Increment the memo by the number neurons in a neuron basket. This means that
+                // previous idempotent calls should increment global_cf_memo and handle overflow
+                match global_cf_memo.checked_add(neuron_basket_construction_parameters.count) {
+                    Some(new_value) => {
+                        global_cf_memo = new_value;
+                    }
+                    None => {
+                        sweep_result.global_failures += 1;
+                        // This will exit the entire function, ending all loops, but persist the data that has already been processed
+                        return sweep_result;
+                    }
+                }
             }
         }
-        assert!(total_sns_tokens_sold_e8s <= sns_being_offered_e8s);
         log!(
             INFO,
-            "SNS Neuron Recipes Created; {} direct investors and {} community fund investors receive a total of {} out of {} (change {});",
-		    self.buyers.len(),
-		    self.cf_participants.len(),
-		    total_sns_tokens_sold_e8s,
-		    sns_being_offered_e8s,
-		    sns_being_offered_e8s - total_sns_tokens_sold_e8s
+            "SNS Neuron Recipes Created; {} successes, {} failures, {} invalids, and {} skips. Participants receive a total of {} out of {} (change {});",
+            sweep_result.success,
+            sweep_result.failure,
+            sweep_result.invalid,
+            sweep_result.skipped,
+            total_sns_tokens_sold_e8s,
+            sns_being_offered_e8s,
+            sns_being_offered_e8s - total_sns_tokens_sold_e8s
         );
-        Ok(neurons)
+
+        sweep_result
     }
 
     /// Tries to transition the Swap Lifecycle to `Lifecycle::Aborted`.  
@@ -1297,12 +1399,7 @@ impl Swap {
 
         self.buyers
             .entry(buyer.to_string())
-            .or_insert_with(|| BuyerState {
-                icp: Some(TransferableAmount {
-                    amount_e8s: 0,
-                    ..TransferableAmount::default()
-                }),
-            })
+            .or_insert_with(|| BuyerState::new(0))
             .set_amount_icp_e8s(new_balance_e8s);
         // We compute the current participation amounts once and store the result in Swap's state,
         // for efficiency reasons.
@@ -3213,11 +3310,11 @@ fn create_sns_neuron_basket_for_direct_participant(
     amount_sns_token_e8s: u64,
     neuron_basket_construction_parameters: &NeuronBasketConstructionParameters,
     memo_offset: u64,
-) -> Vec<SnsNeuronRecipe> {
+) -> Result<Vec<SnsNeuronRecipe>, String> {
     let mut recipes = vec![];
 
     let vesting_schedule =
-        neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s);
+        neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s)?;
 
     let memo_of_longest_dissolve_delay = memo_offset + (vesting_schedule.len() - 1) as u64;
     let neuron_id_with_longest_dissolve_delay = SaleNeuronId::from(
@@ -3260,7 +3357,7 @@ fn create_sns_neuron_basket_for_direct_participant(
         });
     }
 
-    recipes
+    Ok(recipes)
 }
 
 /// Create the basket of SNS Neuron Recipes for a single community fund participant.
@@ -3271,11 +3368,11 @@ fn create_sns_neuron_basket_for_cf_participant(
     neuron_basket_construction_parameters: &NeuronBasketConstructionParameters,
     memo_offset: u64,
     nns_governance_canister_id: PrincipalId,
-) -> Vec<SnsNeuronRecipe> {
+) -> Result<Vec<SnsNeuronRecipe>, String> {
     let mut recipes = vec![];
 
     let vesting_schedule =
-        neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s);
+        neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s)?;
 
     // Since all CF Participant Neurons are controlled by NNS Governance, a global memo is used.
     // Each basket uses an offset to start its range of memos.
@@ -3325,7 +3422,7 @@ fn create_sns_neuron_basket_for_cf_participant(
         });
     }
 
-    recipes
+    Ok(recipes)
 }
 
 impl Storable for Ticket {
@@ -3841,31 +3938,19 @@ mod tests {
         let cf_participants = vec![
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 1,
-                    amount_icp_e8s: 698047,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(1, 698047).unwrap()],
             },
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 2,
-                    amount_icp_e8s: 678574,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(2, 678574).unwrap()],
             },
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 3,
-                    amount_icp_e8s: 305256,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(3, 305256).unwrap()],
             },
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(657894).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 4,
-                    amount_icp_e8s: 339747,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(4, 339747).unwrap()],
             },
         ];
         let swap = Swap {
@@ -3930,7 +4015,8 @@ mod tests {
 
         assert_eq!(
             neuron_basket_construction_parameters
-                .generate_vesting_schedule(/* total_amount_e8s = */ 10),
+                .generate_vesting_schedule(/* total_amount_e8s = */ 10)
+                .unwrap(),
             vec![
                 ScheduledVestingEvent {
                     amount_e8s: 2,
@@ -3957,7 +4043,8 @@ mod tests {
 
         assert_eq!(
             neuron_basket_construction_parameters
-                .generate_vesting_schedule(/* total_amount_e8s = */ 9),
+                .generate_vesting_schedule(/* total_amount_e8s = */ 9)
+                .unwrap(),
             vec![
                 ScheduledVestingEvent {
                     amount_e8s: 1,
@@ -3994,7 +4081,7 @@ mod tests {
                 count,
                 dissolve_delay_interval_seconds,
             }
-            .generate_vesting_schedule(total_e8s);
+            .generate_vesting_schedule(total_e8s).unwrap();
 
             // Inspect overall size.
             assert_eq!(
@@ -4322,12 +4409,7 @@ mod tests {
         let time_remaining = 50;
         let now = sale_duration - time_remaining;
         let buyers = btreemap! {
-            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
-                icp: Some(TransferableAmount {
-                    amount_e8s: 1,
-                    ..TransferableAmount::default()
-                }),
-            },
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(1),
         };
         let mut swap = Swap {
             lifecycle: Lifecycle::Open as i32,
@@ -4355,12 +4437,7 @@ mod tests {
         let time_remaining = 50;
         let now = sale_duration - time_remaining;
         let buyers = btreemap! {
-            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
-                icp: Some(TransferableAmount {
-                    amount_e8s: 10,
-                    ..TransferableAmount::default()
-                }),
-            },
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(10),
         };
         let mut swap = Swap {
             lifecycle: Lifecycle::Open as i32,
@@ -4390,12 +4467,7 @@ mod tests {
         let time_remaining = 50;
         let now = sale_duration - time_remaining;
         let buyers = btreemap! {
-            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
-                icp: Some(TransferableAmount {
-                    amount_e8s: 20,
-                    ..TransferableAmount::default()
-                }),
-            },
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(20),
         };
         let mut swap = Swap {
             lifecycle: Lifecycle::Open as i32,
@@ -4480,12 +4552,7 @@ mod tests {
         let time_remaining = 50;
         let now = sale_duration - time_remaining;
         let buyers = btreemap! {
-            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
-                icp: Some(TransferableAmount {
-                    amount_e8s: 20,
-                    ..TransferableAmount::default()
-                }),
-            },
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(20),
         };
         let mut swap = Swap {
             lifecycle: Lifecycle::Open as i32,
@@ -4813,42 +4880,21 @@ mod tests {
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
                 cf_neurons: vec![
-                    CfNeuron {
-                        nns_neuron_id: 1,
-                        amount_icp_e8s: 698047,
-                    },
-                    CfNeuron {
-                        nns_neuron_id: 2,
-                        amount_icp_e8s: 303030,
-                    },
+                    CfNeuron::try_new(1, 698047).unwrap(),
+                    CfNeuron::try_new(2, 303030).unwrap(),
                 ],
             },
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
-                cf_neurons: vec![CfNeuron {
-                    nns_neuron_id: 3,
-                    amount_icp_e8s: 678574,
-                }],
+                cf_neurons: vec![CfNeuron::try_new(3, 678574).unwrap()],
             },
             CfParticipant {
                 hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
                 cf_neurons: vec![
-                    CfNeuron {
-                        nns_neuron_id: 4,
-                        amount_icp_e8s: 305256,
-                    },
-                    CfNeuron {
-                        nns_neuron_id: 5,
-                        amount_icp_e8s: 100000,
-                    },
-                    CfNeuron {
-                        nns_neuron_id: 6,
-                        amount_icp_e8s: 1010101,
-                    },
-                    CfNeuron {
-                        nns_neuron_id: 7,
-                        amount_icp_e8s: 102123,
-                    },
+                    CfNeuron::try_new(4, 305256).unwrap(),
+                    CfNeuron::try_new(5, 100000).unwrap(),
+                    CfNeuron::try_new(6, 1010101).unwrap(),
+                    CfNeuron::try_new(7, 102123).unwrap(),
                 ],
             },
         ];

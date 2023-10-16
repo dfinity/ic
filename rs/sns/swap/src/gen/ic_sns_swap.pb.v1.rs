@@ -455,6 +455,12 @@ pub struct CfNeuron {
     /// with this neuron.
     #[prost(uint64, tag = "2")]
     pub amount_icp_e8s: u64,
+    /// Idempotency flag indicating whether the neuron recipes have been created for
+    /// the CfNeuron. When set to true, it signifies that the action of creating neuron
+    /// recipes has been performed on this structure. If the action is retried, this flag
+    /// can be checked to avoid duplicate operations.
+    #[prost(bool, optional, tag = "3")]
+    pub has_created_neuron_recipes: ::core::option::Option<bool>,
 }
 /// Represents a Neurons' Fund participant, possibly with several neurons.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
@@ -623,6 +629,12 @@ pub struct BuyerState {
     /// * ABORTED - owned by the buyer, can be transferred out
     #[prost(message, optional, tag = "5")]
     pub icp: ::core::option::Option<TransferableAmount>,
+    /// Idempotency flag indicating whether the neuron recipes have been created for
+    /// the BuyerState. When set to true, it signifies that the action of creating neuron
+    /// recipes has been performed on this structure. If the action is retried, this flag
+    /// can be checked to avoid duplicate operations.
+    #[prost(bool, optional, tag = "6")]
+    pub has_created_neuron_recipes: ::core::option::Option<bool>,
 }
 /// Information about a direct investor.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

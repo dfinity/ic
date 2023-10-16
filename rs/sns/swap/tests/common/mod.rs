@@ -265,13 +265,10 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
 }
 
 pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
-    (0..count)
+    (1..count + 1)
         .map(|i| CfParticipant {
             hotkey_principal: i2principal_id_string(i),
-            cf_neurons: vec![CfNeuron {
-                nns_neuron_id: i,
-                amount_icp_e8s: E8,
-            }],
+            cf_neurons: vec![CfNeuron::try_new(i, E8).unwrap()],
         })
         .collect()
 }

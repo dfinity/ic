@@ -802,22 +802,13 @@ fn test_scenario_happy() {
                         CfParticipant {
                             hotkey_principal: TEST_USER1_PRINCIPAL.to_string(),
                             cf_neurons: vec![
-                                CfNeuron {
-                                    nns_neuron_id: 0x91,
-                                    amount_icp_e8s: 50 * E8,
-                                },
-                                CfNeuron {
-                                    nns_neuron_id: 0x92,
-                                    amount_icp_e8s: 30 * E8,
-                                },
+                                CfNeuron::try_new(0x91, 50 * E8).unwrap(),
+                                CfNeuron::try_new(0x92, 30 * E8).unwrap(),
                             ],
                         },
                         CfParticipant {
                             hotkey_principal: TEST_USER2_PRINCIPAL.to_string(),
-                            cf_neurons: vec![CfNeuron {
-                                nns_neuron_id: 0x93,
-                                amount_icp_e8s: 20 * E8,
-                            }],
+                            cf_neurons: vec![CfNeuron::try_new(0x93, 20 * E8).unwrap()],
                         },
                     ],
                     open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
@@ -1218,7 +1209,7 @@ async fn test_finalize_swap_ok() {
     assert_eq!(swap.lifecycle(), Committed);
 
     // We need to create a function to generate the clients, so we can get them
-    // †wice: once for when we call `finalize` and once for when we call
+    // twice: once for when we call `finalize` and once for when we call
     // `try_auto_finalize`
     pub fn get_clients(
         neuron_recipes: &[SnsNeuronRecipe],
@@ -1510,7 +1501,8 @@ async fn test_finalize_swap_ok() {
                         transfer_success_timestamp_seconds: END_TIMESTAMP_SECONDS + 10,
                         amount_transferred_e8s: Some(expected_amount_committed_e8s),
                         transfer_fee_paid_e8s: Some(fee_e8s)
-                    })
+                    }),
+                    has_created_neuron_recipes: Some(true),
                 }
             );
         });
@@ -1973,7 +1965,7 @@ fn test_error_refund_multiple_users() {
         //The life cycle should have changed to ABORTED
         assert_eq!(swap.lifecycle(), Aborted);
 
-        //Make sure neither user1 nor any other user can refund tokens from user1 until they are sweeped
+        //Make sure neither user1 nor any other user can refund tokens from user1 until they are swept
         let mut expects = get_account_balance_mock_ledger(&amount, &user1);
         expects.extend(
             get_transfer_mock_ledger(&amount, &user1, &user2, false)
@@ -2530,7 +2522,8 @@ async fn test_sweep_icp_handles_ledger_transfers() {
                 icp: Some(TransferableAmount {
                     amount_e8s: DEFAULT_TRANSFER_FEE.get_e8s() - 1,
                     ..Default::default()
-                })
+                }),
+                has_created_neuron_recipes: Some(false),
             },
             // This Buyer has already had its transfer succeed, and should result in
             // as Skipped field increment
@@ -2540,7 +2533,8 @@ async fn test_sweep_icp_handles_ledger_transfers() {
                     transfer_start_timestamp_seconds: END_TIMESTAMP_SECONDS,
                     transfer_success_timestamp_seconds: END_TIMESTAMP_SECONDS + 1,
                     ..Default::default()
-                })
+                }),
+                has_created_neuron_recipes: Some(false),
             },
             // This buyer's state is valid, and a mock call to the ledger will allow it
             // to succeed, which should result in a success field increment
@@ -2548,7 +2542,8 @@ async fn test_sweep_icp_handles_ledger_transfers() {
                 icp: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
                     ..Default::default()
-                })
+                }),
+                has_created_neuron_recipes: Some(false),
             },
             // This buyer's state is valid, but a mock call to the ledger will fail the transfer,
             // which should result in a failure field increment.
@@ -2556,7 +2551,8 @@ async fn test_sweep_icp_handles_ledger_transfers() {
                 icp: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
                     ..Default::default()
-                })
+                }),
+                has_created_neuron_recipes: Some(false),
             },
         },
         ..Default::default()
@@ -2608,7 +2604,8 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
                 icp: Some(TransferableAmount {
                     amount_e8s: DEFAULT_TRANSFER_FEE.get_e8s() - 1,
                     ..Default::default()
-                })
+                }),
+                has_created_neuron_recipes: Some(false),
             },
             // This buyer's state is valid, but a mock call to the ledger will fail the transfer,
             // which should result in a failure field increment.
@@ -2616,7 +2613,8 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
                 icp: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
                     ..Default::default()
-                })
+                }),
+                has_created_neuron_recipes: Some(false),
             },
         },
         ..Default::default()
@@ -3436,6 +3434,7 @@ fn test_derived_state() {
             transfer_success_timestamp_seconds: 12,
             ..Default::default()
         }),
+        has_created_neuron_recipes: Some(false),
     };
     let buyers = btreemap! {
         "".to_string() => buyer_state,
@@ -3459,14 +3458,8 @@ fn test_derived_state() {
     swap.cf_participants = vec![CfParticipant {
         hotkey_principal: "".to_string(),
         cf_neurons: vec![
-            CfNeuron {
-                nns_neuron_id: 0,
-                amount_icp_e8s: 300_000_000,
-            },
-            CfNeuron {
-                nns_neuron_id: 1,
-                amount_icp_e8s: 400_000_000,
-            },
+            CfNeuron::try_new(1, 300_000_000).unwrap(),
+            CfNeuron::try_new(2, 400_000_000).unwrap(),
         ],
     }];
     swap.update_derived_fields();
@@ -4005,6 +3998,262 @@ async fn test_claim_swap_neurons_handles_inconsistent_response() {
     );
 }
 
+/// Test that create_sns_neuron_recipes will handle missing required state gracefully with an error.
+#[test]
+fn test_create_sns_neuron_recipes_handles_missing_state() {
+    // create_sns_neuron_recipes depends on params being set
+    let mut swap = Swap {
+        params: None,
+        ..Default::default()
+    };
+
+    // Call create_sns_neuron_recipes
+    let result = swap.create_sns_neuron_recipes();
+
+    // Inspect results
+
+    // create_sns_neuron_recipes should gracefully handle missing state by incrementing global_failures
+    assert_eq!(
+        result,
+        SweepResult {
+            success: 0,
+            failure: 0,
+            skipped: 0,
+            invalid: 0,
+            global_failures: 1
+        }
+    );
+
+    // create_sns_neuron_recipes depends on params being set
+    let mut swap = Swap {
+        params: Some(Params {
+            neuron_basket_construction_parameters: None,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    // Call create_sns_neuron_recipes
+    let result = swap.create_sns_neuron_recipes();
+
+    // Inspect results
+
+    // create_sns_neuron_recipes should gracefully handle missing state by incrementing global_failures
+    assert_eq!(
+        result,
+        SweepResult {
+            success: 0,
+            failure: 0,
+            skipped: 0,
+            invalid: 0,
+            global_failures: 1
+        }
+    );
+
+    // create_sns_neuron_recipes depends on params being set
+    let mut swap = Swap {
+        params: Some(Params {
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 1,
+                dissolve_delay_interval_seconds: ONE_MONTH_SECONDS,
+            }),
+            ..Default::default()
+        }),
+        init: None,
+        ..Default::default()
+    };
+
+    // Call create_sns_neuron_recipes
+    let result = swap.create_sns_neuron_recipes();
+
+    // Inspect results
+
+    // create_sns_neuron_recipes should gracefully handle missing state by incrementing global_failures
+    assert_eq!(
+        result,
+        SweepResult {
+            success: 0,
+            failure: 0,
+            skipped: 0,
+            invalid: 0,
+            global_failures: 1
+        }
+    );
+}
+
+/// Test that create_sns_neuron_recipes will handle invalid BuyerStates gracefully by incrementing the correct
+/// SweepResult fields
+#[test]
+fn test_create_sns_neuron_recipes_handles_invalid_buyer_states() {
+    // Step 1: Prepare the world
+
+    // Create some valid and invalid buyers in the state
+    let mut swap = Swap {
+        lifecycle: Committed as i32,
+        init: Some(init()),
+        params: Some(params()),
+        buyers: btreemap! {
+            i2principal_id_string(1001) => BuyerState::new(50 * E8), // Valid
+            "GARBAGE_PRINCIPAL_ID".to_string() => BuyerState::new(50 * E8), // Invalid
+        },
+        direct_participation_icp_e8s: Some(100 * E8),
+        neurons_fund_participation_icp_e8s: Some(0),
+        ..Default::default()
+    };
+
+    // Helper variable
+    let neuron_basket_count = params()
+        .neuron_basket_construction_parameters
+        .unwrap()
+        .count as u32;
+
+    // Step 2: Call create_sns_neuron_recipes
+    let sweep_result = swap.create_sns_neuron_recipes();
+
+    // Step 3: Inspect results
+    assert_eq!(
+        sweep_result,
+        SweepResult {
+            success: neuron_basket_count, // Single valid buyer
+            skipped: 0,                   // No skips
+            failure: 0,                   // No failures
+            invalid: neuron_basket_count, // Two invalid buyer states
+            global_failures: 0,           // No global failures
+        }
+    );
+
+    assert_eq!(swap.neuron_recipes.len(), neuron_basket_count as usize);
+}
+
+/// Test that create_sns_neuron_recipes will handle already created sns neuron recipes and
+/// increment the correct field in SweepResult
+#[test]
+fn test_create_sns_neuron_recipes_skips_already_created_neuron_recipes_for_direct_buyers() {
+    // Step 1: Prepare the world
+    // Helper variable
+    let neuron_basket_count = params()
+        .neuron_basket_construction_parameters
+        .unwrap()
+        .count as u32;
+
+    // Create some valid and invalid buyers in the state
+    let mut swap = Swap {
+        lifecycle: Committed as i32,
+        init: Some(init()),
+        params: Some(params()),
+        buyers: btreemap! {
+            i2principal_id_string(1001) => BuyerState {
+                icp: Some(TransferableAmount {
+                    amount_e8s: 50 * E8,
+                    transfer_start_timestamp_seconds: 0,
+                    transfer_success_timestamp_seconds: 0,
+                    amount_transferred_e8s: Some(0),
+                    transfer_fee_paid_e8s: Some(0),
+                }),
+                has_created_neuron_recipes: Some(true),
+            }, // Already created
+           i2principal_id_string(1002) => BuyerState {
+                icp: Some(TransferableAmount {
+                    amount_e8s: 50 * E8,
+                    transfer_start_timestamp_seconds: 0,
+                    transfer_success_timestamp_seconds: 0,
+                    amount_transferred_e8s: Some(0),
+                    transfer_fee_paid_e8s: Some(0),
+                }),
+                has_created_neuron_recipes: Some(false),
+           },
+        },
+        direct_participation_icp_e8s: Some(100 * E8),
+        neurons_fund_participation_icp_e8s: Some(0),
+        // Create the correct number of recipes for the already processed buyer
+        neuron_recipes: vec![SnsNeuronRecipe::default(); neuron_basket_count as usize],
+        ..Default::default()
+    };
+
+    // Step 2: Call create_sns_neuron_recipes
+    let sweep_result = swap.create_sns_neuron_recipes();
+
+    // Step 3: Inspect results
+    assert_eq!(
+        sweep_result,
+        SweepResult {
+            success: neuron_basket_count, // Single valid buyer
+            skipped: neuron_basket_count, // One skip
+            failure: 0,                   // No failures
+            invalid: 0,                   // No invalids
+            global_failures: 0,           // No global failures
+        }
+    );
+
+    assert_eq!(
+        swap.neuron_recipes.len(),
+        neuron_basket_count as usize * swap.buyers.len()
+    );
+}
+
+/// Test that create_sns_neuron_recipes will handle already created sns neuron recipes and
+/// increment the correct field in SweepResult
+#[test]
+fn test_create_sns_neuron_recipes_skips_already_created_neuron_recipes_for_nf_participants() {
+    // Step 1: Prepare the world
+    // Helper variable
+    let neuron_basket_count = params()
+        .neuron_basket_construction_parameters
+        .unwrap()
+        .count as u32;
+
+    // Create some valid and invalid buyers in the state
+    let mut swap = Swap {
+        lifecycle: Committed as i32,
+        init: Some(init()),
+        params: Some(params()),
+        buyers: btreemap! {},
+        direct_participation_icp_e8s: Some(0),
+        neurons_fund_participation_icp_e8s: Some(100 * E8),
+        cf_participants: vec![
+            CfParticipant {
+                hotkey_principal: i2principal_id_string(1001),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 1,
+                    amount_icp_e8s: 50 * E8,
+                    has_created_neuron_recipes: Some(true),
+                }],
+            },
+            CfParticipant {
+                hotkey_principal: i2principal_id_string(1002),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 50 * E8,
+                    has_created_neuron_recipes: Some(false),
+                }],
+            },
+        ],
+        // Create the correct number of recipes for the already processed buyer
+        neuron_recipes: vec![SnsNeuronRecipe::default(); neuron_basket_count as usize],
+        ..Default::default()
+    };
+
+    // Step 2: Call create_sns_neuron_recipes
+    let sweep_result = swap.create_sns_neuron_recipes();
+
+    // Step 3: Inspect results
+    assert_eq!(
+        sweep_result,
+        SweepResult {
+            success: neuron_basket_count, // Single valid CfParticipant
+            skipped: neuron_basket_count, // One skip
+            failure: 0,                   // No failures
+            invalid: 0,                   // No invalids
+            global_failures: 0,           // No global failures
+        }
+    );
+
+    assert_eq!(
+        swap.neuron_recipes.len(),
+        neuron_basket_count as usize * swap.cf_participants.len()
+    );
+}
+
 /// Test that when paginating through the Participants, that different invocations
 /// result in the same ordering.
 #[test]
@@ -4352,7 +4601,7 @@ fn test_refresh_buyer_tokens() {
             &(amount_user1_0 + amount_user1_1),
         );
 
-        // Make sure user1's committmend is reflected in the buyers state
+        // Make sure user1's commitment is reflected in the buyers state
         // Total committed balance should be that of user1 + user2
         check_final_conditions(
             &mut swap,
@@ -4887,7 +5136,8 @@ async fn test_finalize_swap_abort_sets_amount_transferred_and_fees_correctly() {
                 transfer_success_timestamp_seconds: END_TIMESTAMP_SECONDS + 10,
                 amount_transferred_e8s: Some(50 * E8 - DEFAULT_TRANSFER_FEE.get_e8s()),
                 transfer_fee_paid_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s())
-            })
-        }
+            }),
+            has_created_neuron_recipes: Some(false),
+        },
     );
 }
