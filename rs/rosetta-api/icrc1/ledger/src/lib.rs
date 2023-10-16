@@ -251,6 +251,8 @@ pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_symbol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_decimals: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transfer_fee: Option<Nat>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_fee_collector: Option<ChangeFeeCollector>,
@@ -566,6 +568,9 @@ impl<Tokens: TokensType> Ledger<Tokens> {
         }
         if let Some(token_symbol) = args.token_symbol {
             self.token_symbol = token_symbol;
+        }
+        if let Some(token_decimals) = args.token_decimals {
+            self.decimals = token_decimals;
         }
         if let Some(transfer_fee) = args.transfer_fee {
             self.transfer_fee = Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
