@@ -22,7 +22,10 @@ use ic_replicated_state::{
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
     ingress::WasmResult,
-    messages::{Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery},
+    messages::{
+        CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
+        UserQuery,
+    },
     methods::WasmMethod,
     CanisterId, Cycles, NumInstructions, NumMessages, Time,
 };
@@ -383,19 +386,20 @@ impl<'a> QueryContext<'a> {
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
-        let (canister, instructions_left, result) = execute_non_replicated_query(
-            query_kind,
-            method_name,
-            method_payload,
-            canister,
-            data_certificate,
-            self.state.time(),
-            execution_parameters,
-            &self.network_topology,
-            self.hypervisor,
-            &mut self.round_limits,
-            self.query_critical_error,
-        );
+        let (mut canister, instructions_left, result, call_context_id) =
+            execute_non_replicated_query(
+                query_kind,
+                method_name,
+                method_payload,
+                canister,
+                data_certificate,
+                self.state.time(),
+                execution_parameters,
+                &self.network_topology,
+                self.hypervisor,
+                &mut self.round_limits,
+                self.query_critical_error,
+            );
         let instructions_executed = instruction_limit - instructions_left;
         self.total_instructions_used += instructions_executed;
         measurement_scope.add(
@@ -403,7 +407,33 @@ impl<'a> QueryContext<'a> {
             NumSlices::from(1),
             NumMessages::from(1),
         );
+
+        if let Some(call_context_id) = call_context_id {
+            let _action = self.finish(
+                &mut canister,
+                call_context_id,
+                None,
+                Ok(None),
+                instructions_executed,
+            );
+        }
         (canister, result)
+    }
+
+    fn finish(
+        &self,
+        canister: &mut CanisterState,
+        call_context_id: CallContextId,
+        callback_id: Option<CallbackId>,
+        result: Result<Option<WasmResult>, HypervisorError>,
+        instructions_used: NumInstructions,
+    ) -> CallContextAction {
+        canister
+            .system_state
+            .call_context_manager_mut()
+            // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
+            .unwrap()
+            .on_canister_result(call_context_id, callback_id, result, instructions_used)
     }
 
     fn execute_callback(
@@ -440,18 +470,13 @@ impl<'a> QueryContext<'a> {
         let call_origin = call_context.call_origin().clone();
         // Validate that the canister has an `ExecutionState`.
         if canister.execution_state.is_none() {
-            let action = canister
-                .system_state
-                .call_context_manager_mut()
-                // This `unwrap()` cannot fail because we checked for the call
-                // context manager in `get_call_context_and_callback()` call.
-                .unwrap()
-                .on_canister_result(
-                    call_context_id,
-                    Some(callback_id),
-                    Err(HypervisorError::WasmModuleNotFound),
-                    0.into(),
-                );
+            let action = self.finish(
+                &mut canister,
+                call_context_id,
+                Some(callback_id),
+                Err(HypervisorError::WasmModuleNotFound),
+                0.into(),
+            );
             return Ok((canister, call_origin, action));
         }
 
@@ -556,19 +581,13 @@ impl<'a> QueryContext<'a> {
                 .get()
                 .saturating_sub(instructions_left.get()),
         );
-        // TODO: RUN-795: The query test fails because we don't call `on_canister_result`
-        let action = canister
-            .system_state
-            .call_context_manager_mut()
-            // This `unwrap()` cannot fail because we checked for the call
-            // context manager in `get_call_context_and_callback()` call.
-            .unwrap()
-            .on_canister_result(
-                call_context_id,
-                Some(callback_id),
-                result,
-                instructions_used,
-            );
+        let action = self.finish(
+            &mut canister,
+            call_context_id,
+            Some(callback_id),
+            result,
+            instructions_used,
+        );
 
         measurement_scope.add(instructions_used, NumSlices::from(1), NumMessages::from(1));
         Ok((canister, call_origin, action))

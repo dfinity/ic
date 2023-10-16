@@ -2408,3 +2408,107 @@ fn bitcoin_test_routing_regtest_canister_exists() {
 
     test_canister_routing(test, vec![BitcoinNetwork::Regtest, BitcoinNetwork::regtest]);
 }
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_query() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .inter_query(
+            b_id,
+            call_args().on_reply(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    .inter_query(
+                        b_id,
+                        call_args().on_reply(
+                            wasm()
+                                .get_global_data()
+                                .reply_data_append()
+                                // Counter a.3
+                                .performance_counter(1)
+                                .reply_int64(),
+                        ),
+                    ),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    let result = test.non_replicated_query(a_id, "query", a).unwrap();
+
+    let counters = result
+        .bytes()
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
+    assert!(counters[2] < counters[3]);
+}
+
+#[test]
+fn test_call_context_performance_counter_correctly_reported_on_composite_query() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        // Counter a.0
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .composite_query(
+            b_id,
+            call_args().on_reply(
+                wasm()
+                    // Counter a.2
+                    .performance_counter(1)
+                    .int64_to_blob()
+                    .append_to_global_data()
+                    .composite_query(
+                        b_id,
+                        call_args().on_reply(
+                            wasm()
+                                .get_global_data()
+                                .reply_data_append()
+                                // Counter a.3
+                                .performance_counter(1)
+                                .reply_int64(),
+                        ),
+                    ),
+            ),
+        )
+        // Counter a.1
+        .performance_counter(1)
+        .int64_to_blob()
+        .append_to_global_data()
+        .build();
+    let result = test
+        .non_replicated_query(a_id, "composite_query", a)
+        .unwrap();
+
+    let counters = result
+        .bytes()
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect::<Vec<_>>();
+
+    assert!(counters[0] < counters[1]);
+    assert!(counters[1] < counters[2]);
+    assert!(counters[2] < counters[3]);
+}

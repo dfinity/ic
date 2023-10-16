@@ -12,6 +12,7 @@ use ic_error_types::UserError;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
+use ic_types::messages::CallContextId;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{Cycles, NumInstructions, Time};
 use prometheus::IntCounter;
@@ -34,6 +35,7 @@ pub fn execute_non_replicated_query(
     CanisterState,
     NumInstructions,
     Result<Option<WasmResult>, UserError>,
+    Option<CallContextId>,
 ) {
     // Validate that the canister is running.
     if let Err(err) = validate_canister(&canister) {
@@ -41,6 +43,7 @@ pub fn execute_non_replicated_query(
             canister,
             execution_parameters.instruction_limits.message(),
             Err(err),
+            None,
         );
     }
 
@@ -54,13 +57,14 @@ pub fn execute_non_replicated_query(
             canister,
             execution_parameters.instruction_limits.message(),
             Err(err.into_user_error(&canister_id)),
+            None,
         );
     }
 
     let mut preserve_changes = false;
-    let (non_replicated_query_kind, caller) = match query_kind {
+    let (non_replicated_query_kind, caller, call_context_id) = match query_kind {
         NonReplicatedQueryKind::Pure { caller } => {
-            (ic_system_api::NonReplicatedQueryKind::Pure, caller)
+            (ic_system_api::NonReplicatedQueryKind::Pure, caller, None)
         }
         NonReplicatedQueryKind::Stateful { call_origin } => {
             preserve_changes = true;
@@ -80,6 +84,7 @@ pub fn execute_non_replicated_query(
                     outgoing_request: None,
                 },
                 caller,
+                Some(call_context_id),
             )
         }
     };
@@ -116,5 +121,10 @@ pub fn execute_non_replicated_query(
     let result = output
         .wasm_result
         .map_err(|err| err.into_user_error(&canister.canister_id()));
-    (canister, output.num_instructions_left, result)
+    (
+        canister,
+        output.num_instructions_left,
+        result,
+        call_context_id,
+    )
 }

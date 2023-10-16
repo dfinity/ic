@@ -56,7 +56,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
-            let (_, _, result) = execute_non_replicated_query(
+            let result = execute_non_replicated_query(
                 NonReplicatedQueryKind::Pure { caller: sender },
                 WasmMethod::Query("test".to_string()),
                 &[],
@@ -68,7 +68,8 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
-            );
+            )
+            .2;
             let executed_instructions =
                 as_num_instructions(instructions_before - round_limits.instructions);
             assert_eq!(result, Ok(None), "Error executing a query method");
