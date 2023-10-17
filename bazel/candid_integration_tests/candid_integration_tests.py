@@ -14,6 +14,7 @@ if not os.path.isdir(workspace_dir):
 did_file_path = os.path.realpath(os.environ["DID_FILE_PATH"])
 backup_did_file_path = os.path.realpath(os.environ["BACKUP_DID_FILE_PATH"])
 
+
 def modify_file_contents(path, find, replacement):
     with open(path) as f:
         contents = f.read()
@@ -25,20 +26,22 @@ def modify_file_contents(path, find, replacement):
     with open(path, "w") as f:
         f.write(new_contents)
 
-def run_example_did_git_test():
+
+def run_example_did_git_test(test_bin = "TEST_BIN"):
     return subprocess.run(
-        [os.environ["TEST_BIN"]],
+        [os.environ[test_bin]],
         env={
             "BUILD_WORKSPACE_DIRECTORY": workspace_dir,
             "TEST_TMPDIR": os.environ["TEST_TMPDIR"],
-            "CI_MERGE_REQUEST_TITLE": os.environ.get("CI_MERGE_REQUEST_TITLE","")
+            "CI_MERGE_REQUEST_TITLE": os.environ.get("CI_MERGE_REQUEST_TITLE", ""),
         },
-        capture_output=True
+        capture_output=True,
     )
+
 
 @pytest.fixture(autouse=True)
 def setup_example_did():
-    #setup
+    # setup
     shutil.copyfile(backup_did_file_path, did_file_path)
 
     # run test
@@ -53,17 +56,25 @@ def test_did_check_succeeds():
 
     assert res.returncode == 0
 
+
 def test_remove_variants_check_fails():
     modify_file_contents(path=did_file_path, find="happy; sad", replacement="happy")
 
     res = run_example_did_git_test()
 
-    assert "The new interface at bazel/candid_integration_tests/example.did is not compatible with the old interface" in res.stderr.decode('utf-8')
+    error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()'"
+
+    assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
 
-@pytest.mark.skip(reason="Not sure how to do this")
+
 def test_adding_new_did_file_succeeds():
-    shutil.copyfile(backup_did_file_path, "new.did")
+    res = run_example_did_git_test(test_bin = "NEW_DID_TEST")
+
+    message = "is a new file, skipping backwards compatibility check"
+    assert message in res.stdout.decode("utf-8")
+    assert res.returncode == 0
+
 
 def test_add_variants_succeeds():
     modify_file_contents(path=did_file_path, find="sad", replacement="sad; stunned")
@@ -72,72 +83,112 @@ def test_add_variants_succeeds():
 
     assert res.returncode == 0
 
-#Todo: enable also-reverse in candid check
-@pytest.mark.skip(reason="Not implemented yet")
+
 def test_remove_required_field_from_input_check_fails():
-    modify_file_contents(path=did_file_path, find="existing_required_request_field : int;", replacement="// Blank.")
+    modify_file_contents(
+        path=did_file_path,
+        find="existing_required_request_field : int;",
+        replacement="// Blank.",
+    )
 
-    run_example_did_git_test(also_revers=True)
+    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
-#Todo: enable also-reverse in candid check
-@pytest.mark.skip(reason="Not implemented yet")
+    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)'"
+    assert error_message in res.stderr.decode("utf-8")
+    assert res.returncode == 101
+    assert "running also-reverse check" in res.stdout.decode("utf-8")
+
+
 def test_remove_required_field_from_output_check_fails():
-    modify_file_contents(path=did_file_path, find="existing_required_response_field : int;", replacement="// Blank.")
+    modify_file_contents(
+        path=did_file_path,
+        find="existing_required_response_field : int;",
+        replacement="// Blank.",
+    )
 
-    run_example_did_git_test(also_revers=True)
+    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
-#Todo: enable also-reverse in candid check
-@pytest.mark.skip(reason="Not implemented yet")
+    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)'"
+    assert error_message in res.stderr.decode("utf-8")
+    assert res.returncode == 101
+
+
 def test_adding_a_required_field_to_input_check_fails():
-    modify_file_contents(path=did_file_path, find="// Insert DanceRequest fields here.", replacement="new_required_int : int;" )
+    modify_file_contents(
+        path=did_file_path,
+        find="// Insert DanceRequest fields here.",
+        replacement="new_required_int : int;",
+    )
 
-    run_example_did_git_test(also_revers=True)
+    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+
+    error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)'"
+    assert error_message in res.stderr.decode("utf-8")
+    assert res.returncode == 101
 
 
 def test_adding_optional_field_succeeds():
-    modify_file_contents(path=did_file_path, find="// Insert DanceRequest fields here.", replacement="new_optional_int : opt int;")
+    modify_file_contents(
+        path=did_file_path,
+        find="// Insert DanceRequest fields here.",
+        replacement="new_optional_int : opt int;",
+    )
 
-    res = run_example_did_git_test()
+    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
     assert res.returncode == 0
 
-#Todo: enable also-reverse in candid check
-@pytest.mark.skip(reason="Not implemented yet")
+
 def test_adding_optional_field_reverse_succeeds():
-    modify_file_contents(path=did_file_path, find="// Insert DanceResponse fields here.", replacement="new_optional_int : opt int;")
+    modify_file_contents(
+        path=did_file_path,
+        find="// Insert DanceResponse fields here.",
+        replacement="new_optional_int : opt int;",
+    )
 
-    run_example_did_git_test(also_revers=True)
+    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+
+    assert res.returncode == 0
 
 
-#Todo: enable also-reverse in candid check
-@pytest.mark.skip(reason="Not implemented yet")
 def test_override_also_reverse():
     # Add a method to the service.
-    modify_file_contents(path=did_file_path, find="// Comment within service.", replacement="new_method : () -> ();")
+    modify_file_contents(
+        path=did_file_path,
+        find="// Comment within service.",
+        replacement="new_method : () -> ();",
+    )
 
-    run_example_did_git_test()
+    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
-    with pytest.raises(subprocess.CalledProcessError):
-        run_example_did_git_test(also_revers=True)
+    error_message = "Method new_method is only in the expected type'"
+    assert error_message in res.stderr.decode("utf-8")
+    assert "running also-reverse check" in res.stdout.decode("utf-8")
+    assert res.returncode == 101
 
     # When the merge request title contains the magic words, --also-reverse should be disabled.
-    os.environ["CI_MERGE_REQUEST_TITLE"] = "Best change ever [override-also-reverse]"
-    run_example_did_git_test(also_revers=True)
+    with mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-also-reverse]"}):
+        res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+        assert "running also-reverse check" not in res.stdout.decode("utf-8")
+        assert res.returncode == 0
 
-@mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-didc-check]"})
-def test_override_didc_checks_skips_check():
-    res = run_example_did_git_test()
 
-    assert res.returncode == 0
-    assert "Found [override-didc-check] in merge request title. Skipping didc_check." in res.stdout.decode('utf-8')
-
-@mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-didc-check]"})
 def test_override_didc_checks_failing_check_succeeds():
     modify_file_contents(path=did_file_path, find="happy; sad", replacement="happy")
-    res = run_example_did_git_test()
 
-    assert res.returncode == 0
-    assert "Found [override-didc-check] in merge request title. Skipping didc_check." in res.stdout.decode('utf-8')
+    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+
+    error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()'"
+    assert error_message in res.stderr.decode("utf-8")
+    assert res.returncode == 101
+
+    with mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-didc-check]"}):
+        res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+        assert res.returncode == 0
+        assert (
+            "Found [override-didc-check] in merge request title. Skipping didc_check."
+            in res.stdout.decode("utf-8")
+        )
 
 
 if __name__ == "__main__":

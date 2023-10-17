@@ -19,7 +19,7 @@ readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
 
 if ! git show $merge_base:{did_path} > $tmpfile 2> $errlog; then
-    if grep -sq -- "exists on disk, but not in " $errlog; then
+    if grep -sq -- "exists on disk, but not in \\|does not exist in 'HEAD'" $errlog; then
         echo "{did_path} is a new file, skipping backwards compatibility check"
         exit 0
     else
@@ -32,7 +32,13 @@ echo MERGE_BASE=$merge_base
 echo DID_PATH={did_path}
 
 {check_did} {did_path} "$tmpfile"
-    """.format(check_did = check_did.short_path, did_path = ctx.file.did.path)
+if [ {enable_also_reverse} = True ]; then
+    if [[ $mr_title != *"[override-also-reverse]"* ]]; then
+        echo "running also-reverse check"
+        {check_did} "$tmpfile" {did_path}
+    fi
+fi
+    """.format(check_did = check_did.short_path, did_path = ctx.file.did.path, enable_also_reverse = ctx.attr.enable_also_reverse)
 
     ctx.actions.write(output = ctx.outputs.executable, content = script)
 
@@ -55,6 +61,7 @@ _did_git_test = rule(
     implementation = _did_git_test_impl,
     attrs = {
         "did": attr.label(allow_single_file = True),
+        "enable_also_reverse": attr.bool(default = False),
         "_check_did": CHECK_DID,
         "_git": attr.label(allow_single_file = True, default = "//:.git"),
     },
