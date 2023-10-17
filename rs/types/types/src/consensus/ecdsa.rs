@@ -1753,12 +1753,14 @@ impl EcdsaObject for EcdsaOpening {
     }
 }
 
-pub fn ecdsa_msg_id(msg: &EcdsaMessage) -> EcdsaArtifactId {
-    match msg {
-        EcdsaMessage::EcdsaSignedDealing(object) => object.message_id(),
-        EcdsaMessage::EcdsaDealingSupport(object) => object.message_id(),
-        EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
-        EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
-        EcdsaMessage::EcdsaOpening(object) => object.message_id(),
+impl From<&EcdsaMessage> for EcdsaArtifactId {
+    fn from(msg: &EcdsaMessage) -> EcdsaArtifactId {
+        match msg {
+            EcdsaMessage::EcdsaSignedDealing(object) => object.message_id(),
+            EcdsaMessage::EcdsaDealingSupport(object) => object.message_id(),
+            EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
+            EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
+            EcdsaMessage::EcdsaOpening(object) => object.message_id(),
+        }
     }
 }

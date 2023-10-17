@@ -667,6 +667,16 @@ impl From<&pb::CanisterHttpResponseAttribute> for CanisterHttpResponseAttribute 
     }
 }
 
+impl From<&CanisterHttpResponseShare> for CanisterHttpResponseAttribute {
+    fn from(msg: &CanisterHttpResponseShare) -> CanisterHttpResponseAttribute {
+        CanisterHttpResponseAttribute::Share(
+            msg.content.registry_version,
+            msg.content.id,
+            msg.content.content_hash.clone(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{time::UNIX_EPOCH, Cycles};
