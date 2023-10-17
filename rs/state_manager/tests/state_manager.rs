@@ -680,6 +680,8 @@ fn missing_wasm_chunk_store_is_handled() {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        // Make sure Tip Thread isn't doing anything while we hack into the Checkpoint files.
+        state_manager.flush_tip_channel();
 
         // Since the canister has no execution state, there should be no stable memory
         // file.
@@ -3846,6 +3848,10 @@ fn report_diverged_checkpoint() {
             state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
             wait_for_checkpoint(&state_manager, height(3));
 
+            // If the Tip thread is active while we report diverged checkpoint, it may crash
+            // which is OK in production but confuses debug assertions.
+            state_manager.flush_tip_channel();
+
             // This could only happen if calculating the manifest and certification of height 2
             // completed after reaching height 3
             state_manager.report_diverged_checkpoint(height(2))
@@ -3918,6 +3924,9 @@ fn diverged_checkpoint_is_complete() {
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
+            // If the Tip thread is active while we report diverged checkpoint, it may crash
+            // which is OK in production but confuses debug assertions.
+            state_manager.flush_tip_channel();
 
             state_manager.report_diverged_checkpoint(height(2));
         })
@@ -4006,6 +4015,9 @@ fn remove_too_many_diverged_checkpoints() {
 
         let (_, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(divergence), CertificationScope::Full);
+        // If the Tip thread is active while we report diverged checkpoint, it may crash
+        // which is OK in production but confuses debug assertions.
+        state_manager.flush_tip_channel();
         state_manager.report_diverged_checkpoint(height(divergence));
     }
     state_manager_crash_test(
@@ -4034,6 +4046,9 @@ fn remove_old_diverged_checkpoint() {
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
                 wait_for_checkpoint(&state_manager, height(1));
+                // If the Tip thread is active while we report diverged checkpoint, it may crash
+                // which is OK in production but confuses debug assertions.
+                state_manager.flush_tip_channel();
 
                 state_manager.report_diverged_checkpoint(height(1))
             }),
@@ -4118,6 +4133,10 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
                 wait_for_checkpoint(&state_manager, height(2));
+
+                // If the Tip thread is active while we report diverged checkpoint, it may crash
+                // which is OK in production but confuses debug assertions.
+                state_manager.flush_tip_channel();
 
                 state_manager.report_diverged_checkpoint(height(2))
             }),
