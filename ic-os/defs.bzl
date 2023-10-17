@@ -517,6 +517,32 @@ EOF
         tags = ["manual"],
     )
 
+    # Same as above but without KVM support to run inside VMs and containers
+    # VHOST for nested VMs is not configured at the moment (should be possible)
+    native.genrule(
+        name = "launch-local-vm-no-kvm",
+        srcs = [
+            ":disk-img.tar",
+        ],
+        outs = ["launch_local_vm_script_no_kvm"],
+        cmd = """
+        IMAGE="$(location :disk-img.tar)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+TEMP=\\$$(mktemp -d)
+CID=\\$$((\\$$RANDOM + 3))
+cp $$IMAGE \\$$TEMP
+cd \\$$TEMP
+tar xf disk-img.tar
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
+
     # -------------------- final "return" target --------------------
     # The good practice is to have the last target in the macro with `name = name`.
     # This allows users to just do `bazel build //some/path:macro_instance` without need to know internals of the macro
