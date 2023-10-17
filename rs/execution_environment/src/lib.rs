@@ -15,6 +15,7 @@ mod scheduler;
 mod types;
 pub mod util;
 
+use query_handler::query_stats::QueryStatsPayloadBuilderParams;
 // We need to expose this for testing purposes
 pub use query_handler::query_stats::init_query_stats;
 
@@ -29,7 +30,6 @@ pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::execution_environment::{
     IngressFilter, IngressFilterService, IngressHistoryReader, IngressHistoryWriter,
@@ -91,7 +91,7 @@ pub struct ExecutionServices {
     pub async_query_handler: QueryExecutionService,
     pub anonymous_query_handler: AnonymousQueryService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
-    pub query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
+    pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
 
 impl ExecutionServices {
@@ -209,7 +209,7 @@ impl ExecutionServices {
             async_query_handler,
             anonymous_query_handler,
             scheduler,
-            query_stats_payload_builder: Box::new(query_stats_payload_builder),
+            query_stats_payload_builder,
         }
     }
 

@@ -248,6 +248,10 @@ pub fn construct_ic_stack(
         log.clone(),
         subnet_type,
     );
+    // ---------- QUERY STATS DEPS FOLLOW -----------
+    let query_stats_payload_builder = execution_services
+        .query_stats_payload_builder
+        .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
     let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
@@ -272,7 +276,7 @@ pub fn construct_ic_stack(
         P2PStateSyncClient::Client(state_sync),
         xnet_payload_builder,
         self_validating_payload_builder,
-        execution_services.query_stats_payload_builder,
+        query_stats_payload_builder,
         message_router,
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
