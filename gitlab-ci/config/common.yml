@@ -99,20 +99,20 @@ after_script:
     GIT_STRATEGY: "fetch"  # And then pull only new commits
     SHELL_WRAPPER: "/usr/bin/time"
 
-.ubuntu-k8s:
-  extends:
-    - .build-env-base
-    - .ic-build-legacy-image
-
 .build-k8s:
   extends:
-    - .ubuntu-k8s
+    - .build-env-base
     - .ic-build-image
+
+.build-k8s-legacy:
+  extends:
+    - .build-k8s
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a"
 
 .ubuntu-cargo-k8s:
   extends:
-    - .ubuntu-k8s
-    - .ic-build-legacy-image
+    - .build-k8s-legacy
   variables:
     # This MUST match the directory used in our `build-ic.sh` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
@@ -129,11 +129,6 @@ after_script:
     - dfinity-ic
   variables:
     GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
-
-.ic-build-legacy-image:
-  extends: .ic-build-image
-  image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a"
 
 .cargo-rules:
   rules:
