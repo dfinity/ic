@@ -22,7 +22,9 @@ use crate::{
         dkg::Message as DkgMessage,
         ecdsa::{EcdsaArtifactId, EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHash,
+        ConsensusMessageHashable,
     },
+    crypto::crypto_hash,
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     messages::{HttpRequestError, MessageId, SignedIngress, SignedRequestBytes},
@@ -377,6 +379,12 @@ impl TryFrom<&pb::ConsensusMessageId> for ConsensusMessageId {
     }
 }
 
+impl From<&ConsensusMessage> for ConsensusMessageId {
+    fn from(msg: &ConsensusMessage) -> ConsensusMessageId {
+        msg.get_id()
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Ingress artifacts
 
@@ -472,6 +480,21 @@ impl TryFrom<&pb::CertificationMessageId> for CertificationMessageId {
     }
 }
 
+impl From<&CertificationMessage> for CertificationMessageId {
+    fn from(msg: &CertificationMessage) -> CertificationMessageId {
+        match msg {
+            CertificationMessage::Certification(cert) => CertificationMessageId {
+                height: cert.height,
+                hash: CertificationMessageHash::Certification(crypto_hash(cert)),
+            },
+            CertificationMessage::CertificationShare(share) => CertificationMessageId {
+                height: share.height,
+                hash: CertificationMessageHash::CertificationShare(crypto_hash(share)),
+            },
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 
@@ -481,6 +504,12 @@ pub type EcdsaMessageId = EcdsaArtifactId;
 // CanisterHttp artifacts
 
 pub type CanisterHttpResponseId = CryptoHashOf<CanisterHttpResponseShare>;
+
+impl From<&CanisterHttpResponseShare> for CanisterHttpResponseId {
+    fn from(msg: &CanisterHttpResponseShare) -> CanisterHttpResponseId {
+        crypto_hash(msg)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // StateSync artifacts.

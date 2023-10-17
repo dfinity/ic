@@ -23,8 +23,8 @@ use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
     ecdsa::{
-        ecdsa_msg_id, EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType,
-        EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
+        EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
+        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
     },
     CatchUpPackage,
 };
@@ -60,7 +60,7 @@ impl EcdsaObjectPool {
 
     fn insert_object(&mut self, message: EcdsaMessage) {
         assert_eq!(EcdsaMessageType::from(&message), self.object_type);
-        let key = ecdsa_msg_id(&message);
+        let key = EcdsaArtifactId::from(&message);
         if self.objects.insert(key, message).is_none() {
             self.metrics.observe_insert(self.object_type.as_str());
         }
@@ -415,7 +415,7 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
                         | EcdsaMessage::EcdsaSignedDealing(_) => (),
                         _ => adverts.push(EcdsaArtifact::message_to_advert(&message)),
                     }
-                    unvalidated_ops.remove(ecdsa_msg_id(&message));
+                    unvalidated_ops.remove(EcdsaArtifactId::from(&message));
                     validated_ops.insert(message);
                 }
                 EcdsaChangeAction::RemoveValidated(msg_id) => {
@@ -704,7 +704,7 @@ mod tests {
             let ecdsa_dealing = EcdsaMessage::EcdsaSignedDealing(create_ecdsa_dealing(
                 dummy_idkg_transcript_id_for_tests(100),
             ));
-            let key = ecdsa_msg_id(&ecdsa_dealing);
+            let key = EcdsaArtifactId::from(&ecdsa_dealing);
             assert!(object_pool.get_object(&key).is_none());
             object_pool.insert_object(ecdsa_dealing);
             key
@@ -713,7 +713,7 @@ mod tests {
             let ecdsa_dealing = EcdsaMessage::EcdsaSignedDealing(create_ecdsa_dealing(
                 dummy_idkg_transcript_id_for_tests(200),
             ));
-            let key = ecdsa_msg_id(&ecdsa_dealing);
+            let key = EcdsaArtifactId::from(&ecdsa_dealing);
             assert!(object_pool.get_object(&key).is_none());
             object_pool.insert_object(ecdsa_dealing);
             key

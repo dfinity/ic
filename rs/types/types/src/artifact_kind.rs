@@ -3,11 +3,11 @@ use crate::{
     artifact::*,
     canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
     consensus::{
-        certification::{CertificationMessage, CertificationMessageHash},
+        certification::CertificationMessage,
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
-        ecdsa::{ecdsa_msg_id, EcdsaMessage, EcdsaMessageAttribute},
-        ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHashable,
+        ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
+        ConsensusMessage, ConsensusMessageAttribute,
     },
     crypto::crypto_hash,
     messages::SignedIngress,
@@ -28,12 +28,10 @@ impl ArtifactKind for ConsensusArtifact {
     /// The function converts a `ConsensusMessage` into an advert for a
     /// `ConsensusArtifact`.
     fn message_to_advert(msg: &ConsensusMessage) -> Advert<ConsensusArtifact> {
-        let size = bincode::serialized_size(&msg).unwrap() as usize;
-        let attribute = ConsensusMessageAttribute::from(msg);
         Advert {
-            id: msg.get_id(),
-            attribute,
-            size,
+            id: ConsensusMessageId::from(msg),
+            attribute: ConsensusMessageAttribute::from(msg),
+            size: bincode::serialized_size(&msg).unwrap() as usize,
             integrity_hash: crypto_hash(msg).get(),
         }
     }
@@ -76,19 +74,8 @@ impl ArtifactKind for CertificationArtifact {
     /// The function converts a `CertificationMessage` into an advert for a
     /// `CertificationArtifact`.
     fn message_to_advert(msg: &CertificationMessage) -> Advert<CertificationArtifact> {
-        use CertificationMessage::*;
-        let id = match msg {
-            Certification(cert) => CertificationMessageId {
-                height: cert.height,
-                hash: CertificationMessageHash::Certification(crypto_hash(cert)),
-            },
-            CertificationShare(share) => CertificationMessageId {
-                height: share.height,
-                hash: CertificationMessageHash::CertificationShare(crypto_hash(share)),
-            },
-        };
         Advert {
-            id,
+            id: CertificationMessageId::from(msg),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
             integrity_hash: crypto_hash(msg).get(),
@@ -110,14 +97,11 @@ impl ArtifactKind for DkgArtifact {
     /// The function converts a `DkgMessage` into an advert for a
     /// `DkgArtifact`.
     fn message_to_advert(msg: &DkgMessage) -> Advert<DkgArtifact> {
-        let size = bincode::serialized_size(&msg).unwrap() as usize;
-        let id = DkgMessageId::from(msg);
-        let hash = id.hash.clone();
         Advert {
-            id,
+            id: DkgMessageId::from(msg),
             attribute: (),
-            size,
-            integrity_hash: hash.get(),
+            size: bincode::serialized_size(&msg).unwrap() as usize,
+            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -136,11 +120,10 @@ impl ArtifactKind for EcdsaArtifact {
     /// The function converts a `EcdsaMessage` into an advert for a
     /// `EcdsaArtifact`.
     fn message_to_advert(msg: &EcdsaMessage) -> Advert<EcdsaArtifact> {
-        let size = bincode::serialized_size(&msg).unwrap() as usize;
         Advert {
-            id: ecdsa_msg_id(msg),
+            id: EcdsaMessageId::from(msg),
             attribute: EcdsaMessageAttribute::from(msg),
-            size,
+            size: bincode::serialized_size(&msg).unwrap() as usize,
             integrity_hash: crypto_hash(msg).get(),
         }
     }
@@ -160,17 +143,11 @@ impl ArtifactKind for CanisterHttpArtifact {
     /// This function converts a `CanisterHttpResponseShare` into an advert for a
     /// `CanisterHttpArtifact`.
     fn message_to_advert(msg: &CanisterHttpResponseShare) -> Advert<CanisterHttpArtifact> {
-        let size = bincode::serialized_size(&msg).unwrap() as usize;
-        let hash = crypto_hash(msg);
         Advert {
-            id: hash.clone(),
-            attribute: CanisterHttpResponseAttribute::Share(
-                msg.content.registry_version,
-                msg.content.id,
-                msg.content.content_hash.clone(),
-            ),
-            size,
-            integrity_hash: hash.get(),
+            id: CanisterHttpResponseId::from(msg),
+            attribute: CanisterHttpResponseAttribute::from(msg),
+            size: bincode::serialized_size(&msg).unwrap() as usize,
+            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }

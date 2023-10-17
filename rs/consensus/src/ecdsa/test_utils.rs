@@ -20,7 +20,7 @@ use ic_test_utilities::consensus::fake::*;
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    ecdsa_msg_id, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
+    EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
     EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
     EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
     IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef,
@@ -1143,7 +1143,7 @@ pub(crate) fn is_moved_to_validated(
 ) -> bool {
     for action in change_set {
         if let EcdsaChangeAction::MoveToValidated(msg) = action {
-            if ecdsa_msg_id(msg) == *msg_id {
+            if EcdsaArtifactId::from(msg) == *msg_id {
                 return true;
             }
         }
