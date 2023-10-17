@@ -756,7 +756,8 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
         account_block_ids.get(&last_key).map(|_| 0).or_else(|| {
             account_block_ids
                 .iter_upper_bound(&last_key)
-                .find(|((account_bytes, _), _)| account_bytes == &last_key.0)
+                .take_while(|(k, _)| k.0 == account_sha256(account))
+                .next()
                 .map(|(key, _)| key.1 .0)
         })
     })
