@@ -183,6 +183,8 @@ async fn withdraw_eth(
                 withdrawal_amount: amount,
                 destination,
                 ledger_burn_index,
+                from: caller,
+                from_subaccount: None,
             };
 
             log!(
@@ -356,10 +358,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_amount,
                     destination,
                     ledger_burn_index,
+                    from,
+                    from_subaccount,
                 }) => EP::AcceptedEthWithdrawalRequest {
                     withdrawal_amount: withdrawal_amount.into(),
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
+                    from,
+                    from_subaccount: from_subaccount.map(|s| s.0),
                 },
                 EventType::CreatedTransaction {
                     withdrawal_id,

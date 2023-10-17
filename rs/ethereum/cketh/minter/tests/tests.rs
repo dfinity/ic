@@ -160,6 +160,8 @@ fn should_deposit_and_withdraw() {
             withdrawal_amount: withdrawal_amount.clone(),
             destination: destination.clone(),
             ledger_burn_index: block_index.clone(),
+            from: caller,
+            from_subaccount: None,
         },
     );
 

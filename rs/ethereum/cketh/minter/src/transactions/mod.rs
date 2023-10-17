@@ -12,12 +12,14 @@ use crate::tx::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
     TransactionPrice,
 };
+use candid::Principal;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt;
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
 pub struct EthWithdrawalRequest {
     #[n(0)]
     pub withdrawal_amount: Wei,
@@ -25,6 +27,40 @@ pub struct EthWithdrawalRequest {
     pub destination: Address,
     #[cbor(n(2), with = "crate::cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
+    #[cbor(n(3), with = "crate::cbor::principal")]
+    pub from: Principal,
+    #[n(4)]
+    pub from_subaccount: Option<Subaccount>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[cbor(transparent)]
+pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
+
+impl fmt::Debug for Subaccount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
+
+struct DebugPrincipal<'a>(&'a Principal);
+
+impl fmt::Debug for DebugPrincipal<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Debug for EthWithdrawalRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_struct("EthWithdrawalRequest")
+            .field("withdrawal_amount", &self.withdrawal_amount)
+            .field("destination", &self.destination)
+            .field("ledger_burn_index", &self.ledger_burn_index)
+            .field("from", &DebugPrincipal(&self.from))
+            .field("from_subaccount", &self.from_subaccount)
+            .finish()
+    }
 }
 
 /// State machine holding Ethereum transactions issued by the minter.

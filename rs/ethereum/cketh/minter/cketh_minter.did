@@ -183,6 +183,8 @@ type Event = record {
             withdrawal_amount : nat;
             destination : text;
             ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
         };
         CreatedTransaction : record {
             withdrawal_id : nat;

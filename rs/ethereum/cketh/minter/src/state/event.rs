@@ -67,6 +67,7 @@ pub enum EventType {
         #[n(1)]
         transaction: SignedEip1559TransactionRequest,
     },
+    /// The minter created a new transaction to handle an existing withdrawal request.
     #[n(10)]
     ReplacedTransaction {
         /// The withdrawal identifier.

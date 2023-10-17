@@ -3,7 +3,7 @@ use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
-use crate::transactions::{create_transaction, EthTransactions, EthWithdrawalRequest};
+use crate::transactions::{create_transaction, EthTransactions, EthWithdrawalRequest, Subaccount};
 use crate::tx::{
     AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     TransactionPrice,
@@ -1248,7 +1248,7 @@ mod eth_withdrawal_request {
     #[test]
     fn should_have_readable_debug_representation() {
         let request = withdrawal_request_with_index(LedgerBurnIndex::new(131));
-        let expected_debug = "EthWithdrawalRequest { withdrawal_amount: 1_100_000_000_000_000, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, ledger_burn_index: 131 }";
+        let expected_debug = "EthWithdrawalRequest { withdrawal_amount: 1_100_000_000_000_000, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, ledger_burn_index: 131, from: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, from_subaccount: Some(1111111111111111111111111111111111111111111111111111111111111111) }";
         assert_eq!(format!("{:?}", request), expected_debug);
     }
 }
@@ -1453,49 +1453,64 @@ pub mod arbitrary {
     use crate::address::Address;
     use crate::checked_amount::CheckedAmountOf;
     use crate::numeric::{GasAmount, TransactionNonce, WeiPerGas};
-    use crate::transactions::EthWithdrawalRequest;
+    use crate::transactions::{EthWithdrawalRequest, Subaccount};
     use crate::tx::{
         AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest,
         SignedEip1559TransactionRequest, StorageKey, TransactionPrice,
     };
+    use candid::Principal;
     use phantom_newtype::Id;
+    use proptest::arbitrary::any;
+    use proptest::array::{uniform20, uniform32};
+    use proptest::collection::vec as pvec;
     use proptest::strategy::Strategy;
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
-        use proptest::arbitrary::any;
-        use proptest::array::uniform32;
         uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
     }
 
     fn arb_u64_id<Entity>() -> impl Strategy<Value = Id<Entity, u64>> {
-        use proptest::arbitrary::any;
         any::<u64>().prop_map(Id::from)
     }
 
     fn arb_u256() -> impl Strategy<Value = ethnum::u256> {
-        use proptest::arbitrary::any;
-        use proptest::array::uniform32;
         uniform32(any::<u8>()).prop_map(ethnum::u256::from_be_bytes)
     }
 
     fn arb_address() -> impl Strategy<Value = Address> {
-        use proptest::arbitrary::any;
-        use proptest::array::uniform20;
         uniform20(any::<u8>()).prop_map(|bytes| Address::new(bytes))
     }
 
+    fn arb_principal() -> impl Strategy<Value = Principal> {
+        pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    }
+
+    fn arb_subaccount() -> impl Strategy<Value = Subaccount> {
+        uniform32(any::<u8>()).prop_map(Subaccount)
+    }
+
     pub fn arb_withdrawal_request() -> impl Strategy<Value = EthWithdrawalRequest> {
-        (arb_checked_amount_of(), arb_address(), arb_u64_id()).prop_map(
-            |(withdrawal_amount, destination, ledger_burn_index)| EthWithdrawalRequest {
-                withdrawal_amount,
-                destination,
-                ledger_burn_index,
-            },
+        (
+            arb_checked_amount_of(),
+            arb_address(),
+            arb_u64_id(),
+            arb_principal(),
+            proptest::option::of(arb_subaccount()),
         )
+            .prop_map(
+                |(withdrawal_amount, destination, ledger_burn_index, from, from_subaccount)| {
+                    EthWithdrawalRequest {
+                        withdrawal_amount,
+                        destination,
+                        ledger_burn_index,
+                        from,
+                        from_subaccount,
+                    }
+                },
+            )
     }
 
     pub fn arb_non_overflowing_transaction_price() -> impl Strategy<Value = TransactionPrice> {
-        use proptest::arbitrary::any;
         (any::<u128>(), any::<u128>(), any::<u128>()).prop_map(
             |(gas_limit, max_priority_fee_per_gas, max_fee_per_gas)| {
                 let price = TransactionPrice {
@@ -1510,14 +1525,11 @@ pub mod arbitrary {
     }
 
     fn arb_storage_key() -> impl Strategy<Value = StorageKey> {
-        use proptest::arbitrary::any;
-        use proptest::array::uniform32;
         uniform32(any::<u8>()).prop_map(StorageKey)
     }
 
     fn arb_access_list_item() -> impl Strategy<Value = AccessListItem> {
-        use proptest::collection::vec;
-        (arb_address(), vec(arb_storage_key(), 0..100)).prop_map(|(address, storage_keys)| {
+        (arb_address(), pvec(arb_storage_key(), 0..100)).prop_map(|(address, storage_keys)| {
             AccessListItem {
                 address,
                 storage_keys,
@@ -1531,15 +1543,13 @@ pub mod arbitrary {
     }
 
     pub fn arb_eip_1559_transaction_request() -> impl Strategy<Value = Eip1559TransactionRequest> {
-        use proptest::arbitrary::any;
-        use proptest::collection::vec;
         (
             any::<u64>(),
             arb_checked_amount_of(),
             arb_non_overflowing_transaction_price(),
             arb_address(),
             arb_checked_amount_of(),
-            vec(any::<u8>(), 0..100),
+            pvec(any::<u8>(), 0..100),
             arb_access_list(),
         )
             .prop_map(
@@ -1560,7 +1570,6 @@ pub mod arbitrary {
     }
 
     fn arb_eip_1559_signature() -> impl Strategy<Value = Eip1559Signature> {
-        use proptest::arbitrary::any;
         (any::<bool>(), arb_u256(), arb_u256()).prop_map(|(signature_y_parity, r, s)| {
             Eip1559Signature {
                 signature_y_parity,
@@ -1608,6 +1617,11 @@ fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithd
         ledger_burn_index,
         destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
         withdrawal_amount: Wei::new(1_100_000_000_000_000),
+        from: candid::Principal::from_str(
+            "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
+        )
+        .unwrap(),
+        from_subaccount: Some(Subaccount([0x11; 32])),
     }
 }
 
