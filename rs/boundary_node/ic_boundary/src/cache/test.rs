@@ -59,8 +59,6 @@ async fn handler(request: Request<Body>) -> impl IntoResponse {
     "a".repeat(size)
 }
 
-// BOUN-913: fix and re-enable this flaky test.
-#[ignore]
 #[tokio::test]
 async fn test_cache() -> Result<(), Error> {
     // Check that we fail if item size >= max size
@@ -82,7 +80,6 @@ async fn test_cache() -> Result<(), Error> {
         ));
 
     // Check non-anonymous
-    cache.clear().unwrap();
     let req = gen_request_with_params(CANISTER_1, false, 8, 0, false);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
@@ -127,7 +124,7 @@ async fn test_cache() -> Result<(), Error> {
     }
 
     // Check cache flushing
-    cache.clear().unwrap();
+    cache.clear().await.unwrap();
     assert_eq!(cache.len(), 0);
 
     let req = gen_request(CANISTER_1, false);
@@ -141,20 +138,20 @@ async fn test_cache() -> Result<(), Error> {
     assert_eq!(cs, CacheStatus::Miss);
 
     // Check too big requests
-    cache.clear().unwrap();
+    cache.clear().await.unwrap();
     let req = gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE, 0, true);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Miss);
 
-    cache.clear().unwrap();
+    cache.clear().await.unwrap();
     let req = gen_request_with_params(CANISTER_1, false, MAX_RESP_SIZE + 1, 0, true);
     let res = app.call(req).await.unwrap();
     let cs = res.extensions().get::<CacheStatus>().cloned().unwrap();
     assert_eq!(cs, CacheStatus::Bypass(CacheBypassReason::TooBig));
 
     // Check memory limits
-    cache.clear().unwrap();
+    cache.clear().await.unwrap();
     let max_items = MAX_MEM_SIZE / MAX_RESP_SIZE;
 
     for i in 0..max_items + 1 {
@@ -167,5 +164,6 @@ async fn test_cache() -> Result<(), Error> {
     // Make sure that some of the entries were evicted
     assert!(cache.len() < max_items);
 
+    cache.close().await?;
     Ok(())
 }
