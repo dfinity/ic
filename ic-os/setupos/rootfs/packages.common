@@ -36,6 +36,7 @@ sudo
 udev
 usbutils
 xfsprogs
+zstd
 
 # SELinux support
 selinux-policy-default
