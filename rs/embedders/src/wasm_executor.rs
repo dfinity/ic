@@ -379,12 +379,12 @@ impl WasmExecutorImpl {
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
                 Some(Ok(serialized_module)) => {
-                    let module = self
+                    let instance_pre = self
                         .wasm_embedder
-                        .deserialize_module(&serialized_module.bytes);
-                    let cache = EmbedderCache::new(module.clone());
+                        .deserialize_module_and_pre_instantiate(&serialized_module.bytes);
+                    let cache = EmbedderCache::new(instance_pre.clone());
                     *guard = Some(cache.clone());
-                    match module {
+                    match instance_pre {
                         Ok(_) => Ok(CacheLookup {
                             cache,
                             serialized_module: Some(serialized_module),

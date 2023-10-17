@@ -13,8 +13,8 @@ use std::{
 
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, Linker, Memory, Module, Mutability, OptLevel, Store, Val,
-    ValType,
+    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, OptLevel,
+    Store, Val, ValType,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -243,11 +243,31 @@ impl WasmtimeEmbedder {
                     format!("{:?}", e),
                 ))
             })?;
-        // Note that a wasmtime::Module object is cheaply clonable (just doing
+        Ok(module)
+    }
+
+    pub fn pre_instantiate(&self, module: &Module) -> HypervisorResult<InstancePre<StoreData>> {
+        let mut linker: wasmtime::Linker<StoreData> = Linker::new(module.engine());
+        system_api::syscalls(
+            &mut linker,
+            self.config.feature_flags,
+            self.config.stable_memory_dirty_page_limit,
+            self.config.stable_memory_accessed_page_limit,
+            self.config.metering_type,
+        );
+
+        let instance_pre = linker.instantiate_pre(module).map_err(|e| {
+            HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(format!(
+                "{:?}",
+                e
+            )))
+        })?;
+
+        // Note that a wasmtime::InstancePre object is cheaply clonable (just doing
         // a bit of reference counting, i.e. it is a "shallow copy"). This is
         // important because EmbedderCache is cloned frequently, and that must
         // not be an expensive operation.
-        Ok(module)
+        Ok(instance_pre)
     }
 
     pub fn deserialize_module(
@@ -266,6 +286,14 @@ impl WasmtimeEmbedder {
                 },
             )
         }
+    }
+
+    pub fn deserialize_module_and_pre_instantiate(
+        &self,
+        serialized_module: &SerializedModuleBytes,
+    ) -> HypervisorResult<InstancePre<StoreData>> {
+        let module = self.deserialize_module(serialized_module)?;
+        self.pre_instantiate(&module)
     }
 
     fn list_memory_infos(
@@ -321,16 +349,16 @@ impl WasmtimeEmbedder {
         modification_tracking: ModificationTracking,
         system_api: Option<SystemApiImpl>,
     ) -> Result<WasmtimeInstance, (HypervisorError, Option<SystemApiImpl>)> {
-        let module = match cache
-            .downcast::<HypervisorResult<wasmtime::Module>>()
-            .expect("incompatible embedder cache, expected HypervisorResult<wasmtime::Module>")
+        let instance_pre = match cache
+            .downcast::<HypervisorResult<InstancePre<StoreData>>>()
+            .expect("incompatible embedder cache, expected HypervisorResult<wasmtime::InstancePre<StoreData>>>")
         {
             Ok(x) => x,
             Err(err) => return Err((err.clone(), system_api)),
         };
 
         let mut store = Store::new(
-            module.engine(),
+            instance_pre.module().engine(),
             StoreData {
                 system_api,
                 num_instructions_global: None,
@@ -338,16 +366,7 @@ impl WasmtimeEmbedder {
             },
         );
 
-        let mut linker = Linker::new(store.engine());
-        system_api::syscalls(
-            &mut linker,
-            self.config.feature_flags,
-            self.config.stable_memory_dirty_page_limit,
-            self.config.stable_memory_accessed_page_limit,
-            self.config.metering_type,
-        );
-
-        let instance = match linker.instantiate(&mut store, module) {
+        let instance = match instance_pre.instantiate(&mut store) {
             Ok(instance) => instance,
             Err(err) => {
                 error!(
