@@ -14,7 +14,7 @@ NnsProposal:
 Principals: []
 
 fallback_controller_principals:
-    - ye54c-us65k-r4log-cyhy6-vt33j-z7mwx-ymwzl-yjtti-24xs4-qemd2-rqe
+    - bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae
 
 dapp_canisters: []
 
@@ -53,7 +53,7 @@ Distribution:
 
     Neurons:
 
-        - principal: ye54c-us65k-r4log-cyhy6-vt33j-z7mwx-ymwzl-yjtti-24xs4-qemd2-rqe
+        - principal: bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae
           stake: 15 tokens
           memo: 0
           dissolve_delay: 1 years
