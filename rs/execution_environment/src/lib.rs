@@ -19,6 +19,7 @@ pub mod util;
 pub use query_handler::query_stats::init_query_stats;
 
 use crate::anonymous_query_handler::AnonymousQueryHandler;
+use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
     ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
@@ -31,8 +32,8 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::execution_environment::{
-    IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
-    QueryHandler, Scheduler,
+    IngressFilter, IngressFilterService, IngressHistoryReader, IngressHistoryWriter,
+    QueryExecutionService, QueryHandler, Scheduler,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -41,7 +42,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
 use ic_types::{messages::CallContextId, SubnetId};
-use ingress_filter::IngressFilter;
+use ingress_filter::IngressFilterImpl;
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
 use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
@@ -82,6 +83,7 @@ pub enum NonReplicatedQueryKind {
 
 // This struct holds public facing components that are created by Execution.
 pub struct ExecutionServices {
+    pub sync_ingress_filter: Arc<dyn IngressFilter<State = ReplicatedState>>,
     pub ingress_filter: IngressFilterService,
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
@@ -160,6 +162,10 @@ impl ExecutionServices {
             QuerySchedulerFlag::UseNewSchedulingAlgorithm,
         );
 
+        let ingress_filter_metrics: Arc<_> = IngressFilterMetrics::new(metrics_registry).into();
+        let sync_ingress_filter =
+            IngressFilterImpl::new_sync(Arc::clone(&exec_env), ingress_filter_metrics.clone());
+
         // Creating the async services require that a tokio runtime context is available.
 
         let async_query_handler = HttpQueryHandler::new_service(
@@ -167,11 +173,11 @@ impl ExecutionServices {
             query_scheduler.clone(),
             Arc::clone(&state_reader),
         );
-        let ingress_filter = IngressFilter::new_service(
+        let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
-            metrics_registry,
+            ingress_filter_metrics.clone(),
         );
         let anonymous_query_handler = AnonymousQueryHandler::new_service(
             query_scheduler,
@@ -195,6 +201,7 @@ impl ExecutionServices {
         ));
 
         Self {
+            sync_ingress_filter,
             ingress_filter,
             ingress_history_writer,
             ingress_history_reader,
