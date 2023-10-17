@@ -108,6 +108,7 @@ fn execute_test(
         let cup = make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id);
 
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
+            node_id,
             subnet_id,
             pb::CatchUpPackage::from(&cup),
             artifact_pool_config.clone(),
@@ -275,6 +276,7 @@ fn execute_test_chunking_pool(
 
         let cup = make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id);
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
+            node_id,
             subnet_id,
             pb::CatchUpPackage::from(&cup),
             artifact_pool_config.clone(),
