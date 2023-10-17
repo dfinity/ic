@@ -96,7 +96,7 @@ boundary-node-service-worker:
 after-script-test-ic-build-legacy-image:
   extends:
     - .after-script-test
-    - .ic-build-legacy-image
+    - .build-k8s-legacy
 
 after-script-test-ic-build-image:
   extends:
@@ -105,7 +105,7 @@ after-script-test-ic-build-image:
 .bazel-build-legacy-image:
   extends:
     - .bazel-test-all
-  image: !reference [.ic-build-legacy-image, image]
+  image: !reference [.build-k8s-legacy, image]
 
 bazel-build-fuzzers:
   extends:
@@ -327,7 +327,6 @@ bazel-test-all-rebuild:
 
 bazel-build-macos:
   extends:
-    - .build-env-base
     - .bazel-test-all
     - .bazel-rules-pipeline-no-merge-train
   tags:
@@ -341,7 +340,6 @@ bazel-build-macos:
 
 macos-openssl-static-binaries:
   extends:
-    - .build-env-base
     - .bazel-test-all
     - .bazel-rules-pipeline-no-merge-train
   tags:
@@ -534,7 +532,7 @@ pre-commit:
 
 python-gitlab-ci-tests:
   extends:
-    - .ubuntu-k8s
+    - .build-k8s-legacy
   rules:
     # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
@@ -556,7 +554,7 @@ python-gitlab-ci-tests:
 
 check-bins-linux:
   extends:
-    - .ubuntu-k8s
+    - .build-k8s-legacy
     - .rules-master-pipeline-no-merge-train
   needs:
     - job: linux-openssl-static-binaries
@@ -749,7 +747,7 @@ build-determinism:
 
 build-determinism-release:
   extends:
-    - .ubuntu-k8s
+    - .build-k8s-legacy
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
   needs:

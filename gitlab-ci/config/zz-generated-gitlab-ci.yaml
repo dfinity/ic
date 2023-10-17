@@ -283,7 +283,7 @@
       - digestfile*
     when: always
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
     - ".rules-build-base-images"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
@@ -424,10 +424,30 @@
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-k8s"
+    - ".build-env-base"
     - ".ic-build-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
+  tags:
+    - dfinity-ic
+  variables:
+    GET_SOURCES_ATTEMPTS: 5
+    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
+    GIT_DEPTH: 0
+    GIT_STRATEGY: fetch
+    SHELL_WRAPPER: "/usr/bin/time"
+".build-k8s-legacy":
+  artifacts:
+    expire_in: 3 days
+    paths:
+      - junit_data/*
+      - coredumps/*.txt
+      - coredumps/*.gz
+    when: always
+  extends:
+    - ".build-k8s"
+  image:
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   tags:
     - dfinity-ic
   variables:
@@ -451,16 +471,6 @@
     expire_in: 3 days
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
-  tags:
-    - dfinity-ic
-  variables:
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-".ic-build-legacy-image":
-  artifacts:
-    expire_in: 3 days
-  extends: ".ic-build-image"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   tags:
     - dfinity-ic
   variables:
@@ -580,8 +590,7 @@
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-k8s"
-    - ".ic-build-legacy-image"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   tags:
@@ -592,27 +601,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
-    SHELL_WRAPPER: "/usr/bin/time"
-".ubuntu-k8s":
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".build-env-base"
-    - ".ic-build-legacy-image"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
-  tags:
-    - dfinity-ic
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
 after-script-test-ic-build-image:
   artifacts:
@@ -663,7 +651,7 @@ after-script-test-ic-build-legacy-image:
     when: always
   extends:
     - ".after-script-test"
-    - ".ic-build-legacy-image"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   needs: []
@@ -1043,7 +1031,6 @@ bazel-build-macos:
         - bazel-testlogs-gitlab/**/test.xml
     when: always
   extends:
-    - ".build-env-base"
     - ".bazel-test-all"
     - ".bazel-rules-pipeline-no-merge-train"
   image:
@@ -2042,7 +2029,7 @@ build-base-images-ref-update:
     - build-setupos-base-dev
     - build-setupos-base-dev-sev
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
     - ".rules-build-base-images"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
@@ -2414,7 +2401,7 @@ build-determinism-release:
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   needs:
@@ -3241,7 +3228,7 @@ check-bins-linux:
     when: always
   before_script: "/bin/true"
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
     - ".rules-master-pipeline-no-merge-train"
   image:
     name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
@@ -3565,7 +3552,7 @@ dependencies-check:
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   needs: []
@@ -3597,7 +3584,7 @@ dependency-scan-nightly:
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   needs: []
@@ -3637,7 +3624,7 @@ dependency-scan-release-cut:
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   needs: []
@@ -4036,7 +4023,6 @@ macos-openssl-static-binaries:
         - bazel-testlogs-gitlab/**/test.xml
     when: always
   extends:
-    - ".build-env-base"
     - ".bazel-test-all"
     - ".bazel-rules-pipeline-no-merge-train"
   image:
@@ -4797,7 +4783,7 @@ python-gitlab-ci-tests:
         - test_report.xml
     when: always
   extends:
-    - ".ubuntu-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bc65a3306900bed76f8126a866e957ae89473e66ec55efe86edb4fcc8a6a5a0a
   needs: []
