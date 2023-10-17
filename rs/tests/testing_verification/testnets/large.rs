@@ -1,6 +1,6 @@
 // Set up a testnet containing:
 //   one 4-node System, one 4-node Application, and one 1-node Application subnets, a single boundary node, and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 500 GiB disk.
+// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 2,000 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
@@ -74,7 +74,7 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
     let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
     ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
