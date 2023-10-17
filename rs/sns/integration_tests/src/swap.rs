@@ -2694,6 +2694,7 @@ fn test_upgrade() {
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
         neurons_fund_participation_constraints: None,
+        neurons_fund_participation: None,
     })
     .unwrap();
     let canister_id = state_machine
@@ -3105,6 +3106,7 @@ fn test_last_man_less_than_min() {
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
         neurons_fund_participation_constraints: None,
+        neurons_fund_participation: None,
     })
     .unwrap();
     state_machine

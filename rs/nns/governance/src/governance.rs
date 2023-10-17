@@ -9305,6 +9305,7 @@ fn is_information_about_swap_from_different_sources_consistent(
                 neurons_fund_participants: _,
                 should_auto_finalize: _,
                 neurons_fund_participation_constraints: _,
+                neurons_fund_participation: _,
             } = swap_init;
 
             (

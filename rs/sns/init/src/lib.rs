@@ -691,7 +691,7 @@ impl SnsInitPayload {
         }
     }
 
-    /// Construct the parameters used to initialize a SNS Swap canister.
+    /// Construct the parameters used to initialize an SNS Swap canister.
     ///
     /// Precondition: At least one of [`Self::validate_legacy_init`],
     /// [`Self::validate_pre_execution`], or [`Self::validate_post_execution`] must
@@ -749,6 +749,8 @@ impl SnsInitPayload {
             neurons_fund_participation_constraints: self
                 .neurons_fund_participation_constraints
                 .clone(),
+            // TODO[NNS1-2569]: populate with `self.neurons_fund_participation`
+            neurons_fund_participation: None,
         })
     }
 

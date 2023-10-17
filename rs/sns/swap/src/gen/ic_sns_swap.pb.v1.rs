@@ -371,6 +371,9 @@ pub struct Init {
     #[prost(message, optional, tag = "29")]
     pub neurons_fund_participation_constraints:
         ::core::option::Option<NeuronsFundParticipationConstraints>,
+    /// Whether Neurons' Fund participation is requested.
+    #[prost(bool, optional, tag = "32")]
+    pub neurons_fund_participation: ::core::option::Option<bool>,
 }
 /// Constraints for the Neurons' Fund participation in an SNS swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
