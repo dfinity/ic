@@ -13,7 +13,7 @@ use http::header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH};
 use http::{response, Version};
 use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
 use hyper::body;
-use stretto::CacheBuilder;
+use stretto::AsyncCacheBuilder;
 
 use crate::routes::{ApiError, ErrorCause, RequestContext};
 
@@ -112,7 +112,7 @@ struct CacheItem {
 
 #[derive(Clone)]
 pub struct Cache {
-    cache: stretto::Cache<RequestContext, CacheItem>,
+    cache: stretto::AsyncCache<RequestContext, CacheItem>,
     max_item_size: usize,
     ttl: Duration,
     cache_non_anonymous: bool,
@@ -134,15 +134,15 @@ impl Cache {
             ));
         }
 
-        Ok(Self {
-            cache: CacheBuilder::new(
-                // That's the recommended way of estimating it
-                (cache_size as usize) / AVG_CACHE_VALUE_SIZE * 10,
-                cache_size as i64,
-            )
-            .finalize()
-            .unwrap(),
+        let cache = AsyncCacheBuilder::new(
+            // That's the recommended way of estimating it
+            (cache_size as usize) / AVG_CACHE_VALUE_SIZE * 10,
+            cache_size as i64,
+        )
+        .finalize(tokio::spawn)?;
 
+        Ok(Self {
+            cache,
             max_item_size,
             ttl,
             cache_non_anonymous,
@@ -151,7 +151,7 @@ impl Cache {
 
     // Stores the response components in the cache
     // Response itself cannot be stored since it's not cloneable, so we have to rebuild it
-    fn store(
+    async fn store(
         &self,
         ctx: RequestContext,
         parts: &response::Parts,
@@ -177,16 +177,23 @@ impl Cache {
         }
 
         // Insert the response into the cache & wait for it to persist there
-        self.cache
-            .try_insert_with_ttl(ctx, item, cost as i64, self.ttl)?;
-        self.cache.wait()?;
+        let ok = self
+            .cache
+            .try_insert_with_ttl(ctx, item, cost as i64, self.ttl)
+            .await?;
+
+        if !ok {
+            return Err(anyhow!("Cache entry wasn't added"));
+        }
+
+        self.cache.wait().await?;
 
         Ok(())
     }
 
     // Looks up the request in the cache
-    fn lookup(&self, ctx: &RequestContext) -> Option<AxumResponse> {
-        let item = match self.cache.get(ctx) {
+    async fn lookup(&self, ctx: &RequestContext) -> Option<AxumResponse> {
+        let item = match self.cache.get(ctx).await {
             Some(v) => v,
             None => return None,
         };
@@ -209,17 +216,22 @@ impl Cache {
         )
     }
 
-    // For now used only in tests, but belongs here
-
+    // For now stuff below is used only in tests, but belongs here
     #[allow(dead_code)]
     fn len(&self) -> usize {
         self.cache.len()
     }
 
     #[allow(dead_code)]
-    fn clear(&self) -> Result<(), Error> {
-        self.cache.clear()?;
-        self.cache.wait()?;
+    async fn clear(&self) -> Result<(), Error> {
+        self.cache.clear().await?;
+        self.cache.wait().await?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    async fn close(&self) -> Result<(), Error> {
+        self.cache.close().await?;
         Ok(())
     }
 }
@@ -269,7 +281,7 @@ pub async fn cache_middleware(
     }
 
     // Try to look up the request in the cache
-    if let Some(v) = cache.lookup(&ctx) {
+    if let Some(v) = cache.lookup(&ctx).await {
         return Ok(CacheStatus::Hit.with_response(v));
     }
 
@@ -298,7 +310,7 @@ pub async fn cache_middleware(
     let body = read_streaming_body(body, body_size).await?;
 
     // Insert the response into the cache
-    let cache_status = match cache.store(ctx, &parts, &body) {
+    let cache_status = match cache.store(ctx, &parts, &body).await {
         Err(e) => CacheStatus::Error(e.to_string()),
         Ok(_) => CacheStatus::Miss,
     };
