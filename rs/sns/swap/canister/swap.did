@@ -91,6 +91,7 @@ type Icrc1Account = record { owner : opt principal; subaccount : opt vec nat8 };
 type Init = record {
   nns_proposal_id : opt nat64;
   sns_root_canister_id : text;
+  neurons_fund_participation : opt bool;
   min_participant_icp_e8s : opt nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   fallback_controller_principal_ids : vec text;

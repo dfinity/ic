@@ -414,6 +414,9 @@ message Init {
   // Constraints for the Neurons' Fund participation in this swap.
   // TODO[NNS1-2570]: Use this data to compute neurons_fund_participation_icp_e8s.
   optional NeuronsFundParticipationConstraints neurons_fund_participation_constraints = 29;
+
+  // Whether Neurons' Fund participation is requested.
+  optional bool neurons_fund_participation = 32;
 }
 
 // Constraints for the Neurons' Fund participation in an SNS swap.

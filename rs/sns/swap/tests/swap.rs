@@ -116,6 +116,7 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
         neurons_fund_participation_constraints: None,
+        neurons_fund_participation: None,
     };
     assert_is_ok!(result.validate());
     result
