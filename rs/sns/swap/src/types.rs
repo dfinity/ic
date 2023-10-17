@@ -520,7 +520,7 @@ impl Init {
 
 impl Params {
     const MIN_SALE_DURATION_SECONDS: u64 = SECONDS_PER_DAY;
-    const MAX_SALE_DURATION_SECONDS: u64 = 90 * SECONDS_PER_DAY;
+    const MAX_SALE_DURATION_SECONDS: u64 = 14 * SECONDS_PER_DAY;
 
     pub fn validate(&self, init: &Init) -> Result<(), String> {
         if self.min_icp_e8s == 0 {
@@ -1436,7 +1436,7 @@ mod tests {
     }
 
     #[test]
-    fn sale_cannot_be_open_more_than_90_days() {
+    fn sale_cannot_be_open_more_than_14_days() {
         // Should be valid with the swap deadline set to MAX_SALE_DURATION_SECONDS from now.
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS,
@@ -1472,7 +1472,7 @@ mod tests {
     }
 
     #[test]
-    fn sale_cannot_be_open_more_than_90_days_takes_into_account_delay() {
+    fn sale_cannot_be_open_more_than_14_days_takes_into_account_delay() {
         // Would normally be invalid with MAX_SALE_DURATION_SECONDS + 1 second, but 1 second
         // of sale_delay makes the real period only MAX_SALE_DURATION_SECONDS, which is allowed.
         let params = Params {
