@@ -39,7 +39,7 @@ use ic_tests::driver::universal_vm::DeployedUniversalVm;
 use ic_tests::driver::universal_vm::UniversalVm;
 use ic_tests::driver::{
     boundary_node::BoundaryNode,
-    ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
@@ -164,6 +164,11 @@ pub fn setup(env: TestEnv) {
     let env_clone = env.clone();
     let prometheus_thread = std::thread::spawn(move || {
         PrometheusVm::default()
+            .with_vm_resources(VmResources {
+                vcpus: Some(NrOfVCPUs::new(32)),
+                memory_kibibytes: Some(AmountOfMemoryKiB::new(125000000)), // ~128 GiB
+                boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+            })
             .start(&env_clone)
             .expect("Failed to start prometheus VM");
     });
@@ -190,12 +195,12 @@ pub fn setup(env: TestEnv) {
         tx_aux_node.send(deployed_universal_vm).unwrap();
     });
 
-    prometheus_thread.join().unwrap();
-    env.sync_with_prometheus();
-
     nns_state_thread
         .join()
         .unwrap_or_else(|e| std::panic::resume_unwind(e));
+
+    prometheus_thread.join().unwrap();
+    env.sync_with_prometheus_by_name(RECOVERED_NNS);
 }
 
 fn setup_recovered_nns(
