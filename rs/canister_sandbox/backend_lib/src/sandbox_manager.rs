@@ -333,11 +333,13 @@ impl SandboxManager {
             wasm_id,
         );
         let deserialization_timer = Instant::now();
-        let module = self.embedder.deserialize_module(serialized_module);
-        let cache = Arc::new(EmbedderCache::new(module.clone()));
+        let instance_pre = self
+            .embedder
+            .deserialize_module_and_pre_instantiate(serialized_module);
+        let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
         let deserialization_time = deserialization_timer.elapsed();
         guard.caches.insert(wasm_id, Arc::clone(&cache));
-        match module {
+        match instance_pre {
             Ok(_) => Ok((cache, deserialization_time)),
             Err(err) => Err(err),
         }
