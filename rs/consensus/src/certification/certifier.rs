@@ -725,6 +725,7 @@ mod tests {
                 add_expectations(state_manager.clone(), 1, 4);
                 let metrics_registry = MetricsRegistry::new();
                 let mut cert_pool = CertificationPoolImpl::new(
+                    replica_config.node_id,
                     pool_config,
                     ic_logger::replica_logger::no_op_logger(),
                     metrics_registry.clone(),
@@ -788,6 +789,7 @@ mod tests {
                 add_expectations(state_manager.clone(), 1, 4);
                 let metrics_registry = MetricsRegistry::new();
                 let mut cert_pool = CertificationPoolImpl::new(
+                    replica_config.node_id,
                     pool_config,
                     ic_logger::replica_logger::no_op_logger(),
                     metrics_registry.clone(),
@@ -921,6 +923,7 @@ mod tests {
             add_expectations(state_manager.clone(), 3, 5);
             let metrics_registry = MetricsRegistry::new();
             let mut cert_pool = CertificationPoolImpl::new(
+                replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
@@ -997,6 +1000,7 @@ mod tests {
             add_expectations(state_manager.clone(), 3, 5);
             let metrics_registry = MetricsRegistry::new();
             let mut cert_pool = CertificationPoolImpl::new(
+                replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
@@ -1065,6 +1069,7 @@ mod tests {
             add_expectations(state_manager.clone(), 3, 5);
             let metrics_registry = MetricsRegistry::new();
             let cert_pool = CertificationPoolImpl::new(
+                replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
@@ -1135,7 +1140,7 @@ mod tests {
                 add_expectations(state_manager.clone(), 3, 5);
                 let metrics_registry = MetricsRegistry::new();
                 let certifier = CertifierImpl::new(
-                    replica_config,
+                    replica_config.clone(),
                     membership,
                     crypto,
                     state_manager.clone(),
@@ -1144,6 +1149,7 @@ mod tests {
                     log,
                 );
                 let mut cert_pool = CertificationPoolImpl::new(
+                    replica_config.node_id,
                     pool_config,
                     ic_logger::replica_logger::no_op_logger(),
                     metrics_registry,
@@ -1248,6 +1254,7 @@ mod tests {
             add_expectations(state_manager.clone(), 4, 5);
             let metrics_registry = MetricsRegistry::new();
             let mut cert_pool = CertificationPoolImpl::new(
+                replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),

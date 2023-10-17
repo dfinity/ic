@@ -177,6 +177,7 @@ impl ConsensusDependencies {
         let metrics_registry = MetricsRegistry::new();
 
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new_from_cup_without_bytes(
+            replica_config.node_id,
             replica_config.subnet_id,
             cup,
             pool_config.clone(),

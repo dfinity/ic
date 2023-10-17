@@ -12,7 +12,7 @@ use crate::{
     IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, NodeId, PrincipalId};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
@@ -136,6 +136,7 @@ impl Step for MergeCertificationPoolsStep {
             .flat_map(|r| r.map_err(|e| warn!(self.logger, "Failed to read dir: {:?}", e)))
             .map(|dir| {
                 let pool = CertificationPoolImpl::new(
+                    NodeId::from(PrincipalId::new_node_test_id(0)),
                     ArtifactPoolConfig::new(dir.path()),
                     self.logger.clone().into(),
                     MetricsRegistry::new(),
@@ -148,6 +149,7 @@ impl Step for MergeCertificationPoolsStep {
 
         // Analyze and move full certifications
         let new_pool = CertificationPoolImpl::new(
+            NodeId::from(PrincipalId::new_node_test_id(0)),
             ArtifactPoolConfig::new(self.work_dir.join("data/ic_consensus_pool")),
             self.logger.clone().into(),
             MetricsRegistry::new(),
@@ -1068,11 +1070,13 @@ mod tests {
         let tmp = tempfile::tempdir().expect("Could not create a temp dir");
         let work_dir = tmp.path().to_path_buf();
         let pool1 = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("certifications/ip1")),
             logger.clone().into(),
             MetricsRegistry::new(),
         );
         let pool2 = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("certifications/ip2")),
             logger.clone().into(),
             MetricsRegistry::new(),
@@ -1132,6 +1136,7 @@ mod tests {
         step.exec().expect("Failed to execute step.");
 
         let new_pool = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
             logger.clone().into(),
             MetricsRegistry::new(),
@@ -1192,6 +1197,7 @@ mod tests {
         step.exec().expect("Failed to execute step.");
 
         let new_pool = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
             logger.clone().into(),
             MetricsRegistry::new(),

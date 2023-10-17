@@ -124,6 +124,7 @@ pub fn construct_ic_stack(
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
+        node_id,
         subnet_id,
         pb::CatchUpPackage::from(&catch_up_package),
         artifact_pool_config.clone(),

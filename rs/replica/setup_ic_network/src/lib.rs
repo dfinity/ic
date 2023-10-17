@@ -666,6 +666,7 @@ fn init_artifact_pools(
     let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
 
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
+        node_id,
         config,
         log.clone(),
         registry.clone(),
