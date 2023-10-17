@@ -67,32 +67,34 @@ use ic_nns_governance::{
         },
         manage_neuron_response::{self, Command as CommandResponse, MergeMaturityResponse},
         neuron::{self, DissolveState, Followees},
+        neurons_fund_snapshot::NeuronsFundNeuronPortion,
         proposal::{self, Action, ActionDesc},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         settle_community_fund_participation,
         settle_community_fund_participation::Committed,
-        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
-        swap_background_information, AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot,
-        BallotChange, BallotInfo, BallotInfoChange, CreateServiceNervousSystem,
-        DerivedProposalInformation, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceChange, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
+        settle_neurons_fund_participation_request, swap_background_information,
+        AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
+        BallotInfoChange, CreateServiceNervousSystem, DerivedProposalInformation, Empty,
+        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceChange, GovernanceError,
+        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
         ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
-        NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalChange, ProposalData,
-        ProposalDataChange,
+        NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider,
+        OpenSnsTokenSwap, Proposal, ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
         SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, SwapBackgroundInformation, Tally, TallyChange,
-        Topic, UpdateNodeProvider, Vote, WaitForQuietState, WaitForQuietStateDesc,
+        SwapBackgroundInformation, SwapParticipationLimits, Tally, TallyChange, Topic,
+        UpdateNodeProvider, Vote, WaitForQuietState, WaitForQuietStateDesc,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{
-    self as sns_swap_pb, CfNeuron, NeuronBasketConstructionParameters, Params,
+    self as sns_swap_pb, LinearScalingCoefficient, NeuronBasketConstructionParameters,
+    NeuronsFundParticipationConstraints, Params,
 };
 use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, ListDeployedSnsesRequest,
@@ -113,6 +115,9 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+
+#[cfg(not(feature = "test"))]
+use ic_sns_swap::pb::v1::CfNeuron;
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
@@ -11186,6 +11191,41 @@ struct MockEnvironment<'a> {
     call_canister_method_min_duration: Option<std::time::Duration>,
 }
 
+fn format_call_request(c: &ExpectedCallCanisterMethodCallArguments) -> String {
+    match c.method_name {
+        "deploy_new_sns" => {
+            format!("{:?}", Decode!(&c.request, DeployNewSnsRequest))
+        }
+        "open" => {
+            format!("{:?}", Decode!(&c.request, sns_swap_pb::OpenRequest))
+        }
+        _ => {
+            format!("<{} undecoded bytes>{:?}", c.request.len(), c.request)
+        }
+    }
+}
+
+#[inline]
+fn assert_calls_eq(
+    observed: &ExpectedCallCanisterMethodCallArguments,
+    expected: &ExpectedCallCanisterMethodCallArguments,
+) {
+    assert_eq!(
+        (observed.target, observed.method_name),
+        (expected.target, expected.method_name),
+        "unexpected call to {}.{}",
+        observed.target,
+        observed.method_name
+    );
+    assert_eq!(
+        format_call_request(observed),
+        format_call_request(expected),
+        "unexpected call request to {}.{}",
+        observed.target,
+        observed.method_name
+    );
+}
+
 #[async_trait]
 impl Environment for MockEnvironment<'_> {
     async fn call_canister_method(
@@ -11194,7 +11234,7 @@ impl Environment for MockEnvironment<'_> {
         method_name: &str,
         request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        let (expected_arguments, result) = self
+        let (observed_call, result) = self
             .expected_call_canister_method_calls
             .lock()
             .unwrap()
@@ -11211,31 +11251,12 @@ impl Environment for MockEnvironment<'_> {
                 );
             });
 
-        assert_eq!(
-            ExpectedCallCanisterMethodCallArguments {
-                target,
-                method_name,
-                request: request.clone(),
-            },
-            expected_arguments,
-            "Decoded actual request:\n{}, Decoded expected request:\n {}",
-            match method_name {
-                "open" => format!("{:#?}", Decode!(&request, sns_swap_pb::OpenRequest)),
-                "deploy_new_sns" => format!("{:#?}", Decode!(&request, DeployNewSnsRequest)),
-                _ => "???".to_string(),
-            },
-            match method_name {
-                "open" => format!(
-                    "{:#?}",
-                    Decode!(&expected_arguments.request, sns_swap_pb::OpenRequest)
-                ),
-                "deploy_new_sns" => format!(
-                    "{:#?}",
-                    Decode!(&expected_arguments.request, DeployNewSnsRequest)
-                ),
-                _ => "???".to_string(),
-            },
-        );
+        let expected_call = ExpectedCallCanisterMethodCallArguments {
+            target,
+            method_name,
+            request: request.clone(),
+        };
+        assert_calls_eq(&observed_call, &expected_call);
 
         // If requested, use the .await operator.
         if let Some(call_canister_method_min_duration) = self.call_canister_method_min_duration {
@@ -11332,9 +11353,9 @@ lazy_static! {
         sale_delay_seconds: None,
     };
 
-    // Collectively, the Community Fund neurons have 100e-8 ICP in maturity.
+    // Collectively, the Neurons' Fund neurons have 100e-8 ICP in maturity.
     // Neurons 1 and 2 belong to principal(1); neuron 3 belongs to principal(2).
-    // Neuron 4 also belongs to principal(1), but is NOT a CF neuron.
+    // Neuron 4 also belongs to principal(1), but is NOT a Neurons' Fund neuron.
     static ref SWAP_ID_TO_NEURON: BTreeMap<u64, Neuron> = {
         let neuron_base = Neuron {
             cached_neuron_stake_e8s: 100_000 * E8,
@@ -11400,10 +11421,379 @@ lazy_static! {
                 ).unwrap()],
             },
         ];
-
         result.sort_by(|p1, p2| p1.hotkey_principal.cmp(&p2.hotkey_principal));
         result
     };
+
+    static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
+        ideal_matched_participation_function: Some(
+            IdealMatchedParticipationFunction {
+                serialized_representation: Some(
+                    "<SimpleLinearFunction>".to_string(),
+                ),
+            },
+        ),
+        neurons_fund_reserves: Some(
+            NeuronsFundSnapshot {
+                neurons_fund_neuron_portions: vec![
+                    NeuronsFundNeuronPortion {
+                        nns_neuron_id: Some(
+                            NeuronId {
+                                id: 1,
+                            },
+                        ),
+                        amount_icp_e8s: Some(
+                            600000000,
+                        ),
+                        maturity_equivalent_icp_e8s: Some(
+                            6000000000,
+                        ),
+                        hotkey_principal: Some(principal(1)),
+                        is_capped: Some(
+                            false,
+                        ),
+                    },
+                    NeuronsFundNeuronPortion {
+                        nns_neuron_id: Some(
+                            NeuronId {
+                                id: 2,
+                            },
+                        ),
+                        amount_icp_e8s: Some(
+                            100000000,
+                        ),
+                        maturity_equivalent_icp_e8s: Some(
+                            1000000000,
+                        ),
+                        hotkey_principal: Some(principal(1)),
+                        is_capped: Some(
+                            false,
+                        ),
+                    },
+                    NeuronsFundNeuronPortion {
+                        nns_neuron_id: Some(
+                            NeuronId {
+                                id: 3,
+                            },
+                        ),
+                        amount_icp_e8s: Some(
+                            300000000,
+                        ),
+                        maturity_equivalent_icp_e8s: Some(
+                            3000000000,
+                        ),
+                        hotkey_principal: Some(principal(2)),
+                        is_capped: Some(
+                            false,
+                        ),
+                    },
+                ],
+            },
+        ),
+        swap_participation_limits: Some(
+            SwapParticipationLimits {
+                min_direct_participation_icp_e8s: Some(
+                    6200000000,
+                ),
+                max_direct_participation_icp_e8s: Some(
+                    18900000000,
+                ),
+                min_participant_icp_e8s: Some(
+                    100000000,
+                ),
+                max_participant_icp_e8s: Some(
+                    10000000000,
+                ),
+            },
+        ),
+        direct_participation_icp_e8s: Some(
+            18900000000,
+        ),
+        total_maturity_equivalent_icp_e8s: Some(
+            10000000000,
+        ),
+        max_neurons_fund_swap_participation_icp_e8s: Some(
+            1000000000,
+        ),
+        intended_neurons_fund_participation_icp_e8s: Some(
+            1000000000,
+        ),
+    });
+
+    static ref INITIAL_NEURONS_FUND_PARTICIPATION_ABORT: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
+        ideal_matched_participation_function: Some(
+            IdealMatchedParticipationFunction {
+                serialized_representation: Some(
+                    "<SimpleLinearFunction>".to_string(),
+                ),
+            },
+        ),
+        neurons_fund_reserves: Some(
+            NeuronsFundSnapshot {
+                neurons_fund_neuron_portions: vec![],
+            },
+        ),
+        swap_participation_limits: Some(
+            SwapParticipationLimits {
+                min_direct_participation_icp_e8s: Some(
+                    6200000000,
+                ),
+                max_direct_participation_icp_e8s: Some(
+                    18900000000,
+                ),
+                min_participant_icp_e8s: Some(
+                    100000000,
+                ),
+                max_participant_icp_e8s: Some(
+                    10000000000,
+                ),
+            },
+        ),
+        direct_participation_icp_e8s: Some(
+            0,
+        ),
+        total_maturity_equivalent_icp_e8s: Some(
+            10000000000,
+        ),
+        max_neurons_fund_swap_participation_icp_e8s: Some(
+            1000000000,
+        ),
+        intended_neurons_fund_participation_icp_e8s: Some(
+            0,
+        ),
+    });
+
+    static ref INITIAL_NEURONS_FUND_PARTICIPATION_COMMIT: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
+        ideal_matched_participation_function: Some(
+            IdealMatchedParticipationFunction {
+                serialized_representation: Some(
+                    "<SimpleLinearFunction>".to_string(),
+                ),
+            },
+        ),
+        neurons_fund_reserves: Some(
+            NeuronsFundSnapshot {
+                neurons_fund_neuron_portions: vec![
+                    NeuronsFundNeuronPortion {
+                        nns_neuron_id: Some(
+                            NeuronId {
+                                id: 1,
+                            },
+                        ),
+                        amount_icp_e8s: Some(
+                            300000000,
+                        ),
+                        maturity_equivalent_icp_e8s: Some(
+                            6000000000,
+                        ),
+                        hotkey_principal: Some(principal(1)),
+                        is_capped: Some(
+                            false,
+                        ),
+                    },
+                    NeuronsFundNeuronPortion {
+                        nns_neuron_id: Some(
+                            NeuronId {
+                                id: 3,
+                            },
+                        ),
+                        amount_icp_e8s: Some(
+                            150000000,
+                        ),
+                        maturity_equivalent_icp_e8s: Some(
+                            3000000000,
+                        ),
+                        hotkey_principal: Some(principal(2)),
+                        is_capped: Some(
+                            false,
+                        ),
+                    },
+                ],
+            },
+        ),
+        swap_participation_limits: Some(
+            SwapParticipationLimits {
+                min_direct_participation_icp_e8s: Some(
+                    6200000000,
+                ),
+                max_direct_participation_icp_e8s: Some(
+                    18900000000,
+                ),
+                min_participant_icp_e8s: Some(
+                    100000000,
+                ),
+                max_participant_icp_e8s: Some(
+                    10000000000,
+                ),
+            },
+        ),
+        direct_participation_icp_e8s: Some(
+            500000000,
+        ),
+        total_maturity_equivalent_icp_e8s: Some(
+            10000000000,
+        ),
+        max_neurons_fund_swap_participation_icp_e8s: Some(
+            1000000000,
+        ),
+        intended_neurons_fund_participation_icp_e8s: Some(
+            500000000,
+        ),
+    });
+
+    static ref NEURONS_FUND_FULL_REFUNDS: Option<NeuronsFundSnapshot> = Some(NeuronsFundSnapshot {
+        neurons_fund_neuron_portions: vec![
+            NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(
+                    NeuronId {
+                        id: 1,
+                    },
+                ),
+                amount_icp_e8s: Some(
+                    600000000,
+                ),
+                maturity_equivalent_icp_e8s: Some(
+                    6000000000,
+                ),
+                hotkey_principal: Some(principal(1)),
+                is_capped: Some(
+                    false,
+                ),
+            },
+            NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(
+                    NeuronId {
+                        id: 2,
+                    },
+                ),
+                amount_icp_e8s: Some(
+                    100000000,
+                ),
+                maturity_equivalent_icp_e8s: Some(
+                    1000000000,
+                ),
+                hotkey_principal: Some(principal(1)),
+                is_capped: Some(
+                    false,
+                ),
+            },
+            NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(
+                    NeuronId {
+                        id: 3,
+                    },
+                ),
+                amount_icp_e8s: Some(
+                    300000000,
+                ),
+                maturity_equivalent_icp_e8s: Some(
+                    3000000000,
+                ),
+                hotkey_principal: Some(principal(2)),
+                is_capped: Some(
+                    false,
+                ),
+            },
+        ],
+    });
+
+    static ref NEURONS_FUND_PARTIAL_REFUNDS: Option<NeuronsFundSnapshot> = Some(NeuronsFundSnapshot {
+        neurons_fund_neuron_portions: vec![
+            NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(
+                    NeuronId {
+                        id: 1,
+                    },
+                ),
+                amount_icp_e8s: Some(
+                    300000000,
+                ),
+                maturity_equivalent_icp_e8s: Some(
+                    6000000000,
+                ),
+                hotkey_principal: Some(principal(1)),
+                is_capped: Some(
+                    false,
+                ),
+            },
+            NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(
+                    NeuronId {
+                        id: 2,
+                    },
+                ),
+                amount_icp_e8s: Some(
+                    100000000,
+                ),
+                maturity_equivalent_icp_e8s: Some(
+                    1000000000,
+                ),
+                hotkey_principal: Some(principal(1)),
+                is_capped: Some(
+                    false,
+                ),
+            },
+            NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(
+                    NeuronId {
+                        id: 3,
+                    },
+                ),
+                amount_icp_e8s: Some(
+                    150000000,
+                ),
+                maturity_equivalent_icp_e8s: Some(
+                    3000000000,
+                ),
+                hotkey_principal: Some(principal(2)),
+                is_capped: Some(
+                    false,
+                ),
+            },
+        ],
+    });
+
+    static ref NEURONS_FUND_DATA_BEFORE_SETTLE: Option<NeuronsFundData> = Some(NeuronsFundData {
+        initial_neurons_fund_participation: INITIAL_NEURONS_FUND_PARTICIPATION.clone(),
+        final_neurons_fund_participation: None,
+        neurons_fund_refunds: None,
+    });
+
+    static ref NEURONS_FUND_DATA_WITH_EARLY_REFUNDS: Option<NeuronsFundData> = Some(NeuronsFundData {
+        initial_neurons_fund_participation: INITIAL_NEURONS_FUND_PARTICIPATION.clone(),
+        final_neurons_fund_participation: None,
+        neurons_fund_refunds: NEURONS_FUND_FULL_REFUNDS.clone(),
+    });
+
+    static ref NEURONS_FUND_DATA_AFTER_SETTLE_ABORT: Option<NeuronsFundData> = Some(NeuronsFundData {
+        initial_neurons_fund_participation: INITIAL_NEURONS_FUND_PARTICIPATION.clone(),
+        final_neurons_fund_participation: INITIAL_NEURONS_FUND_PARTICIPATION_ABORT.clone(),
+        neurons_fund_refunds: NEURONS_FUND_FULL_REFUNDS.clone(),
+    });
+
+    static ref NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT: Option<NeuronsFundData> = Some(NeuronsFundData {
+        initial_neurons_fund_participation: INITIAL_NEURONS_FUND_PARTICIPATION.clone(),
+        final_neurons_fund_participation: INITIAL_NEURONS_FUND_PARTICIPATION_COMMIT.clone(),
+        neurons_fund_refunds: NEURONS_FUND_PARTIAL_REFUNDS.clone(),
+    });
+
+    static ref NEURONS_FUND_PARTICIPATION_CONSTRAINTS: Option<NeuronsFundParticipationConstraints> = Some(
+        // Will need to be fixed after NNS1-2591 is resolved. See
+        // `NeuronsFundParticipation::compute_constraints` in rs/nns/governance/src/neurons_fund.rs
+        NeuronsFundParticipationConstraints {
+            min_direct_participation_threshold_icp_e8s: Some(6200000000),
+            max_neurons_fund_participation_icp_e8s: Some(1000000000),
+            coefficient_intervals: vec![
+                LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(0),
+                    to_direct_participation_icp_e8s: Some(1000000000),
+                    slope_numerator: Some(1),
+                    slope_denominator: Some(1),
+                    intercept_icp_e8s: Some(0),
+                }
+            ]
+        }
+    );
 
     static ref EXPECTED_LIST_DEPLOYED_SNSES_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {
@@ -11556,16 +11946,41 @@ lazy_static! {
         ..Default::default()
     };
 
+    static ref LEGACY_SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
+        current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+         create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+         proposal_id: 1,
+         neurons_fund_participants: CF_PARTICIPANTS.clone(),
+         random_swap_start_time: GlobalTimeOfDay {
+             seconds_after_utc_midnight: Some(RANDOM_U64)
+         },
+         neurons_fund_participation_constraints: None,
+    }).unwrap();
+
     static ref SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
        current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
         create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
         proposal_id: 1,
-        neurons_fund_participants: CF_PARTICIPANTS.clone(),
+        neurons_fund_participants: vec![],
         random_swap_start_time: GlobalTimeOfDay {
             seconds_after_utc_midnight: Some(RANDOM_U64)
         },
-        neurons_fund_participation_constraints: None, // TODO[NNS1-2558]
+        neurons_fund_participation_constraints: NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
     }).unwrap();
+
+    static ref LEGACY_EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
+        ExpectedCallCanisterMethodCallArguments {
+            target: SNS_WASM_CANISTER_ID,
+            method_name: "deploy_new_sns",
+            request: Encode!(&DeployNewSnsRequest {
+                sns_init_payload: Some(LEGACY_SNS_INIT_PAYLOAD.clone())
+            }).unwrap(),
+        },
+        Ok(Encode!(&DeployNewSnsResponse {
+            error: None,
+            ..Default::default()
+        }).unwrap())
+    );
 
     static ref EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {
@@ -11851,6 +12266,7 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
 /// Multiple calls to settle_community_fund should be idempotent.
 ///
 /// TODO[NNS1-2632]: Remove this test once `settle_community_fund_participation` is deprecated.
+#[cfg(not(feature = "test"))]
 #[tokio::test]
 async fn test_settle_community_fund_is_idempotent() {
     use settle_community_fund_participation::Result;
@@ -12230,16 +12646,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
         )
         .await;
 
-    assert!(
-        matches!(
-            response,
-            SettleNeuronsFundParticipationResponse {
-                result: Some(settle_neurons_fund_participation_response::Result::Err(_))
-            }
-        ),
-        "{:?}",
-        response
-    );
+    assert!(response.is_err(), "Expected error, got {:?}", response);
 
     // Get the treasury account's balance again
     let sns_governance_treasury_balance_after_commitment = driver
@@ -12262,6 +12669,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
     );
 }
 
+#[cfg(not(feature = "test"))]
 fn assert_neurons_fund_decremented(
     gov: &Governance,
     nf_participants: Vec<sns_swap_pb::CfParticipant>,
@@ -12307,6 +12715,7 @@ fn assert_neurons_fund_unchanged(gov: &Governance, original_state: BTreeMap<u64,
 }
 
 /// TODO[NNS1-2632]: Remove this test once `settle_community_fund_participation` is deprecated.
+#[cfg(not(feature = "test"))]
 #[tokio::test]
 async fn test_create_service_nervous_system_settles_community_fund_commit() {
     // Step 1: Prepare the world.
@@ -12319,7 +12728,7 @@ async fn test_create_service_nervous_system_settles_community_fund_commit() {
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
         [
             // Called during proposal execution
-            EXPECTED_DEPLOY_NEW_SNS_CALL.clone(),
+            LEGACY_EXPECTED_DEPLOY_NEW_SNS_CALL.clone(),
             // Called during settlement
             EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
         ]
@@ -12509,7 +12918,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
         "{:#?}",
         proposal
     );
-    assert_eq!(proposal.cf_participants, *CF_PARTICIPANTS);
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Open as i32)
@@ -12518,8 +12926,31 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    // Assert all of the maturity has been decremented and is held in escrow
-    assert_neurons_fund_decremented(&gov, CF_PARTICIPANTS.clone(), SWAP_ID_TO_NEURON.clone());
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
+
+    // Assert some of the maturity has been decremented and is held in escrow
+    let reserved_neurons_portions = NEURONS_FUND_DATA_BEFORE_SETTLE
+        .as_ref()
+        .unwrap()
+        .initial_neurons_fund_participation
+        .as_ref()
+        .unwrap()
+        .neurons_fund_reserves
+        .as_ref()
+        .unwrap()
+        .neurons_fund_neuron_portions
+        .clone();
+    for portion in reserved_neurons_portions {
+        let current_neuron = gov
+            .neuron_store
+            .with_neuron(&portion.nns_neuron_id.unwrap(), |neuron| neuron.clone())
+            .unwrap();
+        assert!(
+            current_neuron.maturity_e8s_equivalent + portion.amount_icp_e8s.unwrap()
+                == portion.maturity_equivalent_icp_e8s.unwrap()
+        );
+    }
 
     // Cannot be purged yet, because Neurons' Fund participation has not been settled yet.
     let proposal = ProposalData {
@@ -12544,18 +12975,13 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
                     nns_proposal_id: Some(proposal.id.unwrap().id),
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-                        total_direct_participation_icp_e8s: Some(100_000 * E8),
-                        total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
+                        total_direct_participation_icp_e8s: Some(5 * E8),
+                        total_neurons_fund_participation_icp_e8s: Some(5 * E8),
                     })),
                 },
             )
-            .await
-            .result
-            .unwrap();
-        assert!(matches!(
-            response,
-            settle_neurons_fund_participation_response::Result::Ok(_)
-        ));
+            .await;
+        assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
 
         // Re-inspect the proposal.
         let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
@@ -12578,6 +13004,11 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
             Some(sns_swap_pb::Lifecycle::Committed as i32),
         );
         assert!(proposal.can_be_purged(now, voting_period_seconds));
+
+        assert_eq!(
+            proposal.neurons_fund_data,
+            *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
+        );
     }
 
     // Step 3.2: Make sure expected canister call(s) take place.
@@ -12592,6 +13023,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
 }
 
 /// TODO[NNS1-2632]: Remove this test once `settle_community_fund_participation` is deprecated.
+#[cfg(not(feature = "test"))]
 #[tokio::test]
 async fn test_create_service_nervous_system_settles_community_fund_abort() {
     // Step 1: Prepare the world.
@@ -12604,7 +13036,7 @@ async fn test_create_service_nervous_system_settles_community_fund_abort() {
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
         [
             // Called during proposal execution
-            EXPECTED_DEPLOY_NEW_SNS_CALL.clone(),
+            LEGACY_EXPECTED_DEPLOY_NEW_SNS_CALL.clone(),
             // Called during settlement
             EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
         ]
@@ -12792,7 +13224,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         "{:#?}",
         proposal
     );
-    assert_eq!(proposal.cf_participants, *CF_PARTICIPANTS);
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Open as i32)
@@ -12801,8 +13232,31 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    // Assert all of the maturity has been decremented and is held in escrow
-    assert_neurons_fund_decremented(&gov, CF_PARTICIPANTS.clone(), SWAP_ID_TO_NEURON.clone());
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
+
+    // Assert some of the maturity has been decremented and is held in escrow
+    let reserved_neurons_portions = NEURONS_FUND_DATA_BEFORE_SETTLE
+        .as_ref()
+        .unwrap()
+        .initial_neurons_fund_participation
+        .as_ref()
+        .unwrap()
+        .neurons_fund_reserves
+        .as_ref()
+        .unwrap()
+        .neurons_fund_neuron_portions
+        .clone();
+    for portion in reserved_neurons_portions {
+        let current_neuron = gov
+            .neuron_store
+            .with_neuron(&portion.nns_neuron_id.unwrap(), |neuron| neuron.clone())
+            .unwrap();
+        assert!(
+            current_neuron.maturity_e8s_equivalent + portion.amount_icp_e8s.unwrap()
+                == portion.maturity_equivalent_icp_e8s.unwrap()
+        );
+    }
 
     // Cannot be purged yet, because Community Fund participation has not been settled yet.
     let proposal = ProposalData {
@@ -12828,13 +13282,9 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
                     result: Some(Result::Aborted(Aborted {})),
                 },
             )
-            .await
-            .result
-            .unwrap();
-        assert!(matches!(
-            response,
-            settle_neurons_fund_participation_response::Result::Ok(_)
-        ));
+            .await;
+
+        assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
 
         // Re-inspect the proposal.
         let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
@@ -12859,6 +13309,11 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         assert!(proposal.can_be_purged(now, voting_period_seconds));
 
         assert_neurons_fund_unchanged(&gov, SWAP_ID_TO_NEURON.clone());
+
+        assert_eq!(
+            proposal.neurons_fund_data,
+            *NEURONS_FUND_DATA_AFTER_SETTLE_ABORT
+        );
     }
 
     // Step 3.2: Make sure expected canister call(s) take place.
@@ -12941,9 +13396,13 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
         "{:#?}",
         proposal.proposal.as_ref().unwrap()
     );
-    assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
-    assert_eq!(proposal.cf_participants, *CF_PARTICIPANTS);
     assert_eq!(proposal.sns_token_swap_lifecycle, None);
+    assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(
+        proposal.neurons_fund_data,
+        *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
+    );
     assert_ne!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     let failure_reason = proposal.failure_reason.clone().unwrap();
     assert_eq!(
@@ -12973,6 +13432,7 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
 }
 
 /// TODO[NNS1-2632]: Remove this test once `settle_community_fund_participation` is deprecated.
+#[cfg(not(feature = "test"))]
 #[tokio::test]
 async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_system() {
     use settle_community_fund_participation::Result;
@@ -13145,16 +13605,7 @@ async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_sys
         .await;
 
     // Assert that the call did not fail.
-    assert!(
-        matches!(
-            response,
-            SettleNeuronsFundParticipationResponse {
-                result: Some(settle_neurons_fund_participation_response::Result::Ok(_))
-            }
-        ),
-        "{:?}",
-        response
-    );
+    assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
 
     // Get the treasury account's balance again
     let sns_governance_treasury_balance_after_second_settle_call = driver
@@ -13265,20 +13716,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         )
         .await;
 
-    assert!(
-        matches!(
-            response,
-            SettleNeuronsFundParticipationResponse {
-                result: Some(settle_neurons_fund_participation_response::Result::Ok(
-                    settle_neurons_fund_participation_response::Ok {
-                        neurons_fund_neurons: _
-                    }
-                ))
-            }
-        ),
-        "{:?}",
-        response
-    );
+    assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
 
     // Get the treasury account's balance again
     let sns_governance_treasury_balance_after_commitment = driver
@@ -13317,20 +13755,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         )
         .await;
 
-    assert!(
-        matches!(
-            response,
-            SettleNeuronsFundParticipationResponse {
-                result: Some(settle_neurons_fund_participation_response::Result::Ok(
-                    settle_neurons_fund_participation_response::Ok {
-                        neurons_fund_neurons: _
-                    }
-                ))
-            }
-        ),
-        "{:?}",
-        response
-    );
+    assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
 
     // Get the treasury account's balance again
     let sns_governance_treasury_balance_after_second_settle_call = driver

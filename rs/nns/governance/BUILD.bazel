@@ -25,7 +25,6 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/governance",
-    "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/ledger_core",
@@ -65,14 +64,16 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/init",
+    "//rs/nns/constants",
     "//rs/nns/sns-wasm",
+    "//rs/sns/init",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/init:init--test_feature",
+    "//rs/nns/constants:constants--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ]
 
@@ -248,6 +249,18 @@ rust_test(
     crate = ":governance",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
+rust_test(
+    name = "governance_test--test_feature",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate = ":governance--test_feature",
+    crate_features = ["test"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
 )
