@@ -83,6 +83,7 @@ function fetch_mgmt_mac() {
 
 function main() {
     # Establish run order
+    mgmt_mac=""
     read_variables
     if [ "${mgmt_mac}" == "" ]; then
         fetch_mgmt_mac
