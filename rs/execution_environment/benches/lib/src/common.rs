@@ -105,6 +105,7 @@ where
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation =
         MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
+    canister_state.system_state.freeze_threshold = 0.into();
 
     // Create call context and callback
     let call_origin =
