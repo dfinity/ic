@@ -19,6 +19,7 @@ pub struct ExecutedCreateServiceNervousSystemProposal {
     pub proposal_id: u64,
     pub neurons_fund_participants: Vec<CfParticipant>,
     pub random_swap_start_time: GlobalTimeOfDay,
+    /// Information about the Neurons' Fund participation needed by the Swap canister.
     pub neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
 }
 
@@ -482,7 +483,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
         if !defects.is_empty() {
             return Err(format!(
-                "Failed to convert proposal to SnsInitPayload:\n{}",
+                "Failed to convert CreateServiceNervousSystem proposal to SnsInitPayload:\n{}",
                 defects.join("\n"),
             ));
         }

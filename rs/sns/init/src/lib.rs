@@ -11,7 +11,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IS_MATCHED_FUNDING_ENABLED,
+    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
 use ic_sns_governance::{
@@ -36,6 +36,7 @@ use pb::v1::DappCanisters;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
+    num::NonZeroU64,
     str::FromStr,
     string::ToString,
 };
@@ -131,7 +132,7 @@ enum MaxNeuronsFundParticipationValidationError {
     Unspecified,
     // Does not make sense if no SNS neurons can be created.
     BelowSingleParticipationLimit {
-        max_neurons_fund_participation_icp_e8s: u64,
+        max_neurons_fund_participation_icp_e8s: NonZeroU64,
         min_participant_icp_e8s: u64,
     },
     // The Neuron's Fund should never provide more funds than can be contributed directly.
@@ -153,7 +154,7 @@ impl ToString for MaxNeuronsFundParticipationValidationError {
                 min_participant_icp_e8s,
             } => {
                 format!(
-                    "{prefix}max_neurons_fund_participation_icp_e8s ({}) \
+                    "{prefix}max_neurons_fund_participation_icp_e8s ({} > 0) \
                     should be greater than or equal min_participant_icp_e8s ({}).",
                     max_neurons_fund_participation_icp_e8s, min_participant_icp_e8s,
                 )
@@ -220,7 +221,6 @@ impl From<LinearScalingCoefficientVecValidationError> for Result<(), String> {
 }
 
 enum NeuronsFundParticipationConstraintsValidationError {
-    FeatureDisabled,
     SetBeforeProposalExecution,
     RelatedFieldUnspecified(String),
     MinDirectParticipationThresholdValidationError(MinDirectParticipationThresholdValidationError),
@@ -232,12 +232,6 @@ impl ToString for NeuronsFundParticipationConstraintsValidationError {
     fn to_string(&self) -> String {
         let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
         match self {
-            Self::FeatureDisabled => {
-                format!(
-                    "{prefix}Error: field SnsInitPayload.neurons_fund_participation_constraints is \
-                    not supported yet."
-                )
-            }
             Self::SetBeforeProposalExecution => {
                 format!(
                     "{prefix}neurons_fund_participation_constraints must not be set before \
@@ -1967,11 +1961,6 @@ impl SnsInitPayload {
         &self,
         is_pre_execution: bool,
     ) -> Result<(), String> {
-        // Currently disabled on mainnet.
-        if !IS_MATCHED_FUNDING_ENABLED && self.neurons_fund_participation_constraints.is_some() {
-            return NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into();
-        }
-
         // This field must be set by NNS Governance at proposal execution time, not before.
         // This will also catch the situation in which we are in the legacy (pre-1-prop) flow,
         // in which the neurons_fund_participation_constraints field must not be set.
@@ -2036,7 +2025,11 @@ impl SnsInitPayload {
                 )
                 .to_string()
             })?;
-            if max_neurons_fund_participation_icp_e8s < min_participant_icp_e8s {
+            if 0 < max_neurons_fund_participation_icp_e8s
+                && max_neurons_fund_participation_icp_e8s < min_participant_icp_e8s
+            {
+                let max_neurons_fund_participation_icp_e8s =
+                    NonZeroU64::new(max_neurons_fund_participation_icp_e8s).unwrap();
                 return NeuronsFundParticipationConstraintsValidationError::MaxNeuronsFundParticipationValidationError(
                     MaxNeuronsFundParticipationValidationError::BelowSingleParticipationLimit {
                         max_neurons_fund_participation_icp_e8s,
@@ -2216,10 +2209,9 @@ mod test {
     use ic_sns_governance::{
         governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
     };
-    #[cfg(feature = "test")]
-    use ic_sns_swap::pb::v1::LinearScalingCoefficient;
     use ic_sns_swap::pb::v1::{
-        NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
+        LinearScalingCoefficient, NeuronBasketConstructionParameters,
+        NeuronsFundParticipationConstraints,
     };
     use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
@@ -3544,58 +3536,6 @@ mod test {
         }
     }
 
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_mainnet_legacy_flow() {
-        let sns_init_payload = SnsInitPayload {
-            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
-                min_direct_participation_threshold_icp_e8s: Some(1_000),
-                max_neurons_fund_participation_icp_e8s: Some(10_000),
-                coefficient_intervals: vec![],
-            }),
-            ..SnsInitPayload::with_valid_legacy_values_for_testing()
-        };
-        assert_eq!(
-            sns_init_payload.validate_legacy_init().map(|_| ()),
-            NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into(),
-        );
-    }
-
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_mainnet_pre_execution() {
-        let sns_init_payload = SnsInitPayload {
-            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
-                min_direct_participation_threshold_icp_e8s: Some(1_000),
-                max_neurons_fund_participation_icp_e8s: Some(10_000),
-                coefficient_intervals: vec![],
-            }),
-            ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
-        };
-        assert_eq!(
-            sns_init_payload.validate_pre_execution().map(|_| ()),
-            NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into(),
-        );
-    }
-
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_mainnet_post_execution() {
-        let sns_init_payload = SnsInitPayload {
-            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
-                min_direct_participation_threshold_icp_e8s: Some(1_000),
-                max_neurons_fund_participation_icp_e8s: Some(10_000),
-                coefficient_intervals: vec![],
-            }),
-            ..SnsInitPayload::with_valid_values_for_testing()
-        };
-        assert_eq!(
-            sns_init_payload.validate_post_execution().map(|_| ()),
-            NeuronsFundParticipationConstraintsValidationError::FeatureDisabled.into(),
-        );
-    }
-
-    #[cfg(feature = "test")]
     #[test]
     fn test_neurons_fund_participation_constraints_validation_for_legacy_flow() {
         // The concrete values are irrelevant, as we just want to make sure that the validation
@@ -3614,7 +3554,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_neurons_fund_participation_constraints_validation_for_pre_execution() {
         let sns_init_payload = SnsInitPayload {
@@ -3631,7 +3570,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_neurons_fund_participation_constraints_validation_for_post_execution() {
         let sns_init_payload = SnsInitPayload {

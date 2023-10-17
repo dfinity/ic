@@ -307,6 +307,8 @@ impl SnsInitializationFlowTestSetup {
     }
 }
 
+/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
+#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation() {
     // Step 0: Setup the world and record its state
@@ -571,6 +573,8 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     assert!(at_least_one_sns_neuron_is_nf_controlled);
 }
 
+/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
+#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_success_without_neurons_fund_participation() {
     // Step 0: Setup the world and record its state
@@ -1021,6 +1025,8 @@ fn test_one_proposal_sns_initialization_swap_cannot_be_opened_by_legacy_method()
         .contains("Invalid lifecycle state to open the swap: must be Pending, was Adopted"));
 }
 
+/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
+#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dapps() {
     // Step 0: Setup the world and record its state

@@ -50,7 +50,7 @@ pub async fn finalize_committed_swap_and_check_success(
             .unwrap()
     };
 
-    assert_eq!(expected_derived_swap_state, derived_swap_state);
+    assert_eq!(derived_swap_state, expected_derived_swap_state);
 
     info!(
         log,

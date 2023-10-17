@@ -1292,15 +1292,35 @@ message ProposalData {
   DerivedProposalInformation derived_proposal_information = 20;
 
   // This structure contains data for settling the Neurons' Fund participation at the end of a swap.
-  // This data is however not sufficient, as settling a swap requires knowing the ultimate result
-  // (Aborted or Committed) and, if Committed, the overall direct participation amount. For more
-  // details, refer to `SettleNeuronsFundParticipationRequest`.
   //
   // TODO[NNS1-2566]: deprecate `original_total_community_fund_maturity_e8s_equivalent` and
   // `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
-  optional NeuronsFundParticipation neurons_fund_participation = 21;
+  optional NeuronsFundData neurons_fund_data = 21;
 }
 
+// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
+message NeuronsFundData {
+  // Initial Neurons' Fund reserves computed at the time of execution of the proposal through which
+  // the SNS swap is created.
+  optional NeuronsFundParticipation initial_neurons_fund_participation = 1;
+
+  // Final Neurons' Fund participation computed at the time of swap finalization. This field should
+  // remain unspecified either (1) until the `settle_neurons_fund_participation` function is called
+  // or (2) until the NNS handles an error at the SNS deployment stage.
+  //
+  // If specified, this must be a subset of `initial_neurons_fund_participation`.
+  optional NeuronsFundParticipation final_neurons_fund_participation = 2;
+
+  // Refunds for any leftover Neurons' Fund maturity that could not be used to participate in
+  // the swap. This field should remain unspecified `settle_neurons_fund_participation` is called.
+  //
+  // If specified, this must be equal to the following set-difference:
+  // `initial_neurons_fund_participation.neurons_fund_reserves`
+  // set-minus `final_neurons_fund_participation.neurons_fund_reserves`.
+  optional NeuronsFundSnapshot neurons_fund_refunds = 3;
+}
+
+// Information for deciding how the Neurons' Fund should participate in an SNS Swap.
 message NeuronsFundParticipation {
   // The function used in the implementation of Matched Funding.
   //
@@ -1312,9 +1332,30 @@ message NeuronsFundParticipation {
 
   // The snapshot of the Neurons' Fund allocation of its maximum swap participation amount among
   // its neurons. This snapshot is computed at the execution time of the NNS proposal leading
-  // to the swap opening; it is then used at the end of a swap to compute the refund amounts
-  // per Neuron' Fund neuron.
-  optional NeuronsFundSnapshot neurons_fund_snapshot = 2;
+  // to the swap opening.
+  optional NeuronsFundSnapshot neurons_fund_reserves = 2;
+
+  // Absolute constraints for direct participants of this swap needed in Matched Funding
+  // computations.
+  optional SwapParticipationLimits swap_participation_limits = 3;
+
+  // The following fields are provided for auditability.
+
+  // Neurons' Fund participation is computed for this amount of direct participation.
+  optional uint64 direct_participation_icp_e8s = 4;
+
+  // Total amount of maturity in the Neurons' Fund at the time when the Neurons' Fund participation
+  // was created.
+  optional uint64 total_maturity_equivalent_icp_e8s = 5;
+
+  // Maximum amount that the Neurons' Fund will participate with in this SNS swap, regardless of how
+  // large the value of `direct_participation_icp_e8s` is.
+  optional uint64 max_neurons_fund_swap_participation_icp_e8s = 6;
+
+  // How much the Neurons' Fund would ideally like to participate with in this SNS swap, given
+  // the direct participation amount (`direct_participation_icp_e8s`) and matching function
+  // (`ideal_matched_participation_function`).
+  optional uint64 intended_neurons_fund_participation_icp_e8s = 7;
 }
 
 // This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
@@ -1335,19 +1376,31 @@ message IdealMatchedParticipationFunction {
 // per Neuron' Fund neuron.
 message NeuronsFundSnapshot {
   // Represents one NNS neuron from the Neurons' Fund participating in this swap.
-  message NeuronsFundNeuron {
+  message NeuronsFundNeuronPortion {
     // The NNS neuron ID of the participating neuron.
-    optional uint64 nns_neuron_id = 1;
-    // The amount of Neurons' Fund participation associated with this neuron.
+    optional ic_nns_common.pb.v1.NeuronId nns_neuron_id = 1;
+    // Portion of maturity taken from this neuron. Must be less than or equal to
+    // `maturity_equivalent_icp_e8s`.
     optional uint64 amount_icp_e8s = 2;
+    // Overall amount of maturity of the neuron from which this portion is taken.
+    optional uint64 maturity_equivalent_icp_e8s = 3;
     // The principal that can vote on behalf of this neuron.
-    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 3;
-    // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
-    // has been capped to reflect the maximum participation amount for this SNS swap.
-    optional bool is_capped = 4;
+    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4;
+    // Whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
+    // participation constraints.
+    optional bool is_capped = 5;
   }
 
-  repeated NeuronsFundNeuron neurons_fund_neurons = 1;
+  repeated NeuronsFundNeuronPortion neurons_fund_neuron_portions = 1;
+}
+
+// Absolute constraints of this swap needed that the Neurons' Fund need to be aware of.
+// The fields correspond to those in Swap's `Init` message.
+message SwapParticipationLimits {
+  optional uint64 min_direct_participation_icp_e8s = 1;
+  optional uint64 max_direct_participation_icp_e8s = 2;
+  optional uint64 min_participant_icp_e8s = 3;
+  optional uint64 max_participant_icp_e8s = 4;
 }
 
 // This message has a couple of unusual features.
@@ -2271,7 +2324,7 @@ message SettleNeuronsFundParticipationResponse {
 
   // Request was completed successfully.
   message Ok {
-    repeated NeuronsFundNeuron neurons_fund_neurons = 1;
+    repeated NeuronsFundNeuron neurons_fund_neuron_portions = 1;
   }
 
   oneof result {

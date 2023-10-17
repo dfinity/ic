@@ -869,6 +869,7 @@ async fn settle_neurons_fund_participation_(
     governance_mut()
         .settle_neurons_fund_participation(caller(), request)
         .await
+        .into()
 }
 
 /// Return the NodeProvider record where NodeProvider.id == caller(), if such a

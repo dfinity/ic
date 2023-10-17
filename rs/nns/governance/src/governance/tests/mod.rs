@@ -69,6 +69,7 @@ type CanisterMethodCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 lazy_static! {
     static ref PRINCIPAL_ID_1: PrincipalId = PrincipalId::new_user_test_id(1);
     static ref PRINCIPAL_ID_2: PrincipalId = PrincipalId::new_user_test_id(2);
+    static ref PRINCIPAL_ID_3: PrincipalId = PrincipalId::new_user_test_id(3);
     static ref TARGET_SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(435106);
     static ref OPEN_SNS_TOKEN_SWAP: OpenSnsTokenSwap = OpenSnsTokenSwap {
         target_swap_canister_id: Some((*TARGET_SWAP_CANISTER_ID).into()),
@@ -1451,6 +1452,8 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
     use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
     use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2};
+
+    use crate::pb::v1::create_service_nervous_system::SwapParameters;
 
     use super::*;
 
