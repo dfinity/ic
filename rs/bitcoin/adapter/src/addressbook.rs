@@ -1,8 +1,5 @@
 use crate::config::Config;
-use bitcoin::{
-    network::{constants::ServiceFlags, Address},
-    Network,
-};
+use bitcoin::network::{constants::ServiceFlags, Address};
 use ic_logger::{info, ReplicaLogger};
 use rand::{
     prelude::{IteratorRandom, SliceRandom, StdRng},
@@ -102,7 +99,7 @@ impl AddressBook {
     /// cannot be made without an address. If not enough addresses are found to
     /// meet the minimum number of connections, a panic will be issued.
     pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
-        let (min_addresses, max_addresses) = address_limits(config.network);
+        let (min_addresses, max_addresses) = config.address_limits;
         let known_addresses: HashSet<SocketAddr> = config.nodes.iter().cloned().collect();
         Self {
             dns_seeds: config.dns_seeds.clone(),
@@ -306,21 +303,11 @@ fn format_addr(seed: &str, port: u16) -> String {
     format!("{}:{}", seed, port)
 }
 
-/// This function is used to get the address limits for the `AddressBook`
-/// based on the provided `Network`.
-fn address_limits(network: Network) -> (usize, usize) {
-    match network {
-        Network::Bitcoin => (500, 2000),
-        Network::Testnet => (100, 1000),
-        Network::Signet => (1, 1),
-        Network::Regtest => (1, 1),
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
+    use bitcoin::Network;
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
 

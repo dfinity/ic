@@ -4988,6 +4988,8 @@ dependencies = [
  "bitcoin 0.28.2",
  "hex",
  "rand 0.8.5",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

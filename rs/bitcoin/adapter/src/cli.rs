@@ -1,5 +1,5 @@
 //! A parser for the command line flags and configuration file.
-use crate::config::Config;
+use crate::config::{address_limits, Config};
 use clap::Parser;
 use http::Uri;
 use std::{fs::File, io, path::PathBuf};
@@ -28,8 +28,11 @@ impl Cli {
     pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
         let file = File::open(&self.config).map_err(CliError::Io)?;
-        let config: Config =
+        let mut config: Config =
             serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
+
+        // Set the address limits based on the specified network.
+        config.address_limits = address_limits(config.network);
 
         // Validate proxy URL.
         // Check for general validation errors.
@@ -153,6 +156,7 @@ pub mod test {
         let result = cli.get_config();
         let config = result.unwrap();
         assert_eq!(config.network, Network::Bitcoin);
+        assert_eq!(config.address_limits, (500, 2000));
         assert_eq!(config.dns_seeds.len(), 9);
         assert_eq!(config.socks_proxy, None);
         assert_eq!(config.incoming_source, IncomingSource::Systemd);
@@ -168,6 +172,7 @@ pub mod test {
         let result = cli.get_config();
         let config = result.unwrap();
         assert_eq!(config.network, Network::Testnet);
+        assert_eq!(config.address_limits, (100, 1000));
         assert_eq!(config.dns_seeds.len(), 4);
         assert_eq!(config.socks_proxy, None);
         assert_eq!(
