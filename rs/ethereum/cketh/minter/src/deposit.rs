@@ -86,7 +86,7 @@ async fn mint_cketh() {
 /// Scraps Ethereum logs between `from` and `min(from + 1024, to)` since certain RPC providers
 /// require that the number of blocks queried is no greater than 1024.
 /// Returns the last block number that was scraped (which is `min(from + 1024, to)`).
-pub async fn scrap_eth_logs_between(
+async fn scrap_eth_logs_range_inclusive(
     contract_address: Address,
     from: BlockNumber,
     to: BlockNumber,
@@ -214,10 +214,14 @@ pub async fn scrap_eth_logs() {
         }
     };
     let mut last_scraped_block_number = read_state(|s| s.last_scraped_block_number);
+
     while last_scraped_block_number < last_block_number {
-        last_scraped_block_number = scrap_eth_logs_between(
+        let next_block_to_query = last_scraped_block_number
+            .checked_increment()
+            .unwrap_or(BlockNumber::MAX);
+        last_scraped_block_number = scrap_eth_logs_range_inclusive(
             contract_address,
-            last_scraped_block_number,
+            next_block_to_query,
             last_block_number,
         )
         .await;

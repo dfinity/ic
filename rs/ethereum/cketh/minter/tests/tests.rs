@@ -16,6 +16,7 @@ use ic_cketh_minter::endpoints::{
 };
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_cketh_minter::logs::Log;
+use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, SCRAPPING_ETH_LOGS_INTERVAL};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_state_machine_tests::{
@@ -52,15 +53,16 @@ fn should_deposit_and_withdraw() {
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     tick_until_next_http_request(&cketh.env, "eth_getBlockByNumber");
+    const BLOCK_NUMBER: u64 = 18020072;
     cketh.handle_rpc_call(
         "https://rpc.ankr.com/eth",
         "eth_getBlockByNumber",
-        eth_get_block_by_number(),
+        eth_get_block_by_number(BLOCK_NUMBER),
     );
     cketh.handle_rpc_call(
         "https://cloudflare-eth.com",
         "eth_getBlockByNumber",
-        eth_get_block_by_number(),
+        eth_get_block_by_number(BLOCK_NUMBER),
     );
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     tick_until_next_http_request(&cketh.env, "eth_getLogs");
@@ -224,15 +226,16 @@ fn should_block_blocked_addresses() {
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     tick_until_next_http_request(&cketh.env, "eth_getBlockByNumber");
+    const BLOCK_NUMBER: u64 = 18020072;
     cketh.handle_rpc_call(
         "https://rpc.ankr.com/eth",
         "eth_getBlockByNumber",
-        eth_get_block_by_number(),
+        eth_get_block_by_number(BLOCK_NUMBER),
     );
     cketh.handle_rpc_call(
         "https://cloudflare-eth.com",
         "eth_getBlockByNumber",
-        eth_get_block_by_number(),
+        eth_get_block_by_number(BLOCK_NUMBER),
     );
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     tick_until_next_http_request(&cketh.env, "eth_getLogs");
@@ -341,6 +344,55 @@ fn should_block_blocked_addresses() {
     assert!(cketh.env.await_ingress(message_id, MAX_TICKS).is_err());
 }
 
+#[test]
+fn two_log_scrappings_should_not_overlap() {
+    let mut cketh = CkEthSetup::new();
+
+    assert_eq!(
+        "0xfD644A761079369962386f8E4259217C2a10B8D0".to_string(),
+        cketh.minter_address()
+    );
+
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    tick_until_next_http_request(&cketh.env, "eth_getBlockByNumber");
+    let block_number: u64 = 18_020_072;
+    cketh.handle_rpc_call(
+        "https://rpc.ankr.com/eth",
+        "eth_getBlockByNumber",
+        eth_get_block_by_number(block_number),
+    );
+    cketh.handle_rpc_call(
+        "https://cloudflare-eth.com",
+        "eth_getBlockByNumber",
+        eth_get_block_by_number(block_number),
+    );
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    tick_until_next_http_request(&cketh.env, "eth_getLogs");
+
+    let (first_from_block, first_to_block) = cketh.get_scrap_logs_range();
+    assert_eq!(first_from_block, BlockNumber::from(3_956_207_u64));
+    assert_eq!(first_to_block, BlockNumber::from(3_957_231_u64));
+
+    cketh.handle_rpc_call(
+        "https://rpc.ankr.com/eth",
+        "eth_getLogs",
+        eth_get_logs(None),
+    );
+    cketh.handle_rpc_call(
+        "https://cloudflare-eth.com",
+        "eth_getLogs",
+        eth_get_logs(None),
+    );
+
+    tick_until_next_http_request(&cketh.env, "eth_getLogs");
+    let (from_block, to_block) = cketh.get_scrap_logs_range();
+    assert_ne!(first_to_block, from_block);
+    assert_eq!(
+        to_block,
+        from_block.checked_add(BlockNumber::from(1024_u64)).unwrap()
+    );
+}
+
 fn assert_contains_unique_event(events: &[Event], payload: EventPayload) {
     match events.iter().filter(|e| e.payload == payload).count() {
         0 => panic!("missing the event payload {payload:#?} in audit log {events:#?}"),
@@ -358,9 +410,9 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-fn parse_method(json_str: &str) -> Option<String> {
+fn parse_json_value(json_str: &str, json_name: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(json_str).ok()?;
-    match value.get("method") {
+    match value.get(json_name) {
         Some(method) => method.as_str().map(|s| s.to_string()),
         None => None,
     }
@@ -419,10 +471,11 @@ struct EthLogEntry {
 }
 
 fn eth_get_logs(log_entry: Option<EthLogEntry>) -> Vec<u8> {
-    let mut result: Value = Value::Null;
+    let content: Vec<Value> = vec![];
+    let mut result: Value = json!(content);
     if let Some(log_entry) = log_entry {
         let amount_hex = format!("0x{:0>64x}", log_entry.amount);
-        result = json!({
+        result = json!([{
             "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
             "blockHash": "0x79cfe76d69337dae199e32c2b6b3d7c2668bfe71a05f303f95385e70031b9ef8",
             "blockNumber": format!("0x{:x}", DEFAULT_DEPOSIT_BLOCK_NUMBER),
@@ -436,13 +489,13 @@ fn eth_get_logs(log_entry: Option<EthLogEntry>) -> Vec<u8> {
             ],
             "transactionHash": log_entry.transaction_hash,
             "transactionIndex": "0x33"
-        });
+        }]);
     }
 
     serde_json::to_vec(&json!({
         "jsonrpc": "2.0",
         "id": 141,
-        "result": [result]
+        "result": result
     }))
     .expect("Failed to serialize JSON")
 }
@@ -478,11 +531,11 @@ fn eth_send_raw_transaction() -> Vec<u8> {
         .expect("Failed to serialize JSON")
 }
 
-fn eth_get_block_by_number() -> Vec<u8> {
+fn eth_get_block_by_number(block_number: u64) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "jsonrpc":"2.0",
         "result":{
-            "number":"0x112f6e8",
+            "number": format!("{:#x}", block_number),
             "baseFeePerGas":"0x3e4f64de7"
         },
         "id":1
@@ -535,8 +588,11 @@ fn tick_until_next_http_request(env: &StateMachine, method: &str) {
     for _ in 0..MAX_TICKS {
         for context in env.canister_http_request_contexts().values() {
             assert_has_header(context, "Content-Type", "application/json");
-            let parsed_method =
-                parse_method(std::str::from_utf8(&context.body.clone().unwrap()).unwrap()).unwrap();
+            let parsed_method = parse_json_value(
+                std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                "method",
+            )
+            .unwrap();
             if parsed_method == method {
                 break;
             }
@@ -598,8 +654,11 @@ impl CkEthSetup {
         let contexts = self.env.canister_http_request_contexts();
         for (id, context) in &contexts {
             assert_has_header(context, "Content-Type", "application/json");
-            let parsed_method =
-                parse_method(std::str::from_utf8(&context.body.clone().unwrap()).unwrap()).unwrap();
+            let parsed_method = parse_json_value(
+                std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                "method",
+            )
+            .unwrap();
             let url = &context.url.clone();
             if url == provider && parsed_method == method {
                 let clean_up_context = match context.transform.clone() {
@@ -733,7 +792,7 @@ impl CkEthSetup {
         let response = Decode!(
             &assert_reply(
                 self.env
-                    .execute_ingress(self.minter_id, "http_request", Encode!(&request).unwrap(),)
+                    .query(self.minter_id, "http_request", Encode!(&request).unwrap(),)
                     .expect("failed to get minter info")
             ),
             HttpResponse
@@ -861,5 +920,41 @@ impl CkEthSetup {
             events.append(&mut next_batch.events);
         }
         events
+    }
+
+    fn get_scrap_logs_range(&self) -> (BlockNumber, BlockNumber) {
+        let method = "eth_getLogs";
+        let contexts = self.env.canister_http_request_contexts();
+        for context in contexts.values() {
+            assert_has_header(context, "Content-Type", "application/json");
+            let parsed_method = parse_json_value(
+                std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                "method",
+            )
+            .unwrap();
+
+            if parsed_method == method {
+                use ic_cketh_minter::eth_rpc::{BlockSpec, GetLogsParam, JsonRpcRequest};
+
+                let status = serde_json::from_slice::<JsonRpcRequest<Vec<GetLogsParam>>>(
+                    &context.body.clone().unwrap().clone(),
+                )
+                .unwrap();
+                let from_block = match &status.params[0].from_block {
+                    BlockSpec::Number(block_number) => *block_number,
+                    BlockSpec::Tag(_) => {
+                        panic!()
+                    }
+                };
+                let to_block = match &status.params[0].to_block {
+                    BlockSpec::Number(block_number) => *block_number,
+                    BlockSpec::Tag(_) => {
+                        panic!()
+                    }
+                };
+                return (from_block, to_block);
+            }
+        }
+        panic!("couldn't find any eth_getLogs request");
     }
 }
