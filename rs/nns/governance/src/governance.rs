@@ -6682,6 +6682,10 @@ impl Governance {
         if !neuron_stable_indexes_building_is_enabled() {
             return;
         }
+        // Running validations might increase heap size. Do not run it when heap should not grow.
+        if self.check_heap_can_grow().is_err() {
+            return;
+        }
         if self
             .heap_data
             .migrations
