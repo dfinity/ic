@@ -117,4 +117,4 @@ pub const IS_MATCHED_FUNDING_ENABLED: bool = cfg! { any(test, feature = "test") 
 
 /// Returns whether the UpdateAllowedPrincipals NnsFunction is enabled. Currently, the
 /// proposals should be disabled in non-test builds.
-pub const IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED: bool = cfg! { not(any(test, feature = "test")) };
+pub const IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED: bool = cfg! { any(test, feature = "test") };
