@@ -329,6 +329,23 @@ fn hitting_page_delta_limit_fails_message() {
 }
 
 #[test]
+fn hitting_page_delta_limit_fails_message_non_native_stable() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .with_non_native_stable()
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
+    assert_eq!(
+        result.description(),
+        "Canister exceeded memory access limits: Exceeded the limit for the \
+    number of modified pages in the stable memory in a single message execution: limit: 40 KB."
+    );
+}
+
+#[test]
 fn dts_update_resume_fails_due_to_cycles_change() {
     // Test steps:
     // 1. Canister A starts running the update method.

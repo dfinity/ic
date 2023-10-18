@@ -141,18 +141,76 @@ fn charge_for_cpu(
 ) -> Result<(), anyhow::Error> {
     let complexity = ExecutionComplexity {
         cpu: overhead.cpu_complexity,
-        ..Default::default()
     };
     charge_for_system_api_call(
         caller,
         overhead.system_api_overhead,
-        overhead.num_bytes.get() as u32,
+        overhead.num_bytes.get(),
         complexity,
-        NumInstructions::from(0),
-        // since we are not adding any stable dirty pages, process this as if there was no limit
-        NumPages::new(u64::MAX),
     )
     .map_err(|e| process_err(caller, e))
+}
+
+#[inline(never)]
+fn charge_for_stable_write(
+    caller: &mut Caller<'_, StoreData>,
+    system_api_overhead: NumInstructions,
+    offset: u64,
+    size: u64,
+    complexity: ExecutionComplexity,
+    stable_memory_dirty_page_limit: NumPages,
+) -> HypervisorResult<()> {
+    let (new_stable_dirty_pages, dirty_page_cost) =
+        get_new_stable_dirty_pages(caller, offset, size)?;
+
+    let (total_overhead, overflow) = system_api_overhead
+        .get()
+        .overflowing_add(dirty_page_cost.get());
+    if overflow {
+        let err = unexpected_err(format!(
+            "Overflow while calculating charge for System API Call: overhead: {}, dirty_page_cost: {}",
+            system_api_overhead,
+            dirty_page_cost,
+        ));
+        return Err(err);
+    }
+
+    let subnet_type = caller.data().system_api()?.subnet_type();
+
+    #[allow(non_upper_case_globals)]
+    const KiB: u64 = 1024;
+
+    match subnet_type {
+        // Do not observe stable dirty pages limit on the system subnets.
+        SubnetType::System => {}
+        SubnetType::Application | SubnetType::VerifiedApplication => {
+            let stable_dirty_pages = &mut caller
+                .data_mut()
+                .num_stable_dirty_pages_from_non_native_writes;
+            let total_pages = NumPages::from(
+                stable_dirty_pages
+                    .get()
+                    .saturating_add(new_stable_dirty_pages.get()),
+            );
+
+            if total_pages > stable_memory_dirty_page_limit {
+                let error = HypervisorError::MemoryAccessLimitExceeded(
+                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
+                                stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            ),
+                        );
+                return Err(error);
+            }
+            *stable_dirty_pages = total_pages;
+        }
+    }
+
+    charge_for_system_api_call(
+        caller,
+        NumInstructions::from(total_overhead),
+        size,
+        complexity,
+    )
 }
 
 /// Charges a canister (in instructions) for system API call overhead (exit,
@@ -174,26 +232,20 @@ fn charge_for_cpu(
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
     system_api_overhead: NumInstructions,
-    num_bytes: u32,
+    num_bytes: u64,
     complexity: ExecutionComplexity,
-    dirty_page_cost: NumInstructions,
-    stable_memory_dirty_page_limit: NumPages,
 ) -> HypervisorResult<()> {
     let (system_api, log) = caller.data_mut().system_api_mut_log()?;
-    observe_execution_complexity(log, system_api, complexity, stable_memory_dirty_page_limit)?;
+    observe_execution_complexity(log, system_api, complexity)?;
     let num_instructions_from_bytes =
-        system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
-    let (num_instructions1, overflow1) = num_instructions_from_bytes
+        system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes));
+    let (num_instructions, overflow) = num_instructions_from_bytes
         .get()
-        .overflowing_add(dirty_page_cost.get());
-    let (num_instructions, overflow2) =
-        num_instructions1.overflowing_add(system_api_overhead.get());
-    if overflow1 || overflow2 {
+        .overflowing_add(system_api_overhead.get());
+    if overflow {
         return Err(unexpected_err(format!(
-            "Overflow while calculating charge for System API Call: overhead: {}, num_bytes: {}, dirty_page_cost: {}",
-            system_api_overhead,
-            num_bytes,
-            dirty_page_cost,
+            "Overflow while calculating charge for System API Call: overhead: {}, num_bytes: {}",
+            system_api_overhead, num_bytes,
         )));
     }
     charge_direct_fee(caller, NumInstructions::from(num_instructions))
@@ -263,11 +315,7 @@ fn observe_execution_complexity(
     log: &ReplicaLogger,
     system_api: &mut SystemApiImpl,
     complexity: ExecutionComplexity,
-    stable_memory_dirty_page_limit: NumPages,
 ) -> HypervisorResult<()> {
-    #[allow(non_upper_case_globals)]
-    const KiB: u64 = 1024;
-
     let canister_id = system_api.canister_id();
 
     let total_complexity = system_api.execution_complexity() + &complexity;
@@ -285,13 +333,6 @@ fn observe_execution_complexity(
                     message_instruction_limit,
                 );
                 return Err(HypervisorError::ExecutionComplexityLimitExceeded);
-            } else if total_complexity.stable_dirty_pages > stable_memory_dirty_page_limit {
-                let error = HypervisorError::MemoryAccessLimitExceeded(
-                    format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                        stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
-                    ),
-                );
-                return Err(error);
             }
             system_api.set_execution_complexity(total_complexity);
         }
@@ -783,19 +824,15 @@ pub(crate) fn syscalls(
                 let offset = offset as u32;
                 let src = src as u32;
                 let size = size as u32;
-                let (stable_dirty_pages, dirty_page_cost) =
-                    get_new_stable_dirty_pages(&mut caller, offset as u64, size as u64)
-                        .map_err(|e| process_err(&mut caller, e))?;
 
-                charge_for_system_api_call(
+                charge_for_stable_write(
                     &mut caller,
                     system_api::complexity_overhead!(STABLE_WRITE, metering_type),
-                    size,
+                    offset as u64,
+                    size as u64,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_WRITE,
-                        stable_dirty_pages,
                     },
-                    dirty_page_cost,
                     stable_memory_dirty_page_limit,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
@@ -874,18 +911,15 @@ pub(crate) fn syscalls(
                 let offset = offset as u64;
                 let src = src as u64;
                 let size = size as u64;
-                let (stable_dirty_pages, dirty_page_cost) =
-                    get_new_stable_dirty_pages(&mut caller, offset, size)
-                        .map_err(|e| process_err(&mut caller, e))?;
-                charge_for_system_api_call(
+
+                charge_for_stable_write(
                     &mut caller,
                     system_api::complexity_overhead!(STABLE64_WRITE, metering_type),
-                    size as u32,
+                    offset,
+                    size,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_WRITE,
-                        stable_dirty_pages,
                     },
-                    dirty_page_cost,
                     stable_memory_dirty_page_limit,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
@@ -1123,10 +1157,7 @@ pub(crate) fn syscalls(
                     0,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_GROW,
-                        ..Default::default()
                     },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_system_api(&mut caller, |s| {

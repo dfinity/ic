@@ -95,22 +95,18 @@ pub enum PerformanceCounterType {
 pub struct ExecutionComplexity {
     /// Accumulated CPU complexity, in instructions.
     pub cpu: CpuComplexity,
-    /// The number of dirty pages in stable memory.
-    pub stable_dirty_pages: NumPages,
 }
 
 impl ExecutionComplexity {
     /// Execution complexity with maximum values.
     pub const MAX: Self = Self {
         cpu: CpuComplexity::new(i64::MAX),
-        stable_dirty_pages: NumPages::new(u64::MAX),
     };
 
     /// Creates execution complexity with a specified CPU complexity.
     pub fn with_cpu(cpu: NumInstructions) -> Self {
         Self {
             cpu: (cpu.get() as i64).into(),
-            ..Default::default()
         }
     }
 
@@ -124,7 +120,6 @@ impl ExecutionComplexity {
     pub fn max(&self, rhs: Self) -> Self {
         Self {
             cpu: self.cpu.max(rhs.cpu),
-            stable_dirty_pages: self.stable_dirty_pages.max(rhs.stable_dirty_pages),
         }
     }
 }
@@ -135,11 +130,6 @@ impl ops::Add for &ExecutionComplexity {
     fn add(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
         ExecutionComplexity {
             cpu: self.cpu + rhs.cpu,
-            stable_dirty_pages: self
-                .stable_dirty_pages
-                .get()
-                .saturating_add(rhs.stable_dirty_pages.get())
-                .into(),
         }
     }
 }
@@ -150,22 +140,13 @@ impl ops::Sub for &ExecutionComplexity {
     fn sub(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
         ExecutionComplexity {
             cpu: self.cpu - rhs.cpu,
-            stable_dirty_pages: self
-                .stable_dirty_pages
-                .get()
-                .saturating_sub(rhs.stable_dirty_pages.get())
-                .into(),
         }
     }
 }
 
 impl fmt::Display for ExecutionComplexity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{{ cpu = {} stable_dirty_pages = {} }}",
-            self.cpu, self.stable_dirty_pages,
-        )
+        write!(f, "{{ cpu = {} }}", self.cpu,)
     }
 }
 
