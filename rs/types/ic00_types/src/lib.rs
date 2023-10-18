@@ -16,7 +16,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
-use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
+use ic_protobuf::state::canister_state_bits::v1::{self as pb_canister_state_bits};
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
 use ic_protobuf::types::v1::{
     CanisterInstallMode as CanisterInstallModeProto, CanisterUpgradeOptions,
@@ -744,6 +744,14 @@ impl CanisterStatusResult {
 
 impl Payload<'_> for CanisterStatusResult {}
 
+#[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
+pub struct QueryStats {
+    num_calls_total: candid::Nat,
+    num_instructions_total: candid::Nat,
+    request_payload_bytes_total: candid::Nat,
+    response_payload_bytes_total: candid::Nat,
+}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     status : variant { running; stopping; stopped };
@@ -755,6 +763,12 @@ impl Payload<'_> for CanisterStatusResult {}
 ///     freezing_threshold: nat,
 ///     idle_cycles_burned_per_day: nat;
 ///     reserved_cycles: nat;
+///     query_stats: record {
+///         num_calls: nat;
+///         num_instructions: nat;
+///         ingress_payload_size: nat;
+///         egress_payload_size: nat;
+///     }
 /// })`
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
 pub struct CanisterStatusResultV2 {
@@ -769,6 +783,7 @@ pub struct CanisterStatusResultV2 {
     freezing_threshold: candid::Nat,
     idle_cycles_burned_per_day: candid::Nat,
     reserved_cycles: candid::Nat,
+    query_stats: QueryStats,
 }
 
 impl CanisterStatusResultV2 {
@@ -786,6 +801,10 @@ impl CanisterStatusResultV2 {
         reserved_cycles_limit: Option<u128>,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
+        query_num_calls: u128,
+        query_num_instructions: u128,
+        query_ingress_payload_size: u128,
+        query_egress_payload_size: u128,
     ) -> Self {
         Self {
             status,
@@ -807,6 +826,12 @@ impl CanisterStatusResultV2 {
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
             reserved_cycles: candid::Nat::from(reserved_cycles),
+            query_stats: QueryStats {
+                num_calls_total: candid::Nat::from(query_num_calls),
+                num_instructions_total: candid::Nat::from(query_num_instructions),
+                request_payload_bytes_total: candid::Nat::from(query_ingress_payload_size),
+                response_payload_bytes_total: candid::Nat::from(query_egress_payload_size),
+            },
         }
     }
 

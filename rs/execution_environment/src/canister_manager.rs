@@ -1029,6 +1029,16 @@ impl CanisterManager {
                 )
                 .get(),
             canister.system_state.reserved_balance().get(),
+            canister.scheduler_state.total_query_stats.num_calls,
+            canister.scheduler_state.total_query_stats.num_instructions,
+            canister
+                .scheduler_state
+                .total_query_stats
+                .ingress_payload_size,
+            canister
+                .scheduler_state
+                .total_query_stats
+                .egress_payload_size,
         ))
     }
 
@@ -1534,7 +1544,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterIdAlreadyExists(canister_id) => {
                 Self::new(
                     ErrorCode::CanisterIdAlreadyExists,
-                        format!("Unsuccessful canister creation: canister id already exists {}", canister_id) 
+                        format!("Unsuccessful canister creation: canister id already exists {}", canister_id)
                 )
             }
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),

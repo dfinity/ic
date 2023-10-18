@@ -714,6 +714,10 @@ fn can_get_canister_information() {
                 Some(5_000_000_000_000u128),
                 0u128,
                 0u128,
+                0u128,
+                0u128,
+                0u128,
+                0u128,
             )
         );
 
@@ -765,6 +769,10 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
+                    0u128,
+                    0u128,
+                    0u128,
+                    0u128,
                     0u128,
                     0u128,
                 ),
