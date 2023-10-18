@@ -399,12 +399,12 @@ impl HttpResponsePayload for Block {
 }
 
 /// An envelope for all JSON-RPC requests.
-#[derive(Serialize)]
-struct JsonRpcRequest<T> {
-    jsonrpc: &'static str,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct JsonRpcRequest<T> {
+    jsonrpc: String,
     method: String,
     id: u64,
-    params: T,
+    pub params: T,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -586,7 +586,7 @@ where
 {
     let eth_method = method.into();
     let mut rpc_request = JsonRpcRequest {
-        jsonrpc: "2.0",
+        jsonrpc: "2.0".to_string(),
         params,
         method: eth_method.clone(),
         id: 1,
