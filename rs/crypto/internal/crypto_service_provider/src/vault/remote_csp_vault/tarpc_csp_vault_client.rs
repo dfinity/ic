@@ -43,6 +43,7 @@ use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -250,7 +251,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
         self.tokio_block_on(self.tarpc_csp_client.sign(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
-            message.to_vec(),
+            ByteBuf::from(message.to_vec()),
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
@@ -283,7 +284,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
         self.tokio_block_on(self.tarpc_csp_client.multi_sign(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
-            message.to_vec(),
+            ByteBuf::from(message.to_vec()),
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
@@ -318,7 +319,7 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
         self.tokio_block_on(self.tarpc_csp_client.threshold_sign(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
-            message.to_vec(),
+            ByteBuf::from(message.to_vec()),
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
@@ -548,7 +549,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         tokio::task::block_in_place(|| {
             self.tokio_block_on(self.tarpc_csp_client.tls_sign(
                 context_with_timeout(self.rpc_timeout),
-                message.to_vec(),
+                ByteBuf::from(message.to_vec()),
                 *key_id,
             ))
             .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
@@ -573,7 +574,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         self.tokio_block_on(self.tarpc_csp_client.idkg_create_dealing(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
-            context_data.to_vec(),
+            ByteBuf::from(context_data.to_vec()),
             dealer_index,
             reconstruction_threshold,
             receiver_keys.to_vec(),
@@ -602,7 +603,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             dealer_index,
             receiver_index,
             receiver_key_id,
-            context_data.to_vec(),
+            ByteBuf::from(context_data.to_vec()),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(IDkgVerifyDealingPrivateError::TransientInternalError {
@@ -622,7 +623,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript(
             context_with_timeout(self.rpc_timeout),
             dealings.clone(),
-            context_data.to_vec(),
+            ByteBuf::from(context_data.to_vec()),
             receiver_index,
             *key_id,
             transcript.clone(),
@@ -647,7 +648,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             context_with_timeout(self.rpc_timeout),
             dealings.clone(),
             openings.clone(),
-            context_data.to_vec(),
+            ByteBuf::from(context_data.to_vec()),
             receiver_index,
             *key_id,
             transcript.clone(),
@@ -700,7 +701,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             context_with_timeout(self.rpc_timeout),
             dealing,
             dealer_index,
-            context_data.to_vec(),
+            ByteBuf::from(context_data.to_vec()),
             opener_index,
             *opener_key_id,
         ))
@@ -728,7 +729,7 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
         self.tokio_block_on(self.tarpc_csp_client.ecdsa_sign_share(
             context_with_timeout(self.rpc_timeout),
             derivation_path.clone(),
-            hashed_message.to_vec(),
+            ByteBuf::from(hashed_message.to_vec()),
             *nonce,
             key.clone(),
             kappa_unmasked.clone(),
