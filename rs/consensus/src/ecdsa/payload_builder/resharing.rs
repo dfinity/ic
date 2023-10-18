@@ -18,10 +18,9 @@ use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 // and reshare the one specified by reshare_request.key_id.
 pub(crate) fn initiate_reshare_requests(
     payload: &mut ecdsa::EcdsaPayload,
-    current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
     reshare_requests: BTreeSet<ecdsa::EcdsaReshareRequest>,
 ) {
-    let Some(key_transcript) = current_key_transcript else {
+    let Some(key_transcript) = &payload.key_transcript.current else {
         return;
     };
 
@@ -98,12 +97,11 @@ pub(crate) fn update_completed_reshare_requests(
         &ecdsa::EcdsaReshareRequest,
         &InitialIDkgDealings,
     ) -> Option<ic_types::messages::Response>,
-    current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
     resolver: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     log: &ReplicaLogger,
 ) {
-    if current_key_transcript.is_none() {
+    if payload.key_transcript.current.is_none() {
         return;
     }
 
@@ -233,7 +231,7 @@ mod tests {
         reshare_requests.insert(req_2.clone());
 
         // Key not yet created, requests should not be accepted
-        initiate_reshare_requests(&mut payload, None, reshare_requests.clone());
+        initiate_reshare_requests(&mut payload, reshare_requests.clone());
         assert!(payload.ongoing_xnet_reshares.is_empty());
         assert!(payload.xnet_reshare_agreements.is_empty());
 
@@ -242,15 +240,11 @@ mod tests {
             generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
-        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+        payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
             key_transcript.to_attributes(),
             key_transcript_ref,
-        );
-        initiate_reshare_requests(
-            &mut payload,
-            Some(&current_key_transcript),
-            reshare_requests.clone(),
-        );
+        ));
+        initiate_reshare_requests(&mut payload, reshare_requests.clone());
         assert_eq!(payload.ongoing_xnet_reshares.len(), 2);
         assert!(payload.ongoing_xnet_reshares.contains_key(&req_1));
         assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
@@ -259,11 +253,7 @@ mod tests {
         // One more new request, it should get added incrementally
         let req_3 = create_reshare_request(3, 3);
         reshare_requests.insert(req_3.clone());
-        initiate_reshare_requests(
-            &mut payload,
-            Some(&current_key_transcript),
-            reshare_requests.clone(),
-        );
+        initiate_reshare_requests(&mut payload, reshare_requests.clone());
         assert_eq!(payload.ongoing_xnet_reshares.len(), 3);
         assert!(payload.ongoing_xnet_reshares.contains_key(&req_1));
         assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
@@ -277,11 +267,7 @@ mod tests {
         payload
             .xnet_reshare_agreements
             .insert(req_4, ecdsa::CompletedReshareRequest::ReportedToExecution);
-        initiate_reshare_requests(
-            &mut payload,
-            Some(&current_key_transcript),
-            reshare_requests.clone(),
-        );
+        initiate_reshare_requests(&mut payload, reshare_requests.clone());
         assert_eq!(payload.ongoing_xnet_reshares.len(), 3);
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
     }
@@ -311,16 +297,12 @@ mod tests {
             generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
-        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+        payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
             key_transcript.to_attributes(),
             key_transcript_ref,
-        );
+        ));
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        initiate_reshare_requests(
-            &mut payload,
-            Some(&current_key_transcript),
-            reshare_requests.clone(),
-        );
+        initiate_reshare_requests(&mut payload, reshare_requests.clone());
         assert_eq!(payload.ongoing_xnet_reshares.len(), 2);
         assert!(payload.ongoing_xnet_reshares.contains_key(&req_1));
         assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
@@ -334,7 +316,6 @@ mod tests {
         update_completed_reshare_requests(
             &mut payload,
             &|_, _| Some(empty_response()),
-            Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
@@ -355,7 +336,6 @@ mod tests {
         update_completed_reshare_requests(
             &mut payload,
             &|_, _| Some(empty_response()),
-            Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
@@ -374,7 +354,6 @@ mod tests {
         update_completed_reshare_requests(
             &mut payload,
             &|_, _| Some(empty_response()),
-            Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
             &no_op_logger(),

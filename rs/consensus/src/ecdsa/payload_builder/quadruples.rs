@@ -17,7 +17,6 @@ use std::collections::BTreeSet;
 /// - moving completed quadruples from "in creation" to "available".
 /// Returns the newly created transcripts.
 pub(super) fn update_quadruples_in_creation(
-    current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
     payload: &mut ecdsa::EcdsaPayload,
     transcript_cache: &dyn EcdsaTranscriptBuilder,
     height: Height,
@@ -25,7 +24,7 @@ pub(super) fn update_quadruples_in_creation(
 ) -> Result<Vec<IDkgTranscript>, EcdsaPayloadError> {
     let mut newly_available = Vec::new();
     let mut new_transcripts = Vec::new();
-    if let Some(key_transcript) = current_key_transcript {
+    if let Some(key_transcript) = &payload.key_transcript.current {
         let registry_version = key_transcript.registry_version();
         let receivers = key_transcript.receivers().clone();
         for (key, quadruple) in payload.quadruples_in_creation.iter_mut() {
@@ -209,11 +208,10 @@ pub(super) fn update_quadruples_in_creation(
 /// considering currently available quadruples, quadruples in creation, and
 /// ecdsa configs.
 pub(super) fn make_new_quadruples_if_needed(
-    current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
     ecdsa_config: &EcdsaConfig,
     ecdsa_payload: &mut ecdsa::EcdsaPayload,
 ) {
-    if let Some(key_transcript) = current_key_transcript {
+    if let Some(key_transcript) = &ecdsa_payload.key_transcript.current {
         let node_ids: Vec<_> = key_transcript.receivers().iter().copied().collect();
         make_new_quadruples_if_needed_helper(
             &node_ids,
@@ -367,12 +365,13 @@ pub(super) mod tests {
             generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &idkg_key_transcript)).unwrap();
-        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+
+        let mut payload = empty_ecdsa_payload(subnet_id);
+        payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
             idkg_key_transcript.to_attributes(),
             key_transcript_ref,
-        );
+        ));
         block_reader.add_transcript(*key_transcript_ref.as_ref(), idkg_key_transcript);
-        let mut payload = empty_ecdsa_payload(subnet_id);
         // Start quadruple creation
         let (kappa_config_ref, lambda_config_ref) = create_new_quadruple_in_creation(
             &subnet_nodes,
@@ -385,7 +384,6 @@ pub(super) mod tests {
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_quadruples_in_creation(
-            Some(&current_key_transcript),
             &mut payload,
             &transcript_builder,
             cur_height,
@@ -421,7 +419,6 @@ pub(super) mod tests {
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_quadruples_in_creation(
-            Some(&current_key_transcript),
             &mut payload,
             &transcript_builder,
             cur_height,
@@ -455,7 +452,6 @@ pub(super) mod tests {
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_quadruples_in_creation(
-            Some(&current_key_transcript),
             &mut payload,
             &transcript_builder,
             cur_height,
@@ -493,7 +489,6 @@ pub(super) mod tests {
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_quadruples_in_creation(
-            Some(&current_key_transcript),
             &mut payload,
             &transcript_builder,
             cur_height,
@@ -544,7 +539,6 @@ pub(super) mod tests {
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_quadruples_in_creation(
-            Some(&current_key_transcript),
             &mut payload,
             &transcript_builder,
             cur_height,
