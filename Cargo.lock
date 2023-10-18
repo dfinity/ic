@@ -14014,6 +14014,9 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]

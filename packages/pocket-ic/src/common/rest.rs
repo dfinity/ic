@@ -5,6 +5,7 @@
 use crate::UserError;
 
 use candid::Principal;
+use hex;
 use reqwest::blocking::Response;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -180,6 +181,12 @@ pub struct RawVerifyCanisterSigArg {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct BlobId(pub [u8; 32]);
+
+impl std::fmt::Display for BlobId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "BlobId{{{}}}", hex::encode(self.0))
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct BinaryBlob {

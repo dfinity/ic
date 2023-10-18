@@ -385,9 +385,9 @@ where
     {
         let op_id = computation.op.id().0;
         trace!(
-            "update_with_timeout::start op_id={} instance_id={}",
+            "update_with_timeout::start instance_id={} op_id={}",
+            computation.instance_id,
             op_id,
-            computation.instance_id
         );
         let sync_wait_time = sync_wait_time.unwrap_or(self.inner.sync_wait_time);
         let st = self.inner.clone();
@@ -434,9 +434,9 @@ where
                         let st = self.inner.clone();
                         move || {
                             trace!(
-                                "bg_task::start op_id={} instance_id={}",
+                                "bg_task::start instance_id={} op_id={}",
+                                instance_id,
                                 op_id.0,
-                                instance_id
                             );
                             let result = op.compute(&mut pocket_ic);
                             let new_state_label = pocket_ic.get_state_label();
@@ -454,7 +454,7 @@ where
                             } else {
                                 *instance_state = InstanceState::Available(pocket_ic);
                             }
-                            trace!("bg_task::end op_id={} instance_id={}", op_id.0, instance_id);
+                            trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
                             result
                         }
                     };
@@ -490,17 +490,17 @@ where
         // kernel thread.
         if let Ok(o) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
-                "update_with_timeout::synchronous op_id={} instance_id={}",
+                "update_with_timeout::synchronous instance_id={} op_id={}",
+                computation.instance_id,
                 op_id,
-                computation.instance_id
             );
             return Ok(UpdateReply::Output(o.expect("join failed!")));
         }
 
         trace!(
-            "update_with_timeout::timeout op_id={} instance_id={}",
+            "update_with_timeout::timeout instance_id={} op_id={}",
+            computation.instance_id,
             op_id,
-            computation.instance_id
         );
         Ok(busy_outcome)
     }

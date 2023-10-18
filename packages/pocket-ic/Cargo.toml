@@ -23,6 +23,9 @@ ic-cdk = "0.10"
 base64 = { workspace = true }
 hex = "^0.4.2"
 async-trait = "^0.1.73"
+tracing = "0.1"
+tracing-appender = "^0.2.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 
 [dev-dependencies]
