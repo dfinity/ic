@@ -335,6 +335,8 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
         let max_icp_e8s = swap_parameters.maximum_icp.and_then(|tokens| tokens.e8s);
 
+        let neurons_fund_participation = swap_parameters.neurons_fund_participation;
+
         // If min_icp_e8s and max_icp_e8s are None, but min_direct_participation_icp_e8s and
         // max_direct_participation_icp_e8s are Some, or vice versa, then we can
         // "reconstruct" the missing fields.
@@ -522,6 +524,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             confirmation_text,
             restricted_countries,
             token_logo,
+            neurons_fund_participation,
 
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>

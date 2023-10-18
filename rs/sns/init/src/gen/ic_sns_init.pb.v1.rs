@@ -195,6 +195,9 @@ pub struct SnsInitPayload {
     /// swap.
     #[prost(uint64, optional, tag = "34")]
     pub nns_proposal_id: ::core::option::Option<u64>,
+    /// Whether or not the neurons' fund is participating
+    #[prost(bool, optional, tag = "40")]
+    pub neurons_fund_participation: ::core::option::Option<bool>,
     /// The Neurons' Fund participants of this SNS decentralization swap.
     #[prost(message, optional, tag = "35")]
     pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,

@@ -1310,6 +1310,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
+                neurons_fund_participation: original_swap_parameters.neurons_fund_participation,
 
                 // We'll examine these later
                 initial_token_distribution: None,
@@ -1632,7 +1633,13 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 neurons_fund_participants: Some(NeuronsFundParticipants {
                     participants: neurons_fund_participants,
                 }),
-                // TODO[NNS1-2558]: Test this field.
+                neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED {
+                    Some(true)
+                } else {
+                    None
+                },
+
+                // TODO[NNS1-2558]: Test these fields.
                 neurons_fund_participation_constraints: None,
 
                 // We'll examine these later

@@ -11,7 +11,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IS_MATCHED_FUNDING_ENABLED,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
 use ic_sns_governance::{
@@ -458,6 +458,7 @@ impl SnsInitPayload {
             nns_proposal_id: None,
             neurons_fund_participants: None,
             neurons_fund_participation_constraints: None,
+            neurons_fund_participation: None,
         }
     }
 
@@ -527,6 +528,11 @@ impl SnsInitPayload {
             neurons_fund_participants: Some(NeuronsFundParticipants {
                 participants: vec![],
             }),
+            neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED {
+                Some(true)
+            } else {
+                None
+            },
             ..SnsInitPayload::with_default_values()
         }
     }
@@ -829,6 +835,7 @@ impl SnsInitPayload {
             neurons_fund_participants: _,
             token_logo: _,
             neurons_fund_participation_constraints: _,
+            neurons_fund_participation: _,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -946,6 +953,7 @@ impl SnsInitPayload {
             self.validate_swap_start_timestamp_seconds_pre_execution(),
             self.validate_swap_due_timestamp_seconds_pre_execution(),
             self.validate_neurons_fund_participation_constraints(true),
+            self.validate_neurons_fund_participation(),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -993,6 +1001,7 @@ impl SnsInitPayload {
             self.validate_swap_start_timestamp_seconds(),
             self.validate_swap_due_timestamp_seconds(),
             self.validate_neurons_fund_participation_constraints(false),
+            self.validate_neurons_fund_participation(),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -1959,6 +1968,17 @@ impl SnsInitPayload {
         }
     }
 
+    pub fn validate_neurons_fund_participation(&self) -> Result<(), String> {
+        if IS_MATCHED_FUNDING_ENABLED {
+            if self.neurons_fund_participation.is_none() {
+                return Err("Error: neurons_fund_participation must be specified.".to_string());
+            }
+        } else if self.neurons_fund_participation.is_some() {
+            return Err("Error: neurons_fund_participation must not be specified until Matched Funding is enabled.".to_string());
+        }
+        Ok(())
+    }
+
     pub fn validate_neurons_fund_participation_constraints(
         &self,
         is_pre_execution: bool,
@@ -2187,6 +2207,7 @@ impl SnsInitPayload {
             swap_due_timestamp_seconds: None,
             dapp_canisters: None,
             token_logo: None,
+            neurons_fund_participation: None,
             ..self
         }
     }

@@ -3684,6 +3684,9 @@ struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long, value_parser=parse_tokens)]
     neurons_fund_investment_icp: nervous_system_pb::Tokens,
 
+    #[clap(long)]
+    neurons_fund_participation: Option<bool>,
+
     // Ledger
     // ------
     #[clap(long, value_parser=parse_tokens)]
@@ -3776,6 +3779,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             swap_start_time,
             swap_duration,
             neurons_fund_investment_icp,
+            neurons_fund_participation,
 
             transaction_fee,
             token_name,
@@ -3925,7 +3929,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 start_time,
                 duration,
                 neurons_fund_investment_icp,
-                neurons_fund_participation: None, // TODO NNS1-2569: Populate
+                neurons_fund_participation,
             })
         };
 

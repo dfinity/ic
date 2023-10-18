@@ -172,6 +172,7 @@ fn test_parse() {
                 seconds: Some(7 * 24 * 60 * 60),
             },
             neurons_fund_investment_icp: nervous_system_pb::Tokens { e8s: Some(10 * E8) },
+            neurons_fund_participation: Some(true),
         },
         nns_proposal: NnsProposal {
             title: "Proposal to Create an SNS named Daniel".to_string(),
@@ -458,7 +459,7 @@ fn test_convert_to_create_service_nervous_system() {
             }),
             neurons_fund_investment_icp: Some(nervous_system_pb::Tokens { e8s: Some(10 * E8) }),
 
-            neurons_fund_participation: None, // TODO NNS1-2569: Populate
+            neurons_fund_participation: Some(true),
         }
     );
 }
