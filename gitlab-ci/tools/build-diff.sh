@@ -120,9 +120,6 @@ cat $SHA256SUMS1
 echo "Full diff before dropping artifacts allowed non-determinism"
 diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true
 
-# TODO(IDX-2542)
-sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' -e '/system-tests/d' -e'/prod-test-driver/d' -e'/sns-test-dapp-canister/d' $SHA256SUMS0 $SHA256SUMS1
-
 # ignore *.wasm.did files
 sed -i -e '/.wasm.did/d' $SHA256SUMS0 $SHA256SUMS1
 
