@@ -1,5 +1,5 @@
 {
-  "checksum": "83385444304c080504803c0f473d92ab0256b9d553821cdc6c34c6f274ec796a",
+  "checksum": "c391f821c15183606c61f6b461c2b2b476d2795a79d2b91223ed0d0055048de7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7240,13 +7240,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "candid 0.9.9": {
+    "candid 0.9.10": {
       "name": "candid",
-      "version": "0.9.9",
+      "version": "0.9.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/candid/0.9.9/download",
-          "sha256": "aa0f00717c71b8e9ee4c090b4880ec2418c8506bb6828a2c72df72d3896e905d"
+          "url": "https://crates.io/api/v1/crates/candid/0.9.10/download",
+          "sha256": "07c109aab46c1937be5901201d83c40d77b5e58dca3ad748ef618f95a627a877"
         }
       },
       "targets": [
@@ -7299,7 +7299,7 @@
               "target": "byteorder"
             },
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "build_script_build"
             },
             {
@@ -7390,7 +7390,7 @@
           ],
           "selects": {}
         },
-        "version": "0.9.9"
+        "version": "0.9.10"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -13153,7 +13153,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -21328,7 +21328,7 @@
               "target": "backoff"
             },
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -21486,7 +21486,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -21656,7 +21656,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -21711,7 +21711,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -21771,7 +21771,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -21889,7 +21889,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -22178,7 +22178,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -22299,7 +22299,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -22356,7 +22356,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -22512,7 +22512,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -22567,7 +22567,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -22724,7 +22724,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {
@@ -22784,7 +22784,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.9.9",
+              "id": "candid 0.9.10",
               "target": "candid"
             },
             {

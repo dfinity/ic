@@ -240,7 +240,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "candid": crate.spec(
-                version = "^0.9.9",
+                version = "^0.9.10",
                 features = ["parser"],
             ),
             "cargo_metadata": crate.spec(
