@@ -747,16 +747,12 @@ mod test {
             generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
-        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+        payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
             key_transcript.to_attributes(),
             key_transcript_ref,
-        );
+        ));
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        initiate_reshare_requests(
-            &mut payload,
-            Some(&current_key_transcript),
-            reshare_requests.clone(),
-        );
+        initiate_reshare_requests(&mut payload, reshare_requests.clone());
         let prev_payload = payload.clone();
 
         // Create completed dealings for request 1.
@@ -766,7 +762,6 @@ mod test {
         update_completed_reshare_requests(
             &mut payload,
             &make_dealings_response,
-            Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
@@ -801,7 +796,6 @@ mod test {
         update_completed_reshare_requests(
             &mut payload,
             &make_dealings_response,
-            Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
@@ -874,10 +868,10 @@ mod test {
         );
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+        ecdsa_payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
             key_transcript.to_attributes(),
             key_transcript_ref,
-        );
+        ));
         let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
         let quadruple_id_2 = ecdsa_payload.uid_generator.next_quadruple_id();
         // Fill in the ongoing signatures
@@ -927,7 +921,6 @@ mod test {
 
         update_ongoing_signatures(
             all_requests,
-            Some(&current_key_transcript),
             max_ongoing_signatures,
             &mut ecdsa_payload,
             &no_op_logger(),

@@ -45,6 +45,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 mod errors;
+mod key_transcript;
 mod quadruples;
 pub(super) mod resharing;
 pub(super) mod signatures;
@@ -132,20 +133,18 @@ pub(crate) fn create_summary_payload(
     let next_interval_registry_version = context.registry_version;
 
     // Get ecdsa_config from registry if it exists
-    let ecdsa_config = get_ecdsa_config_if_enabled(
+    let Some(ecdsa_config) = get_ecdsa_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
         registry_client,
         log,
-    )?;
-    if ecdsa_config.is_none() {
+    )?
+    else {
         return Ok(None);
     };
-    let ecdsa_config = ecdsa_config.unwrap();
 
     // Get ecdsa_payload from parent block if it exists
-    let ecdsa_payload = parent_block.payload.as_ref().as_data().ecdsa.as_ref();
-    if ecdsa_payload.is_none() {
+    let Some(ecdsa_payload) = parent_block.payload.as_ref().as_data().ecdsa.as_ref() else {
         // Parent block doesn't have ECDSA payload and feature is enabled.
         // Create the bootstrap summary block, and create a new key for the given key_id.
         //
@@ -164,8 +163,7 @@ pub(crate) fn create_summary_payload(
         return make_bootstrap_summary(
             subnet_id, key_id, height, /*initial_dealings=*/ None, log,
         );
-    }
-    let ecdsa_payload = ecdsa_payload.unwrap();
+    };
 
     let block_reader = block_chain_reader(
         pool_reader,
@@ -207,29 +205,23 @@ fn create_summary_payload_helper(
         .map(ecdsa::UnmaskedTranscriptWithAttributes::registry_version)
         .unwrap_or(curr_interval_registry_version);
 
-    let created_key_transcript = match &ecdsa_payload.key_transcript.next_in_creation {
-        ecdsa::KeyTranscriptCreation::Created(unmasked) => {
-            let transcript = block_reader.transcript(unmasked.as_ref())?;
-            Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
-                transcript.to_attributes(),
-                *unmasked,
-            ))
+    let created_key_transcript =
+        key_transcript::get_created_key_transcript(&ecdsa_payload.key_transcript, block_reader)?;
+
+    if created_key_transcript.is_none() {
+        if let Some(metrics) = ecdsa_payload_metrics {
+            metrics.critical_error_ecdsa_key_transcript_missing.inc();
         }
-        _ => {
-            if let Some(metrics) = ecdsa_payload_metrics {
-                metrics.critical_error_ecdsa_key_transcript_missing.inc();
-            }
-            error!(
-                log,
-                "{}: Key not created in previous interval, \
+
+        error!(
+            log,
+            "{}: Key not created in previous interval, \
                 keep trying in next interval(height = {}), key_transcript = {}",
-                CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING,
-                height,
-                ecdsa_payload.key_transcript
-            );
-            None
-        }
-    };
+            CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING,
+            height,
+            ecdsa_payload.key_transcript
+        );
+    }
 
     let is_new_key_transcript = current_key_transcript
         .map(ecdsa::UnmaskedTranscriptWithAttributes::transcript_id)
@@ -570,19 +562,14 @@ pub(crate) fn create_data_payload_helper_2(
     log: &ReplicaLogger,
 ) -> Result<(), EcdsaPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
-    if let ecdsa::KeyTranscriptCreation::Created(unmasked) =
-        &ecdsa_payload.key_transcript.next_in_creation
-    {
-        let transcript = block_reader.transcript(unmasked.as_ref())?;
-        if ecdsa_payload.key_transcript.current.is_none() {
-            ecdsa_payload.key_transcript.current = Some(
-                ecdsa::UnmaskedTranscriptWithAttributes::new(transcript.to_attributes(), *unmasked),
-            );
-        }
+    if ecdsa_payload.key_transcript.current.is_none() {
+        ecdsa_payload.key_transcript.current = key_transcript::get_created_key_transcript(
+            &ecdsa_payload.key_transcript,
+            block_reader,
+        )?;
     }
 
     ecdsa_payload.uid_generator.update_height(height)?;
-    let current_key_transcript = ecdsa_payload.key_transcript.current.as_ref().cloned();
 
     let request_expiry_time = ecdsa_config
         .signature_request_timeout_ns
@@ -598,30 +585,18 @@ pub(crate) fn create_data_payload_helper_2(
     );
     signatures::update_ongoing_signatures(
         new_signing_requests,
-        current_key_transcript.as_ref(),
         ecdsa_config.quadruples_to_create_in_advance,
         ecdsa_payload,
         log,
     )?;
-    quadruples::make_new_quadruples_if_needed(
-        current_key_transcript.as_ref(),
-        ecdsa_config,
-        ecdsa_payload,
-    );
+    quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload);
 
-    let mut new_transcripts = quadruples::update_quadruples_in_creation(
-        current_key_transcript.as_ref(),
-        ecdsa_payload,
-        transcript_builder,
-        height,
-        log,
-    )?;
+    let mut new_transcripts =
+        quadruples::update_quadruples_in_creation(ecdsa_payload, transcript_builder, height, log)?;
     if let Some(new_transcript) = update_next_key_transcript(
         receivers,
         next_interval_registry_version,
-        current_key_transcript.as_ref(),
-        &mut ecdsa_payload.key_transcript.next_in_creation,
-        &mut ecdsa_payload.uid_generator,
+        ecdsa_payload,
         transcript_builder,
         height,
         log,
@@ -641,16 +616,13 @@ pub(crate) fn create_data_payload_helper_2(
     resharing::update_completed_reshare_requests(
         ecdsa_payload,
         &resharing::make_reshare_dealings_response(ecdsa_dealings_contexts),
-        current_key_transcript.as_ref(),
         block_reader,
         transcript_builder,
         log,
     );
-    let reshare_requests = resharing::get_reshare_requests(ecdsa_dealings_contexts);
     resharing::initiate_reshare_requests(
         ecdsa_payload,
-        current_key_transcript.as_ref(),
-        reshare_requests,
+        resharing::get_reshare_requests(ecdsa_dealings_contexts),
     );
     Ok(())
 }
@@ -883,15 +855,16 @@ pub(crate) fn get_signing_requests<'a>(
 fn update_next_key_transcript(
     receivers: &[NodeId],
     registry_version: RegistryVersion,
-    current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
-    next_key_transcript_creation: &mut ecdsa::KeyTranscriptCreation,
-    uid_generator: &mut ecdsa::EcdsaUIDGenerator,
+    ecdsa_payload: &mut ecdsa::EcdsaPayload,
     transcript_cache: &dyn EcdsaTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<Option<IDkgTranscript>, EcdsaPayloadError> {
     let mut new_transcript = None;
-    match (current_key_transcript, &next_key_transcript_creation) {
+    match (
+        &ecdsa_payload.key_transcript.current,
+        &ecdsa_payload.key_transcript.next_in_creation,
+    ) {
         (Some(transcript), ecdsa::KeyTranscriptCreation::Begin) => {
             // We have an existing key transcript, need to reshare it to create next
             // Create a new reshare config when there is none
@@ -904,16 +877,18 @@ fn update_next_key_transcript(
                 receivers,
                 height,
             );
-            *next_key_transcript_creation = ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(
-                ecdsa::ReshareOfUnmaskedParams::new(
-                    uid_generator.next_transcript_id(),
-                    receivers_set,
-                    registry_version,
-                    transcript,
-                    transcript.unmasked_transcript(),
-                ),
-            );
+            ecdsa_payload.key_transcript.next_in_creation =
+                ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(
+                    ecdsa::ReshareOfUnmaskedParams::new(
+                        ecdsa_payload.uid_generator.next_transcript_id(),
+                        receivers_set,
+                        registry_version,
+                        transcript,
+                        transcript.unmasked_transcript(),
+                    ),
+                );
         }
+
         (Some(_), ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(config)) => {
             // check if the next key transcript has been made
             if let Some(transcript) =
@@ -928,27 +903,30 @@ fn update_next_key_transcript(
                     height,
                 );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, &transcript))?;
-                *next_key_transcript_creation =
+                ecdsa_payload.key_transcript.next_in_creation =
                     ecdsa::KeyTranscriptCreation::Created(transcript_ref);
                 new_transcript = Some(transcript);
             }
         }
+
         (None, ecdsa::KeyTranscriptCreation::Begin) => {
             // The first ECDSA key transcript has to be created, starting from a random
             // config. Here receivers and dealers are the same set.
-            let transcript_id = uid_generator.next_transcript_id();
+            let transcript_id = ecdsa_payload.uid_generator.next_transcript_id();
             let receivers_set = receivers.iter().copied().collect::<BTreeSet<_>>();
             let dealers_set = receivers_set.clone();
-            *next_key_transcript_creation = ecdsa::KeyTranscriptCreation::RandomTranscriptParams(
-                ecdsa::RandomTranscriptParams::new(
-                    transcript_id,
-                    dealers_set,
-                    receivers_set,
-                    registry_version,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
-                ),
-            );
+            ecdsa_payload.key_transcript.next_in_creation =
+                ecdsa::KeyTranscriptCreation::RandomTranscriptParams(
+                    ecdsa::RandomTranscriptParams::new(
+                        transcript_id,
+                        dealers_set,
+                        receivers_set,
+                        registry_version,
+                        AlgorithmId::ThresholdEcdsaSecp256k1,
+                    ),
+                );
         }
+
         (None, ecdsa::KeyTranscriptCreation::RandomTranscriptParams(config)) => {
             // Check if the random transcript has been created
             if let Some(transcript) =
@@ -956,18 +934,20 @@ fn update_next_key_transcript(
             {
                 let receivers_set = receivers.iter().copied().collect::<BTreeSet<_>>();
                 let transcript_ref = ecdsa::MaskedTranscript::try_from((height, &transcript))?;
-                *next_key_transcript_creation = ecdsa::KeyTranscriptCreation::ReshareOfMaskedParams(
-                    ecdsa::ReshareOfMaskedParams::new(
-                        uid_generator.next_transcript_id(),
-                        receivers_set,
-                        registry_version,
-                        &transcript,
-                        transcript_ref,
-                    ),
-                );
+                ecdsa_payload.key_transcript.next_in_creation =
+                    ecdsa::KeyTranscriptCreation::ReshareOfMaskedParams(
+                        ecdsa::ReshareOfMaskedParams::new(
+                            ecdsa_payload.uid_generator.next_transcript_id(),
+                            receivers_set,
+                            registry_version,
+                            &transcript,
+                            transcript_ref,
+                        ),
+                    );
                 new_transcript = Some(transcript);
             }
         }
+
         (None, ecdsa::KeyTranscriptCreation::ReshareOfMaskedParams(config)) => {
             // Check if the unmasked transcript has been created
             if let Some(transcript) =
@@ -982,11 +962,12 @@ fn update_next_key_transcript(
                     height,
                 );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, &transcript))?;
-                *next_key_transcript_creation =
+                ecdsa_payload.key_transcript.next_in_creation =
                     ecdsa::KeyTranscriptCreation::Created(transcript_ref);
                 new_transcript = Some(transcript);
             }
         }
+
         (None, ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, config))) => {
             // Check if the unmasked transcript has been created
             if let Some(transcript) =
@@ -1003,21 +984,25 @@ fn update_next_key_transcript(
                     height,
                 );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, &transcript))?;
-                *next_key_transcript_creation =
+                ecdsa_payload.key_transcript.next_in_creation =
                     ecdsa::KeyTranscriptCreation::Created(transcript_ref);
                 new_transcript = Some(transcript);
             }
         }
-        (None, ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(_)) => {
-            unreachable!("Unexpected ReshareOfUnmaskedParams for key transcript creation");
-        }
+
         (_, ecdsa::KeyTranscriptCreation::Created(_)) => {
             // valid case that we can ignore
         }
+
+        (None, ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(_)) => {
+            unreachable!("Unexpected ReshareOfUnmaskedParams for key transcript creation");
+        }
+
         _ => {
             unreachable!("Unexpected next_key_transcript configuration reached!");
         }
     }
+
     Ok(new_transcript)
 }
 
@@ -1250,13 +1235,12 @@ mod tests {
         );
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::from(0), &idkg_key_transcript)).unwrap();
-        let key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+        ecdsa_payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
             idkg_key_transcript.to_attributes(),
             key_transcript_ref,
-        );
+        ));
         let result = signatures::update_ongoing_signatures(
             result,
-            Some(&key_transcript),
             max_ongoing_signatures,
             &mut ecdsa_payload,
             &no_op_logger(),
@@ -1298,7 +1282,6 @@ mod tests {
         // We should be able to move the 2nd request into ongoing_signatures.
         let result = signatures::update_ongoing_signatures(
             new_requests,
-            Some(&key_transcript),
             max_ongoing_signatures,
             &mut ecdsa_payload,
             &no_op_logger(),
@@ -1501,9 +1484,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1534,9 +1515,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1573,9 +1552,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1606,13 +1583,12 @@ mod tests {
 
         // 4. Reshare the current key transcript to get the next one
         let cur_height = Height::new(40);
+        payload.key_transcript.current = Some(current_key_transcript.clone());
         payload.key_transcript.next_in_creation = ecdsa::KeyTranscriptCreation::Begin;
         let result = update_next_key_transcript(
             &subnet_nodes,
             registry_version,
-            Some(&current_key_transcript),
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1644,9 +1620,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes,
             registry_version,
-            Some(&current_key_transcript),
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1698,9 +1672,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes_ids,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1731,9 +1703,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes_ids,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1770,9 +1740,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes_ids,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1819,9 +1787,7 @@ mod tests {
         let result = update_next_key_transcript(
             &subnet_nodes_ids,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1861,9 +1827,7 @@ mod tests {
         let result = update_next_key_transcript(
             &target_subnet_nodes_ids,
             registry_version,
-            None,
-            &mut payload.key_transcript.next_in_creation,
-            &mut payload.uid_generator,
+            &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
@@ -1928,10 +1892,10 @@ mod tests {
         );
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+        ecdsa_payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
             key_transcript.to_attributes(),
             key_transcript_ref,
-        );
+        ));
         let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
         // Fill in the ongoing signatures
         let sig_inputs_1 = create_sig_inputs_with_args(
@@ -1966,7 +1930,6 @@ mod tests {
 
         signatures::update_ongoing_signatures(
             all_requests,
-            Some(&current_key_transcript),
             max_ongoing_signatures,
             &mut ecdsa_payload,
             &no_op_logger(),
@@ -2126,6 +2089,7 @@ mod tests {
 
             // Create a payload block with references to these past blocks
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+            ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let (quadruple_id_1, quadruple_id_2) = (
                 ecdsa_payload.uid_generator.next_quadruple_id(),
                 ecdsa_payload.uid_generator.next_quadruple_id(),
@@ -2191,7 +2155,6 @@ mod tests {
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
             let result = quadruples::update_quadruples_in_creation(
-                Some(&current_key_transcript),
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,
@@ -2413,6 +2376,7 @@ mod tests {
 
             // Create a payload block with references to these past blocks
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+            ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let uid_generator = &mut ecdsa_payload.uid_generator;
             let quadruple_id_1 = uid_generator.next_quadruple_id();
             let quadruple_id_2 = uid_generator.next_quadruple_id();
@@ -2470,7 +2434,6 @@ mod tests {
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
             let result = quadruples::update_quadruples_in_creation(
-                Some(&current_key_transcript),
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,

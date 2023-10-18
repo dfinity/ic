@@ -85,12 +85,11 @@ pub(crate) fn update_signature_agreements(
 /// their matched quadruple has been fully produced.
 pub(crate) fn update_ongoing_signatures(
     new_requests: BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext>,
-    current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
     max_ongoing_signatures: u32,
     payload: &mut ecdsa::EcdsaPayload,
     log: &ReplicaLogger,
 ) -> Result<(), EcdsaPayloadError> {
-    if let Some(key_transcript) = current_key_transcript {
+    if let Some(key_transcript) = &payload.key_transcript.current {
         debug!(
             log,
             "update_ongoing_signatures: number of new_requests={}",
