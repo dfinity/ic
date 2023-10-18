@@ -26,6 +26,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
+use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use tokio::net::UnixListener;
@@ -62,7 +63,7 @@ pub trait TarpcCspVault {
     // Corresponds to `BasicSignatureCspVault.sign()`.
     async fn sign(
         algorithm_id: AlgorithmId,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError>;
 
@@ -72,7 +73,7 @@ pub trait TarpcCspVault {
     // Corresponds to `MultiSignatureCspVault.multi_sign()`.
     async fn multi_sign(
         algorithm_id: AlgorithmId,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
@@ -83,7 +84,7 @@ pub trait TarpcCspVault {
     // Corresponds to `ThresholdSignatureCspVault.threshold_sign()`.
     async fn threshold_sign(
         algorithm_id: AlgorithmId,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError>;
 
@@ -152,13 +153,13 @@ pub trait TarpcCspVault {
     ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 
     // Corresponds to `TlsHandshakeCspVault.tls_sign()`.
-    async fn tls_sign(message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError>;
+    async fn tls_sign(message: ByteBuf, key_id: KeyId) -> Result<CspSignature, CspTlsSignError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_create_dealing`
     #[allow(clippy::too_many_arguments)]
     async fn idkg_create_dealing(
         algorithm_id: AlgorithmId,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<MEGaPublicKey>,
@@ -172,13 +173,13 @@ pub trait TarpcCspVault {
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(
         dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
@@ -189,7 +190,7 @@ pub trait TarpcCspVault {
     async fn idkg_load_transcript_with_openings(
         dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
@@ -208,7 +209,7 @@ pub trait TarpcCspVault {
     async fn idkg_open_dealing(
         dealing: IDkgDealingInternal,
         dealer_index: NodeIndex,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         opener_index: NodeIndex,
         opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
@@ -217,7 +218,7 @@ pub trait TarpcCspVault {
     #[allow(clippy::too_many_arguments)]
     async fn ecdsa_sign_share(
         derivation_path: ExtendedDerivationPath,
-        hashed_message: Vec<u8>,
+        hashed_message: ByteBuf,
         nonce: Randomness,
         key: IDkgTranscriptInternal,
         kappa_unmasked: IDkgTranscriptInternal,
