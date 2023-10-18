@@ -14,6 +14,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError, InternalError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionKeySetWithPop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -229,54 +230,63 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         algorithm_id: AlgorithmId,
         key_id: KeyId,
-        epoch: Epoch,
+        epoch_to_update_to: Epoch,
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError> {
-        debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
+        debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch_to_update_to.get());
 
-        let updated_key_set = match algorithm_id {
-            AlgorithmId::NiDkg_Groth20_Bls12_381 => {
-                // Retrieve key from key store
-                let maybe_key_set = self.sks_read_lock().get(&key_id);
-                let key_set = maybe_key_set.ok_or_else(|| {
-                    ni_dkg_errors::CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(
-                        ni_dkg_errors::KeyNotFoundError {
-                            internal_error: "Cannot update forward secure key if it is missing"
-                                .to_string(),
-                            key_id: key_id.to_string(),
-                        },
-                    )
-                })?;
+        if algorithm_id != AlgorithmId::NiDkg_Groth20_Bls12_381 {
+            return Err(
+                ni_dkg_errors::CspDkgUpdateFsEpochError::UnsupportedAlgorithmId(algorithm_id),
+            );
+        }
 
-                // Specialise to Groth20
-                let key_set = specialise::fs_key_set(key_set)
-                    .expect("Not a forward secure secret key; it should be impossible to retrieve a key of the wrong type.");
-                let mut key_set = specialise::groth20::fs_key_set(key_set)
-                    .expect("If key generation is correct, it should be impossible to retrieve a key of the wrong type.");
+        // Retrieve key from key store
+        let maybe_key_set = self.sks_read_lock().get(&key_id);
+        let (mut key_set, mut secret_key) =
+            specialize_key_set_and_deserialize_secret_key(key_id, maybe_key_set)?;
 
-                // Update secret key to new epoch (deserialize key first)
-                let mut secret_key = SecretKey::deserialize(&key_set.secret_key);
-                let seed = Seed::from_rng(&mut *self.rng_write_lock());
-                ni_dkg_clib::update_key_inplace_to_epoch(&mut secret_key, epoch, seed);
-
-                // Replace secret key in key set (serialize key first)
-                key_set.secret_key = secret_key.serialize();
-
-                // Generalise:
-                Ok(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set))
+        if let Some(epoch_in_sks) = secret_key.current_epoch() {
+            if epoch_to_update_to <= epoch_in_sks {
+                // Epoch we want to update to is older than or equal to that of the key in the SKS
+                // => nothing to do; return early.
+                return Ok(());
             }
-            other => Err(ni_dkg_errors::CspDkgUpdateFsEpochError::UnsupportedAlgorithmId(other)),
-        };
 
-        // Save state
-        self.sks_write_lock()
-            .insert_or_replace(
-                key_id,
-                CspSecretKey::FsEncryption(updated_key_set?),
-                Some(NIDKG_FS_SCOPE),
-            )
-            .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {}", e));
+            // Epoch we want to update to is newer than that of the key in the SKS
+            // => try to update the key in the SKS
+            // Generate the seed and release the `rng_write_lock` before acquiring the SKS write
+            // lock, since if we were to hold both locks at the same time, we would have to adhere
+            // to the lock acquisition order.
+            let seed = Seed::from_rng(&mut *self.rng_write_lock());
+            // Optimistically update the key, even though we may have to throw it away in case the
+            // key in the SKS was updated to the `epoch_to_update_to` (or newer) in the meantime -
+            // the alternative would be to update the key while holding the SKS write lock, and
+            // this is not desirable since the key update is an expensive and relatively
+            // long-running operation.
+            ni_dkg_clib::update_key_inplace_to_epoch(&mut secret_key, epoch_to_update_to, seed);
+            // Replace secret key in key set (serialize key first)
+            key_set.secret_key = secret_key.serialize();
+            // Generalise:
+            let key_set = CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set);
 
-        // FIN
+            let mut sks_write_lock = self.sks_write_lock();
+            let maybe_reread_key_set = sks_write_lock.get(&key_id);
+            let (_reread_key_set, reread_secret_key) =
+                specialize_key_set_and_deserialize_secret_key(key_id, maybe_reread_key_set)?;
+            if let Some(reread_epoch_in_sks) = reread_secret_key.current_epoch() {
+                if epoch_to_update_to > reread_epoch_in_sks {
+                    // Epoch to update to is still newer than the one of the key in the SKS
+                    // => update the key in the SKS
+                    sks_write_lock
+                        .insert_or_replace(
+                            key_id,
+                            CspSecretKey::FsEncryption(key_set),
+                            Some(NIDKG_FS_SCOPE),
+                        )
+                        .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {}", e));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -460,6 +470,29 @@ fn gen_dealing_encryption_key_pair_from_seed(
     (public_key, pop, key_set)
 }
 
+fn specialize_key_set_and_deserialize_secret_key(
+    key_id: KeyId,
+    maybe_key_set: Option<CspSecretKey>,
+) -> Result<(FsEncryptionKeySetWithPop, SecretKey), ni_dkg_errors::CspDkgUpdateFsEpochError> {
+    let key_set = maybe_key_set.ok_or_else(|| {
+        ni_dkg_errors::CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(
+            ni_dkg_errors::KeyNotFoundError {
+                internal_error: "Cannot update forward secure key if it is missing".to_string(),
+                key_id: key_id.to_string(),
+            },
+        )
+    })?;
+
+    // Specialise to Groth20
+    let key_set = specialise::fs_key_set(key_set)
+        .expect("Not a forward secure secret key; it should be impossible to retrieve a key of the wrong type.");
+    let key_set = specialise::groth20::fs_key_set(key_set)
+        .expect("If key generation is correct, it should be impossible to retrieve a key of the wrong type.");
+
+    // Update secret key to new epoch (deserialize key first)
+    let secret_key = SecretKey::deserialize(&key_set.secret_key);
+    Ok((key_set, secret_key))
+}
 fn validate_dealing_encryption_public_key(
     node_id: NodeId,
     public_key_proto: PublicKey,
