@@ -1098,17 +1098,26 @@ async fn notify_top_up(
 ///   notification about.
 /// * `controller` - PrincipalId of the canister controller.
 #[candid_method(update, rename = "notify_create_canister")]
+#[allow(deprecated)]
 async fn notify_create_canister(
     NotifyCreateCanister {
         block_index,
         controller,
         subnet_type,
+        subnet_selection,
         settings,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&controller);
     let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let subnet_selection =
+        get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
+            NotifyError::Other {
+                error_code: NotifyErrorCode::BadSubnetSelection as u64,
+                error_message,
+            }
+        })?;
 
     let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_CREATE_CANISTER).await?;
 
@@ -1140,7 +1149,7 @@ async fn notify_create_canister(
         Some(result) => result,
         None => {
             let result =
-                process_create_canister(controller, from, amount, subnet_type, settings).await;
+                process_create_canister(controller, from, amount, subnet_selection, settings).await;
 
             with_state_mut(|state| {
                 state.blocks_notified.as_mut().unwrap().insert(
@@ -1158,9 +1167,11 @@ async fn notify_create_canister(
 }
 
 #[candid_method(update, rename = "create_canister")]
+#[allow(deprecated)]
 async fn create_canister(
     CreateCanister {
         settings,
+        subnet_selection,
         subnet_type,
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
@@ -1171,12 +1182,19 @@ async fn create_canister(
             create_error: "Insufficient cycles attached.".to_string(),
         });
     }
+    let subnet_selection =
+        get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
+            CreateCanisterError::Refunded {
+                refund_amount: cycles.into(),
+                create_error: error_message,
+            }
+        })?;
 
     // will always succeed because only calls from canisters can have cycles attached
     let calling_canister = caller().try_into().unwrap();
 
     dfn_core::api::msg_cycles_accept(cycles);
-    match do_create_canister(caller(), cycles.into(), subnet_type, settings, false).await {
+    match do_create_canister(caller(), cycles.into(), subnet_selection, settings, false).await {
         Ok(canister_id) => Ok(canister_id),
         Err(create_error) => {
             let refund_amount = cycles.saturating_sub(BAD_REQUEST_CYCLES_PENALTY as u64);
@@ -1442,7 +1460,7 @@ async fn process_create_canister(
     controller: PrincipalId,
     from: AccountIdentifier,
     amount: Tokens,
-    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
     settings: Option<CanisterSettingsArgs>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
@@ -1457,7 +1475,7 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match do_create_canister(controller, cycles, subnet_type, settings, true).await {
+    match do_create_canister(controller, cycles, subnet_selection, settings, true).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
@@ -1634,7 +1652,7 @@ async fn deposit_cycles(
 async fn do_create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
-    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
     settings: Option<CanisterSettingsArgs>,
     mint_cycles: bool,
 ) -> Result<CanisterId, String> {
@@ -1644,23 +1662,53 @@ async fn do_create_canister(
     // subnets change in the meantime.
     let mut rng = get_rng().await?;
 
-    // If subnet_type is `Some`, then use it to determine the eligible list
+    // If subnet_selection is set, then use it to determine the eligible list
     // of subnets. Otherwise, fall back to the list of subnets for the
     // provided controller id.
-    let mut subnets: Vec<SubnetId> = match subnet_type {
-        Some(subnet_type) => with_state(|state| {
-            let subnet_types_to_subnets = state
-                .subnet_types_to_subnets
-                .as_ref()
-                .expect("subnet types to subnets mapping is not `None`");
-            match subnet_types_to_subnets.get(&subnet_type) {
-                Some(s) => Ok(s.iter().copied().collect()),
-                None => Err(format!(
-                    "Provided subnet type {} does not exist",
-                    subnet_type
-                )),
+
+    let mut subnets: Vec<SubnetId> = match subnet_selection {
+        Some(option) => match option {
+            SubnetSelection::Filter(subnet_filter) => {
+                with_state(|state| match subnet_filter.subnet_type {
+                    Some(subnet_type) => {
+                        let subnet_types_to_subnets = state
+                            .subnet_types_to_subnets
+                            .as_ref()
+                            .expect("subnet types to subnets mapping is `None`");
+                        subnet_types_to_subnets
+                            .get(&subnet_type)
+                            .map(|set| set.iter().cloned().collect())
+                            .ok_or(format!(
+                                "Provided subnet type {} does not exist",
+                                subnet_type
+                            ))
+                    }
+                    None => Ok(get_subnets_for(&controller_id)),
+                })
             }
-        }),
+            SubnetSelection::Subnet { subnet } => with_state(|state| {
+                if state.default_subnets.contains(&subnet)
+                    || state
+                        .authorized_subnets
+                        .get(&controller_id)
+                        .map(|subnets| subnets.contains(&subnet))
+                        .unwrap_or(false)
+                    || state
+                        .subnet_types_to_subnets
+                        .as_ref()
+                        .map(|types_to_subnets| {
+                            types_to_subnets
+                                .values()
+                                .any(|subnets| subnets.contains(&subnet))
+                        })
+                        .unwrap_or(false)
+                {
+                    Ok(vec![subnet])
+                } else {
+                    Err(format!("Subnet {} does not exist or {} is not authorized to deploy to that subnet.", subnet, controller_id))
+                }
+            }),
+        },
         None => Ok(get_subnets_for(&controller_id)),
     }?;
 
@@ -1940,6 +1988,21 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         )?;
         Ok(())
     })
+}
+
+fn get_subnet_selection(
+    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
+) -> Result<Option<SubnetSelection>, String> {
+    if subnet_type.is_some() && subnet_selection.is_some() {
+        Err("Cannot specify subnet_type and subnet_selection at the same time.".to_string())
+    } else if let Some(subnet_type) = subnet_type {
+        Ok(Some(SubnetSelection::Filter(SubnetFilter {
+            subnet_type: Some(subnet_type),
+        })))
+    } else {
+        Ok(subnet_selection)
+    }
 }
 
 #[cfg(test)]

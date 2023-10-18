@@ -57,7 +57,9 @@ pub struct NotifyTopUp {
 pub struct NotifyCreateCanister {
     pub block_index: BlockIndex,
     pub controller: PrincipalId,
+    #[deprecated(note = "use subnet_selection instead")]
     pub subnet_type: Option<String>,
+    pub subnet_selection: Option<SubnetSelection>,
     pub settings: Option<CanisterSettingsArgs>,
 }
 
@@ -80,7 +82,9 @@ pub enum NotifyError {
 /// Argument taken by create_canister endpoint
 #[derive(Default, Debug, Clone, CandidType, Deserialize, PartialEq, Eq)]
 pub struct CreateCanister {
+    #[deprecated(note = "use subnet_selection instead")]
     pub subnet_type: Option<String>,
+    pub subnet_selection: Option<SubnetSelection>,
     pub settings: Option<CanisterSettingsArgs>,
 }
 
@@ -97,6 +101,19 @@ pub enum CreateCanisterError {
     },
 }
 
+/// Options to select subnets when creating a canister
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum SubnetSelection {
+    /// Choose a random subnet that satisfies the specified properties
+    Filter(SubnetFilter),
+    /// Choose a specific subnet
+    Subnet { subnet: SubnetId },
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct SubnetFilter {
+    pub subnet_type: Option<String>,
+}
 pub enum NotifyErrorCode {
     /// An internal error in the cycles minting canister (e.g., inconsistent state).
     /// That should never happen.
@@ -105,6 +122,8 @@ pub enum NotifyErrorCode {
     FailedToFetchBlock = 2,
     /// The cycles minting canister failed to execute the refund transaction.
     RefundFailed = 3,
+    /// The subnet selection parameters are set in an invalid way.
+    BadSubnetSelection = 4,
 }
 
 impl NotifyError {
