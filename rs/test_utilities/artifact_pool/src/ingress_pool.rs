@@ -48,7 +48,9 @@ impl IngressPoolThrottler for TestIngressPool {
     }
 }
 
-impl MutablePool<IngressArtifact, ChangeSet> for TestIngressPool {
+impl MutablePool<IngressArtifact> for TestIngressPool {
+    type ChangeSet = ChangeSet;
+
     fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>) {
         self.pool.insert(unvalidated_artifact)
     }

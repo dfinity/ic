@@ -118,7 +118,9 @@ impl CertificationPoolImpl {
     }
 }
 
-impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
+impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
+    type ChangeSet = ChangeSet;
+
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
         let height = msg.message.height();
         match &msg.message {

@@ -380,7 +380,9 @@ impl EcdsaPool for EcdsaPoolImpl {
     }
 }
 
-impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
+impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
+    type ChangeSet = EcdsaChangeSet;
+
     fn insert(&mut self, artifact: UnvalidatedArtifact<EcdsaMessage>) {
         let mut ops = EcdsaPoolSectionOps::new();
         ops.insert(artifact.into_inner());
