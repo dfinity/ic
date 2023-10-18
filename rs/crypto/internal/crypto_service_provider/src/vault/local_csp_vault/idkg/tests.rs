@@ -298,6 +298,7 @@ mod idkg_gen_dealing_encryption_key_pair {
 
 mod idkg_retain_active_keys {
     use crate::key_id::KeyId;
+    use crate::keygen::utils::mega_public_key_from_proto;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeyStore;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
@@ -307,8 +308,8 @@ mod idkg_retain_active_keys {
     use crate::SecretKeyStore;
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
-    use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
     use ic_crypto_internal_types::scope::{ConstScope, Scope};
+    use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
     use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
     use mockall::predicate::eq;
     use mockall::Sequence;
@@ -319,8 +320,13 @@ mod idkg_retain_active_keys {
     #[test]
     fn should_fail_when_idkg_oldest_public_key_not_found() {
         let vault = LocalCspVault::builder_for_test().build();
+        let idkg_dealing_encryption_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let idkg_dealing_encryption_public_key =
+            mega_public_key_from_proto(&idkg_dealing_encryption_public_key_proto)
+                .expect("should convert to MEGaPublicKey");
 
-        let result = vault.idkg_retain_active_keys(BTreeSet::new(), an_idkg_public_key());
+        let result =
+            vault.idkg_retain_active_keys(BTreeSet::new(), idkg_dealing_encryption_public_key);
 
         assert_matches!(result, Err(IDkgRetainKeysError::InternalError {internal_error})
             if internal_error.contains("Could not find oldest IDKG public key")
@@ -411,10 +417,16 @@ mod idkg_retain_active_keys {
         let mut canister_sks = MockSecretKeyStore::new();
         let mut seq = Sequence::new();
 
-        let oldest_public_key = an_idkg_public_key();
-        let oldest_public_key_proto =
-            idkg_dealing_encryption_pk_to_proto(oldest_public_key.clone());
-        pks.expect_retain_most_recent_idkg_public_keys_up_to_inclusive()
+        let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+            .expect("should convert to MEGaPublicKey");
+        pks.expect_idkg_dealing_encryption_pubkeys().never();
+        pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+            .times(1)
+            .in_sequence(&mut seq)
+            .with(eq(oldest_public_key_proto.clone()))
+            .return_once(|_| Ok(true));
+        pks.expect_retain_idkg_public_keys_since()
             .times(1)
             .in_sequence(&mut seq)
             .with(eq(oldest_public_key_proto.clone()))
@@ -454,10 +466,12 @@ mod idkg_retain_active_keys {
         let mut canister_sks = MockSecretKeyStore::new();
         let mut seq = Sequence::new();
 
-        let oldest_public_key = an_idkg_public_key();
-        let oldest_public_key_proto =
-            idkg_dealing_encryption_pk_to_proto(oldest_public_key.clone());
-        pks.expect_retain_most_recent_idkg_public_keys_up_to_inclusive()
+        let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+            .expect("should convert to MEGaPublicKey");
+        pks.expect_idkg_dealing_encryption_pubkeys().never();
+        pks.expect_retain_idkg_public_keys_since().never();
+        pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
             .times(1)
             .in_sequence(&mut seq)
             .with(eq(oldest_public_key_proto))
@@ -478,10 +492,6 @@ mod idkg_retain_active_keys {
         assert!(vault
             .idkg_retain_active_keys(BTreeSet::new(), oldest_public_key)
             .is_ok());
-    }
-
-    fn an_idkg_public_key() -> MEGaPublicKey {
-        MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::K256))
     }
 
     fn generate_idkg_dealing_encryption_key_pairs<

@@ -27,6 +27,11 @@ pub enum PublicKeyRetainError {
     OldestPublicKeyNotFound,
 }
 
+#[derive(Debug)]
+pub enum PublicKeyRetainCheckError {
+    OldestPublicKeyNotFound,
+}
+
 /// A store for public key material persisted on disk.
 ///
 /// If errors occur regarding reading from or writing to disk,
@@ -88,7 +93,8 @@ pub trait PublicKeyStore: Send + Sync {
         key: PublicKeyProto,
     ) -> Result<(), PublicKeyAddError>;
 
-    /// Retain only the most recent iDKG dealing encryption public keys.
+    /// Retain only the most recent iDKG dealing encryption public keys including the
+    /// `oldest_public_key_to_keep`.
     /// Returns `Ok(true)` iff this operation modified the public key store.
     ///
     /// The order of public keys is based on their order of insertion ([`Self::add_idkg_dealing_encryption_pubkey`])
@@ -100,10 +106,22 @@ pub trait PublicKeyStore: Send + Sync {
     /// * [`PublicKeyRetainError::OldestPublicKeyNotFound`] if the given `oldest_public_key_to_keep` was not found.
     /// No keys are deleted in that case.
     /// * [`PublicKeyRetainError::Io`] if an I/O error occurred while writing the retained keys back to disk.
-    fn retain_most_recent_idkg_public_keys_up_to_inclusive(
+    fn retain_idkg_public_keys_since(
         &mut self,
         oldest_public_key_to_keep: &PublicKeyProto,
     ) -> Result<bool, PublicKeyRetainError>;
+
+    /// Checks to see if a call to `retain_most_recent_idkg_public_keys_up_to_inclusive` would
+    /// modify the keystore.
+    ///
+    /// Returns `true` if the keystore would be modified, `false` otherwise.
+    ///
+    /// # Errors
+    /// * [`PublicKeyRetainError::OldestPublicKeyNotFound`] if the given `oldest_public_key_to_keep` was not found.
+    fn would_retain_idkg_public_keys_modify_pubkey_store(
+        &self,
+        oldest_public_key_to_keep: &PublicKeyProto,
+    ) -> Result<bool, PublicKeyRetainCheckError>;
 
     /// Gets the iDKG dealing encryption public keys.
     ///
