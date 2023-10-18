@@ -3228,7 +3228,7 @@ check-bins-linux:
     when: always
   before_script: "/bin/true"
   extends:
-    - ".build-k8s-legacy"
+    - ".build-k8s"
     - ".rules-master-pipeline-no-merge-train"
   image:
     name: ubuntu@sha256:b5a61709a9a44284d88fb12e5c48db0409cfad5b69d4ff8224077c57302df9cf
