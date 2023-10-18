@@ -3,7 +3,7 @@
 use crate::time_source::TimeSource;
 use ic_types::{
     artifact::{Advert, ArtifactKind, PriorityFn},
-    CountBytes, Height, NodeId, Time,
+    Height, NodeId, Time,
 };
 use serde::{Deserialize, Serialize};
 
@@ -100,6 +100,11 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
     ) -> Box<dyn Iterator<Item = T::Message> + '_>;
 }
 
+pub enum UnvalidatedArtifactEvent<Artifact: ArtifactKind> {
+    Insert(UnvalidatedArtifact<Artifact::Message>),
+    Remove(Artifact::Id),
+}
+
 /// Validated artifact
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidatedArtifact<T> {
@@ -107,25 +112,8 @@ pub struct ValidatedArtifact<T> {
     pub timestamp: Time,
 }
 
-impl<T> ValidatedArtifact<T> {
-    pub fn map<U, F>(self, f: F) -> ValidatedArtifact<U>
-    where
-        F: FnOnce(T) -> U,
-    {
-        ValidatedArtifact {
-            msg: f(self.msg),
-            timestamp: self.timestamp,
-        }
-    }
-}
-
-pub enum UnvalidatedArtifactEvent<Artifact: ArtifactKind> {
-    Insert(UnvalidatedArtifact<Artifact::Message>),
-    Remove(Artifact::Id),
-}
-
 /// Unvalidated artifact
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnvalidatedArtifact<T> {
     pub message: T,
     pub peer_id: NodeId,
@@ -133,12 +121,6 @@ pub struct UnvalidatedArtifact<T> {
 }
 
 // Traits for accessing data for (un)validated artifacts follow.
-
-impl<T: CountBytes> CountBytes for ValidatedArtifact<T> {
-    fn count_bytes(&self) -> usize {
-        self.msg.count_bytes() + self.timestamp.count_bytes()
-    }
-}
 
 impl<T> AsRef<T> for ValidatedArtifact<T> {
     fn as_ref(&self) -> &T {
