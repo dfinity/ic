@@ -87,7 +87,7 @@ async fn start(runtime: Arc<Runtime>) {
         }
     };
     // This process is the one to start PocketIC.
-    let _guard = setup_tracing(&args);
+    let _guard = setup_tracing(args.pid);
 
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default().build();
@@ -172,7 +172,7 @@ async fn start(runtime: Arc<Runtime>) {
 }
 
 // Registers a global subscriber that collects tracing events and spans.
-fn setup_tracing(args: &ValidatedArgs) -> Option<WorkerGuard> {
+fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
     use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
     use tracing_subscriber::prelude::*;
@@ -192,11 +192,11 @@ fn setup_tracing(args: &ValidatedArgs) -> Option<WorkerGuard> {
 
     let guard = match std::env::var(LOG_DIR_PATH_ENV_NAME).map(std::path::PathBuf::from) {
         Ok(p) => {
-            std::fs::create_dir_all(&p).expect("Could not create directory!");
-            let pid = args.pid;
+            std::fs::create_dir_all(&p).expect("Could not create directory");
             let dt = OffsetDateTime::from(std::time::SystemTime::now());
             let ts = dt.format(&Rfc3339).unwrap().replace(':', "_");
-            let appender = tracing_appender::rolling::never(&p, format!("{ts}_pocket_ic_{pid}"));
+            let appender =
+                tracing_appender::rolling::never(&p, format!("pocket_ic_server_{ts}_{pid}.log"));
             let (non_blocking_appender, guard) = tracing_appender::non_blocking(appender);
 
             let log_dir_filter: EnvFilter =
