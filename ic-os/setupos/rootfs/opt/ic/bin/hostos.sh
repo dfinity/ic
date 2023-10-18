@@ -11,10 +11,13 @@ function install_hostos() {
 
     target_drive=$(find_first_drive)
 
-    size=$(tar --list -v -f /data/host-os.img.tar.gz disk.img | cut -d ' ' -f 3)
+    TMPDIR=$(mktemp -d)
+    tar xafS /data/host-os.img.tar.zst -C "${TMPDIR}" disk.img
+
+    size=$(wc -c <"${TMPDIR}/disk.img")
     size="${size:=0}"
 
-    tar xzOf /data/host-os.img.tar.gz disk.img | pv -f -s "$size" | dd of="/dev/${target_drive}" bs=10M
+    pv -f -s "$size" "${TMPDIR}/disk.img" | dd of="/dev/${target_drive}" bs=10M conv=sparse
     log_and_reboot_on_error "${?}" "Unable to install HostOS disk-image on drive: /dev/${target_drive}"
 
     sync
