@@ -209,6 +209,9 @@ message SnsInitPayload {
   // swap.
   optional uint64 nns_proposal_id = 34;
 
+  // Whether or not the neurons' fund is participating
+  optional bool neurons_fund_participation = 40;
+
   // The Neurons' Fund participants of this SNS decentralization swap.
   optional NeuronsFundParticipants neurons_fund_participants = 35;
 

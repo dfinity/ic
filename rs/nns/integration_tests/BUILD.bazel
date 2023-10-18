@@ -35,9 +35,6 @@ BASE_DEPENDENCIES = [
         "//rs/crypto/sha2",
         "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
-        "//rs/nns/constants",
-        "//rs/nns/gtc",
-        "//rs/nns/test_utils",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/canister",
@@ -79,7 +76,14 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
     "//rs/sns/swap",
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/nns/gtc",
+    ],
+})
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
@@ -87,7 +91,14 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/nns/constants:constants--test_feature",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/nns/gtc:gtc--test_feature",
+    ],
+})
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
@@ -118,7 +129,7 @@ DEV_DATA = [
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
-    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister-test",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
@@ -151,7 +162,7 @@ DEV_ENV = {
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
     "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
     "GOVERNANCE_MEMORY_MIGRATION_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-memory-migration-test-canister)",
-    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister-test)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
@@ -214,7 +225,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = ["src/lib.rs"],
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:governance_mem_test`

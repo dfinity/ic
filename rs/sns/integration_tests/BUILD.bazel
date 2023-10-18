@@ -10,7 +10,6 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
-    "//rs/nns/constants",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icp_ledger/ledger",
@@ -41,11 +40,13 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/init",
     "//rs/sns/test_utils",
+    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
     "//rs/sns/test_utils:test_utils--test_feature",
+    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -146,7 +147,7 @@ DATA_DEPS = [
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
-    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister-test",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
@@ -178,7 +179,7 @@ ENV = {
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "SNS_TEST_DAPP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-test-dapp-canister)",
-    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister-test)",
 }
 
 rust_test_suite_with_extra_srcs(

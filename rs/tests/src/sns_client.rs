@@ -351,7 +351,7 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
             start_time: None,
             duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
             neurons_fund_investment_icp: Some(Tokens::from_tokens(100)),
-            neurons_fund_participation: None, // TODO NNS1-2569: Populate
+            neurons_fund_participation: Some(true),
         }),
         ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(Tokens::from_e8s(100_000)),

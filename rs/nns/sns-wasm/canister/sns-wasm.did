@@ -116,6 +116,7 @@ type SnsInitPayload = record {
   max_dissolve_delay_seconds : opt nat64;
   max_dissolve_delay_bonus_percentage : opt nat64;
   nns_proposal_id : opt nat64;
+  neurons_fund_participation : opt bool;
   min_participant_icp_e8s : opt nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   fallback_controller_principal_ids : vec text;

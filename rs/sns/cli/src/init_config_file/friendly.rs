@@ -183,6 +183,9 @@ pub(crate) struct Swap {
 
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     neurons_fund_investment_icp: nervous_system_pb::Tokens,
+
+    #[serde(default)]
+    neurons_fund_participation: Option<bool>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -743,6 +746,7 @@ impl Swap {
             start_time,
             duration,
             neurons_fund_investment_icp,
+            neurons_fund_participation,
         } = self;
 
         let minimum_participants = Some(*minimum_participants);
@@ -771,6 +775,8 @@ impl Swap {
 
         let neurons_fund_investment_icp = Some(*neurons_fund_investment_icp);
 
+        let neurons_fund_participation = *neurons_fund_participation;
+
         nns_governance_pb::SwapParameters {
             minimum_participants,
 
@@ -792,7 +798,7 @@ impl Swap {
             duration,
 
             neurons_fund_investment_icp,
-            neurons_fund_participation: None, // TODO NNS1-2569: Populate
+            neurons_fund_participation,
         }
     }
 }

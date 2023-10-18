@@ -14,7 +14,6 @@ filegroup(
 BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
-    "//rs/nns/constants",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
@@ -43,11 +42,13 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/governance",
     "//rs/sns/init",
+    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/init:init--test_feature",
+    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -126,6 +127,17 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/sns-wasm.did",
     deps = DEPENDENCIES + [":sns-wasm"],
+)
+
+rust_canister(
+    name = "sns-wasm-canister-test",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/sns-wasm.did"],
+    crate_features = ["test"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/sns-wasm.did",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":sns-wasm--test_feature"],
 )
 
 rust_test(
