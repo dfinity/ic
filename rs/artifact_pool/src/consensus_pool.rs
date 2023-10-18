@@ -581,7 +581,9 @@ impl ConsensusPool for ConsensusPoolImpl {
     }
 }
 
-impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
+impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
+    type ChangeSet = ChangeSet;
+
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         let mut ops = PoolSectionOps::new();
         ops.insert(unvalidated_artifact);

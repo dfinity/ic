@@ -110,7 +110,9 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     }
 }
 
-impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPoolImpl {
+impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
+    type ChangeSet = CanisterHttpChangeSet;
+
     fn insert(&mut self, artifact: UnvalidatedArtifact<CanisterHttpResponseShare>) {
         self.unvalidated
             .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);

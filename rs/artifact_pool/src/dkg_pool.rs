@@ -98,7 +98,9 @@ impl DkgPoolImpl {
     }
 }
 
-impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
+impl MutablePool<DkgArtifact> for DkgPoolImpl {
+    type ChangeSet = ChangeSet;
+
     /// Inserts an unvalidated artifact into the unvalidated section.
     fn insert(&mut self, artifact: UnvalidatedArtifact<consensus::dkg::Message>) {
         self.unvalidated

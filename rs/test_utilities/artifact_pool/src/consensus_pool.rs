@@ -711,7 +711,9 @@ impl ConsensusPool for TestConsensusPool {
     }
 }
 
-impl MutablePool<ConsensusArtifact, ChangeSet> for TestConsensusPool {
+impl MutablePool<ConsensusArtifact> for TestConsensusPool {
+    type ChangeSet = ChangeSet;
+
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
     }

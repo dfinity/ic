@@ -47,7 +47,9 @@ pub struct ChangeResult<Artifact: ArtifactKind> {
 
 /// Defines the canonical way for mutating an artifact pool.
 /// Mutations should happen from a single place/component.
-pub trait MutablePool<Artifact: ArtifactKind, C> {
+pub trait MutablePool<Artifact: ArtifactKind> {
+    type ChangeSet;
+
     /// Inserts a message into the unvalidated part of the pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<Artifact::Message>);
 
@@ -58,7 +60,7 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
     fn apply_changes(
         &mut self,
         time_source: &dyn TimeSource,
-        change_set: C,
+        change_set: Self::ChangeSet,
     ) -> ChangeResult<Artifact>;
 }
 

@@ -82,7 +82,7 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet>,
+    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet = ChangeSet>,
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {

@@ -256,7 +256,9 @@ impl IngressPool for IngressPoolImpl {
     }
 }
 
-impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
+impl MutablePool<IngressArtifact> for IngressPoolImpl {
+    type ChangeSet = ChangeSet;
+
     /// Insert a new ingress message in the Ingress Pool and update the
     /// peer_index
     fn insert(&mut self, artifact: UnvalidatedArtifact<SignedIngress>) {
