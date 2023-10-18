@@ -15,7 +15,8 @@ use canister_test::{Canister, Project, Wasm};
 use cycles_minting_canister::{
     create_canister_txn, top_up_canister_txn, CreateCanisterResult,
     IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyTopUp,
-    TokensToCycles, TopUpCanisterResult, CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR,
+    SubnetFilter, SubnetSelection, TokensToCycles, TopUpCanisterResult, CREATE_CANISTER_REFUND_FEE,
+    DEFAULT_CYCLES_PER_XDR,
 };
 use dfn_candid::{candid_one, CandidOne};
 use dfn_protobuf::{ProtoBuf, ToProto};
@@ -251,7 +252,7 @@ pub fn test(env: TestEnv) {
         let send_amount = Tokens::new(2, 0).unwrap();
 
         let (err, refund_block) = user1
-            .create_canister_cmc(send_amount, None, &controller_pid, None)
+            .create_canister_cmc(send_amount, None, &controller_pid, None, None)
             .await
             .unwrap_err();
 
@@ -297,7 +298,7 @@ pub fn test(env: TestEnv) {
         let small_amount = Tokens::new(0, 500_000).unwrap();
 
         let (err, refund_block) = user1
-            .create_canister_cmc(small_amount, None, &controller_pid, None)
+            .create_canister_cmc(small_amount, None, &controller_pid, None, None)
             .await
             .unwrap_err();
 
@@ -331,7 +332,7 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
         let (err, no_refund_block) = user1
-            .create_canister_cmc(tiny_amount, None, &controller_pid, None)
+            .create_canister_cmc(tiny_amount, None, &controller_pid, None, None)
             .await
             .unwrap_err();
 
@@ -396,14 +397,14 @@ pub fn test(env: TestEnv) {
             .pay_for_canister(initial_amount, None, &controller_pid)
             .await;
         let new_canister_id = user1
-            .notify_canister_create_cmc(bh, None, &controller_pid, None)
+            .notify_canister_create_cmc(bh, None, &controller_pid, None, None)
             .await
             .unwrap();
 
         // second notify should return the success result together with canister id
         let tip = tst.get_tip().await.unwrap();
         let can_id = user1
-            .notify_canister_create_cmc(bh, None, &controller_pid, None)
+            .notify_canister_create_cmc(bh, None, &controller_pid, None, None)
             .await
             .unwrap();
         assert_eq!(new_canister_id, can_id);
@@ -658,7 +659,7 @@ pub fn test(env: TestEnv) {
         let nns_amount = Tokens::new(2, 0).unwrap();
 
         let new_canister_id = user1
-            .create_canister_cmc(nns_amount, None, &controller_pid, None)
+            .create_canister_cmc(nns_amount, None, &controller_pid, None, None)
             .await
             .unwrap();
 
@@ -741,7 +742,7 @@ pub fn test(env: TestEnv) {
             .pay_for_canister(nns_amount, None, &controller_pid)
             .await;
         let err = user1
-            .notify_canister_create_cmc(block, None, &controller_pid, None)
+            .notify_canister_create_cmc(block, None, &controller_pid, None, None)
             .await
             .unwrap_err();
 
@@ -790,7 +791,7 @@ pub fn test(env: TestEnv) {
         info!(logger, "creating NNS canister");
 
         user1
-            .notify_canister_create_cmc(block, None, &controller_pid, None)
+            .notify_canister_create_cmc(block, None, &controller_pid, None, None)
             .await
             .unwrap();
 
@@ -806,7 +807,7 @@ pub fn test(env: TestEnv) {
         let amount = Tokens::new(100_000, 0).unwrap();
 
         let (err, refund_block) = user1
-            .create_canister_cmc(amount, None, &controller_pid, None)
+            .create_canister_cmc(amount, None, &controller_pid, None, None)
             .await
             .unwrap_err();
 
@@ -903,7 +904,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
         let send_amount = Tokens::new(2, 0).unwrap();
 
         let (err, refund_block) = user1
-            .create_canister_cmc(send_amount, None, &controller_pid, None)
+            .create_canister_cmc(send_amount, None, &controller_pid, None, None)
             .await
             .unwrap_err();
 
@@ -959,19 +960,68 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
         )
         .await;
 
-        // Create canisters with sufficient funds on both an authorized and a
-        // subnet with a specific type and confirm the canisters are created
-        // on the expected subnet on each case.
+        // Create canisters with sufficient funds on
+        //  - an authorized subnet
+        //  - a subnet with a specified type via subnet_type
+        //  - a subnet with a specified type via subnet_selection
+        //  - a specific authorized subnet
+        //  - a specific subnet of another type
+        // and confirm the canisters are created on the expected subnet on each case.
         info!(logger, "creating canisters");
         let initial_amount = Tokens::new(10_000, 0).unwrap();
 
         let canister_on_authorized_subnet = user1
-            .create_canister_cmc(initial_amount, None, &controller_pid, None)
+            .create_canister_cmc(initial_amount, None, &controller_pid, None, None)
             .await
             .unwrap();
 
         let canister_on_type1_subnet = user1
-            .create_canister_cmc(initial_amount, None, &controller_pid, Some(type1))
+            .create_canister_cmc(
+                initial_amount,
+                None,
+                &controller_pid,
+                Some(type1.clone()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let canister_on_type1_subnet_2 = user1
+            .create_canister_cmc(
+                initial_amount,
+                None,
+                &controller_pid,
+                None,
+                Some(SubnetSelection::Filter(SubnetFilter {
+                    subnet_type: Some(type1),
+                })),
+            )
+            .await
+            .unwrap();
+
+        let canister_on_specific_subnet_authorized = user1
+            .create_canister_cmc(
+                initial_amount,
+                None,
+                &controller_pid,
+                None,
+                Some(SubnetSelection::Subnet {
+                    subnet: authorized_subnet,
+                }),
+            )
+            .await
+            .unwrap();
+
+        let canister_on_specific_subnet_type1 = user1
+            .create_canister_cmc(
+                initial_amount,
+                None,
+                &controller_pid,
+                None,
+                Some(SubnetSelection::Subnet {
+                    subnet: subnet_of_type1,
+                }),
+            )
             .await
             .unwrap();
 
@@ -984,33 +1034,75 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .find_map(|s| (s.subnet_id == subnet_of_type1).then_some(s.nodes().next().unwrap()))
             .unwrap();
 
-        let _status: CanisterStatusResult = runtime_from_url(
+        let authorized_runtime = runtime_from_url(
             node_on_authorized_subnet.get_public_url(),
             node_on_authorized_subnet.effective_canister_id(),
-        )
-        .get_management_canister_with_effective_canister_id(canister_on_authorized_subnet.into())
-        .update_from_sender(
-            "canister_status",
-            candid_one,
-            CanisterIdRecord::from(canister_on_authorized_subnet),
-            &Sender::from_keypair(&controller_user_keypair),
-        )
-        .await
-        .unwrap();
-
-        let _status: CanisterStatusResult = runtime_from_url(
+        );
+        let type1_runtime = runtime_from_url(
             node_on_type1_subnet.get_public_url(),
             node_on_type1_subnet.effective_canister_id(),
-        )
-        .get_management_canister_with_effective_canister_id(canister_on_type1_subnet.into())
-        .update_from_sender(
-            "canister_status",
-            candid_one,
-            CanisterIdRecord::from(canister_on_type1_subnet),
-            &Sender::from_keypair(&controller_user_keypair),
-        )
-        .await
-        .unwrap();
+        );
+
+        let _status: CanisterStatusResult = authorized_runtime
+            .get_management_canister_with_effective_canister_id(
+                canister_on_authorized_subnet.into(),
+            )
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(canister_on_authorized_subnet),
+                &Sender::from_keypair(&controller_user_keypair),
+            )
+            .await
+            .unwrap();
+
+        let _status: CanisterStatusResult = type1_runtime
+            .get_management_canister_with_effective_canister_id(canister_on_type1_subnet.into())
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(canister_on_type1_subnet),
+                &Sender::from_keypair(&controller_user_keypair),
+            )
+            .await
+            .unwrap();
+
+        let _status: CanisterStatusResult = type1_runtime
+            .get_management_canister_with_effective_canister_id(canister_on_type1_subnet_2.into())
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(canister_on_type1_subnet_2),
+                &Sender::from_keypair(&controller_user_keypair),
+            )
+            .await
+            .unwrap();
+
+        let _status: CanisterStatusResult = authorized_runtime
+            .get_management_canister_with_effective_canister_id(
+                canister_on_specific_subnet_authorized.into(),
+            )
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(canister_on_specific_subnet_authorized),
+                &Sender::from_keypair(&controller_user_keypair),
+            )
+            .await
+            .unwrap();
+
+        let _status: CanisterStatusResult = type1_runtime
+            .get_management_canister_with_effective_canister_id(
+                canister_on_specific_subnet_type1.into(),
+            )
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(canister_on_specific_subnet_type1),
+                &Sender::from_keypair(&controller_user_keypair),
+            )
+            .await
+            .unwrap();
     });
 }
 
@@ -1197,12 +1289,19 @@ impl UserHandle {
         sender_subaccount: Option<Subaccount>,
         controller_id: &PrincipalId,
         subnet_type: Option<String>,
+        subnet_selection: Option<SubnetSelection>,
     ) -> CreateCanisterResult {
         let block = self
             .pay_for_canister(amount, sender_subaccount, controller_id)
             .await;
-        self.notify_canister_create_cmc(block, sender_subaccount, controller_id, subnet_type)
-            .await
+        self.notify_canister_create_cmc(
+            block,
+            sender_subaccount,
+            controller_id,
+            subnet_type,
+            subnet_selection,
+        )
+        .await
     }
 
     pub async fn top_up_canister_ledger(
@@ -1269,11 +1368,14 @@ impl UserHandle {
         _sender_subaccount: Option<Subaccount>,
         controller_id: &PrincipalId,
         subnet_type: Option<String>,
+        subnet_selection: Option<SubnetSelection>,
     ) -> CreateCanisterResult {
+        #[allow(deprecated)]
         let notify_arg = NotifyCreateCanister {
             block_index: block,
             controller: *controller_id,
             subnet_type,
+            subnet_selection,
             settings: None,
         };
 

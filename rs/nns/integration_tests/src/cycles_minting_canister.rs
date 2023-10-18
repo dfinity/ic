@@ -678,10 +678,12 @@ fn notify_create_canister(
     };
 
     let block_index = send_transfer(state_machine, &transfer_args).expect("transfer failed");
+    #[allow(deprecated)]
     let notify_args = NotifyCreateCanister {
         block_index,
         controller: *TEST_USER1_PRINCIPAL,
         subnet_type: None,
+        subnet_selection: None,
         settings,
     };
 
@@ -709,9 +711,11 @@ fn cmc_create_canister_with_cycles(
     subnet_type: Option<String>,
     cycles: u128,
 ) -> Result<CanisterId, CreateCanisterError> {
+    #[allow(deprecated)]
     let create_args = Encode!(&CreateCanister {
         settings,
         subnet_type,
+        subnet_selection: None,
     })
     .unwrap();
 
