@@ -66,29 +66,29 @@ def image_deps(mode, _malicious = False):
 # child images, depending on this build variant.
 def _custom_partitions(mode):
     if mode == "dev":
-        guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.gz")
-        host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.gz")
+        guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
+        host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
         nns_url = "https://dfinity.org"
     elif mode == "dev-sev":
-        guest_image = Label("//ic-os/guestos/envs/dev-sev:disk-img.tar.gz")
-        host_image = Label("//ic-os/hostos/envs/dev-sev:disk-img.tar.gz")
+        guest_image = Label("//ic-os/guestos/envs/dev-sev:disk-img.tar.zst")
+        host_image = Label("//ic-os/hostos/envs/dev-sev:disk-img.tar.zst")
         nns_url = "https://dfinity.org"
     else:
-        guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.gz")
-        host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.gz")
+        guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
+        host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.zst")
         nns_url = "https://icp-api.io,https://icp0.io,https://ic0.app"
 
     copy_file(
         name = "copy_guestos_img",
         src = guest_image,
-        out = "guest-os.img.tar.gz",
+        out = "guest-os.img.tar.zst",
         allow_symlink = True,
     )
 
     copy_file(
         name = "copy_hostos_img",
         src = host_image,
-        out = "host-os.img.tar.gz",
+        out = "host-os.img.tar.zst",
         allow_symlink = True,
     )
 
@@ -130,8 +130,8 @@ def _custom_partitions(mode):
         srcs = [
             Label("//ic-os/setupos:data/nns_public_key.pem"),
             ":deployment.json",
-            ":guest-os.img.tar.gz",
-            ":host-os.img.tar.gz",
+            ":guest-os.img.tar.zst",
+            ":host-os.img.tar.zst",
         ],
         mode = "0644",
         package_dir = "data",
