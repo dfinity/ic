@@ -554,7 +554,7 @@ python-gitlab-ci-tests:
 
 check-bins-linux:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
     - .rules-master-pipeline-no-merge-train
   needs:
     - job: linux-openssl-static-binaries
