@@ -22,14 +22,16 @@ _download_canister_gz() {
     DOWNLOAD_NAME=$1
     GIT_HASH=$2
 
-    # See note at variable declaration
+    DOWNLOAD_URL="https://download.dfinity.systems/ic/${GIT_HASH}/canisters/${DOWNLOAD_NAME}.wasm.gz"
     OUTPUT_FILE="$MY_DOWNLOAD_DIR/$DOWNLOAD_NAME-$GIT_HASH.wasm.gz"
 
-    curl --silent "https://download.dfinity.systems/ic/$GIT_HASH/canisters/$DOWNLOAD_NAME.wasm.gz" \
-        --output "$OUTPUT_FILE" \
-        --fail
+    curl \
+        "${DOWNLOAD_URL}" \
+        --output "${OUTPUT_FILE}" \
+        --fail \
+        --silent
 
-    echo "$OUTPUT_FILE"
+    echo "${OUTPUT_FILE}"
 }
 
 _canister_download_name_for_sns_canister_type() {
