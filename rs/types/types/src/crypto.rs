@@ -50,7 +50,7 @@ impl fmt::Debug for CryptoHash {
 pub type CryptoHashOf<T> = Id<T, CryptoHash>;
 
 /// Signed contains the signed content and its signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct Signed<T, S> {
     pub content: T,
     pub signature: S,

@@ -117,9 +117,7 @@ impl CanisterHttpPoolManagerImpl {
                 if active_callback_ids.contains(&share.content.id) {
                     None
                 } else {
-                    Some(CanisterHttpChangeAction::RemoveValidated(
-                        ic_types::crypto::crypto_hash(share),
-                    ))
+                    Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
                 }
             })
             .chain(
@@ -129,9 +127,7 @@ impl CanisterHttpPoolManagerImpl {
                         if active_callback_ids.contains(&share.content.id) {
                             None
                         } else {
-                            Some(CanisterHttpChangeAction::RemoveUnvalidated(
-                                ic_types::crypto::crypto_hash(share),
-                            ))
+                            Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()))
                         }
                     }),
             )
@@ -311,7 +307,7 @@ impl CanisterHttpPoolManagerImpl {
                     .ok()?;
                 if !node_is_in_committee {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
-                        ic_types::crypto::crypto_hash(share),
+                        share.clone(),
                         "Share signed by node that is not a member of the canister http committee"
                             .to_string(),
                     ));
@@ -322,7 +318,7 @@ impl CanisterHttpPoolManagerImpl {
 
                     self.metrics.shares_marked_invalid.inc();
                     Some(CanisterHttpChangeAction::HandleInvalid(
-                        ic_types::crypto::crypto_hash(share),
+                        share.clone(),
                         format!("Unable to verify signature of share, {}", err),
                     ))
                 } else {
