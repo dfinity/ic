@@ -23,6 +23,7 @@ use std::{
     str::FromStr,
 };
 
+pub mod binary_search;
 pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
