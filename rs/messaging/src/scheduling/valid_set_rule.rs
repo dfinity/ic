@@ -304,19 +304,6 @@ impl ValidSetRuleImpl {
                     None => return Err(StateError::CanisterNotFound(payer)),
                 };
 
-                // Ensure the canister is running if the message isn't to a subnet.
-                if !ingress.is_addressed_to_subnet(self.own_subnet_id) {
-                    match canister.status() {
-                        CanisterStatusType::Running => {}
-                        CanisterStatusType::Stopping => {
-                            return Err(StateError::CanisterStopping(canister.canister_id()))
-                        }
-                        CanisterStatusType::Stopped => {
-                            return Err(StateError::CanisterStopped(canister.canister_id()))
-                        }
-                    }
-                }
-
                 // Withdraw cost of inducting the message.
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
@@ -330,6 +317,19 @@ impl ValidSetRuleImpl {
                     subnet_size,
                 ) {
                     return Err(StateError::CanisterOutOfCycles(err));
+                }
+
+                // Ensure the canister is running if the message isn't to a subnet.
+                if !ingress.is_addressed_to_subnet(self.own_subnet_id) {
+                    match canister.status() {
+                        CanisterStatusType::Running => {}
+                        CanisterStatusType::Stopping => {
+                            return Err(StateError::CanisterStopping(canister.canister_id()))
+                        }
+                        CanisterStatusType::Stopped => {
+                            return Err(StateError::CanisterStopped(canister.canister_id()))
+                        }
+                    }
                 }
 
                 state.push_ingress(ingress)
