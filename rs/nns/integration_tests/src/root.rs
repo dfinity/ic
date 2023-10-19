@@ -3,6 +3,8 @@ use canister_test::Runtime;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
+use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_USER1_KEYPAIR,
 };
@@ -196,25 +198,20 @@ fn test_stop_start_nns_canister() {
                 ProposalStatus::Executed
             );
 
-            // Perform a transfer, should fail.
-            let result: Result<BlockIndex, String> = nns_canisters
-                .ledger
+            // Check that the canister is stopped.
+            let result: Result<CanisterStatusResult, String> = nns_canisters
+                .root
                 .update_from_sender(
-                    "send_pb",
-                    protobuf,
-                    SendArgs {
-                        memo: Memo(0),
-                        amount: Tokens::from_tokens(100).unwrap(),
-                        fee: DEFAULT_TRANSFER_FEE,
-                        from_subaccount: None,
-                        to: AccountIdentifier::new(user2.get_principal_id(), None),
-                        created_at_time: None,
+                    "canister_status",
+                    candid_one,
+                    CanisterIdRecord {
+                        canister_id: nns_canisters.ledger.canister_id(),
                     },
                     &user1,
                 )
                 .await;
 
-            assert!(result.unwrap_err().contains("is stopped"));
+            assert_eq!(result.unwrap().status, CanisterStatusType::Stopped);
 
             let payload = StopOrStartCanisterProposal {
                 canister_id: LEDGER_CANISTER_ID,
