@@ -266,11 +266,16 @@ fn new_random_config(
 
 #[cfg(test)]
 pub(super) mod test_utils {
+    use crate::ecdsa::test_utils::create_sig_inputs;
+
     use super::*;
 
     use std::collections::BTreeMap;
 
-    use ic_types::{consensus::ecdsa, NodeId, RegistryVersion};
+    use ic_types::{
+        consensus::ecdsa::{self, EcdsaPayload, QuadrupleId},
+        NodeId, RegistryVersion,
+    };
 
     pub fn create_new_quadruple_in_creation(
         subnet_nodes: &[NodeId],
@@ -286,6 +291,17 @@ pub(super) mod test_utils {
         );
         (kappa_config_ref, lambda_config_ref)
     }
+
+    pub fn create_available_quadruple(ecdsa_payload: &mut EcdsaPayload, caller: u8) -> QuadrupleId {
+        let sig_inputs = create_sig_inputs(caller);
+        let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
+        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
+        ecdsa_payload
+            .available_quadruples
+            .insert(quadruple_id, quadruple_ref.clone());
+
+        quadruple_id
+    }
 }
 
 #[cfg(test)]
@@ -294,44 +310,64 @@ pub(super) mod tests {
     use super::*;
 
     use crate::ecdsa::test_utils::{
-        empty_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        set_up_ecdsa_payload, EcdsaPayloadTestHelper, TestEcdsaBlockReader,
+        TestEcdsaTranscriptBuilder,
     };
-    use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
-    };
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
+    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
+    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_types::{
+        consensus::ecdsa::EcdsaPayload, crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
+        SubnetId,
+    };
+
+    fn set_up(
+        rng: &mut ReproducibleRng,
+        subnet_id: SubnetId,
+        height: Height,
+    ) -> (
+        EcdsaPayload,
+        CanisterThresholdSigTestEnvironment,
+        TestEcdsaBlockReader,
+    ) {
+        let (mut ecdsa_payload, env, block_reader) = set_up_ecdsa_payload(
+            rng, subnet_id, /*nodes_count=*/ 4, /*should_create_key_transcript=*/ true,
+        );
+        ecdsa_payload
+            .uid_generator
+            .update_height(height)
+            .expect("Should successfully update the height");
+
+        (ecdsa_payload, env, block_reader)
+    }
 
     #[test]
     fn test_ecdsa_make_new_quadruples_if_needed() {
+        let mut rng = reproducible_rng();
+        let quadruples_to_create_in_advance = 3;
         let subnet_id = subnet_test_id(1);
-        let cur_height = Height::new(1);
-        let subnet_nodes = (0..10).map(node_test_id).collect::<Vec<_>>();
-        let summary_registry_version = RegistryVersion::new(10);
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-        let update_res = ecdsa_payload.uid_generator.update_height(cur_height);
-        assert!(update_res.is_ok());
-        let quadruples_to_create_in_advance = 5;
+        let height = Height::new(10);
+        let (mut ecdsa_payload, env, _block_reader) = set_up(&mut rng, subnet_id, height);
         let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance,
             ..EcdsaConfig::default()
         };
-        // Success case
+
         make_new_quadruples_if_needed_helper(
-            &subnet_nodes,
-            summary_registry_version,
+            &env.nodes.ids::<Vec<_>>(),
+            env.newest_registry_version,
             &ecdsa_config,
             &mut ecdsa_payload,
         );
+
         assert_eq!(
             ecdsa_payload.quadruples_in_creation.len(),
             quadruples_to_create_in_advance as usize
         );
-        // Check transcript ids are unique
+        // Verify the generated transcript ids.
         let mut transcript_ids = BTreeSet::new();
-        for quadruple in ecdsa_payload.quadruples_in_creation.iter() {
+        for quadruple in &ecdsa_payload.quadruples_in_creation {
             transcript_ids.insert(quadruple.1.kappa_config.as_ref().transcript_id);
             transcript_ids.insert(quadruple.1.lambda_config.as_ref().transcript_id);
         }
@@ -340,45 +376,37 @@ pub(super) mod tests {
             2 * quadruples_to_create_in_advance as usize
         );
         assert_eq!(
-            transcript_ids.iter().max().unwrap().increment(),
-            ecdsa_payload.uid_generator.next_transcript_id()
+            transcript_ids,
+            BTreeSet::from([
+                IDkgTranscriptId::new(subnet_id, /*id=*/ 0, height),
+                IDkgTranscriptId::new(subnet_id, /*id=*/ 1, height),
+                IDkgTranscriptId::new(subnet_id, /*id=*/ 2, height),
+                IDkgTranscriptId::new(subnet_id, /*id=*/ 3, height),
+                IDkgTranscriptId::new(subnet_id, /*id=*/ 4, height),
+                IDkgTranscriptId::new(subnet_id, /*id=*/ 5, height),
+            ])
+        );
+        assert_eq!(
+            ecdsa_payload.peek_next_transcript_id().id() as u32,
+            2 * quadruples_to_create_in_advance,
         );
     }
 
     #[test]
     fn test_ecdsa_update_quadruples_in_creation() {
         let mut rng = reproducible_rng();
-        let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
-        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
-            &mut rng,
-        );
-        let registry_version = env.newest_registry_version;
-        let subnet_nodes: Vec<_> = env.nodes.ids();
-        let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
-        let mut block_reader = TestEcdsaBlockReader::new();
+        let (mut payload, env, mut block_reader) = set_up(&mut rng, subnet_id, Height::from(100));
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
-        let idkg_key_transcript =
-            generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
-        let key_transcript_ref =
-            ecdsa::UnmaskedTranscript::try_from((Height::new(100), &idkg_key_transcript)).unwrap();
-
-        let mut payload = empty_ecdsa_payload(subnet_id);
-        payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
-            idkg_key_transcript.to_attributes(),
-            key_transcript_ref,
-        ));
-        block_reader.add_transcript(*key_transcript_ref.as_ref(), idkg_key_transcript);
         // Start quadruple creation
         let (kappa_config_ref, lambda_config_ref) = create_new_quadruple_in_creation(
-            &subnet_nodes,
-            registry_version,
+            &env.nodes.ids::<Vec<_>>(),
+            env.newest_registry_version,
             &mut payload.uid_generator,
             &mut payload.quadruples_in_creation,
         );
+
         // 0. No action case
         let cur_height = Height::new(1000);
         let update_res = payload.uid_generator.update_height(cur_height);
@@ -401,7 +429,7 @@ pub(super) mod tests {
 
         // check if nothing has changed
         assert!(payload.available_quadruples.is_empty());
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 2);
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 2);
         assert_eq!(config_ids(&payload), [0, 1]);
 
@@ -435,7 +463,7 @@ pub(super) mod tests {
         // check if new config is made
         assert!(payload.available_quadruples.is_empty());
         let kappa_unmasked_config_id = IDkgTranscriptId::new(subnet_id, 2, cur_height);
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 3);
+        assert_eq!(payload.peek_next_transcript_id().id(), 3);
         assert_eq!(config_ids(&payload), [1, 2]);
 
         // 2. When lambda_masked is ready, expect a new key_times_lambda config.
@@ -467,7 +495,7 @@ pub(super) mod tests {
         }
         // check if new config is made
         assert!(payload.available_quadruples.is_empty());
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 4);
+        assert_eq!(payload.peek_next_transcript_id().id(), 4);
         let key_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 3, cur_height);
         assert_eq!(config_ids(&payload), [2, 3]);
 
@@ -504,7 +532,7 @@ pub(super) mod tests {
         }
         // check if new config is made
         assert!(payload.available_quadruples.is_empty());
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 5);
+        assert_eq!(payload.peek_next_transcript_id().id(), 5);
         let kappa_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 4, cur_height);
         assert_eq!(config_ids(&payload), [3, 4]);
 
@@ -548,7 +576,7 @@ pub(super) mod tests {
         assert_eq!(result.len(), 2);
         // check if new config is made
         assert_eq!(payload.available_quadruples.len(), 1);
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 5);
+        assert_eq!(payload.peek_next_transcript_id().id(), 5);
         assert!(config_ids(&payload).is_empty());
     }
 }

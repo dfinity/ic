@@ -173,8 +173,6 @@ pub(super) fn get_reshare_requests(
 
 #[cfg(test)]
 pub mod test_utils {
-    use std::str::FromStr;
-
     use ic_ic00_types::EcdsaKeyId;
     use ic_test_utilities::types::ids::node_test_id;
     use ic_types::RegistryVersion;
@@ -182,11 +180,12 @@ pub mod test_utils {
     use super::*;
 
     pub fn create_reshare_request(
+        key_id: EcdsaKeyId,
         num_nodes: u64,
         registry_version: u64,
     ) -> ecdsa::EcdsaReshareRequest {
         ecdsa::EcdsaReshareRequest {
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            key_id,
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
             registry_version: RegistryVersion::from(registry_version),
         }
@@ -195,122 +194,110 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::test_utils::*;
     use super::*;
 
     use assert_matches::assert_matches;
-    use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_dealings, generate_key_transcript, CanisterThresholdSigTestEnvironment,
-        IDkgParticipants,
-    };
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::types::ids::subnet_test_id;
-    use ic_types::{consensus::ecdsa::TranscriptAttributes, crypto::AlgorithmId, Height};
+    use ic_types::consensus::ecdsa::EcdsaPayload;
 
     use crate::ecdsa::test_utils::{
-        empty_ecdsa_payload, empty_response, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        empty_response, set_up_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
     };
 
-    #[test]
-    fn test_ecdsa_initiate_reshare_requests() {
+    fn set_up(should_create_key_transcript: bool) -> (EcdsaPayload, TestEcdsaBlockReader) {
         let mut rng = reproducible_rng();
-        let num_of_nodes = 4;
-        let subnet_id = subnet_test_id(1);
-        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+        let (ecdsa_payload, _env, block_reader) = set_up_ecdsa_payload(
             &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            should_create_key_transcript,
         );
-        let mut payload = empty_ecdsa_payload(subnet_id);
-        let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
-        let req_1 = create_reshare_request(1, 1);
-        let req_2 = create_reshare_request(2, 2);
-        let mut reshare_requests = BTreeSet::new();
-        reshare_requests.insert(req_1.clone());
-        reshare_requests.insert(req_2.clone());
 
-        // Key not yet created, requests should not be accepted
-        initiate_reshare_requests(&mut payload, reshare_requests.clone());
+        (ecdsa_payload, block_reader)
+    }
+
+    #[test]
+    fn test_ecdsa_initiate_reshare_requests_should_not_accept_when_key_transcript_not_created() {
+        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ false);
+        let request =
+            create_reshare_request(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(), 1, 1);
+
+        initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
+
         assert!(payload.ongoing_xnet_reshares.is_empty());
         assert!(payload.xnet_reshare_agreements.is_empty());
+    }
 
-        // Two new requests, should be accepted
-        let key_transcript =
-            generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
-        let key_transcript_ref =
-            ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
-        payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
-            key_transcript.to_attributes(),
-            key_transcript_ref,
-        ));
-        initiate_reshare_requests(&mut payload, reshare_requests.clone());
-        assert_eq!(payload.ongoing_xnet_reshares.len(), 2);
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_1));
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
+    #[test]
+    fn test_ecdsa_initiate_reshare_requests_good_path() {
+        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ true);
+        let request =
+            create_reshare_request(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(), 1, 1);
+
+        initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
+
+        assert!(payload.ongoing_xnet_reshares.contains_key(&request));
         assert!(payload.xnet_reshare_agreements.is_empty());
+    }
 
-        // One more new request, it should get added incrementally
-        let req_3 = create_reshare_request(3, 3);
-        reshare_requests.insert(req_3.clone());
-        initiate_reshare_requests(&mut payload, reshare_requests.clone());
-        assert_eq!(payload.ongoing_xnet_reshares.len(), 3);
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_1));
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_3));
+    #[test]
+    fn test_ecdsa_initiate_reshare_requests_incremental() {
+        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ true);
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let request = create_reshare_request(key_id.clone(), 1, 1);
+        let request_2 = create_reshare_request(key_id.clone(), 2, 2);
+
+        initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
+        initiate_reshare_requests(&mut payload, BTreeSet::from([request_2.clone()]));
+
+        assert!(payload.ongoing_xnet_reshares.contains_key(&request));
+        assert!(payload.ongoing_xnet_reshares.contains_key(&request_2));
         assert!(payload.xnet_reshare_agreements.is_empty());
+    }
 
-        // Request for an entry already in completed list, should
-        // not be accepted
-        let req_4 = create_reshare_request(4, 4);
-        reshare_requests.insert(req_4.clone());
-        payload
-            .xnet_reshare_agreements
-            .insert(req_4, ecdsa::CompletedReshareRequest::ReportedToExecution);
-        initiate_reshare_requests(&mut payload, reshare_requests.clone());
-        assert_eq!(payload.ongoing_xnet_reshares.len(), 3);
+    #[test]
+    fn test_ecdsa_initiate_reshare_requests_should_not_accept_already_completed() {
+        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ true);
+        let request =
+            create_reshare_request(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(), 1, 1);
+        payload.xnet_reshare_agreements.insert(
+            request.clone(),
+            ecdsa::CompletedReshareRequest::ReportedToExecution,
+        );
+
+        initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
+
+        assert!(payload.ongoing_xnet_reshares.is_empty());
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
     }
 
     #[test]
     fn test_ecdsa_update_completed_reshare_requests() {
-        let mut rng = reproducible_rng();
-        let num_of_nodes = 4;
-        let subnet_id = subnet_test_id(1);
-        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
-            &mut rng,
-        );
-        let mut payload = empty_ecdsa_payload(subnet_id);
-        let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
-        let mut block_reader = TestEcdsaBlockReader::new();
+        let (mut payload, block_reader) = set_up(/*should_create_key_transcript=*/ true);
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
-        let req_1 = create_reshare_request(1, 1);
-        let req_2 = create_reshare_request(2, 2);
-        let mut reshare_requests = BTreeSet::new();
-
-        reshare_requests.insert(req_1.clone());
-        reshare_requests.insert(req_2.clone());
-        let key_transcript =
-            generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
-        let key_transcript_ref =
-            ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
-        payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
-            key_transcript.to_attributes(),
-            key_transcript_ref,
-        ));
-        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        initiate_reshare_requests(&mut payload, reshare_requests.clone());
-        assert_eq!(payload.ongoing_xnet_reshares.len(), 2);
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_1));
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
-        assert!(payload.xnet_reshare_agreements.is_empty());
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let request_1 = create_reshare_request(key_id.clone(), 1, 1);
+        let request_2 = create_reshare_request(key_id.clone(), 2, 2);
+        initiate_reshare_requests(
+            &mut payload,
+            BTreeSet::from([request_1.clone(), request_2.clone()]),
+        );
 
         // Request 1 dealings are created, it should be moved from in
         // progress -> completed
-        let reshare_params = payload.ongoing_xnet_reshares.get(&req_1).unwrap().as_ref();
+        let reshare_params = payload
+            .ongoing_xnet_reshares
+            .get(&request_1)
+            .unwrap()
+            .as_ref();
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
@@ -321,16 +308,20 @@ mod tests {
             &no_op_logger(),
         );
         assert_eq!(payload.ongoing_xnet_reshares.len(), 1);
-        assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
+        assert!(payload.ongoing_xnet_reshares.contains_key(&request_2));
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
         assert_matches!(
-            payload.xnet_reshare_agreements.get(&req_1).unwrap(),
+            payload.xnet_reshare_agreements.get(&request_1).unwrap(),
             ecdsa::CompletedReshareRequest::Unreported(_)
         );
 
         // Request 2 dealings are created, it should be moved from in
         // progress -> completed
-        let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
+        let reshare_params = payload
+            .ongoing_xnet_reshares
+            .get(&request_2)
+            .unwrap()
+            .as_ref();
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
@@ -343,11 +334,11 @@ mod tests {
         assert!(payload.ongoing_xnet_reshares.is_empty());
         assert_eq!(payload.xnet_reshare_agreements.len(), 2);
         assert_matches!(
-            payload.xnet_reshare_agreements.get(&req_1).unwrap(),
+            payload.xnet_reshare_agreements.get(&request_1).unwrap(),
             ecdsa::CompletedReshareRequest::ReportedToExecution
         );
         assert_matches!(
-            payload.xnet_reshare_agreements.get(&req_2).unwrap(),
+            payload.xnet_reshare_agreements.get(&request_2).unwrap(),
             ecdsa::CompletedReshareRequest::Unreported(_)
         );
 
@@ -361,11 +352,11 @@ mod tests {
         assert!(payload.ongoing_xnet_reshares.is_empty());
         assert_eq!(payload.xnet_reshare_agreements.len(), 2);
         assert_matches!(
-            payload.xnet_reshare_agreements.get(&req_1).unwrap(),
+            payload.xnet_reshare_agreements.get(&request_1).unwrap(),
             ecdsa::CompletedReshareRequest::ReportedToExecution
         );
         assert_matches!(
-            payload.xnet_reshare_agreements.get(&req_2).unwrap(),
+            payload.xnet_reshare_agreements.get(&request_2).unwrap(),
             ecdsa::CompletedReshareRequest::ReportedToExecution
         );
     }

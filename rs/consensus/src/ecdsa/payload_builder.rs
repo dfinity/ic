@@ -1008,13 +1008,16 @@ fn update_next_key_transcript(
 
 #[cfg(test)]
 mod tests {
+    use super::signatures::test_utils::fake_sign_with_ecdsa_context;
+    use super::signatures::test_utils::fake_sign_with_ecdsa_context_with_batch_time;
     use super::*;
+    use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
+    use crate::ecdsa::payload_builder::quadruples::test_utils::create_available_quadruple;
     use crate::ecdsa::test_utils::*;
     use crate::ecdsa::utils::block_chain_reader;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
-    use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
     use ic_crypto_test_utils_canister_threshold_sigs::node::Nodes;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -1027,15 +1030,12 @@ mod tests {
     use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
     use ic_test_utilities::{
         mock_time,
-        state::ReplicatedStateBuilder,
-        types::{
-            ids::{node_test_id, subnet_test_id},
-            messages::RequestBuilder,
-        },
+        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
+    use ic_types::consensus::ecdsa::EcdsaPayload;
     use ic_types::consensus::ecdsa::TranscriptRef;
     use ic_types::consensus::{
         BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
@@ -1132,55 +1132,65 @@ mod tests {
         block_proposal.content.as_ref().clone()
     }
 
+    fn set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(
+        pseudo_random_ids: Vec<(EcdsaKeyId, [u8; 32], Time)>,
+    ) -> (
+        EcdsaPayload,
+        CanisterThresholdSigTestEnvironment,
+        BTreeMap<CallbackId, SignWithEcdsaContext>,
+    ) {
+        let mut rng = reproducible_rng();
+        let (ecdsa_payload, env, _block_reader) = set_up_ecdsa_payload(
+            &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            /*should_create_key_transcript=*/ true,
+        );
+
+        let mut contexts = BTreeMap::new();
+        for (index, (key_id, pseudo_random_id, batch_time)) in
+            pseudo_random_ids.into_iter().enumerate()
+        {
+            contexts.insert(
+                CallbackId::from(index as u64),
+                fake_sign_with_ecdsa_context_with_batch_time(key_id, pseudo_random_id, batch_time),
+            );
+        }
+
+        (ecdsa_payload, env, contexts)
+    }
+
     #[test]
     fn test_ecdsa_signing_request_order() {
-        let mut rng = reproducible_rng();
-        let subnet_id = subnet_test_id(1);
-        let num_of_nodes = 4;
-        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
-        let registry_version = env.newest_registry_version;
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
-            &mut rng,
-        );
-        let subnet_nodes: Vec<_> = env.nodes.ids();
-        let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        valid_keys.insert(key_id.clone());
+        let (mut ecdsa_payload, env, mut contexts) =
+            set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(vec![(
+                key_id.clone(),
+                [0; 32],
+                mock_time(),
+            )]);
+
+        let subnet_nodes: Vec<_> = env.nodes.ids();
+        let registry_version = env.newest_registry_version;
+
+        let valid_keys = BTreeSet::from([key_id]);
+
         let max_ongoing_signatures = 2;
-        let mut state = ReplicatedStateBuilder::default().build();
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .insert(
-                CallbackId::from(0),
-                SignWithEcdsaContext {
-                    request: RequestBuilder::new().build(),
-                    key_id,
-                    pseudo_random_id: [0; 32],
-                    message_hash: [0; 32],
-                    derivation_path: vec![],
-                    batch_time: mock_time(),
-                },
-            );
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+
         let height = Height::from(1);
-        let result = get_signing_requests(
+        let signing_requets = get_signing_requests(
             height,
-            None,
+            /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
-            &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
+            &contexts,
             &valid_keys,
-            None,
+            /*ecdsa_payload_metrics=*/ None,
         );
         // Because there is no quadruples available, expect empty return
-        assert!(result.is_empty());
+        assert!(signing_requets.is_empty());
+
         // Add two quadruples in creation
-        let quadruple_id_0 = ecdsa_payload.uid_generator.clone().next_quadruple_id();
+        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id();
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
@@ -1188,7 +1198,7 @@ mod tests {
                 &mut ecdsa_payload.uid_generator,
                 &mut ecdsa_payload.quadruples_in_creation,
             );
-        let quadruple_id_1 = ecdsa_payload.uid_generator.clone().next_quadruple_id();
+        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id();
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
@@ -1198,19 +1208,17 @@ mod tests {
             );
         let new_requests = get_signing_requests(
             height,
-            None,
+            /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
-            &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
+            &contexts,
             &valid_keys,
-            None,
+            /*ecdsa_payload_metrics=*/ None,
         );
         assert_eq!(new_requests.len(), 1);
         // Check if it is matched with the smaller quadruple ID
         let request_id_0 = *new_requests.keys().next().unwrap();
         assert_eq!(request_id_0.quadruple_id, quadruple_id_0);
+
         // Now we are going to make quadruple_id_1 available.
         let sig_inputs = create_sig_inputs(10);
         let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
@@ -1218,29 +1226,8 @@ mod tests {
             .available_quadruples
             .insert(quadruple_id_1, quadruple_ref.clone());
         ecdsa_payload.quadruples_in_creation.remove(&quadruple_id_1);
-        /*
-        let sig_inputs = create_sig_inputs(11);
-        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
-        ecdsa_payload.available_quadruples.insert(
-            ecdsa_payload.uid_generator.next_quadruple_id(),
-            quadruple_ref.clone(),
-        );
-        */
-        let idkg_key_transcript = generate_key_transcript(
-            &env,
-            &dealers,
-            &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            &mut rng,
-        );
-        let key_transcript_ref =
-            ecdsa::UnmaskedTranscript::try_from((Height::from(0), &idkg_key_transcript)).unwrap();
-        ecdsa_payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
-            idkg_key_transcript.to_attributes(),
-            key_transcript_ref,
-        ));
         let result = signatures::update_ongoing_signatures(
-            result,
+            signing_requets,
             max_ongoing_signatures,
             &mut ecdsa_payload,
             &no_op_logger(),
@@ -1250,32 +1237,21 @@ mod tests {
         assert!(result.is_ok());
         assert!(ecdsa_payload.ongoing_signatures.is_empty());
         // We insert a second request
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .insert(
-                CallbackId::from(1),
-                SignWithEcdsaContext {
-                    request: RequestBuilder::new().build(),
-                    key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-                    pseudo_random_id: [1; 32],
-                    message_hash: [0; 32],
-                    derivation_path: vec![],
-                    batch_time: mock_time(),
-                },
-            );
+        contexts.insert(
+            CallbackId::from(1),
+            fake_sign_with_ecdsa_context(
+                EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                [1; 32],
+            ),
+        );
         // Now there are two signing requests
         let new_requests = get_signing_requests(
             height,
-            None,
+            /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
-            &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
+            &contexts,
             &valid_keys,
-            None,
+            /*ecdsa_payload_metrics=*/ None,
         );
         assert_eq!(new_requests.len(), 2);
         let request_id_1 = *new_requests.keys().find(|x| x != &&request_id_0).unwrap();
@@ -1294,14 +1270,11 @@ mod tests {
         // Run get_signing_requests again, we should get request_id_0, but not request_id_1
         let result = get_signing_requests(
             height,
-            None,
+            /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
-            &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
+            &contexts,
             &valid_keys,
-            None,
+            /*ecdsa_payload_metrics=*/ None,
         );
         assert_eq!(result.len(), 1);
         assert_eq!(result.keys().next().unwrap().clone(), request_id_0);
@@ -1309,139 +1282,66 @@ mod tests {
 
     #[test]
     fn test_ecdsa_signing_request_timeout() {
-        let subnet_id = subnet_test_id(1);
-        let mut state = ReplicatedStateBuilder::default().build();
-        let mut valid_keys = BTreeSet::new();
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let expired_time = mock_time() + Duration::from_secs(10);
         let expiry_time = mock_time() + Duration::from_secs(11);
         let non_expired_time = mock_time() + Duration::from_secs(12);
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        valid_keys.insert(key_id.clone());
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .insert(
-                CallbackId::from(1),
-                SignWithEcdsaContext {
-                    request: RequestBuilder::new().build(),
-                    key_id: key_id.clone(),
-                    pseudo_random_id: [0; 32],
-                    message_hash: [0; 32],
-                    derivation_path: vec![],
-                    batch_time: expired_time,
-                },
-            );
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .insert(
-                CallbackId::from(2),
-                SignWithEcdsaContext {
-                    request: RequestBuilder::new().build(),
-                    key_id,
-                    pseudo_random_id: [1; 32],
-                    message_hash: [0; 32],
-                    derivation_path: vec![],
-                    batch_time: non_expired_time,
-                },
-            );
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-        let height = Height::from(1);
+        let (mut ecdsa_payload, _env, contexts) =
+            set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(vec![
+                (key_id.clone(), [0; 32], expired_time),
+                (key_id.clone(), [1; 32], non_expired_time),
+            ]);
         // Add quadruples
-        let sig_inputs = create_sig_inputs(10);
-        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
-        ecdsa_payload.available_quadruples.insert(
-            ecdsa_payload.uid_generator.next_quadruple_id(),
-            quadruple_ref.clone(),
-        );
-        let sig_inputs = create_sig_inputs(11);
-        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
-        let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
-        ecdsa_payload
-            .available_quadruples
-            .insert(quadruple_id, quadruple_ref.clone());
+        let _discarded_quadruple_id = create_available_quadruple(&mut ecdsa_payload, 10);
+        let matched_quadruple_id = create_available_quadruple(&mut ecdsa_payload, 11);
+
         let result = get_signing_requests(
-            height,
+            Height::from(1),
             Some(expiry_time),
             &mut ecdsa_payload,
-            &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
-            &valid_keys,
-            None,
+            &contexts,
+            &BTreeSet::from([key_id]),
+            /*ecdsa_payload_metrics=*/ None,
         );
+
         assert_eq!(result.len(), 1);
         // Check if it is matched with the quadruple ID 1, because quadruple ID 0 is discard too.
         let request_id = &result.keys().next().unwrap().clone();
-        assert_eq!(request_id.quadruple_id, quadruple_id);
+        assert_eq!(request_id.quadruple_id, matched_quadruple_id);
     }
 
     #[test]
     fn test_ecdsa_request_with_invalid_key() {
-        let subnet_id = subnet_test_id(1);
-        let pseudo_random_id = [0; 32];
-        let mut state = ReplicatedStateBuilder::default().build();
-        let mut valid_keys = BTreeSet::new();
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        valid_keys.insert(key_id);
-
-        // Add a request with a non-existent key.
-        state
-            .metadata
-            .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .insert(
-                CallbackId::from(1),
-                SignWithEcdsaContext {
-                    request: RequestBuilder::new().build(),
-                    key_id: EcdsaKeyId::from_str("Secp256k1:some_invalid_key").unwrap(),
-                    pseudo_random_id,
-                    message_hash: [0; 32],
-                    derivation_path: vec![],
-                    batch_time: mock_time(),
-                },
-            );
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let valid_key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let invalid_key_id = EcdsaKeyId::from_str("Secp256k1:some_invalid_key").unwrap();
+        let (mut ecdsa_payload, _env, contexts) = set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(
+            vec![(invalid_key_id, [0; 32], mock_time())],
+        );
+        let valid_keys = BTreeSet::from([valid_key_id]);
         let height = Height::from(1);
+
         let result = get_signing_requests(
             height,
-            None,
+            /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
-            &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
+            &contexts,
             &valid_keys,
-            None,
+            /*ecdsa_payload_metrics=*/ None,
         );
         // Because there is no quadruples available, expect empty return
         assert!(result.is_empty());
-        // Add a quadruple
-        let sig_inputs = create_sig_inputs(10);
-        let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
-        ecdsa_payload
-            .available_quadruples
-            .insert(quadruple_id, quadruple_ref.clone());
-        let sig_inputs = create_sig_inputs(11);
-        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
-        ecdsa_payload.available_quadruples.insert(
-            ecdsa_payload.uid_generator.next_quadruple_id(),
-            quadruple_ref.clone(),
-        );
+
+        // Add quadruples
+        create_available_quadruple(&mut ecdsa_payload, 10);
+        create_available_quadruple(&mut ecdsa_payload, 11);
+
         let result = get_signing_requests(
             height,
-            None,
+            /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
-            &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
+            &contexts,
             &valid_keys,
-            None,
+            /*ecdsa_payload_metrics=*/ None,
         );
 
         // Verify the request is rejected.
@@ -1462,12 +1362,14 @@ mod tests {
     #[test]
     fn test_ecdsa_update_next_key_transcript() {
         let mut rng = reproducible_rng();
-        let num_of_nodes = 4;
-        let subnet_id = subnet_test_id(1);
-        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
+        let (mut payload, env, mut block_reader) = set_up_ecdsa_payload(
+            &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            /*should_create_key_transcript=*/ false,
+        );
         let registry_version = env.newest_registry_version;
         let subnet_nodes: Vec<_> = env.nodes.ids();
-        let mut block_reader = TestEcdsaBlockReader::new();
         let config_ids = |payload: &ecdsa::EcdsaPayload| {
             let mut arr = payload
                 .iter_transcript_configs_in_creation()
@@ -1480,7 +1382,6 @@ mod tests {
 
         // 1. Nothing initially, masked transcript creation should start
         let cur_height = Height::new(10);
-        let mut payload = empty_ecdsa_data_payload(subnet_id);
         let result = update_next_key_transcript(
             &subnet_nodes,
             registry_version,
@@ -1490,7 +1391,7 @@ mod tests {
             &no_op_logger(),
         );
         matches!(result, Ok(None));
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 1);
+        assert_eq!(payload.peek_next_transcript_id().id(), 1);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [0]);
 
@@ -1526,7 +1427,7 @@ mod tests {
             ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
             completed_transcript,
         );
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 2);
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [1]);
 
@@ -1567,7 +1468,7 @@ mod tests {
             ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
             completed_transcript,
         );
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 2);
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
         assert!(config_ids(&payload).is_empty());
         ecdsa::TranscriptRef::new(cur_height, unmasked_transcript.transcript_id);
@@ -1594,7 +1495,7 @@ mod tests {
             &no_op_logger(),
         );
         matches!(result, Ok(None));
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 3);
+        assert_eq!(payload.peek_next_transcript_id().id(), 3);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [2]);
 
@@ -1627,7 +1528,7 @@ mod tests {
         );
         let completed_transcript = result.unwrap().unwrap();
         assert_eq!(completed_transcript, unmasked_transcript);
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 3);
+        assert_eq!(payload.peek_next_transcript_id().id(), 3);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
         assert!(config_ids(&payload).is_empty());
         let current_key_transcript =
@@ -1646,16 +1547,19 @@ mod tests {
     #[test]
     fn test_ecdsa_update_next_key_transcript_xnet_target_subnet() {
         let mut rng = reproducible_rng();
-        let num_of_nodes = 8;
-        let subnet_id = subnet_test_id(1);
-        let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
+        let (mut payload, env, mut block_reader) = set_up_ecdsa_payload(
+            &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 8,
+            /*should_create_key_transcript=*/ false,
+        );
+
         let registry_version = env.newest_registry_version;
         let (subnet_nodes, target_subnet_nodes) = env.nodes.partition(|(index, _node)| *index < 4);
         assert_eq!(subnet_nodes.len(), 4);
         assert_eq!(subnet_nodes.len(), target_subnet_nodes.len());
         let (subnet_nodes_ids, target_subnet_nodes_ids): (Vec<_>, Vec<_>) =
             (subnet_nodes.ids(), target_subnet_nodes.ids());
-        let mut block_reader = TestEcdsaBlockReader::new();
         let config_ids = |payload: &ecdsa::EcdsaPayload| {
             let mut arr = payload
                 .iter_transcript_configs_in_creation()
@@ -1668,7 +1572,6 @@ mod tests {
 
         // 1. Nothing initially, masked transcript creation should start
         let cur_height = Height::new(10);
-        let mut payload = empty_ecdsa_data_payload(subnet_id);
         let result = update_next_key_transcript(
             &subnet_nodes_ids,
             registry_version,
@@ -1678,7 +1581,7 @@ mod tests {
             &no_op_logger(),
         );
         matches!(result, Ok(None));
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 1);
+        assert_eq!(payload.peek_next_transcript_id().id(), 1);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [0]);
 
@@ -1714,7 +1617,7 @@ mod tests {
             ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
             completed_transcript,
         );
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 2);
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [1]);
 
@@ -1751,7 +1654,7 @@ mod tests {
             ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
             completed_transcript,
         );
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 2);
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
         assert!(config_ids(&payload).is_empty());
         let current_key_transcript =
@@ -1793,7 +1696,7 @@ mod tests {
             &no_op_logger(),
         );
         matches!(result, Ok(None));
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 2);
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [reshare_params.transcript_id().id()]);
 
@@ -1834,7 +1737,7 @@ mod tests {
         );
         let completed_transcript = result.unwrap().unwrap();
         assert_eq!(completed_transcript, unmasked_transcript);
-        assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 2);
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
         assert!(config_ids(&payload).is_empty());
         let current_key_transcript =
@@ -1850,82 +1753,31 @@ mod tests {
         }
     }
 
-    /// Test that ECDSA signature agreement is only delivered once.
     #[test]
     fn test_ecdsa_signature_is_only_delivered_once() {
-        let mut rng = reproducible_rng();
-        use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
-
-        let num_nodes = 4;
-        let subnet_id = subnet_test_id(0);
-        let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
-            &mut rng,
-        );
-        let mut block_reader = TestEcdsaBlockReader::new();
-        let transcript_builder = TestEcdsaTranscriptBuilder::new();
-        let mut sign_with_ecdsa_contexts = BTreeMap::new();
-        let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        valid_keys.insert(key_id.clone());
-        let max_ongoing_signatures = 1;
-        sign_with_ecdsa_contexts.insert(
-            CallbackId::from(1),
-            SignWithEcdsaContext {
-                request: RequestBuilder::new().build(),
-                key_id,
-                pseudo_random_id: [1; 32],
-                message_hash: [0; 32],
-                derivation_path: vec![],
-                batch_time: mock_time(),
-            },
-        );
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let (mut ecdsa_payload, _env, sign_with_ecdsa_contexts) =
+            set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(vec![(
+                key_id.clone(),
+                [0; 32],
+                mock_time(),
+            )]);
 
-        let key_transcript = generate_key_transcript(
-            &env,
-            &dealers,
-            &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            &mut rng,
-        );
-        let key_transcript_ref =
-            ecdsa::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        ecdsa_payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
-            key_transcript.to_attributes(),
-            key_transcript_ref,
-        ));
-        let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
-        // Fill in the ongoing signatures
-        let sig_inputs_1 = create_sig_inputs_with_args(
-            13,
-            &env.nodes
-                .receivers(&key_transcript)
-                .map(Node::id)
-                .collect::<BTreeSet<_>>(),
-            key_transcript.clone(),
-            Height::from(44),
-        );
-        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        sig_inputs_1
-            .idkg_transcripts
-            .iter()
-            .for_each(|(transcript_ref, transcript)| {
-                block_reader.add_transcript(*transcript_ref, transcript.clone())
-            });
-        ecdsa_payload.available_quadruples.insert(
-            quadruple_id_1,
-            sig_inputs_1.sig_inputs_ref.presig_quadruple_ref,
-        );
+        let valid_keys = BTreeSet::from([key_id]);
+
+        let block_reader = TestEcdsaBlockReader::new();
+        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+        let max_ongoing_signatures = 1;
+
+        create_available_quadruple(&mut ecdsa_payload, 13);
 
         let all_requests = get_signing_requests(
             Height::from(0),
-            None,
+            /*request_expiry_time*/ None,
             &mut ecdsa_payload,
             &sign_with_ecdsa_contexts,
             &valid_keys,
-            None,
+            /*ecdsa_payload_metrics*/ None,
         );
 
         signatures::update_ongoing_signatures(
@@ -1958,7 +1810,7 @@ mod tests {
             &block_reader,
             &transcript_builder,
             &signature_builder,
-            None,
+            /*ecdsa_payload_metrics*/ None,
             &ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
@@ -1981,7 +1833,7 @@ mod tests {
             &block_reader,
             &transcript_builder,
             &signature_builder,
-            None,
+            /*ecdsa_payload_metrics*/ None,
             &ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
