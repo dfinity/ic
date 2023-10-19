@@ -33,8 +33,9 @@ use std::{
     ops::RangeBounds,
 };
 
-// TODO(NNS1-2417): tune this before starting migration.
-const NEURON_INDEXES_MIGRATION_BATCH_SIZE: usize = 1000;
+// On average, each neuron takes ~4M instructions to add to neuron indexes. Use batch size 15 so
+// that on average the migration takes ~60M instructions.
+const NEURON_INDEXES_MIGRATION_BATCH_SIZE: usize = 15;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {

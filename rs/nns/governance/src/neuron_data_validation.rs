@@ -19,6 +19,10 @@ use std::{
 
 const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;
 const MAX_EXAMPLE_ISSUES_COUNT: usize = 10;
+// On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions, and a
+// neuron on average has ~40 entries (1 main neuron data + 11.3 followees + 1.2 hot key +
+// 26.2 recent ballots). Using batch size = 10 keeps the overall instructions under 60M.
+const INACTIVE_NEURON_VALIDATION_CHUNK_SIZE: usize = 5;
 
 #[derive(Clone, Debug, PartialEq, CandidType, Serialize, Deserialize)]
 pub enum ValidationIssue {
@@ -232,7 +236,7 @@ impl ValidationInProgress {
         >::new()));
 
         tasks.push_back(Box::new(NeuronCopyValidator::new(
-            DEFAULT_RANGE_VALIDATION_CHUNK_SIZE,
+            INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
         )));
 
         Self {
@@ -318,7 +322,7 @@ impl ValidationTask for VecDeque<Box<dyn ValidationTask>> {
 }
 
 trait CardinalityAndRangeValidator {
-    const NEURON_RANGE_CHUNK_SIZE: usize = DEFAULT_RANGE_VALIDATION_CHUNK_SIZE;
+    const NEURON_RANGE_CHUNK_SIZE: usize;
 
     /// Validates the cardinalities of primary data and index to be equal.
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue>;
@@ -368,9 +372,6 @@ struct NeuronRangeValidationTask<Validator: CardinalityAndRangeValidator> {
     _phantom: PhantomData<Validator>,
 }
 
-// TODO this is a randomly selected value, to be empirically tuned.
-const DEFAULT_RANGE_VALIDATION_CHUNK_SIZE: usize = 100;
-
 impl<Validator: CardinalityAndRangeValidator> NeuronRangeValidationTask<Validator> {
     fn new() -> Self {
         Self {
@@ -414,6 +415,11 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
 struct SubaccountIndexValidator;
 
 impl CardinalityAndRangeValidator for SubaccountIndexValidator {
+    // On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions,
+    // and there is exactly one entry for a neuron, so 400 neurons takes 52M instructions (aiming to
+    // keep it under 60M).
+    const NEURON_RANGE_CHUNK_SIZE: usize = 400;
+
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary = neuron_store.heap_neurons().len() as u64;
         let cardinality_index =
@@ -457,6 +463,11 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
 struct PrincipalIndexValidator;
 
 impl CardinalityAndRangeValidator for PrincipalIndexValidator {
+    // On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions,
+    // and there is 1 controler + 1.2 hot keys (=2.2) on average, so 200 neurons takes 57.2M
+    // instructions (aiming to keep it under 60M).
+    const NEURON_RANGE_CHUNK_SIZE: usize = 200;
+
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary: u64 = neuron_store
             .heap_neurons()
@@ -512,6 +523,11 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
 struct FollowingIndexValidator;
 
 impl CardinalityAndRangeValidator for FollowingIndexValidator {
+    // On average, checking whether an entry exists in a StableBTreeMap takes ~130K instructions,
+    // and there are ~11.3 followee entries on average, so 40 neurons takes 58.76M instructions
+    // (aiming to keep it under 60M).
+    const NEURON_RANGE_CHUNK_SIZE: usize = 40;
+
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary: u64 = neuron_store
             .heap_neurons()
@@ -573,6 +589,9 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
 struct KnownNeuronIndexValidator;
 
 impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
+    // As long as we have <460 known neurons, we will be able to keep the instructions <60M as each
+    // entry lookup takes ~130K instructions.
+    const NEURON_RANGE_CHUNK_SIZE: usize = 300000;
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary = neuron_store
             .heap_neurons()
