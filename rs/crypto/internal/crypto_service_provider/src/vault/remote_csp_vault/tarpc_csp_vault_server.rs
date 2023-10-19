@@ -39,7 +39,6 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
-use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -114,7 +113,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        msg: ByteBuf,
+        msg: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
@@ -136,7 +135,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        message: ByteBuf,
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let vault = self.local_csp_vault;
@@ -158,7 +157,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        message: ByteBuf,
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let vault = self.local_csp_vault;
@@ -316,7 +315,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn tls_sign(
         self,
         _: context::Context,
-        message: ByteBuf,
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspTlsSignError> {
         let vault = self.local_csp_vault;
@@ -329,7 +328,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        context_data: ByteBuf,
+        context_data: Vec<u8>,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<MEGaPublicKey>,
@@ -357,7 +356,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
-        context_data: ByteBuf,
+        context_data: Vec<u8>,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -377,7 +376,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
-        context_data: ByteBuf,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
@@ -400,7 +399,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: ByteBuf,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
@@ -444,7 +443,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         dealing: IDkgDealingInternal,
         dealer_index: NodeIndex,
-        context_data: ByteBuf,
+        context_data: Vec<u8>,
         opener_index: NodeIndex,
         opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
@@ -466,7 +465,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         derivation_path: ExtendedDerivationPath,
-        hashed_message: ByteBuf,
+        hashed_message: Vec<u8>,
         nonce: Randomness,
         key: IDkgTranscriptInternal,
         kappa_unmasked: IDkgTranscriptInternal,
