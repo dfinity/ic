@@ -3,9 +3,9 @@ use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::dashboard::{Dashboard, OrchestratorDashboard};
 use crate::firewall::Firewall;
 use crate::metrics::OrchestratorMetrics;
+use crate::process_manager::ProcessManager;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
-use crate::replica_process::ReplicaProcess;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
@@ -183,7 +183,7 @@ impl Orchestrator {
             registry_local_store.clone(),
         );
 
-        let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
+        let replica_process = Arc::new(Mutex::new(ProcessManager::new(slog_logger.clone())));
         let ic_binary_directory = args
             .ic_binary_directory
             .as_ref()
