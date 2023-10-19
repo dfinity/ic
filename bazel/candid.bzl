@@ -32,11 +32,14 @@ echo MERGE_BASE=$merge_base
 echo DID_PATH={did_path}
 
 {check_did} {did_path} "$tmpfile"
+echo "{did_path} passed candid checks"
+
+# In addition to the usual `didc check after.did before.did` it can be helpful to check the reverse as well.
+# This is This is useful when it is expected that clients will "jump the gun", i.e. upgrade before servers. 
+# This is an unusual (but not unheard of) use case.
 if [ {enable_also_reverse} = True ]; then
-    if [[ $mr_title != *"[override-also-reverse]"* ]]; then
-        echo "running also-reverse check"
-        {check_did} "$tmpfile" {did_path}
-    fi
+    echo "running also-reverse check"
+    {check_did} "$tmpfile" {did_path}
 fi
     """.format(check_did = check_did.short_path, did_path = ctx.file.did.path, enable_also_reverse = ctx.attr.enable_also_reverse)
 
@@ -75,6 +78,7 @@ def did_git_test(name, did, **kwargs):
       name: the test name.
       did: the Candid file, must be a repository file.
       **kwargs: additional keyword arguments to pass to the test rule.
+            enable_also_reverse (bool, optional): whether the test should also run candid checks in reverse order
     """
     kwargs.setdefault("tags", ["local", "no-sandbox", "smoke"])
     _did_git_test(name = name, did = did, **kwargs)

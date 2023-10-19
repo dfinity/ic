@@ -54,6 +54,8 @@ def setup_example_did():
 def test_did_check_succeeds():
     res = run_example_did_git_test()
 
+    message = "bazel/candid_integration_tests/example.did passed candid checks"
+    assert message in res.stdout.decode("utf-8")
     assert res.returncode == 0
 
 
@@ -81,6 +83,8 @@ def test_add_variants_succeeds():
 
     res = run_example_did_git_test()
 
+    message = "bazel/candid_integration_tests/example.did passed candid checks"
+    assert message in res.stdout.decode("utf-8")
     assert res.returncode == 0
 
 
@@ -136,6 +140,8 @@ def test_adding_optional_field_succeeds():
 
     res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
+    message = "bazel/candid_integration_tests/example.did passed candid checks"
+    assert message in res.stdout.decode("utf-8")
     assert res.returncode == 0
 
 
@@ -148,29 +154,9 @@ def test_adding_optional_field_reverse_succeeds():
 
     res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
 
+    message = "bazel/candid_integration_tests/example.did passed candid checks"
+    assert message in res.stdout.decode("utf-8")
     assert res.returncode == 0
-
-
-def test_override_also_reverse():
-    # Add a method to the service.
-    modify_file_contents(
-        path=did_file_path,
-        find="// Comment within service.",
-        replacement="new_method : () -> ();",
-    )
-
-    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
-
-    error_message = "Method new_method is only in the expected type'"
-    assert error_message in res.stderr.decode("utf-8")
-    assert "running also-reverse check" in res.stdout.decode("utf-8")
-    assert res.returncode == 101
-
-    # When the merge request title contains the magic words, --also-reverse should be disabled.
-    with mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-also-reverse]"}):
-        res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
-        assert "running also-reverse check" not in res.stdout.decode("utf-8")
-        assert res.returncode == 0
 
 
 def test_override_didc_checks_failing_check_succeeds():
