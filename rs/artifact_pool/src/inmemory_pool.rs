@@ -1,11 +1,9 @@
 use crate::{
     consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps},
     height_index::{HeightIndex, Indexes, SelectIndex},
+    HasTimestamp, IntoInner,
 };
-use ic_interfaces::{
-    artifact_pool::{HasTimestamp, IntoInner},
-    consensus_pool::{HeightIndexedPool, HeightRange, OnlyError, PoolSection},
-};
+use ic_interfaces::consensus_pool::{HeightIndexedPool, HeightRange, OnlyError, PoolSection};
 use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
     artifact::ConsensusMessageId,
