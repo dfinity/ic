@@ -654,7 +654,7 @@ impl Params {
         Ok(())
     }
 
-    pub fn is_valid_if_initiated_at(&self, now_seconds: u64) -> bool {
+    pub fn is_valid_if_initiated_at(&self, now_seconds: u64) -> Result<(), String> {
         let sale_delay_seconds = self.sale_delay_seconds.unwrap_or(0);
 
         let open_timestamp_seconds = now_seconds.saturating_add(sale_delay_seconds);
@@ -662,16 +662,27 @@ impl Params {
             .swap_due_timestamp_seconds
             .saturating_sub(open_timestamp_seconds);
 
-        // Swap must be at least MIN_SALE_DURATION_SECONDS long
         if duration_seconds < Self::MIN_SALE_DURATION_SECONDS {
-            return false;
+            return Err(format!(
+                "If the swap were initiated at the requested time ({}), its duration would be \
+                    {} seconds, but MIN_SALE_DURATION_SECONDS = {}.",
+                now_seconds,
+                duration_seconds,
+                Self::MIN_SALE_DURATION_SECONDS,
+            ));
         }
         // Swap can be at most MAX_SALE_DURATION_SECONDS long
         if duration_seconds > Self::MAX_SALE_DURATION_SECONDS {
-            return false;
+            return Err(format!(
+                "If the swap were initiated at the requested time ({}), its duration would be \
+                    {} seconds, but MAX_SALE_DURATION_SECONDS = {}.",
+                now_seconds,
+                duration_seconds,
+                Self::MAX_SALE_DURATION_SECONDS,
+            ));
         }
 
-        true
+        Ok(())
     }
 }
 
@@ -810,8 +821,8 @@ impl OpenRequest {
                 defects.push("The parameters of the swap are missing.".to_string());
             }
             Some(params) => {
-                if !params.is_valid_if_initiated_at(current_timestamp_seconds) {
-                    defects.push("The parameters of the swap are invalid.".to_string());
+                if let Err(err) = params.is_valid_if_initiated_at(current_timestamp_seconds) {
+                    defects.push(err);
                 } else if let Err(err) = params.validate(init) {
                     defects.push(err);
                 }
@@ -1443,7 +1454,7 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1451,7 +1462,10 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
 
         // Should be invalid with the swap deadline set MAX_SALE_DURATION_SECONDS + 1 second from now.
         let params = Params {
@@ -1459,7 +1473,7 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(0));
+        assert!(params.is_valid_if_initiated_at(0).is_err());
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1468,7 +1482,9 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert!(params
+            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+            .is_err());
     }
 
     #[test]
@@ -1480,7 +1496,7 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1489,7 +1505,10 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
     }
 
     #[test]
@@ -1500,7 +1519,7 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1508,7 +1527,10 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
 
         // Should fail with the swap length set to one second less than MIN_SALE_DURATION_SECONDS.
         let params = Params {
@@ -1516,7 +1538,7 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(0));
+        assert!(params.is_valid_if_initiated_at(0).is_err());
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1525,7 +1547,9 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert!(params
+            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+            .is_err());
     }
 
     #[test]
@@ -1537,7 +1561,7 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(0));
+        assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1546,7 +1570,10 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert_eq!(
+            params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
+            Ok(())
+        );
 
         // Should be invalid with the swap deadline set to MIN_SALE_DURATION_SECONDS from now
         // with a swap delay of 1 second.
@@ -1555,7 +1582,7 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(0));
+        assert!(params.is_valid_if_initiated_at(0).is_err());
 
         let params = Params {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
@@ -1563,7 +1590,9 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS.clone()
         };
-        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+        assert!(params
+            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+            .is_err());
     }
 
     #[test]
