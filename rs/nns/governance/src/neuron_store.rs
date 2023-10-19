@@ -690,11 +690,10 @@ impl NeuronStore {
     ) -> Result<Option<NeuronId>, String> {
         let mut new_last_neuron_id = None;
         let mut count = 0;
-        for (neuron_id, neuron) in self
-            .heap_neurons
-            .range(last_neuron_id.id + 1..)
-            .take(batch_size)
-        {
+        // In the extremely rare event where we have a u64::MAX neuron id, we don't want to wrap
+        // around and start with 0 again.
+        let start_neuron_id = last_neuron_id.id.saturating_add(1);
+        for (neuron_id, neuron) in self.heap_neurons.range(start_neuron_id..).take(batch_size) {
             NEURON_INDEXES
                 .with(|indexes| indexes.borrow_mut().add_neuron(neuron))
                 .map_err(|error| GovernanceError::from(error).error_message)?;
