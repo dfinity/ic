@@ -1,0 +1,6 @@
+[package]
+name = "ic-utils-ensure"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Assert that returns a result."
+edition = "2021"

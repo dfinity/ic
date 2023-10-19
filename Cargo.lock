@@ -5548,6 +5548,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
+ "ic-utils-ensure",
  "ic0",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
@@ -11093,6 +11094,10 @@ dependencies = [
  "thiserror",
  "time 0.3.22",
 ]
+
+[[package]]
+name = "ic-utils-ensure"
+version = "0.8.0"
 
 [[package]]
 name = "ic-utils-lru-cache"
