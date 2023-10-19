@@ -154,9 +154,11 @@ RUN addgroup node_exporter && \
 # Compile locale specification
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
-# Clear all files that may lead to indeterministic build.
+# Clear all files that may lead to indeterministic build or that are large and unnecessary
 RUN apt-get clean && \
     rm -rf \
+        /usr/local/share/qemu/edk2-arm-code.fd \
+        /usr/local/share/qemu/edk2-arm-vars.fd \
         /var/cache/fontconfig/* /var/cache/ldconfig/aux-cache \
         /var/log/alternatives.log /var/log/apt/history.log /var/log/apt/term.log /var/log/dpkg.log \
         /var/lib/apt/lists/* /var/lib/dbus/machine-id \
