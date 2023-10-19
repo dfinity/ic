@@ -1,7 +1,7 @@
 //! The module contains implementations for different artifact kinds.
 use crate::{
     artifact::*,
-    canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
+    canister_http::CanisterHttpResponseShare,
     consensus::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
@@ -138,14 +138,14 @@ impl ArtifactKind for CanisterHttpArtifact {
     const TAG: ArtifactTag = ArtifactTag::CanisterHttpArtifact;
     type Id = CanisterHttpResponseId;
     type Message = CanisterHttpResponseShare;
-    type Attribute = CanisterHttpResponseAttribute;
+    type Attribute = ();
 
     /// This function converts a `CanisterHttpResponseShare` into an advert for a
     /// `CanisterHttpArtifact`.
     fn message_to_advert(msg: &CanisterHttpResponseShare) -> Advert<CanisterHttpArtifact> {
         Advert {
-            id: CanisterHttpResponseId::from(msg),
-            attribute: CanisterHttpResponseAttribute::from(msg),
+            id: msg.clone(),
+            attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
             integrity_hash: crypto_hash(msg).get(),
         }

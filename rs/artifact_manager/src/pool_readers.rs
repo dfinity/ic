@@ -345,9 +345,7 @@ impl<
             .get_validated_by_identifier(msg_id)
     }
 
-    fn get_priority_function(
-        &self,
-    ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<CanisterHttpResponseId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }

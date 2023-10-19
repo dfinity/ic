@@ -14,7 +14,7 @@
 //! All [`Artifact`] sub-types must also implement [`ChunkableArtifact`] trait
 //! defined in the chunkable module.
 use crate::{
-    canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
+    canister_http::CanisterHttpResponseShare,
     chunkable::{ArtifactChunk, ChunkId, ChunkableArtifact},
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
@@ -24,8 +24,7 @@ use crate::{
         ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHash,
         ConsensusMessageHashable,
     },
-    crypto::crypto_hash,
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{crypto_hash, CryptoHash},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     messages::{HttpRequestError, MessageId, SignedIngress, SignedRequestBytes},
     p2p::GossipAdvert,
@@ -65,7 +64,6 @@ pub enum Artifact {
 pub enum ArtifactAttribute {
     ConsensusMessage(ConsensusMessageAttribute),
     EcdsaMessage(EcdsaMessageAttribute),
-    CanisterHttpMessage(CanisterHttpResponseAttribute),
     Empty(()),
 }
 
@@ -75,7 +73,6 @@ impl From<&ArtifactAttribute> for pb::ArtifactAttribute {
         let kind = match value {
             ArtifactAttribute::ConsensusMessage(x) => Kind::ConsensusMessage(x.into()),
             ArtifactAttribute::EcdsaMessage(x) => Kind::EcdsaMessage(x.into()),
-            ArtifactAttribute::CanisterHttpMessage(x) => Kind::CanisterHttp(x.into()),
             ArtifactAttribute::Empty(_) => Kind::Empty(()),
         };
         Self { kind: Some(kind) }
@@ -92,7 +89,6 @@ impl TryFrom<&pb::ArtifactAttribute> for ArtifactAttribute {
         Ok(match kind {
             Kind::ConsensusMessage(x) => ArtifactAttribute::ConsensusMessage(x.try_into()?),
             Kind::EcdsaMessage(x) => ArtifactAttribute::EcdsaMessage(x.try_into()?),
-            Kind::CanisterHttp(x) => ArtifactAttribute::CanisterHttpMessage(x.into()),
             Kind::Empty(_) => ArtifactAttribute::Empty(()),
         })
     }
@@ -121,7 +117,7 @@ impl From<&ArtifactId> for pb::ArtifactId {
             ArtifactId::DkgMessage(x) => Kind::DkgMessage(x.into()),
             ArtifactId::CertificationMessage(x) => Kind::Certification(x.into()),
             ArtifactId::EcdsaMessage(x) => Kind::Ecdsa(x.into()),
-            ArtifactId::CanisterHttpMessage(x) => Kind::CanisterHttp(x.clone().get().0),
+            ArtifactId::CanisterHttpMessage(x) => Kind::CanisterHttp(x.into()),
             ArtifactId::FileTreeSync(x) => Kind::FileTreeSync(x.clone()),
             ArtifactId::StateSync(x) => Kind::StateSync(x.clone().into()),
         };
@@ -144,9 +140,7 @@ impl TryFrom<&pb::ArtifactId> for ArtifactId {
             Kind::DkgMessage(x) => ArtifactId::DkgMessage(x.into()),
             Kind::Certification(x) => ArtifactId::CertificationMessage(x.try_into()?),
             Kind::Ecdsa(x) => ArtifactId::EcdsaMessage(x.try_into()?),
-            Kind::CanisterHttp(x) => {
-                ArtifactId::CanisterHttpMessage(CanisterHttpResponseId::new(CryptoHash(x.clone())))
-            }
+            Kind::CanisterHttp(x) => ArtifactId::CanisterHttpMessage(x.clone().try_into()?),
             Kind::FileTreeSync(x) => ArtifactId::FileTreeSync(x.clone()),
             Kind::StateSync(x) => ArtifactId::StateSync(x.clone().into()),
         })
@@ -503,13 +497,7 @@ pub type EcdsaMessageId = EcdsaArtifactId;
 // -----------------------------------------------------------------------------
 // CanisterHttp artifacts
 
-pub type CanisterHttpResponseId = CryptoHashOf<CanisterHttpResponseShare>;
-
-impl From<&CanisterHttpResponseShare> for CanisterHttpResponseId {
-    fn from(msg: &CanisterHttpResponseShare) -> CanisterHttpResponseId {
-        crypto_hash(msg)
-    }
-}
+pub type CanisterHttpResponseId = CanisterHttpResponseShare;
 
 // ------------------------------------------------------------------------------
 // StateSync artifacts.

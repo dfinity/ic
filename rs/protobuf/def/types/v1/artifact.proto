@@ -5,16 +5,16 @@ package types.v1;
 import "google/protobuf/empty.proto";
 import "p2p/v1/state_sync_manager.proto";
 import "registry/subnet/v1/subnet.proto";
+import "types/v1/canister_http.proto";
 import "types/v1/ecdsa.proto";
 
 message ArtifactAttribute {
   oneof kind {
     ConsensusMessageAttribute consensus_message = 1;
     EcdsaMessageAttribute ecdsa_message = 3;
-    CanisterHttpResponseAttribute canister_http = 4;
     google.protobuf.Empty empty = 5;
   }
-  reserved 2;
+  reserved 2, 4;
 }
 
 message ConsensusMessageAttribute {
@@ -46,24 +46,18 @@ message EcdsaMessageAttribute {
   }
 }
 
-message CanisterHttpResponseAttribute {
-  uint64 registry_version = 1;
-  uint64 id = 2;
-  bytes hash = 3; // cryptographic hash of [`CanisterHttpResponse`]
-}
-
 message ArtifactId {
   oneof kind {
     ConsensusMessageId consensus = 1;
     IngressMessageId ingress = 2;
     CertificationMessageId certification = 3;
-    bytes canister_http = 4;
+    types.v1.CanisterHttpShare canister_http = 11;
     DkgMessageId dkg_message = 10;
     types.v1.EcdsaArtifactId ecdsa = 6;
     string file_tree_sync = 7;
     p2p.v1.StateSyncId state_sync = 9;
   }
-  reserved 5;
+  reserved 4, 5;
 }
 
 message DkgMessageId {
