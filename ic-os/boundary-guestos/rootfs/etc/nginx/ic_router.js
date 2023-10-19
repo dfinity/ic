@@ -54,7 +54,8 @@ function resolveCanisterIdFromUri(uri) {
   if (!m) {
     return "";
   }
-  const canister_id = m[1];
+  let with_prefix = m[1].split("--");
+  const canister_id = with_prefix[with_prefix.length - 1];
   if (canister_id.length != CANISTER_ID_LENGTH) {
     // not a canister id
     return "";
@@ -68,7 +69,8 @@ function extractCanisterIdFromHost(host) {
   if (!m) {
     return "";
   }
-  let canisterId = m[1];
+  let with_prefix = m[1].split("--");
+  let canisterId = with_prefix[with_prefix.length - 1];
 
   // Check if ID is an alias
   if (!!CANISTER_ID_ALIASES[canisterId]) {
