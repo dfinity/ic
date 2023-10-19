@@ -7030,9 +7030,9 @@
               "editorMode": "code",
               "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_heartbeat_overhead_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
-              "legendFormat": "· cansiter_tasks",
+              "legendFormat": "· canister_tasks",
               "range": true,
-              "refId": "· cansiter_tasks"
+              "refId": "· canister_tasks"
             },
             {
               "datasource": {
@@ -7306,9 +7306,9 @@
               "editorMode": "code",
               "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_heartbeat_overhead_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
-              "legendFormat": "· cansiter_tasks",
+              "legendFormat": "· canister_tasks",
               "range": true,
-              "refId": "· cansiter_tasks"
+              "refId": "· canister_tasks"
             },
             {
               "datasource": {

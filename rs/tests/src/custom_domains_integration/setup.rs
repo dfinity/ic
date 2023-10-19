@@ -1070,7 +1070,7 @@ pub async fn update_dns_records(
         .context("failed to decode the response")?;
     let record_id = response_json["result"][0]["id"].as_str().unwrap();
 
-    // update the TXT record containing the cansiter id
+    // update the TXT record containing the canister id
     let url = format!(
         "{}//client/v4/zones/{}/dns_records/{record_id}",
         base_url, zone_id
