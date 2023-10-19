@@ -430,7 +430,6 @@ where
 
                     let bg_task = {
                         let op_id = op_id.clone();
-                        let state_label = state_label.clone();
                         let st = self.inner.clone();
                         move || {
                             trace!(
@@ -439,15 +438,7 @@ where
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
-                            let new_state_label = pocket_ic.get_state_label();
-                            // add result to graph
                             let instances = st.instances.blocking_read();
-                            let mut guard = st.graph.blocking_write();
-                            let cached_computations =
-                                guard.entry(state_label.clone()).or_insert(HashMap::new());
-                            cached_computations
-                                .insert(op_id.clone(), (new_state_label, result.clone()));
-
                             let mut instance_state = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &*instance_state {
                                 st.drop_sender.send(pocket_ic).unwrap();
