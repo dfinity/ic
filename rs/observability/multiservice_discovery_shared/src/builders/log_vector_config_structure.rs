@@ -1,9 +1,10 @@
 use std::collections::{BTreeSet, HashMap};
-use std::string::ParseError;
 
 use ic_types::PrincipalId;
 use serde::Serialize;
 
+use service_discovery::guest_to_host_address;
+use service_discovery::job_types::NodeOS;
 use service_discovery::{job_types::JobType, TargetGroup};
 
 use crate::builders::vector_config_enriched::VectorSource;
@@ -65,12 +66,15 @@ pub(crate) fn from_targets_into_vector_config(
                 is_bn = true;
             }
             let key = format!("{}-{}", key, job);
-            let target_group = Into::<TargetGroup>::into(&record);
-            let mut source: VectorSystemdGatewayJournaldSource = target_group.try_into().unwrap();
-            source.batch_size = builder.batch_size;
-            source.port = match is_bn {
-                false => builder.port,
-                true => builder.bn_port,
+            let source = VectorSystemdGatewayJournaldSource {
+                _type: "systemd_journal_gatewayd".into(),
+                endpoint: handle_ip(record.clone(), job),
+                data_dir: "logs".to_string(),
+                batch_size: builder.batch_size,
+                port: match is_bn {
+                    false => builder.port,
+                    true => builder.bn_port,
+                },
             };
 
             let transform = VectorSystemdGatewayJournaldTransform::from(record.clone(), *job);
@@ -93,22 +97,6 @@ struct VectorSystemdGatewayJournaldSource {
 impl VectorSource for VectorSystemdGatewayJournaldSource {
     fn clone_dyn(&self) -> Box<dyn VectorSource> {
         Box::new(self.clone())
-    }
-}
-
-impl TryFrom<TargetGroup> for VectorSystemdGatewayJournaldSource {
-    type Error = ParseError;
-
-    fn try_from(target_group: TargetGroup) -> Result<Self, Self::Error> {
-        let endpoint = target_group.get_ip_as_str().unwrap();
-
-        Ok(Self {
-            _type: "systemd_journal_gatewayd".into(),
-            endpoint,
-            data_dir: "logs".to_string(),
-            batch_size: 0,
-            port: 19531,
-        })
     }
 }
 
@@ -141,12 +129,14 @@ impl VectorSystemdGatewayJournaldTransform {
         let anonymous = PrincipalId::new_anonymous().to_string();
         let mut node_id = target_group.node_id.to_string();
         if node_id == anonymous {
-            node_id = target.name
+            node_id = target.clone().name
         }
+
+        let endpoint = handle_ip(target.clone(), &job);
 
         labels.insert(IC_NAME.into(), target_group.ic_name.to_string());
         labels.insert(IC_NODE.into(), node_id.clone());
-        labels.insert(ADDRESS.into(), target_group.get_ip_as_str().unwrap());
+        labels.insert(ADDRESS.into(), endpoint);
         labels.insert(
             NODE_PROVIDER_ID.into(),
             target_group.node_provider_id.to_string(),
@@ -167,6 +157,21 @@ impl VectorSystemdGatewayJournaldTransform {
                 .collect::<Vec<String>>()
                 .join("\n"),
         }
+    }
+}
+
+fn handle_ip(target_group: TargetDto, job_type: &JobType) -> String {
+    match job_type {
+        JobType::NodeExporter(NodeOS::Guest) => {
+            target_group.targets.first().unwrap().ip().to_string()
+        }
+        JobType::NodeExporter(NodeOS::Host) => {
+            guest_to_host_address(*target_group.targets.first().unwrap())
+                .unwrap()
+                .ip()
+                .to_string()
+        }
+        _ => panic!("Unsupported job type"),
     }
 }
 
