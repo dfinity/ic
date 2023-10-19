@@ -220,6 +220,13 @@ impl Point {
         Self::new(self.p * scalar.s)
     }
 
+    /// Scalar multiplication with the customary generator
+    ///
+    /// Currently p256 does not support MulByGenerator trait
+    pub fn mul_by_g(scalar: &Scalar) -> Self {
+        Self::new(p256::ProjectivePoint::GENERATOR * scalar.s)
+    }
+
     /// Serialize the point to bytes in compressed format
     pub fn serialize(&self) -> Vec<u8> {
         self.p.to_affine().to_bytes().to_vec()

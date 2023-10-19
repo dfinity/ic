@@ -280,7 +280,7 @@ fn point_mul(c: &mut Criterion) {
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_point_multiplication_{}", curve_type));
 
-        group.bench_function("multiply", |b| {
+        group.bench_function("multiply_arbitrary_point", |b| {
             b.iter_batched_ref(
                 || {
                     (
@@ -289,6 +289,14 @@ fn point_mul(c: &mut Criterion) {
                     )
                 },
                 |(p, s)| p.scalar_mul(s),
+                BatchSize::SmallInput,
+            )
+        });
+
+        group.bench_function("multiply_generator", |b| {
+            b.iter_batched_ref(
+                || random_scalar(curve_type, rng),
+                |s| EccPoint::mul_by_g(s),
                 BatchSize::SmallInput,
             )
         });

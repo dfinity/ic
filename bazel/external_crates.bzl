@@ -583,6 +583,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "ecdsa",
                     "pem",
                     "pkcs8",
+                    "precomputed-tables",
+                    "std",
                 ],
                 default_features = False,
             ),
