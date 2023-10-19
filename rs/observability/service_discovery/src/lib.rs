@@ -390,7 +390,7 @@ fn some_after(
 ///
 /// (The MAC starts with 0x6a00. The 7'th bit of the first byte is flipped. See
 /// https://en.wikipedia.org/wiki/MAC_address)
-fn guest_to_host_address(sockaddr: SocketAddr) -> Option<SocketAddr> {
+pub fn guest_to_host_address(sockaddr: SocketAddr) -> Option<SocketAddr> {
     match sockaddr.ip() {
         IpAddr::V6(a) if a.segments()[4] == 0x6801 => {
             let s = a.segments();
