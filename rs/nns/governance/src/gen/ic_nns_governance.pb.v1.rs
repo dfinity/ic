@@ -2201,6 +2201,10 @@ pub struct Governance {
     /// Migration related data.
     #[prost(message, optional, tag = "21")]
     pub migrations: ::core::option::Option<governance::Migrations>,
+    /// A Structure used during upgrade to store the index of topics for neurons to their followers.
+    /// This is the inverse of what is stored in a Neuron (its followees).
+    #[prost(map = "int32, message", tag = "22")]
+    pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2435,6 +2439,29 @@ pub mod governance {
         pub neuron_indexes_migration: ::core::option::Option<Migration>,
         #[prost(message, optional, tag = "2")]
         pub copy_inactive_neurons_to_stable_memory_migration: ::core::option::Option<Migration>,
+    }
+    /// A map of followees to their followers.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct FollowersMap {
+        /// The key is the neuron ID of the followee.
+        #[prost(map = "fixed64, message", tag = "1")]
+        pub followers_map: ::std::collections::HashMap<u64, followers_map::Followers>,
+    }
+    /// Nested message and enum types in `FollowersMap`.
+    pub mod followers_map {
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct Followers {
+            /// The followers of the neuron with the given ID.
+            /// These values will be non-repeating, and order does not matter.
+            #[prost(message, repeated, tag = "1")]
+            pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+        }
     }
 }
 /// Proposals with restricted voting are not included unless the caller

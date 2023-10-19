@@ -159,9 +159,14 @@ pub struct HeapNeuronFollowingIndex<NeuronId, Category> {
 }
 
 impl<NeuronId, Category> HeapNeuronFollowingIndex<NeuronId, Category> {
-    pub fn new() -> Self {
+    pub fn new(
+        category_to_followee_to_followers: BTreeMap<
+            Category,
+            BTreeMap<NeuronId, BTreeSet<NeuronId>>,
+        >,
+    ) -> Self {
         Self {
-            category_to_followee_to_followers: BTreeMap::new(),
+            category_to_followee_to_followers,
         }
     }
 
@@ -178,6 +183,10 @@ impl<NeuronId, Category> HeapNeuronFollowingIndex<NeuronId, Category> {
                     .sum::<usize>()
             })
             .sum()
+    }
+
+    pub fn into_inner(self) -> BTreeMap<Category, BTreeMap<NeuronId, BTreeSet<NeuronId>>> {
+        self.category_to_followee_to_followers
     }
 }
 
@@ -395,7 +404,7 @@ mod tests {
     }
 
     fn get_heap_index() -> HeapNeuronFollowingIndex<TestNeuronId, Topic> {
-        HeapNeuronFollowingIndex::<TestNeuronId, Topic>::new()
+        HeapNeuronFollowingIndex::<TestNeuronId, Topic>::new(BTreeMap::new())
     }
 
     // The following test helpers will be run by both implementations.
