@@ -7,6 +7,7 @@ edition = "2021"
 ic-constants = { path = "../constants" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
@@ -29,7 +30,6 @@ assert_matches = "1.3.0"
 criterion = "0.5"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
-ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }

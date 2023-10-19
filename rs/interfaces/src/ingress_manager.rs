@@ -64,6 +64,8 @@ pub enum IngressPermanentError {
     DuplicatedIngressMessage(MessageId),
     InsufficientCycles(CanisterOutOfCyclesError),
     CanisterNotFound(CanisterId),
+    CanisterStopping(CanisterId),
+    CanisterStopped(CanisterId),
     InvalidManagementMessage,
     StateRemoved(Height),
 }
