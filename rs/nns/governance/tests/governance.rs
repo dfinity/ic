@@ -22,7 +22,9 @@ use futures::future::{join_all, FutureExt};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError, E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    cmc::CMC, ledger::IcpLedger, NervousSystemError, E8, SECONDS_PER_DAY,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -14748,4 +14750,44 @@ fn voting_period_seconds_topic_dependency() {
     assert_eq!(voting_period_fun(Topic::Governance), 3); // any other topic should be 3
     assert_eq!(voting_period_fun(Topic::NetworkCanisterManagement), 3);
     assert_eq!(voting_period_fun(Topic::SnsDecentralizationSale), 3);
+}
+
+// TODO - remove after migration of neuron_store.topic_follow_index to being stored on upgrade
+// is rolled out and becomes non-optional
+struct StubIcpLedger {}
+#[async_trait]
+impl IcpLedger for StubIcpLedger {
+    async fn transfer_funds(
+        &self,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _from_subaccount: Option<Subaccount>,
+        _to: AccountIdentifier,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn account_balance(
+        &self,
+        _account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+}
+
+struct StubCMC {}
+#[async_trait]
+impl CMC for StubCMC {
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+        unimplemented!()
+    }
 }

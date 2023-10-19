@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     pb::v1::{
-        governance::{Migration, Migrations},
+        governance::{followers_map::Followers, FollowersMap, Migration, Migrations},
         proposal::Action,
         settle_community_fund_participation, ExecuteNnsFunction, GovernanceError, Neuron,
         OpenSnsTokenSwap, Proposal, ProposalData, ProposalStatus, SettleCommunityFundParticipation,
@@ -2794,4 +2794,64 @@ fn governance_remove_neuron_updates_followee_index_correctly() {
         .neuron_store
         .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::from_i32(2).unwrap());
     assert_eq!(entry, vec![]);
+}
+
+#[test]
+fn test_pre_and_post_upgrade_first_time() {
+    let neuron1 = Neuron {
+        id: Some(NeuronId { id: 1 }),
+        followees: hashmap! {
+            2 => Followees {
+                followees: vec![NeuronId { id : 3}]
+            }
+        },
+        ..Default::default()
+    };
+    let neurons = btreemap! { 1 => neuron1 };
+
+    // This simulates the state of heap on first post_upgrade (empty topic_followee_index)
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+
+    // Precondition
+    assert_eq!(governance_proto.neurons.len(), 1);
+    assert_eq!(governance_proto.topic_followee_index.len(), 0);
+
+    // Then Governance is instantiated during upgrade with proto
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment<'_>>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+    // On next pre-upgrade, we get the heap proto and store it in stable memory
+    let mut extracted_proto = governance.take_heap_proto();
+
+    // topic_followee_index should have been populated
+    assert_eq!(extracted_proto.topic_followee_index.len(), 1);
+
+    // We now modify it so that we can be assured that it is not rebuilding on the next post_upgrade
+    extracted_proto.topic_followee_index.insert(
+        4,
+        FollowersMap {
+            followers_map: hashmap! {5 => Followers { followers: vec![NeuronId { id : 6}]}},
+        },
+    );
+
+    assert_eq!(extracted_proto.neurons.len(), 1);
+    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
+
+    // We now simulate the post_upgrade
+    let mut governance = Governance::new(
+        extracted_proto,
+        Box::<MockEnvironment<'_>>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
+    let extracted_proto = governance.take_heap_proto();
+    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
 }

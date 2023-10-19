@@ -258,6 +258,14 @@ impl NeuronStore {
         std::mem::take(&mut self.heap_neurons)
     }
 
+    /// Takes the HeapNeuronFollowingIndex.  The `self.topic_followee_index` will become empty, so
+    /// it should only be called once at pre_upgrade.
+    pub fn take_heap_topic_followee_index(
+        &mut self,
+    ) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
+        std::mem::take(&mut self.topic_followee_index)
+    }
+
     pub fn new_neuron_id(&self, env: &mut dyn Environment) -> NeuronId {
         loop {
             let id = env
@@ -287,6 +295,12 @@ impl NeuronStore {
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
     pub fn clone_neurons(&self) -> BTreeMap<u64, Neuron> {
         self.heap_neurons.clone()
+    }
+
+    pub fn clone_topic_followee_index(
+        &self,
+    ) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
+        self.topic_followee_index.clone()
     }
 
     /// Returns if store contains a Neuron by id
@@ -976,7 +990,7 @@ fn build_principal_to_neuron_ids_index(
 fn build_topic_followee_index(
     heap_neurons: &BTreeMap<u64, Neuron>,
 ) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
-    let mut index = HeapNeuronFollowingIndex::new();
+    let mut index = HeapNeuronFollowingIndex::new(BTreeMap::new());
     for neuron in heap_neurons.values() {
         let neuron_id = NeuronIdU64::from(neuron.id.expect("Neuron must have an id"));
         let already_present_topic_followee_pairs = add_neuron_followees(

@@ -1,9 +1,17 @@
-use crate::pb::v1::{
-    governance::{GovernanceCachedMetrics, MakingSnsProposal, Migrations, NeuronInFlightCommand},
-    neuron::Followees,
-    Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
-    NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent,
+use crate::{
+    pb::v1::{
+        governance::{
+            followers_map::Followers, FollowersMap, GovernanceCachedMetrics, MakingSnsProposal,
+            Migrations, NeuronInFlightCommand,
+        },
+        neuron::Followees,
+        Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
+        Neuron, NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent,
+    },
+    storage::{NeuronIdU64, Signed32, TopicSigned32},
 };
+use ic_nervous_system_governance::index::neuron_following::HeapNeuronFollowingIndex;
+use ic_nns_common::pb::v1::NeuronId;
 use std::collections::{BTreeMap, HashMap};
 
 /// A GovernanceProto representation on the heap, which should have everything except for neurons.
@@ -31,13 +39,68 @@ pub struct HeapGovernanceData {
     pub migrations: Option<Migrations>,
 }
 
+fn proto_to_heap_topic_followee_index(
+    proto: HashMap<i32, FollowersMap>,
+) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
+    let map = proto
+        .into_iter()
+        .map(|(topic_i32, followers_map)| {
+            let topic = Signed32(topic_i32);
+
+            let followers_map = followers_map
+                .followers_map
+                .into_iter()
+                .map(|(neuron_id, followers)| {
+                    let followers = followers
+                        .followers
+                        .into_iter()
+                        .map(|neuron_id| neuron_id.id)
+                        .collect();
+                    (neuron_id, followers)
+                })
+                .collect();
+            (topic, followers_map)
+        })
+        .collect();
+    HeapNeuronFollowingIndex::new(map)
+}
+
+fn heap_topic_followee_index_to_proto(
+    heap: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+) -> HashMap<i32, FollowersMap> {
+    heap.into_inner()
+        .into_iter()
+        .map(|(topic, followers_map)| {
+            let topic = topic.0;
+            let followers_map = followers_map
+                .into_iter()
+                .map(|(followee, followers)| {
+                    let followee = followee;
+                    let followers = Followers {
+                        followers: followers.into_iter().map(|id| NeuronId { id }).collect(),
+                    };
+                    (followee, followers)
+                })
+                .collect();
+
+            let followers_map = FollowersMap { followers_map };
+
+            (topic, followers_map)
+        })
+        .collect()
+}
+
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because
 /// we have a dedicated struct NeuronStore owning the heap neurons.
 /// Does not guarantee round-trip equivalence between this and
 /// reassemble_governance_proto if the proto has fields that are None, as they might be filled in by default values.
 pub fn split_governance_proto(
     governance_proto: GovernanceProto,
-) -> (BTreeMap<u64, Neuron>, HeapGovernanceData) {
+) -> (
+    BTreeMap<u64, Neuron>,
+    Option<HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>>,
+    HeapGovernanceData,
+) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
     //   **DATA LOSS**
@@ -63,13 +126,22 @@ pub fn split_governance_proto(
         spawning_neurons,
         making_sns_proposal,
         migrations,
+        topic_followee_index,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
         neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
 
+    // There won't be anything in this the first time we boot after the upgrade.
+    let topic_followee_index = if !topic_followee_index.is_empty() {
+        Some(proto_to_heap_topic_followee_index(topic_followee_index))
+    } else {
+        None
+    };
+
     (
         neurons,
+        topic_followee_index,
         HeapGovernanceData {
             proposals,
             to_claim_transfers,
@@ -97,6 +169,7 @@ pub fn split_governance_proto(
 /// it can be serialized into UPGRADES_MEMORY.
 pub fn reassemble_governance_proto(
     neurons: BTreeMap<u64, Neuron>,
+    topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
     heap_governance_proto: HeapGovernanceData,
 ) -> GovernanceProto {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
@@ -147,6 +220,7 @@ pub fn reassemble_governance_proto(
         spawning_neurons,
         making_sns_proposal,
         migrations,
+        topic_followee_index: heap_topic_followee_index_to_proto(topic_followee_index),
     }
 }
 
@@ -186,6 +260,7 @@ mod tests {
             spawning_neurons: Some(true),
             making_sns_proposal: Some(MakingSnsProposal::default()),
             migrations: Some(Migrations::default()),
+            topic_followee_index: Default::default(),
         }
     }
 
@@ -193,10 +268,45 @@ mod tests {
     fn split_and_reassemble_equal() {
         let governance_proto = simple_governance_proto();
 
-        let (heap_neurons, heap_governance_data) = split_governance_proto(governance_proto.clone());
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, heap_governance_data);
+        let (heap_neurons, topic_followee_index, heap_governance_data) =
+            split_governance_proto(governance_proto.clone());
 
+        assert!(topic_followee_index.is_none());
+
+        let reassembled_governance_proto = reassemble_governance_proto(
+            heap_neurons,
+            topic_followee_index.unwrap_or_default(),
+            heap_governance_data,
+        );
+
+        assert_eq!(reassembled_governance_proto, governance_proto);
+    }
+
+    #[test]
+    fn test_split_and_reassemble_with_topic_follower_index() {
+        let mut governance_proto = simple_governance_proto();
+        governance_proto.topic_followee_index = hashmap! {
+            1 => FollowersMap {
+                followers_map: hashmap! {
+                    2 => Followers {
+                        followers: vec![NeuronId { id: 3 }],
+                    },
+                },
+            }
+        };
+
+        let (heap_neurons, topic_followee_index, heap_governance_data) =
+            split_governance_proto(governance_proto.clone());
+
+        assert!(topic_followee_index.is_some());
+
+        let reassembled_governance_proto = reassemble_governance_proto(
+            heap_neurons,
+            topic_followee_index.unwrap_or_default(),
+            heap_governance_data,
+        );
+
+        assert_eq!(reassembled_governance_proto.topic_followee_index.len(), 1);
         assert_eq!(reassembled_governance_proto, governance_proto);
     }
 
@@ -207,9 +317,13 @@ mod tests {
             ..simple_governance_proto()
         };
 
-        let (heap_neurons, heap_governance_data) = split_governance_proto(governance_proto.clone());
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, heap_governance_data);
+        let (heap_neurons, topic_followee_map, heap_governance_data) =
+            split_governance_proto(governance_proto.clone());
+        let reassembled_governance_proto = reassemble_governance_proto(
+            heap_neurons,
+            topic_followee_map.unwrap_or_default(),
+            heap_governance_data,
+        );
 
         assert_eq!(
             reassembled_governance_proto,
@@ -223,7 +337,7 @@ mod tests {
     #[test]
     fn private_voting_period_assumed_to_be_48h() {
         // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-        let (_, heap_governance_proto) = split_governance_proto(GovernanceProto::default());
+        let (_, _, heap_governance_proto) = split_governance_proto(GovernanceProto::default());
         assert_eq!(
             heap_governance_proto.neuron_management_voting_period_seconds,
             48 * 60 * 60

@@ -1675,7 +1675,8 @@ impl Governance {
             })
         }
 
-        let (heap_neurons, heap_governance_proto) = split_governance_proto(governance_proto);
+        let (heap_neurons, topic_followee_map, heap_governance_proto) =
+            split_governance_proto(governance_proto);
 
         let neuron_indexes_migration = heap_governance_proto
             .migrations
@@ -1685,7 +1686,11 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(heap_neurons, None, neuron_indexes_migration),
+            neuron_store: NeuronStore::new(
+                heap_neurons,
+                topic_followee_map,
+                neuron_indexes_migration,
+            ),
             env,
             ledger,
             cmc,
@@ -1700,14 +1705,16 @@ impl Governance {
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
         let neurons = self.neuron_store.take_heap_neurons();
+        let heap_topic_followee_index = self.neuron_store.take_heap_topic_followee_index();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
-        reassemble_governance_proto(neurons, heap_governance_proto)
+        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
     }
 
     pub fn clone_proto(&self) -> GovernanceProto {
         let neurons = self.neuron_store.clone_neurons();
+        let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
-        reassemble_governance_proto(neurons, heap_governance_proto)
+        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
     }
 
     /// Validates that the underlying protobuf is well formed.

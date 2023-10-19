@@ -2062,6 +2062,21 @@ message Governance {
   // Migration related data.
   Migrations migrations = 21;
 
+  // A map of followees to their followers.
+  message FollowersMap {
+    message Followers {
+      // The followers of the neuron with the given ID.
+      // These values will be non-repeating, and order does not matter.
+      repeated ic_nns_common.pb.v1.NeuronId followers = 1;
+    }
+    // The key is the neuron ID of the followee.
+    map<fixed64, Followers> followers_map = 1;
+  }
+
+  // A Structure used during upgrade to store the index of topics for neurons to their followers.
+  // This is the inverse of what is stored in a Neuron (its followees).
+  map<int32, FollowersMap> topic_followee_index = 22;
+
   reserved 6;
   reserved "authz";
 }

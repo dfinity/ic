@@ -743,7 +743,7 @@ fn test_neuron_store_builds_index_unless_provided() {
         hashset! {NeuronId { id: 3 }, NeuronId { id: 1 }}
     );
 
-    let principal_to_neuron_ids_index = HeapNeuronFollowingIndex::new();
+    let principal_to_neuron_ids_index = HeapNeuronFollowingIndex::new(BTreeMap::new());
 
     let neuron_store = NeuronStore::new(
         neurons,
