@@ -487,6 +487,7 @@ pub async fn validate_request(
             .into());
         }
     }
+
     Ok(next.run(request).await)
 }
 
@@ -574,7 +575,11 @@ pub async fn lookup_node(
 }
 
 // Middleware: postprocess the response
-pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
+pub async fn postprocess_response(
+    Extension(canister_id): Extension<CanisterId>,
+    request: Request<Body>,
+    next: Next<Body>,
+) -> impl IntoResponse {
     let mut response = next.run(request).await;
 
     // Set the correct content-type for all replies if it's not an error
@@ -600,6 +605,9 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             );
         }
     }
+
+    // Passthru the canister id for logging
+    response.extensions_mut().insert(canister_id);
 
     response
 }
@@ -638,9 +646,13 @@ pub async fn status(
     let cbor = ser.into_inner();
 
     // Construct response and inject health status for middleware
-    let mut resp = cbor.into_response();
-    resp.extensions_mut().insert(health);
-    resp
+    let mut response = cbor.into_response();
+    response.extensions_mut().insert(health);
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+
+    response
 }
 
 // Handler: Unified handler for query/call/read_state calls
