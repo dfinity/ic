@@ -940,8 +940,8 @@ impl EccPoint {
 
     pub fn mul_by_g(scalar: &EccScalar) -> Self {
         match scalar {
-            EccScalar::K256(s) => secp256k1::Point::generator().mul(s).into(),
-            EccScalar::P256(s) => secp256r1::Point::generator().mul(s).into(),
+            EccScalar::K256(s) => secp256k1::Point::mul_by_g(s).into(),
+            EccScalar::P256(s) => secp256r1::Point::mul_by_g(s).into(),
         }
     }
 
