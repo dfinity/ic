@@ -292,7 +292,7 @@ impl MetricParamsPersist {
             // Count
             ranges: register_int_gauge_with_registry!(
                 format!("persist_ranges"),
-                format!("Number of cansiter ranges currently published"),
+                format!("Number of canister ranges currently published"),
                 registry
             )
             .unwrap(),
