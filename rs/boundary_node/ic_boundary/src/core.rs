@@ -13,15 +13,14 @@ use axum::{
     extract::DefaultBodyLimit,
     middleware,
     routing::method_routing::{get, post},
-    Extension, Router,
+    Router,
 };
 use axum_server::{accept::DefaultAcceptor, Server};
-use candid::Principal;
 use futures::TryFutureExt;
-use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
+use ic_types::CanisterId;
 use prometheus::Registry;
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
@@ -29,7 +28,10 @@ use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, Ser
 use tracing::info;
 
 #[cfg(feature = "tls")]
-use {axum::handler::Handler, instant_acme::LetsEncrypt};
+use {
+    axum::{handler::Handler, Extension},
+    instant_acme::LetsEncrypt,
+};
 
 use crate::{
     cache::{cache_middleware, Cache},
@@ -76,7 +78,8 @@ const MB: usize = 1024 * KB;
 
 const MAX_REQUEST_BODY_SIZE: usize = 2 * MB;
 const METRICS_CACHE_CAPACITY: usize = 30 * MB;
-const MANAGEMENT_CANISTER_ID: &str = "aaaaa-aa";
+
+pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
     // Metrics
@@ -261,20 +264,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             .layer(middleware::from_fn_with_state(
                 HttpMetricParamsStatus::new(&registry),
                 metrics::metrics_middleware_status,
-            ))
-            .layer(middleware::from_fn(routes::postprocess_response));
+            ));
 
         let health_route = Router::new().route(routes::PATH_HEALTH, {
             get(routes::health).with_state(h.clone())
         });
-
-        let btc_mw = ServiceBuilder::new()
-            .layer(Extension((
-                Principal::from_text(MANAGEMENT_CANISTER_ID).expect("failed to parse"),
-                Principal::from_text(BITCOIN_TESTNET_CANISTER_ID).expect("failed to parse"),
-                Principal::from_text(BITCOIN_MAINNET_CANISTER_ID).expect("failed to parse"),
-            )))
-            .layer(middleware::from_fn(management::btc_mw));
 
         let proxy_routes = query_route.merge(call_route).merge(read_state_route).layer(
             // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
@@ -296,7 +290,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                     metrics::metrics_middleware,
                 ))
                 .layer(middleware::from_fn(routes::preprocess_request))
-                .layer(btc_mw)
+                .layer(middleware::from_fn(management::btc_mw))
                 .layer(middleware::from_fn_with_state(
                     lk.clone(),
                     routes::lookup_node,

@@ -14,7 +14,7 @@ use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
 use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use http_body::Body as HttpBody;
-use ic_types::messages::ReplicaHealthStatus;
+use ic_types::{messages::ReplicaHealthStatus, CanisterId};
 use jemalloc_ctl::{epoch, stats};
 use prometheus::{
     register_histogram_vec_with_registry, register_int_counter_vec_with_registry,
@@ -423,6 +423,7 @@ pub async fn metrics_middleware(
         .unwrap_or_default();
 
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
+    let canister_id = response.extensions().get::<CanisterId>().cloned();
     let node = response.extensions().get::<Node>().cloned();
     let cache_status = response
         .extensions()
@@ -497,7 +498,8 @@ pub async fn metrics_middleware(
             status = status_code.as_u16(),
             subnet_id,
             node_id,
-            canister_id = ctx.canister_id.map(|x| x.to_string()),
+            canister_id = canister_id.unwrap().to_string(),
+            canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
             sender,
             method_name = ctx.method_name,
             proc_duration,
