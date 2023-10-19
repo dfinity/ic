@@ -94,6 +94,8 @@ def system_test(
         malicious = False,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
+        colocated_test_driver_vm_enable_ipv4 = False,
+        colocated_test_driver_vm_forward_ssh_agent = False,
         uses_guestos_dev = False,
         uses_guestos_dev_test = False,
         env_inherit = [],
@@ -116,6 +118,8 @@ def system_test(
         }
       Fields can be None or left out.
       colocated_test_driver_vm_required_host_features: a list of strings
+      colocated_test_driver_vm_enable_ipv4: boolean whether to enable an IPv4 address for the colocated test-driver VM.
+      colocated_test_driver_vm_forward_ssh_agent: forward the SSH agent to the colocated test-driver VM.
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
@@ -188,6 +192,18 @@ def system_test(
         if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
             deps.append(dep)
 
+    env = {
+        "COLOCATED_TEST": name,
+        "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
+        "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
+    }
+
+    if colocated_test_driver_vm_enable_ipv4:
+        env.update({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"})
+
+    if colocated_test_driver_vm_forward_ssh_agent:
+        env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
+
     run_system_test(
         name = name + "_colocate",
         src = "//rs/tests/testing_verification:colocate_test_bin",
@@ -198,11 +214,7 @@ def system_test(
         ],
         env_deps = _env_deps,
         env_inherit = env_inherit,
-        env = {
-            "COLOCATED_TEST": name,
-            "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
-            "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
-        },
+        env = env,
         tags = tags + ["requires-network", "system_test"] +
                ([] if "experimental_system_test_colocation" in tags else ["manual"]),
         timeout = test_timeout,
