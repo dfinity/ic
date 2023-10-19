@@ -31,7 +31,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
         let get_status = self.ingress_hist_reader.get_latest_status();
 
         // Do not run on_state_change if consensus_time is not initialized yet.
-        let consensus_time = match self.consensus_pool_cache.consensus_time() {
+        let consensus_time = match self.consensus_time.consensus_time() {
             Some(time) => time,
             None => return ChangeSet::new(),
         };
@@ -158,7 +158,7 @@ mod tests {
     };
     use ic_interfaces_state_manager::StateManager;
     use ic_test_utilities::{
-        consensus::MockConsensusCache,
+        consensus::MockConsensusTime,
         history::MockIngressHistory,
         mock_time,
         state_manager::FakeStateManager,
@@ -176,8 +176,8 @@ mod tests {
     #[tokio::test]
     async fn test_ingress_on_state_change_valid() {
         let time = current_time();
-        let mut consensus_pool_cache = MockConsensusCache::new();
-        consensus_pool_cache
+        let mut consensus_time = MockConsensusTime::new();
+        consensus_time
             .expect_consensus_time()
             .return_const(Some(time));
         let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
@@ -188,7 +188,7 @@ mod tests {
         setup_with_params(
             Some(ingress_hist_reader),
             None,
-            Some(Arc::new(consensus_pool_cache)),
+            Some(Arc::new(consensus_time)),
             None,
             |ingress_manager, ingress_pool| {
                 let ingress_message = SignedIngressBuilder::new()
@@ -225,8 +225,8 @@ mod tests {
     async fn test_ingress_on_state_change_invalid() {
         let time = current_time();
 
-        let mut consensus_pool_cache = MockConsensusCache::new();
-        consensus_pool_cache
+        let mut consensus_time = MockConsensusTime::new();
+        consensus_time
             .expect_consensus_time()
             .return_const(Some(time));
 
@@ -245,7 +245,7 @@ mod tests {
         setup_with_params(
             Some(ingress_hist_reader),
             None,
-            Some(Arc::new(consensus_pool_cache)),
+            Some(Arc::new(consensus_time)),
             None,
             |ingress_manager, ingress_pool| {
                 let ingress_message = SignedIngressBuilder::new()
@@ -283,15 +283,15 @@ mod tests {
         let (_height, state) = state_manager.take_tip();
         let batch_time = state.system_metadata().batch_time + Duration::from_secs(1);
 
-        let mut consensus_pool_cache = MockConsensusCache::new();
-        consensus_pool_cache
+        let mut consensus_time = MockConsensusTime::new();
+        consensus_time
             .expect_consensus_time()
             .return_const(Some(batch_time));
 
         setup_with_params(
             Some(ingress_hist_reader),
             None,
-            Some(Arc::new(consensus_pool_cache)),
+            Some(Arc::new(consensus_time)),
             None,
             |ingress_manager, ingress_pool| {
                 // Message should expire at the current time, and should not be selected
@@ -339,15 +339,15 @@ mod tests {
 
         let time = current_time();
 
-        let mut consensus_pool_cache = MockConsensusCache::new();
-        consensus_pool_cache
+        let mut consensus_time = MockConsensusTime::new();
+        consensus_time
             .expect_consensus_time()
             .return_const(Some(time));
 
         setup_with_params(
             Some(ingress_hist_reader),
             None,
-            Some(Arc::new(consensus_pool_cache)),
+            Some(Arc::new(consensus_time)),
             None,
             |ingress_manager, ingress_pool| {
                 let ingress_message = SignedIngressBuilder::new()
@@ -393,15 +393,15 @@ mod tests {
         let current_time = UNIX_EPOCH + since_epoch;
         let batch_time = current_time + Duration::from_secs(1);
 
-        let mut consensus_pool_cache = MockConsensusCache::new();
-        consensus_pool_cache
+        let mut consensus_time = MockConsensusTime::new();
+        consensus_time
             .expect_consensus_time()
             .return_const(Some(batch_time));
 
         setup_with_params(
             Some(ingress_hist_reader),
             None,
-            Some(Arc::new(consensus_pool_cache)),
+            Some(Arc::new(consensus_time)),
             None,
             |ingress_manager, ingress_pool| {
                 let good_msg = SignedIngressBuilder::new()

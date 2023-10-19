@@ -35,7 +35,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis, MockConsensusCache},
+    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis, MockConsensusTime},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -139,7 +139,7 @@ where
         );
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let ingress_manager = Arc::new(IngressManager::new(
-            Arc::new(MockConsensusCache::new()),
+            Arc::new(MockConsensusTime::new()),
             Box::new(ingress_hist_reader),
             ingress_pool,
             registry_client.clone(),

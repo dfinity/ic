@@ -2,7 +2,7 @@
 //! consensus updates the consensus pool.
 use ic_interfaces::consensus_pool::{
     ChainIterator, ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusBlockChainErr,
-    ConsensusPool, ConsensusPoolCache,
+    ConsensusPool, ConsensusPoolCache, ConsensusTime,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
@@ -131,11 +131,8 @@ impl<'a> Iterator for CachedChainIterator<'a> {
         std::mem::replace(&mut self.cursor, parent)
     }
 }
-impl ConsensusPoolCache for ConsensusCacheImpl {
-    fn finalized_block(&self) -> Block {
-        self.cache.read().unwrap().finalized_block.clone()
-    }
 
+impl ConsensusTime for ConsensusCacheImpl {
     fn consensus_time(&self) -> Option<Time> {
         let cache = &*self.cache.read().unwrap();
         if cache.finalized_block.height() == Height::from(0) {
@@ -143,6 +140,12 @@ impl ConsensusPoolCache for ConsensusCacheImpl {
         } else {
             Some(cache.finalized_block.context.time)
         }
+    }
+}
+
+impl ConsensusPoolCache for ConsensusCacheImpl {
+    fn finalized_block(&self) -> Block {
+        self.cache.read().unwrap().finalized_block.clone()
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {

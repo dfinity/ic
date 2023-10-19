@@ -12,7 +12,7 @@ use ic_interfaces::{
     artifact_pool::{ChangeResult, MutablePool, ValidatedPoolReader},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
-        ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
+        ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     time_source::TimeSource,
@@ -296,11 +296,7 @@ impl UncachedConsensusPoolImpl {
     }
 }
 
-impl ConsensusPoolCache for UncachedConsensusPoolImpl {
-    fn finalized_block(&self) -> Block {
-        get_highest_finalized_block(self, &self.catch_up_package())
-    }
-
+impl ConsensusTime for UncachedConsensusPoolImpl {
     fn consensus_time(&self) -> Option<Time> {
         let block = self.finalized_block();
         if block.height() == Height::from(0) {
@@ -308,6 +304,12 @@ impl ConsensusPoolCache for UncachedConsensusPoolImpl {
         } else {
             Some(block.context.time)
         }
+    }
+}
+
+impl ConsensusPoolCache for UncachedConsensusPoolImpl {
+    fn finalized_block(&self) -> Block {
+        get_highest_finalized_block(self, &self.catch_up_package())
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {
@@ -462,6 +464,11 @@ impl ConsensusPoolImpl {
 
     /// Get a copy of ConsensusPoolCache.
     pub fn get_cache(&self) -> Arc<dyn ConsensusPoolCache> {
+        Arc::clone(&self.cache) as Arc<_>
+    }
+
+    /// Get a copy of ConsensusPoolCache.
+    pub fn get_consensus_time(&self) -> Arc<dyn ConsensusTime> {
         Arc::clone(&self.cache) as Arc<_>
     }
 

@@ -28,7 +28,7 @@ use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
     artifact_pool_config::with_test_pool_config,
-    consensus::MockConsensusCache,
+    consensus::MockConsensusTime,
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
@@ -79,7 +79,7 @@ where
     let subnet_id = subnet_test_id(0);
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let registry = setup_registry(subnet_id, runtime.handle().clone());
-    let consensus_pool_cache = Arc::new(MockConsensusCache::new());
+    let consensus_time = Arc::new(MockConsensusTime::new());
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
         ic_interfaces_state_manager::Labeled::new(Height::new(0), Arc::new(replicated_state)),
@@ -103,7 +103,7 @@ where
             FastForwardTimeSource::new(),
             ingress_pool.clone(),
             &mut IngressManager::new(
-                consensus_pool_cache,
+                consensus_time,
                 ingress_hist_reader,
                 ingress_pool,
                 registry.clone(),
