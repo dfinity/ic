@@ -5,81 +5,80 @@ Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after 
 """
 
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
+def sanitize_external_crates(sanitizers_enabled):
+    FUZZING_ANNOTATION = [crate.annotation(rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING)] if sanitizers_enabled else []
+    return {
+        "candid": FUZZING_ANNOTATION,
+        "wasmtime": FUZZING_ANNOTATION,
+        "bitcoin": FUZZING_ANNOTATION,
+    }
+
+def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, sanitizers_enabled):
+    CRATE_ANNOTATIONS = {
+        "ic_bls12_381": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
+        "ring": [crate.annotation(
+            build_script_env = {
+                "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
+            },
+        )],
+        "ic-wasm": [crate.annotation(
+            gen_binaries = True,
+        )],
+        "openssl-sys": [] if not static_openssl or not sanitizers_enabled else [crate.annotation(
+            build_script_data = [
+                "@openssl//:gen_dir",
+                "@openssl//:openssl",
+            ],
+            # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
+            build_script_data_glob = ["build/**/*.c"],
+            build_script_env = {
+                "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
+                "OPENSSL_STATIC": "true",
+            },
+            data = ["@openssl"],
+            deps = ["@openssl"],
+        )],
+        "librocksdb-sys": [crate.annotation(
+            build_script_env = {
+                # Bazel executors assign only one core when executing
+                # the build script, making rocksdb compilation
+                # extremely slow. Bazel doesn't provide any way to
+                # override this settings so we cheat by starting more
+                # processes in parallel.
+                #
+                # See IDX-2406.
+                "NUM_JOBS": "8",
+            },
+        )],
+        "pprof": [crate.annotation(
+            build_script_data = [
+                "@com_google_protobuf//:protoc",
+            ],
+            build_script_env = {
+                "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+            },
+        )],
+        "prost-build": [crate.annotation(
+            build_script_env = {
+                "PROTOC_NO_VENDOR": "1",
+            },
+        )],
+    }
+    CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
     crates_repository(
         name = name,
         isolated = True,
         cargo_lockfile = cargo_lockfile,
         lockfile = lockfile,
         cargo_config = "//:bazel/cargo.config",
-        annotations = {
-            "ic_bls12_381": [crate.annotation(
-                rustc_flags = [
-                    "-C",
-                    "opt-level=3",
-                ],
-            )],
-            "k256": [crate.annotation(
-                rustc_flags = [
-                    "-C",
-                    "opt-level=3",
-                ],
-            )],
-            "p256": [crate.annotation(
-                rustc_flags = [
-                    "-C",
-                    "opt-level=3",
-                ],
-            )],
-            "ring": [crate.annotation(
-                build_script_env = {
-                    "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
-                },
-            )],
-            "ic-wasm": [crate.annotation(
-                gen_binaries = True,
-            )],
-            "openssl-sys": [] if not static_openssl else [crate.annotation(
-                build_script_data = [
-                    "@openssl//:gen_dir",
-                    "@openssl//:openssl",
-                ],
-                # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
-                build_script_data_glob = ["build/**/*.c"],
-                build_script_env = {
-                    "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
-                    "OPENSSL_STATIC": "true",
-                },
-                data = ["@openssl"],
-                deps = ["@openssl"],
-            )],
-            "librocksdb-sys": [crate.annotation(
-                build_script_env = {
-                    # Bazel executors assign only one core when executing
-                    # the build script, making rocksdb compilation
-                    # extremely slow. Bazel doesn't provide any way to
-                    # override this settings so we cheat by starting more
-                    # processes in parallel.
-                    #
-                    # See IDX-2406.
-                    "NUM_JOBS": "8",
-                },
-            )],
-            "pprof": [crate.annotation(
-                build_script_data = [
-                    "@com_google_protobuf//:protoc",
-                ],
-                build_script_env = {
-                    "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
-                },
-            )],
-            "prost-build": [crate.annotation(
-                build_script_env = {
-                    "PROTOC_NO_VENDOR": "1",
-                },
-            )],
-        },
+        annotations = CRATE_ANNOTATIONS,
         packages = {
             "actix-rt": crate.spec(
                 version = "^2.2.0",

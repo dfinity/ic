@@ -1,5 +1,5 @@
 {
-  "checksum": "c391f821c15183606c61f6b461c2b2b476d2795a79d2b91223ed0d0055048de7",
+  "checksum": "d440b9f8a5bf9eccaf350e9f4fc57746d7cad2131fd6b0c0ba0c63a7c82c20f8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -24924,10 +24924,6 @@
           "selects": {}
         },
         "edition": "2021",
-        "rustc_flags": [
-          "-C",
-          "opt-level=3"
-        ],
         "version": "0.13.1"
       },
       "license": "Apache-2.0 OR MIT"
@@ -33183,10 +33179,6 @@
           "selects": {}
         },
         "edition": "2021",
-        "rustc_flags": [
-          "-C",
-          "opt-level=3"
-        ],
         "version": "0.13.2"
       },
       "license": "Apache-2.0 OR MIT"
@@ -34472,7 +34464,7 @@
         "deps": {
           "common": [
             {
-              "id": "siphasher 0.3.10",
+              "id": "siphasher 0.3.11",
               "target": "siphasher"
             }
           ],
@@ -45477,13 +45469,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "siphasher 0.3.10": {
+    "siphasher 0.3.11": {
       "name": "siphasher",
-      "version": "0.3.10",
+      "version": "0.3.11",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/siphasher/0.3.10/download",
-          "sha256": "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
+          "url": "https://crates.io/api/v1/crates/siphasher/0.3.11/download",
+          "sha256": "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
         }
       },
       "targets": [
@@ -45510,7 +45502,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.10"
+        "version": "0.3.11"
       },
       "license": "MIT/Apache-2.0"
     },
