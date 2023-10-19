@@ -4,7 +4,7 @@ use crate::{
 };
 
 pub fn neuron_stable_indexes_building_is_enabled() -> bool {
-    cfg! { any(test, feature = "test") }
+    true
 }
 
 impl Migration {
