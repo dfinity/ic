@@ -92,6 +92,7 @@ type SnsRootCanister = record {
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   change_canister : (ChangeCanisterProposal) -> ();
+  change_canister_with_blocking : (ChangeCanisterProposal) -> ();
   get_build_metadata : () -> (text) query;
   get_sns_canisters_summary : (GetSnsCanistersSummaryRequest) -> (
       GetSnsCanistersSummaryResponse,

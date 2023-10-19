@@ -215,6 +215,25 @@ fn change_canister(proposal: ChangeCanisterProposal) {
     >(proposal));
 }
 
+// This method returns an error to the caller if the upgrade failed. 
+// This is in contrast to the previous method "change_canister" that returns before doing the upgrade. 
+#[candid_method(update)]
+#[update]
+async fn change_canister_with_blocking(proposal: ChangeCanisterProposal) {
+    log!(INFO, "change_ledger_parameters");
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+    assert_change_canister_proposal_is_valid(&proposal);
+    
+    STATE.with(|state| {
+        assert_ne!(state.borrow().governance_canister_id(), proposal.canister_id.get());
+    });
+        
+    // We can await the full outcome of the upgrade. 
+    // This will not cause a deadlock because we made sure that caller is the governance-canister and the target-canister is not the governance-canister.
+    ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(proposal).await    
+            
+}
+
 /// This function is deprecated, and `register_dapp_canisters` should be used
 /// instead. (NNS1-1991)
 ///

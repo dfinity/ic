@@ -99,6 +99,9 @@ pub mod native_action_ids {
 
     /// DeregisterDappCanisters Action.
     pub const DEREGISTER_DAPP_CANISTERS: u64 = 11;
+    
+    /// ManageLedgerParameters Action.
+    pub const MANAGE_LEDGER_PARAMETERS: u64 = 12;
 }
 
 impl governance::Mode {
@@ -1058,6 +1061,12 @@ impl From<Action> for NervousSystemFunction {
                 ),
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
+            Action::ManageLedgerParameters(_) => NervousSystemFunction {
+                id: native_action_ids::MANAGE_LEDGER_PARAMETERS,
+                name: "Manage ledger parameters".to_string(),
+                description: Some("Proposal to change some parameters in the ledger canister.".to_string()),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
         }
     }
 }
@@ -1517,6 +1526,7 @@ impl From<&Action> for u64 {
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
+            Action::ManageLedgerParameters(_) => native_action_ids::MANAGE_LEDGER_PARAMETERS,
         }
     }
 }

@@ -12,6 +12,7 @@ use crate::{
         ManageSnsMetadata, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
         ProposalData, ProposalDecisionStatus, ProposalRewardStatus, RegisterDappCanisters, Tally,
         TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+        ManageLedgerParameters,
     },
 };
 
@@ -245,6 +246,9 @@ pub async fn validate_and_render_action(
                 .and_then(|params| params.transaction_fee_e8s)
                 .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
             validate_and_render_transfer_sns_treasury_funds(transfer, sns_transfer_fee_e8s)
+        }
+        proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
+            validate_and_render_manage_ledger_parameters(manage_ledger_parameters)
         }
     }
 }
@@ -871,6 +875,52 @@ pub fn validate_and_render_manage_sns_metadata(
     } else {
         Ok(render)
     }
+}
+
+fn validate_and_render_manage_ledger_parameters(manage_ledger_parameters: &ManageLedgerParameters) -> Result<String, String> {
+    let mut no_change = true;
+    let mut render = "# Proposal to change ledger parameters:\n".to_string();
+    if let Some(token_name) = &manage_ledger_parameters.token_name {
+        render += &format!("# Set token name: {} \n", token_name);
+        no_change = false;
+    }
+    if let Some(token_symbol) = &manage_ledger_parameters.token_symbol {
+        render += &format!("# Set token symbol: {} \n", token_symbol);
+        no_change = false;
+    }
+    if let Some(token_decimals) = &manage_ledger_parameters.token_decimals {
+        if u8::try_from(*token_decimals).is_err() {
+            return Err(String::from("The field token_decimals must be 0-255."));
+        }
+        render += &format!("# Set token decimals: {} \n", token_decimals);
+        no_change = false;
+    }
+    if let Some(transfer_fee) = &manage_ledger_parameters.transfer_fee {
+        render += &format!("# Set token transfer fee: {} token-quantums. \n", transfer_fee);
+        no_change = false;
+    }
+    if let Some(set_fee_collector) = &manage_ledger_parameters.set_fee_collector {
+        let fee_collector_subaccount = set_fee_collector.subaccount.clone();
+        if let Some(ref s) = fee_collector_subaccount {
+            if s.subaccount.len() != 32 {
+                return Err(String::from("If a subaccount is set for the fee-collector, it must be 32 bytes."));
+            }
+        }
+        render += &format!(
+            "# Set fee collector account: {} \n", 
+            icrc_ledger_types::icrc1::account::Account{
+                owner: set_fee_collector.owner.ok_or(String::from("Fee collector account owner must be set"))?.into(),
+                subaccount: fee_collector_subaccount.map(|s| s.subaccount.try_into().unwrap()),
+            }
+        );        
+        no_change = false;
+    }
+    if no_change {
+        Err(String::from("ManageLedgerParameters must change at least one value, all values are None"))
+    } else {
+        Ok(render)
+    }
+    
 }
 
 impl ProposalData {

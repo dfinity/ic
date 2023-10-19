@@ -54,7 +54,7 @@ use crate::{
             NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
             ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-            VotingRewardsParameters, WaitForQuietState,
+            VotingRewardsParameters, WaitForQuietState, ManageLedgerParameters,
         },
     },
     proposal::{
@@ -2104,6 +2104,9 @@ impl Governance {
             Action::TransferSnsTreasuryFunds(transfer) => {
                 self.perform_transfer_sns_treasury_funds(transfer).await
             }
+            Action::ManageLedgerParameters(manage_ledger_parameters) => {
+                self.perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters).await
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2665,6 +2668,85 @@ impl Governance {
                 "Invalid 'from_treasury' in transfer.",
             )),
         }
+    }
+    
+    async fn perform_manage_ledger_parameters(&self, proposal_id: u64, manage_ledger_parameters: ManageLedgerParameters) -> Result<(), GovernanceError> {
+        err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
+        
+        let current_version = self.proto.deployed_version_or_panic();
+        let root_canister_id = self.proto.root_canister_id_or_panic();
+        
+        let ledger_canister = get_all_sns_canisters(&*self.env, root_canister_id).await.map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not execute proposal. Error getting current sns canisters: {}", e),
+            )
+        })?
+        .ledger.ok_or(
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not execute proposal. Ledger canister not found."),
+            )
+        )?;
+        
+        let target_wasm = get_wasm(&*self.env, current_version.ledger_wasm_hash.to_vec(), SnsCanisterType::Ledger)
+            .await
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Could not execute proposal. Error getting ledger canister wasm: {}", e),
+                )
+            })?
+            .wasm;
+        
+        let change_canister_proposal_payload = {
+            // For more details, please refer to the comments above the (definition of the)
+            // stop_before_installing field in ChangeCanisterProposal.
+            let stop_before_installing = true;
+            
+            use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs, ChangeFeeCollector};
+            let change_canister_arg =
+                ChangeCanisterProposal::new(stop_before_installing, CanisterInstallMode::Upgrade, CanisterId::new(ledger_canister).unwrap())
+                    .with_wasm(target_wasm)
+                    .with_arg(
+                        candid::encode_one(&
+                            Some(LedgerArgument::Upgrade(
+                                Some(UpgradeArgs{
+                                    token_name: manage_ledger_parameters.token_name,
+                                    token_symbol: manage_ledger_parameters.token_symbol,
+                                    token_decimals: manage_ledger_parameters.token_decimals.map(|n| u8::try_from(n).unwrap()), // unwrap checked in the validate_and_render_manage_ledger_parameters function
+                                    transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
+                                    change_fee_collector: manage_ledger_parameters.set_fee_collector
+                                        .map(|set_fee_collector| ChangeFeeCollector::SetTo(Account{
+                                            owner: set_fee_collector.owner.unwrap().into(),             // unwrap checked in the validate_and_render_manage_ledger_parameters function
+                                            subaccount: set_fee_collector.subaccount.map(|s| s.subaccount.try_into().unwrap())      // unwrap checked in the validate_and_render_manage_ledger_parameters function
+                                        })),
+                                    ..UpgradeArgs::default()       
+                                })
+                            ))
+                        ).unwrap()
+                    );
+
+            Encode!(&change_canister_arg).unwrap()
+        };
+
+        // We use the "change_canister_with_blocking" root method because we will not deadlock since we are upgrading the ledger, 
+        // and since we are upgrading to the same wasm module, we cannot use the "change_canister" non-blocking root method with the self.proto.pending_version mechanism 
+        // as it would not know when the upgrade is complete since we are upgrading with the current/same wasm module. 
+        self.env
+            .call_canister(
+                root_canister_id,
+                "change_canister_with_blocking",
+                change_canister_proposal_payload,
+            )
+            .await
+            .map(|_reply| ())
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Upgrade ledger with new parameters failed: {:?}", err),
+                )
+            })
     }
 
     // Returns an option with the NervousSystemParameters

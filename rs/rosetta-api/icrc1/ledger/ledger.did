@@ -129,6 +129,7 @@ type UpgradeArgs = record {
     token_symbol : opt text;
     token_name : opt text;
     transfer_fee : opt nat;
+    token_decimals : opt nat8;
     change_fee_collector : opt ChangeFeeCollector;
     max_memo_length : opt nat16;
     feature_flags : opt FeatureFlags;

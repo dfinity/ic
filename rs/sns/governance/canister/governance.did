@@ -11,6 +11,7 @@ type Action = variant {
   Unspecified : record {};
   ManageSnsMetadata : ManageSnsMetadata;
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
+  ManageLedgerParameters : ManageLedgerParameters;
   Motion : Motion;
 };
 type AddNeuronPermissions = record {
@@ -224,6 +225,13 @@ type ListProposals = record {
   include_status : vec int32;
 };
 type ListProposalsResponse = record { proposals : vec ProposalData };
+type ManageLedgerParameters = record {
+  token_symbol : opt text;
+  transfer_fee : opt nat64;
+  set_fee_collector : opt Account;
+  token_decimals : opt nat32;
+  token_name : opt text;
+};
 type ManageNeuron = record { subaccount : vec nat8; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };
 type ManageSnsMetadata = record {

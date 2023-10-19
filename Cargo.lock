@@ -9988,6 +9988,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-crypto-sha2",
  "ic-ic00-types",
+ "ic-icrc1-ledger",
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
