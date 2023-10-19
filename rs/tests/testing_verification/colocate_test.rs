@@ -2,7 +2,7 @@ use ic_tests::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::str;
 use std::time::Duration;
 use std::{env, fs};
@@ -18,7 +18,7 @@ use ic_tests::driver::ic::VmResources;
 use ic_tests::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_tests::driver::test_env_api::{retry, FarmBaseUrl, HasDependencies, SshSession};
 use ic_tests::driver::test_setup::GroupSetup;
-use ic_tests::driver::universal_vm::{UniversalVm, UniversalVms};
+use ic_tests::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use slog::{debug, error, info};
 use ssh2::Session;
 
@@ -67,11 +67,18 @@ fn setup(env: TestEnv) {
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
         .unwrap_or_default();
 
-    UniversalVm::new(UVM_NAME.to_string())
+    let uvm = UniversalVm::new(UVM_NAME.to_string())
         .with_required_host_features(host_features)
         .with_vm_resources(vm_resources)
-        .with_config_img(env.get_dependency_path("rs/tests/colocate_uvm_config_image.zst"))
-        .start(&env)
+        .with_config_img(env.get_dependency_path("rs/tests/colocate_uvm_config_image.zst"));
+
+    let uvm = if env::var("COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4").is_ok() {
+        uvm.enable_ipv4()
+    } else {
+        uvm
+    };
+
+    uvm.start(&env)
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));
     info!(log, "Universal VM {UVM_NAME} installed!");
 
@@ -155,6 +162,10 @@ fn setup(env: TestEnv) {
     debug!(log, "Docker env vars: {docker_env_vars}");
 
     info!(log, "Creating final docker image ...");
+
+    let forward_ssh_agent =
+        env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").unwrap_or("".to_string());
+
     let prepare_docker_script = &format!(
         r#"
 set -e
@@ -173,10 +184,19 @@ RUN chmod 600 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
 EOF
 docker build --tag final .
 
-cat <<EOF > /home/admin/run
+cat <<'EOF' > /home/admin/run
 #!/bin/sh
+if [ "{forward_ssh_agent}" ] && [ -n "${{SSH_AUTH_SOCK:-}}" ] && [ -e "${{SSH_AUTH_SOCK:-}}" ]; then
+    DOCKER_RUN_ARGS+=(
+        -v "$SSH_AUTH_SOCK:/ssh-agent"
+        -e SSH_AUTH_SOCK="/ssh-agent"
+    )
+else
+    echo "No ssh-agent to forward."
+fi
 docker run --name {COLOCATE_CONTAINER_NAME} --network host \
   {docker_env_vars}
+  "${{DOCKER_RUN_ARGS[@]}}" \
   final \
   /home/root/root_env/dependencies/{colocated_test_bin} \
   --working-dir /home/root --no-delete-farm-group --no-farm-keepalive {required_host_features} --group-base-name {colocated_test} run
@@ -187,7 +207,7 @@ chmod +x /home/admin/run
     uvm.block_on_bash_script_from_session(&session, prepare_docker_script)
         .unwrap_or_else(|e| panic!("Failed to create final docker image on UVM because: {e}"));
     info!(log, "Starting test remotely ...");
-    start_test(session.clone());
+    start_test(env, uvm);
     let test_result_handle = {
         info!(log, "Waiting for test results asynchronously ...");
         receive_test_exit_code_async(session, log.clone())
@@ -205,19 +225,47 @@ chmod +x /home/admin/run
     info!(log, "test execution has finished successfully");
 }
 
-fn start_test(session: Session) {
+fn start_test(env: TestEnv, uvm: DeployedUniversalVm) {
     let run_test_script = r#"
     set -E
     nohup sh -c '/home/admin/run > /dev/null 2>&1; echo $? > test_exit_code' &
-    "#
-    .to_string();
-    let mut channel = session
-        .channel_session()
-        .expect("failed to establish channel");
-    channel.exec("bash").unwrap();
-    channel.write_all(run_test_script.as_bytes()).unwrap();
-    channel.flush().unwrap();
-    channel.send_eof().unwrap();
+    "#;
+
+    let vm = uvm.get_vm().unwrap();
+    let ipv6 = vm.ipv6.to_string();
+    let priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let mut cmd = Command::new("ssh");
+    cmd.stdin(Stdio::piped())
+        .arg(format!("{SSH_USERNAME}@{ipv6}"))
+        .arg("-i")
+        .arg(priv_key_path);
+    if env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").is_ok() {
+        cmd.arg("-A");
+    }
+    let mut ssh_child = cmd
+        .arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg("bash")
+        .spawn()
+        .unwrap_or_else(|e| panic!("Failed to SSH to the test-driver VM because {e:?}"));
+
+    let mut stdin = ssh_child.stdin.take().expect("Failed to open stdin of ssh");
+    std::thread::spawn(move || {
+        stdin
+            .write_all(run_test_script.as_bytes())
+            .expect("Failed to write to stdin");
+    });
+
+    let out = ssh_child
+        .wait_with_output()
+        .expect("Failed to read stdout of ssh");
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+    if !out.status.success() {
+        panic!("Failed to ssh to the test-driver VM!");
+    }
 }
 
 fn receive_test_exit_code_async(
