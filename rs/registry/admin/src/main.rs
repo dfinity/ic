@@ -92,8 +92,8 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    HOSTOS_VERSION_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
-    ROOT_SUBNET_ID_KEY,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -458,6 +458,8 @@ enum SubCommand {
     /// Sub-command to fetch an API Boundary Node record from the registry.
     /// Retrieve an API Boundary Node record
     GetApiBoundaryNode(GetApiBoundaryNodeCmd),
+    /// Retrieve all API Boundary Node Ids
+    GetApiBoundaryNodes,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -5651,6 +5653,34 @@ async fn main() {
                 opts.json,
             )
             .await;
+        }
+        SubCommand::GetApiBoundaryNodes => {
+            let registry_client = RegistryClientImpl::new(
+                Arc::new(NnsDataProvider::new(
+                    tokio::runtime::Handle::current(),
+                    vec![opts.nns_url.clone()],
+                )),
+                None,
+            );
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+            let keys = registry_client
+                .get_key_family(
+                    API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
+                    registry_client.get_latest_version(),
+                )
+                .unwrap();
+            let records = keys
+                .iter()
+                .map(|k| k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX).unwrap())
+                .collect::<Vec<_>>();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&records)
+                    .expect("Failed to serialize the records to JSON")
+            );
         }
     }
 }
