@@ -5,6 +5,7 @@ use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStoreInsertionError;
+use crate::threshold::ni_dkg::NIDKG_THRESHOLD_SCOPE;
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionKeySetWithPop;
 use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionSecretKey;
@@ -25,6 +26,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::Transcript;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
+use ic_crypto_test_utils::set_of;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::NODE_42;
@@ -64,6 +66,44 @@ proptest! {
 #[test]
 fn test_retention() {
     test_utils::ni_dkg::test_retention(|| LocalCspVault::builder_for_test().build_into_arc());
+}
+
+#[test]
+fn should_not_call_retain_if_keystore_would_not_be_modified() {
+    let active_key_ids = set_of(&[KeyId::from([0u8; 32])]);
+    let mut sks = MockSecretKeyStore::new();
+    sks.expect_retain_would_modify_keystore()
+        .withf(|_filter, scope| *scope == NIDKG_THRESHOLD_SCOPE)
+        .return_const(false)
+        .times(1);
+    sks.expect_retain().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(csp.retain_threshold_keys_if_present(active_key_ids), Ok(()));
+}
+
+#[test]
+fn should_call_retain_if_keystore_would_be_modified() {
+    let active_key_ids = set_of(&[KeyId::from([0u8; 32])]);
+    let mut sks = MockSecretKeyStore::new();
+    let mut seq = Sequence::new();
+    sks.expect_retain_would_modify_keystore()
+        .times(1)
+        .in_sequence(&mut seq)
+        .withf(|_filter, scope| *scope == NIDKG_THRESHOLD_SCOPE)
+        .return_const(true);
+    sks.expect_retain()
+        .times(1)
+        .in_sequence(&mut seq)
+        .withf(|_filter, scope| *scope == NIDKG_THRESHOLD_SCOPE)
+        .return_const(Ok(()));
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(csp.retain_threshold_keys_if_present(active_key_ids), Ok(()));
 }
 
 #[test]

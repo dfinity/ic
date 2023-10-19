@@ -137,12 +137,27 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
         let start_time = self.metrics.now();
-        self.sks_write_lock()
-            .retain(
-                move |key_id, _| active_key_ids.contains(key_id),
-                NIDKG_THRESHOLD_SCOPE,
-            )
-            .unwrap_or_else(|e| panic!("error retaining threshold keys: {}", e));
+        let filter = move |key_id: &KeyId, _: &CspSecretKey| active_key_ids.contains(key_id);
+        if self
+            .sks_read_lock()
+            .retain_would_modify_keystore(filter.clone(), NIDKG_THRESHOLD_SCOPE)
+        {
+            // The fact that we perform the initial check holding a read lock on the SKS, and then
+            // possibly acquire a write lock to actually modify the SKS, results in a potential
+            // race condition here. This has two consequences:
+            //  - In case another writer managed to get the write lock after we released the read
+            //    lock and acquired the write lock, and also executed the retain operation with the
+            //    same set of `active_key_ids`, this is fine, since the operation is idempotent.
+            //  - Another potential issue is that a new transcript could have been loaded, and a
+            //    new key added, between the time that retain on the crypto component was called,
+            //    and the time that we actually call retain here. However:
+            //     - This issue is neither fixed, nor exacerbated by the race condition here
+            //     - The issue is tracked in CRP-1094: It is currently not a problem due to how
+            //       these functions are called from consensus
+            self.sks_write_lock()
+                .retain(filter, NIDKG_THRESHOLD_SCOPE)
+                .unwrap_or_else(|e| panic!("error retaining threshold keys: {}", e));
+        }
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,

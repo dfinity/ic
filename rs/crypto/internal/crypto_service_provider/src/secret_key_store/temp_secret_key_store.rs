@@ -82,4 +82,11 @@ impl SecretKeyStore for TempSecretKeyStore {
     {
         self.store.retain(filter, scope)
     }
+
+    fn retain_would_modify_keystore<F>(&self, filter: F, scope: Scope) -> bool
+    where
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
+    {
+        self.store.retain_would_modify_keystore(filter, scope)
+    }
 }
