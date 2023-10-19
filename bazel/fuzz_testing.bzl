@@ -5,7 +5,7 @@ This module contains utilities to work with fuzz tests.
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 # These are rustc flags that can be used with the Rust nightly toolchain to build fuzz tests for libfuzzer.
-RUSTC_FLAGS_DEFAULTS_FOR_FUZZING = [
+DEFAULT_RUSTC_FLAGS = [
     "-Cpasses=sancov-module",
     "-Cllvm-args=-sanitizer-coverage-level=4",
     "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
@@ -20,11 +20,16 @@ RUSTC_FLAGS_DEFAULTS_FOR_FUZZING = [
     "-Cinstrument-coverage",
     "-Cdebug-assertions",
     "-Ccodegen-units=1",
+    "-Zextra-const-ub-checks",
+    "-Zstrict-init-checks",
 ]
 
 DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
 ]
+
+# This flag will be used by third party crates and internal rust_libraries during fuzzing
+DEFAULT_RUSTC_FLAGS_FOR_FUZZING = DEFAULT_RUSTC_FLAGS + DEFAULT_SANITIZERS
 
 def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_features = [], proc_macro_deps = [], deps = [], **kwargs):
     """Wrapper for the rust_binary to compile a fuzzing rust_binary
@@ -44,7 +49,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
     if not sanitizers:
         sanitizers = DEFAULT_SANITIZERS
 
-    RUSTC_FLAGS_LIBFUZZER = RUSTC_FLAGS_DEFAULTS_FOR_FUZZING + [
+    RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + [
         # This would only work inside the devcontainer
         "-Clink-arg=/usr/lib/llvm-15/lib/clang/15.0.7/lib/linux/libclang_rt.fuzzer-x86_64.a",
     ]
@@ -79,7 +84,7 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
       **kwargs: additional arguments to pass a rust_binary rule.
     """
 
-    RUSTC_FLAGS_AFL = RUSTC_FLAGS_DEFAULTS_FOR_FUZZING + [
+    RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + [
         "-Cllvm-args=-sanitizer-coverage-trace-pc-guard",
         "-Clink-arg=-fuse-ld=gold",
         "-Clink-arg=-fsanitize=fuzzer",

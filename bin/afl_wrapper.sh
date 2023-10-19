@@ -18,6 +18,13 @@ if [[ -z "$OUTPUT_DIR" ]]; then
     OUTPUT_DIR=$(mktemp -d)
 fi
 
+cleanup() {
+    echo "Input directory ${INPUT_DIR}"
+    echo "Output directory ${OUTPUT_DIR}"
+}
+
+trap cleanup EXIT
+
 ASAN_OPTIONS="abort_on_error=1:\
             alloc_dealloc_mismatch=0:\
             allocator_may_return_null=1:\

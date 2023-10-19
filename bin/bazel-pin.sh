@@ -35,10 +35,12 @@ if [[ $# -eq 0 ]]; then
     echo "Repinning all crates"
     CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
     DFINITY_OPENSSL_STATIC=1 CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+    SANITIZERS_ENABLED=1 CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
 else
     for crate in "$@"; do
         echo "Repinning crate: ${crate}"
         CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
         DFINITY_OPENSSL_STATIC=1 CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
+        SANITIZERS_ENABLED=1 CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
     done
 fi
