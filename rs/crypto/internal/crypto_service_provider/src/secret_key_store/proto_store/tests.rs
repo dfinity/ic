@@ -640,6 +640,133 @@ mod retain {
     }
 }
 
+mod retain_would_modify_keystore {
+    use super::*;
+
+    #[test]
+    fn should_return_true_if_some_keys_match_scope_but_not_filter() {
+        let mut key_store = proto_key_store();
+        let rng = &mut reproducible_rng();
+        let mut next_key = || (make_key_id(rng), make_secret_key(rng));
+        let key_with_id_to_retain = next_key();
+        let key_with_value_to_retain = next_key();
+        let key_to_remove = next_key();
+        let key_with_different_scope = next_key();
+        let key_with_no_scope = next_key();
+
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let different_scope = Scope::Const(ConstScope::Test1);
+
+        let mut insert_key_with_scope = |pair: &(KeyId, CspSecretKey), scope: Option<Scope>| {
+            key_store.insert(pair.0, pair.1.clone(), scope).unwrap();
+            assert!(key_store.contains(&pair.0));
+        };
+
+        insert_key_with_scope(&key_with_id_to_retain, Some(selected_scope));
+        insert_key_with_scope(&key_with_value_to_retain, Some(selected_scope));
+        insert_key_with_scope(&key_to_remove, Some(selected_scope));
+        insert_key_with_scope(&key_with_different_scope, Some(different_scope));
+        insert_key_with_scope(&key_with_no_scope, None);
+
+        let id_to_retain = key_with_id_to_retain.0;
+        let value_to_retain = key_with_value_to_retain.1;
+
+        assert!(key_store.retain_would_modify_keystore(
+            move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
+            selected_scope,
+        ));
+    }
+
+    #[test]
+    fn should_return_false_on_empty_secret_key_store() {
+        let rng = &mut reproducible_rng();
+        let key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let id_to_retain = make_key_id(rng);
+        let value_to_retain = make_secret_key(rng);
+
+        assert!(!key_store.retain_would_modify_keystore(|_, _| true, selected_scope));
+        assert!(!key_store.retain_would_modify_keystore(|_, _| false, selected_scope));
+        assert!(!key_store
+            .retain_would_modify_keystore(move |id, _| (id == &id_to_retain), selected_scope));
+        assert!(!key_store.retain_would_modify_keystore(
+            move |_, value| (value == &value_to_retain),
+            selected_scope
+        ));
+    }
+
+    #[test]
+    fn should_return_true_when_retaining_non_existing_key_by_key_id() {
+        let rng = &mut reproducible_rng();
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let key_id = make_key_id(rng);
+        let key_value = make_secret_key(rng);
+        let key_id_to_retain = make_key_id(rng);
+
+        key_store
+            .insert(key_id, key_value, Some(selected_scope))
+            .expect("insert should succeed");
+
+        assert!(key_store
+            .retain_would_modify_keystore(move |id, _| (id == &key_id_to_retain), selected_scope));
+    }
+
+    #[test]
+    fn should_return_true_when_retaining_non_existing_key_by_key_value() {
+        let rng = &mut reproducible_rng();
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let key_id = make_key_id(rng);
+        let key_value = make_secret_key(rng);
+        let key_value_to_retain = make_secret_key(rng);
+
+        key_store
+            .insert(key_id, key_value, Some(selected_scope))
+            .expect("insert should succeed");
+
+        assert!(key_store.retain_would_modify_keystore(
+            move |_, value| (value == &key_value_to_retain),
+            selected_scope
+        ));
+    }
+
+    #[test]
+    fn should_return_false_if_filter_matches_but_scope_does_not_match() {
+        let rng = &mut reproducible_rng();
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let different_scope = Scope::Const(ConstScope::Test1);
+        let key_id = make_key_id(rng);
+        let key_value = make_secret_key(rng);
+
+        key_store
+            .insert(key_id, key_value, Some(selected_scope))
+            .expect("insert should succeed");
+
+        assert!(
+            !key_store.retain_would_modify_keystore(move |id, _| (id == &key_id), different_scope)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "retain filter panicked!")]
+    fn should_panic_if_retain_filter_panics() {
+        let rng = &mut reproducible_rng();
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let key_id = make_key_id(rng);
+        key_store
+            .insert(key_id, make_secret_key(rng), Some(selected_scope))
+            .expect("insert should succeed");
+
+        let _would_modify = key_store.retain_would_modify_keystore(
+            move |_, _| panic!("retain filter panicked!"),
+            selected_scope,
+        );
+    }
+}
+
 mod zeroize_old_secret_key_store {
     use super::*;
     use std::fs;
