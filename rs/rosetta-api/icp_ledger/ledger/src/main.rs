@@ -1493,7 +1493,7 @@ fn get_canidid_interface() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_compatible, service_equal, CandidSource};
     use std::path::PathBuf;
 
     #[test]
@@ -1502,7 +1502,7 @@ mod tests {
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let old_interface = manifest_dir.join("../ledger.did");
 
-        service_compatible(
+        service_equal(
             CandidSource::Text(&new_interface),
             CandidSource::File(old_interface.as_path()),
         )
