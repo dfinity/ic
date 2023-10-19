@@ -44,7 +44,6 @@ rand = "0.8"
 rand_chacha = "0.3"
 rcgen = "0.10.0"
 serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 simple_asn1 = { workspace = true }
 slog = { version = "2.5.2", features = [
