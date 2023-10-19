@@ -1,6 +1,7 @@
+use crate::upgrade::ReplicaProcess;
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
-    replica_process::ReplicaProcess, ssh_access_manager::SshAccessParameters,
+    catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
+    registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
 };
 use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
@@ -18,7 +19,7 @@ pub(crate) struct OrchestratorDashboard {
     node_id: NodeId,
     last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
-    replica_process: Arc<Mutex<ReplicaProcess>>,
+    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     replica_version: ReplicaVersion,
     cup_provider: Arc<CatchUpPackageProvider>,
@@ -73,7 +74,7 @@ impl OrchestratorDashboard {
         node_id: NodeId,
         last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
-        replica_process: Arc<Mutex<ReplicaProcess>>,
+        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         subnet_id: Arc<RwLock<Option<SubnetId>>>,
         replica_version: ReplicaVersion,
         cup_provider: Arc<CatchUpPackageProvider>,

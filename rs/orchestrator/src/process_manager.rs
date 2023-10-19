@@ -1,45 +1,65 @@
-use ic_types::ReplicaVersion;
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
 };
 use slog::{debug, info, warn};
-use std::sync::Mutex;
-use std::{io::Result, sync::Arc};
+use std::{
+    fmt::Debug,
+    io::Result,
+    sync::{Arc, Mutex},
+};
 
 type PIDCell = Arc<Mutex<Option<Pid>>>;
 
-#[derive(Clone, Debug)]
-pub(crate) struct ReplicaCommand {
-    pub(crate) replica_version: ReplicaVersion,
+/// Captures a process that should be run by the [`ProcessManager`]
+pub(crate) trait Process {
+    /// Name of the type of process
+    ///
+    /// Used only for logging purposes
+    const NAME: &'static str;
+
+    /// Version type of the process
+    ///
+    /// Different processes might be using different versioning schemes.
+    /// We only impose that we can check that versions are equal and have
+    /// a debug representation
+    type Version: Eq + Debug;
+
+    /// Return the version of the [`Process`]
+    fn get_version(&self) -> &Self::Version;
+
+    /// Return the path to the binary of the [`Process`]
+    fn get_binary(&self) -> &str;
+
+    /// Return the arguments passed to the [`Process`]
+    fn get_args(&self) -> &[String];
 }
 
-/// Runs and monitors a Replica process and accepts requests to stop the current
-/// Replica process and run a new Replica binary
-pub(crate) struct ReplicaProcess {
-    pub(crate) command: Option<ReplicaCommand>,
-    pub(crate) pid_cell: PIDCell,
-    pub(crate) log: slog::Logger,
-    pub(crate) join_handle: Option<std::thread::JoinHandle<()>>,
+/// A [`ProcessManager`] manages running a single versioned [`Process`]
+pub(crate) struct ProcessManager<P: Process> {
+    process: Option<P>,
+    pid_cell: PIDCell,
+    log: slog::Logger,
+    join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl ReplicaProcess {
+impl<P: Process> ProcessManager<P> {
     pub(crate) fn new(logger: slog::Logger) -> Self {
         Self {
-            command: None,
+            process: None,
             pid_cell: Default::default(),
             log: logger.clone(),
             join_handle: None,
         }
     }
 
-    /// Returns true only if the replica process is running.
+    /// Returns true only if the process is running.
     pub fn is_running(&self) -> bool {
         self.get_pid().is_some()
     }
 
-    /// Returns the `Pid` if the currently running replica; or `None` if no
-    /// replica is running.
+    /// Returns the `Pid` if the currently running process; or `None` if no
+    /// process is running.
     pub fn get_pid(&self) -> Option<Pid> {
         *self.pid_cell.lock().unwrap()
     }
@@ -56,15 +76,15 @@ impl ReplicaProcess {
         }
     }
 
-    /// Kills the currently running replica process group. If no replica is
+    /// Kills the currently running process group. If no process is
     /// running, a log message is printed.
     ///
     /// It is critical that we signal and terminate the whole
-    /// process group of which the replica should be the
-    /// leader. The Replica spawns multiple other sandboxed
-    /// processes under the same process group. For correctness
+    /// process group of which the [`Process`] should be the
+    /// leader. The process may spawn other
+    /// sub-processes under the same process group. For correctness
     /// -- the processes may access state file paths and
-    /// handles -- it is important we signal the sandbox
+    /// handles -- it is important we signal the sub-processes
     /// processes too. This is possible because we shall
     /// restrict setgpid() in production -- by default disabled
     /// by SELinux type enforcement.
@@ -89,36 +109,30 @@ impl ReplicaProcess {
             return signal::kill(gpid, Signal::SIGTERM)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)));
         }
-        info!(self.log, "no replica process running");
+        info!(self.log, "no {} process running", P::NAME);
         Ok(())
     }
 
-    pub(crate) fn start(
-        &mut self,
-        replica_binary: String,
-        replica_version: &ReplicaVersion,
-        args: Vec<String>,
-    ) -> Result<()> {
-        // Do nothing if we're already running a Replica with the requested version
-        let current_version = self.command.as_ref().map(|x| x.replica_version.clone());
-        if self.get_pid().is_some() && Some(replica_version.clone()) == current_version {
-            debug!(
-                self.log,
-                "Replica process already running with correct version"
-            );
-            return Ok(());
+    pub(crate) fn start(&mut self, process: P) -> Result<()> {
+        // Do nothing if we're already running a process with the requested version
+        if let Some(current_version) = self.process.as_ref().map(|p| p.get_version()) {
+            if self.get_pid().is_some() && process.get_version() == current_version {
+                debug!(
+                    self.log,
+                    "{} process already running with correct version",
+                    P::NAME
+                );
+                return Ok(());
+            }
         }
-
-        self.command = Some(ReplicaCommand {
-            replica_version: replica_version.clone(),
-        });
 
         debug!(
             self.log,
-            "Replica process not running: command is {:?} {:?} {:?}",
-            &replica_binary,
-            &replica_version,
-            &args
+            "{} process not running: command is {:?} {:?} {:?}",
+            P::NAME,
+            process.get_binary(),
+            process.get_version(),
+            process.get_args()
         );
 
         // If there is a currently running process, kill it. Instead of starting the new
@@ -129,30 +143,34 @@ impl ReplicaProcess {
         } else {
             info!(
                 self.log,
-                "Starting replica with command: {:?} {:?} {:?}",
-                &replica_binary,
-                &replica_version,
-                &args
+                "Starting {} with command: {:?} {:?} {:?}",
+                P::NAME,
+                process.get_binary(),
+                process.get_version(),
+                process.get_args()
             );
-            let child = std::process::Command::new(replica_binary)
-                .args(&args)
+            let child = std::process::Command::new(process.get_binary())
+                .args(process.get_args())
                 .spawn()?;
             debug!(self.log, "Process started. Pid: {}", child.id());
             self.set_pid(Pid::from_raw(child.id() as i32));
 
             self.join_handle = Some(std::thread::spawn(wait_on_exit(
+                P::NAME,
                 self.log.clone(),
                 child,
                 self.pid_cell.clone(),
             )));
         }
+
+        self.process = Some(process);
         Ok(())
     }
 }
 
-/// Wait for the child process to return, log the exit status and send
-/// `ReplicaExited`-message to `exit_recipient`.
+/// Wait for the child process to return, log the exit status and send.
 fn wait_on_exit(
+    name: &'static str,
     log: slog::Logger,
     mut process: std::process::Child,
     pid_cell: PIDCell,
@@ -160,9 +178,9 @@ fn wait_on_exit(
     move || {
         let exit_status = process.wait();
         if let Err(e) = &exit_status {
-            warn!(log, "wait() for replica returned error: {:?}", e);
+            warn!(log, "wait() for {} returned error: {:?}", name, e);
         } else {
-            info!(log, "Replica exited. Exit Status: {:?}", exit_status);
+            info!(log, "{} exited. Exit Status: {:?}", name, exit_status);
         }
         let _pid = pid_cell.lock().unwrap().take();
     }
