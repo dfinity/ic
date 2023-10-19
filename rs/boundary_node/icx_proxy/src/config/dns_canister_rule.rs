@@ -90,7 +90,11 @@ impl DnsCanisterRule {
                 .map_while(|(host, dns)| match dns {
                     Some(dns) if eq(&host, dns) => Some(None),
                     Some(_) => None,
-                    None => Principal::from_text(host.as_ref()).ok().map(Some),
+                    // ignore any prefix before '--' in the host name
+                    // split() is guaranteed to return a non-empty iterator, so last().unwrap() is safe here
+                    None => Principal::from_text(host.as_ref().split("--").last().unwrap())
+                        .ok()
+                        .map(Some),
                 })
                 .find_map(|x| x),
         }
