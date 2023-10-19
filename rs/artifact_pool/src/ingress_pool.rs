@@ -1,12 +1,15 @@
 /// Ingress Pool provides storage for all ingress messages in artifact_pool
 /// Logically it can be viewed as part of the artifact pool
 /// But we keep it separated for code readability
-use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
+use crate::{
+    metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    HasTimestamp,
+};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     artifact_pool::{
-        ChangeResult, HasTimestamp, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
         ValidatedPoolReader,
     },
     ingress_pool::{
