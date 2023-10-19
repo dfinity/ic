@@ -31,6 +31,7 @@ icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" 
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
+ic-utils-ensure = { path = "../../../utils/ensure" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = "1.4.0"
 minicbor = { workspace = true }

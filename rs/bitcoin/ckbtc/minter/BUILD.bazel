@@ -15,6 +15,7 @@ LIB_DEPS = [
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
+    "//rs/utils/ensure",
     "@crate_index//:bech32",
     "@crate_index//:ic0",
     "@crate_index//:ic-btc-interface",
