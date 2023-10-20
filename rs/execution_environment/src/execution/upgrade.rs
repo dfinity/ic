@@ -7,8 +7,8 @@ use crate::canister_manager::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, finish_err, InstallCodeHelper, OriginalContext, PausedInstallCodeHelper,
-    StableMemoryHandling,
+    canister_layout, finish_err, InstallCodeHelper, MemoryHandling, OriginalContext,
+    PausedInstallCodeHelper,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
@@ -241,10 +241,15 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         original.compilation_cost_handling,
     );
 
+    let memory_handling = if context.keep_main_memory {
+        MemoryHandling::KeepBothMemories
+    } else {
+        MemoryHandling::KeepOnlyStableMemory
+    };
     if let Err(err) = helper.replace_execution_state_and_allocations(
         instructions_from_compilation,
         result,
-        StableMemoryHandling::Keep,
+        memory_handling,
         &original,
     ) {
         let instructions_left = helper.instructions_left();

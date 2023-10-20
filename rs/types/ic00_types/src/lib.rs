@@ -968,6 +968,7 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
 ///     query_allocation: opt nat;
+///     keep_main_memory: opt bool;
 /// })`
 #[derive(Clone, CandidType, Deserialize, Debug)]
 pub struct InstallCodeArgs {
@@ -980,6 +981,7 @@ pub struct InstallCodeArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
+    pub keep_main_memory: Option<bool>,
 }
 
 impl std::fmt::Display for InstallCodeArgs {
@@ -1013,6 +1015,15 @@ impl std::fmt::Display for InstallCodeArgs {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
+        writeln!(f, "}}")?;
+        writeln!(
+            f,
+            "  keep_main_memory: {:?}",
+            &self
+                .keep_main_memory
+                .as_ref()
+                .map(|value| format!("{}", value))
+        )?;
         writeln!(f, "}}")
     }
 }
@@ -1028,6 +1039,7 @@ impl InstallCodeArgs {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
         query_allocation: Option<u64>,
+        keep_main_memory: Option<bool>,
     ) -> Self {
         Self {
             mode,
@@ -1038,6 +1050,7 @@ impl InstallCodeArgs {
             memory_allocation: memory_allocation.map(candid::Nat::from),
             query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
+            keep_main_memory,
         }
     }
 
