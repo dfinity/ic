@@ -27,7 +27,6 @@ where
 {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut consensus_pool = ConsensusPoolImpl::new_from_cup_without_bytes(
-            node_test_id(0),
             subnet_test_id(0),
             make_genesis(ic_types::consensus::dkg::Summary::fake()),
             pool_config,

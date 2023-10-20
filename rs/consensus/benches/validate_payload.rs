@@ -105,7 +105,6 @@ where
         let committee = vec![node_test_id(0)];
         let summary = dkg::Summary::fake();
         let mut consensus_pool = ConsensusPoolImpl::new_from_cup_without_bytes(
-            node_test_id(0),
             subnet_test_id(0),
             make_genesis(summary),
             pool_config.clone(),

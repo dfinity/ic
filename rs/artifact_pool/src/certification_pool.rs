@@ -12,7 +12,6 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::ArtifactKind;
 use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
-use ic_types::NodeId;
 use ic_types::{
     artifact::CertificationMessageId,
     artifact_kind::CertificationArtifact,
@@ -29,7 +28,6 @@ use std::collections::HashSet;
 /// multi-signatures of (height, hash) pairs, where hash corresponds to an
 /// execution state.
 pub struct CertificationPoolImpl {
-    node_id: NodeId,
     // Unvalidated shares and certifications are stored separately to improve the validation
     // performance by checking for full certifications first.
     unvalidated_shares: HeightIndex<CertificationShare>,
@@ -48,7 +46,6 @@ const POOL_CERTIFICATION: &str = "certification";
 
 impl CertificationPoolImpl {
     pub fn new(
-        node_id: NodeId,
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
@@ -75,7 +72,6 @@ impl CertificationPoolImpl {
         };
 
         CertificationPoolImpl {
-            node_id,
             unvalidated_shares: HeightIndex::default(),
             unvalidated_certifications: HeightIndex::default(),
             persistent_pool,
@@ -365,53 +361,17 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
         &self,
         filter: &Height,
     ) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
-        // For all heights above the filter, return the validated certification of the subnet,
-        // or the share signed by this node if we don't have the aggregate.
-
-        let min = filter.increment();
-        let max_certification_height = self
-            .persistent_pool
-            .certifications()
-            .height_range()
-            .map(|x| x.max)
-            .unwrap_or(min);
-        let min_certification_height = min;
-        let max_certification_share_height = self
-            .persistent_pool
-            .certification_shares()
-            .height_range()
-            .map(|x| x.max)
-            .unwrap_or(min);
-
-        let range = min_certification_height.get()
-            ..=max_certification_height
-                .max(max_certification_share_height)
-                .get();
-        let certifications = range.clone().map(move |h| {
-            self.persistent_pool
-                .certifications()
-                .get_by_height(Height::from(h))
-        });
-        let certification_shares = range.map(move |h| {
-            self.persistent_pool
-                .certification_shares()
-                .get_by_height(Height::from(h))
-                .filter(move |x| x.signed.signature.signer == self.node_id)
-        });
-        let iterator = certifications
-            .zip(certification_shares)
-            .flat_map(|(mut certs, shares)| {
-                certs.next().map_or_else(
-                    || {
-                        shares
-                            .map(CertificationMessage::CertificationShare)
-                            .collect::<Vec<_>>()
-                    },
-                    |x| vec![CertificationMessage::Certification(x)],
-                )
-            });
-
-        Box::new(iterator)
+        // Return all validated certifications and all shares above the filter
+        let min_height = filter.get();
+        let all_certs = self
+            .validated_certifications()
+            .filter(move |cert| cert.height > Height::from(min_height))
+            .map(CertificationMessage::Certification);
+        let all_shares = self
+            .validated_shares()
+            .filter(move |share| share.height > Height::from(min_height))
+            .map(CertificationMessage::CertificationShare);
+        Box::new(all_certs.chain(all_shares))
     }
 }
 
@@ -498,12 +458,8 @@ mod tests {
     #[test]
     fn test_certification_pool_insert_and_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
+            let mut pool =
+                CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share1 = fake_share(1, 0);
             let id1 = msg_to_id(&share1);
             let share2 = fake_share(2, 1);
@@ -555,12 +511,8 @@ mod tests {
     #[test]
     fn test_certification_pool_add_to_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
+            let mut pool =
+                CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
             let result = pool.apply_changes(
@@ -587,12 +539,8 @@ mod tests {
     #[test]
     fn test_certification_pool_move_to_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
+            let mut pool =
+                CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(10, 10);
             let cert_msg = fake_cert(20);
             pool.insert(to_unvalidated(share_msg.clone()));
@@ -633,12 +581,8 @@ mod tests {
     #[test]
     fn test_certification_pool_remove_all() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
+            let mut pool =
+                CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(10, 10);
             let cert_msg = fake_cert(10);
             pool.insert(to_unvalidated(share_msg.clone()));
@@ -706,12 +650,8 @@ mod tests {
     #[test]
     fn test_certification_pool_handle_invalid() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
+            let mut pool =
+                CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(10, 10);
             pool.insert(to_unvalidated(share_msg.clone()));
 
@@ -736,52 +676,6 @@ mod tests {
 
             let result = pool.apply_changes(&SysTimeSource::new(), vec![]);
             assert!(!result.poll_immediately);
-        });
-    }
-
-    #[test]
-    fn test_get_all_validated_by_filter() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node = node_test_id(3);
-            let mut pool = CertificationPoolImpl::new(
-                node,
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-
-            let filter = Height::from(10);
-
-            // Create shares from 5 nodes for 20 heights, only add an aggregate on even heights.
-            let mut messages = Vec::new();
-            for h in 1..=20 {
-                for i in 1..=5 {
-                    messages.push(ChangeAction::AddToValidated(fake_share(h, i)));
-                }
-                if h % 2 == 0 {
-                    messages.push(ChangeAction::AddToValidated(fake_cert(h)));
-                }
-            }
-
-            pool.apply_changes(&SysTimeSource::new(), messages);
-
-            let get_signer = |m: &CertificationMessage| match m {
-                CertificationMessage::CertificationShare(x) => x.signed.signature.signer,
-                _ => panic!("No signer for aggregate artifacts"),
-            };
-
-            let mut heights = HashSet::new();
-            pool.get_all_validated_by_filter(&filter).for_each(|m| {
-                assert!(m.height() >= filter);
-                if m.height().get() % 2 == 0 {
-                    assert!(!m.is_share());
-                }
-                if m.is_share() {
-                    assert_eq!(get_signer(&m), node);
-                }
-                assert!(heights.insert(m.height()));
-            });
-            assert_eq!(heights.len(), 10);
         });
     }
 }
