@@ -685,7 +685,7 @@ impl EccPoint {
         Ok(())
     }
 
-    pub fn is_precopmuted(&self) -> bool {
+    pub fn is_precomputed(&self) -> bool {
         self.precompute.is_some()
     }
 
@@ -727,7 +727,7 @@ impl EccPoint {
                 Ok(())
             }
             None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                "No precopmuted information in EccPoint. Forgot to call precopmute()?",
+                "No precomputed information in EccPoint. Forgot to call precompute()?",
             ))),
         }
     }
@@ -821,7 +821,7 @@ impl EccPoint {
             match &pt.precompute {
                 Some(lut) => Ok(lut),
                 None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                    "No precopmuted information in EccPoint. Forgot to call precompute()?",
+                    "No precomputed information in EccPoint. Forgot to call precompute()?",
                 ))),
             }
         };

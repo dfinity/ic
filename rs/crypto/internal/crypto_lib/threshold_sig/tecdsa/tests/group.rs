@@ -216,9 +216,9 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
                 let random_scalar = EccScalar::random(curve_type, rng);
                 let mut random_point = EccPoint::mul_by_g(&random_scalar);
                 let expected_point = random_point.scalar_mul(&scalar)?;
-                assert!(!random_point.is_precopmuted());
+                assert!(!random_point.is_precomputed());
                 random_point.precompute(window_size)?;
-                assert!(random_point.is_precopmuted());
+                assert!(random_point.is_precomputed());
                 let computed_point = random_point.scalar_mul_vartime(&scalar)?;
                 assert_eq!(computed_point, expected_point);
             }
@@ -352,9 +352,9 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
                         })?;
 
                 for (p, _s) in pairs.iter_mut() {
-                    assert!(!p.is_precopmuted());
+                    assert!(!p.is_precomputed());
                     p.precompute(window_size)?;
-                    assert!(p.is_precopmuted());
+                    assert!(p.is_precomputed());
                 }
 
                 // create refs of pairs
