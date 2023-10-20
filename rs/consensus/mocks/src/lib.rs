@@ -107,7 +107,6 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         log,
     )));
     let pool = TestConsensusPool::new(
-        replica_config.node_id,
         subnet_id,
         pool_config,
         time_source.clone(),
