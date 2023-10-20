@@ -1,3 +1,5 @@
+use crate::KEEP_MAIN_MEMORY_ON_UPGRADE;
+
 use super::CanisterId;
 
 use hex::decode;
@@ -255,6 +257,7 @@ fn parse_install(
                 None,
                 None,
                 None,
+                Some(KEEP_MAIN_MEMORY_ON_UPGRADE),
             )
             .encode(),
         )
