@@ -42,15 +42,45 @@ pub fn send_request_to_host(
         }
     };
 
-    read_response_from_host(&mut stream)
+    let read_result = read_response_from_host(&mut stream);
+
+    // When sending an upgrade command to a V0 HostOS, we may hang up the
+    // socket early. In this case, transform into a "good" result, and leave a
+    // log about it.
+
+    // When running an upgrade command...
+    if let Command::Upgrade(_) = request.command {
+        // ...targeting a V0 host agent...
+        if *protocol_version == VsockProtocol::V0 {
+            // ...and the result was an error...
+            if let Result::Err(e) = &read_result {
+                // ...if this was an IO Error...
+                if let Some(e) = e.downcast_ref::<std::io::Error>() {
+                    // ...where the other side hung up early...
+                    if let std::io::ErrorKind::WouldBlock = e.kind() {
+                        // ...report that we are ignoring the error...
+                        eprintln!("Upgrade command to V0 host agent resulted in hangup error: `{e}`, ignoring.");
+
+                        // ...and return `Ok`.
+                        return Ok(
+                            "{\"message\": \"accepted request\", \"status\": \"ok\"}".to_string()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    read_result.map_err(|e| e.to_string())
 }
 
-fn read_response_from_host(stream: &mut VsockStream) -> Result<String, String> {
+fn read_response_from_host(stream: &mut VsockStream) -> anyhow::Result<String> {
     let mut buffer = [0; 4096];
-    let bytes_read = stream.read(&mut buffer).map_err(|e| e.to_string())?;
+    let bytes_read = stream.read(&mut buffer)?;
+
     std::str::from_utf8(&buffer[..bytes_read])
-        .map_err(|e| e.to_string())
         .map(|response| response.to_string())
+        .map_err(|e| e.into())
 }
 
 fn create_stream(port: &u32) -> Result<VsockStream, std::io::Error> {
