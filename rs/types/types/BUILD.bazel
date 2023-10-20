@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -58,6 +59,10 @@ rust_library(
         "@crate_index//:derive_more",
         "@crate_index//:strum_macros",
     ],
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
     version = "0.8.0",
     deps = DEPENDENCIES + select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [],

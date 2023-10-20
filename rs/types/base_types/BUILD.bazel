@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -37,6 +38,10 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
     version = "0.8.0",
     deps = COMMON_DEPS + select({
         "//bazel:fuzzing_code_enabled": ["@crate_index//:arbitrary"],

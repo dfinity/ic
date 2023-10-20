@@ -1,5 +1,5 @@
 {
-  "checksum": "29ae461e7f02475e5133e0dea24fc575017c548b2dacc0b3af93de985ad38b98",
+  "checksum": "3a8f090c1d61ee9fe7ff2ab37ffbd92e538890c8f4fc704500ec0775dd2d37bf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4645,6 +4645,25 @@
           "selects": {}
         },
         "edition": "2015",
+        "rustc_flags": [
+          "-Cpasses=sancov-module",
+          "-Cllvm-args=-sanitizer-coverage-level=4",
+          "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+          "-Cllvm-args=-sanitizer-coverage-pc-table",
+          "-Cllvm-args=-sanitizer-coverage-trace-compares",
+          "-Cllvm-args=-sanitizer-coverage-stack-depth",
+          "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+          "-Ctarget-cpu=native",
+          "-Coverflow_checks",
+          "-Copt-level=3",
+          "-Clink-dead-code",
+          "-Cinstrument-coverage",
+          "-Cdebug-assertions",
+          "-Ccodegen-units=1",
+          "-Zextra-const-ub-checks",
+          "-Zstrict-init-checks",
+          "-Zsanitizer=address"
+        ],
         "version": "1.3.3"
       },
       "license": "MIT"
@@ -20178,6 +20197,25 @@
           "selects": {}
         },
         "edition": "2018",
+        "rustc_flags": [
+          "-Cpasses=sancov-module",
+          "-Cllvm-args=-sanitizer-coverage-level=4",
+          "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+          "-Cllvm-args=-sanitizer-coverage-pc-table",
+          "-Cllvm-args=-sanitizer-coverage-trace-compares",
+          "-Cllvm-args=-sanitizer-coverage-stack-depth",
+          "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+          "-Ctarget-cpu=native",
+          "-Coverflow_checks",
+          "-Copt-level=3",
+          "-Clink-dead-code",
+          "-Cinstrument-coverage",
+          "-Cdebug-assertions",
+          "-Ccodegen-units=1",
+          "-Zextra-const-ub-checks",
+          "-Zstrict-init-checks",
+          "-Zsanitizer=address"
+        ],
         "version": "0.4.3"
       },
       "license": "MIT OR Apache-2.0"
@@ -47939,6 +47977,25 @@
           "selects": {}
         },
         "edition": "2018",
+        "rustc_flags": [
+          "-Cpasses=sancov-module",
+          "-Cllvm-args=-sanitizer-coverage-level=4",
+          "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+          "-Cllvm-args=-sanitizer-coverage-pc-table",
+          "-Cllvm-args=-sanitizer-coverage-trace-compares",
+          "-Cllvm-args=-sanitizer-coverage-stack-depth",
+          "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+          "-Ctarget-cpu=native",
+          "-Coverflow_checks",
+          "-Copt-level=3",
+          "-Clink-dead-code",
+          "-Cinstrument-coverage",
+          "-Cdebug-assertions",
+          "-Ccodegen-units=1",
+          "-Zextra-const-ub-checks",
+          "-Zstrict-init-checks",
+          "-Zsanitizer=address"
+        ],
         "version": "2.5.0"
       },
       "license": "BSD-3-Clause"
