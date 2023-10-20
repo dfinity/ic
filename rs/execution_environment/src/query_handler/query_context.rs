@@ -36,7 +36,7 @@ use ic_types::{
 use prometheus::IntCounter;
 use std::{collections::VecDeque, sync::Arc, time::Duration, time::Instant};
 
-use super::query_call_graph::evaluate_query_call_graph;
+use super::{query_call_graph::evaluate_query_call_graph, query_stats::QueryStatsCollector};
 
 /// The response of a query. If the query originated from a user, then it
 /// contains either `UserResponse` or `UserError`. If the query originated from
@@ -97,8 +97,7 @@ pub(super) struct QueryContext<'a> {
     query_context_time_start: Instant,
     query_context_time_limit: Duration,
     query_critical_error: &'a IntCounter,
-    // Number of instructions used in total
-    pub total_instructions_used: NumInstructions,
+    local_query_execution_stats: Option<&'a QueryStatsCollector>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -119,6 +118,7 @@ impl<'a> QueryContext<'a> {
         composite_queries: FlagStatus,
         canister_id: CanisterId,
         query_critical_error: &'a IntCounter,
+        local_query_execution_stats: Option<&'a QueryStatsCollector>,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -146,7 +146,7 @@ impl<'a> QueryContext<'a> {
             query_context_time_start: Instant::now(),
             query_context_time_limit: max_query_call_walltime,
             query_critical_error,
-            total_instructions_used: NumInstructions::from(0),
+            local_query_execution_stats,
         }
     }
 
@@ -401,7 +401,27 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
             );
         let instructions_executed = instruction_limit - instructions_left;
-        self.total_instructions_used += instructions_executed;
+
+        let ingress_payload_size = method_payload.len();
+        let egress_payload_size = match &result {
+            Ok(result) => match result {
+                Some(WasmResult::Reply(vec)) => vec.len(),
+                Some(WasmResult::Reject(_)) => 0,
+                None => 0,
+            },
+            Err(_) => 0,
+        };
+
+        // Add query statistics to the query aggregator.
+        if let Some(query_stats) = self.local_query_execution_stats {
+            query_stats.register_query_statistics(
+                canister.canister_id(),
+                instructions_executed,
+                ingress_payload_size as u64,
+                egress_payload_size as u64,
+            );
+        }
+
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),

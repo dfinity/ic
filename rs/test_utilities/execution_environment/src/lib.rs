@@ -47,13 +47,14 @@ use ic_replicated_state::{
 use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
 use ic_types::{
+    batch::QueryStats,
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
         RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
-    CanisterId, Cycles, Height, NumInstructions, NumPages, Time, UserId,
+    CanisterId, Cycles, Height, NumInstructions, NumPages, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -1518,6 +1519,14 @@ impl ExecutionTest {
         }
         self.checkpoint_files.extend(new_checkpoint_files);
     }
+
+    pub fn query_stats_for_testing(&self, canister_id: &CanisterId) -> Option<QueryStats> {
+        self.query_handler.query_stats_for_testing(canister_id)
+    }
+
+    pub fn query_stats_set_epoch_for_testing(&mut self, epoch: QueryStatsEpoch) {
+        self.query_handler.query_stats_set_epoch_for_testing(epoch);
+    }
 }
 
 /// A builder for `ExecutionTest`.
@@ -1775,6 +1784,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_query_cache_capacity(mut self, capacity_bytes: u64) -> Self {
         self.execution_config.query_cache_capacity = capacity_bytes.into();
+        self
+    }
+
+    pub fn with_query_stats(mut self) -> Self {
+        self.execution_config.query_stats_aggregation = FlagStatus::Enabled;
         self
     }
 
