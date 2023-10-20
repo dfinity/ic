@@ -167,7 +167,7 @@ fn combine_commitments_via_interpolation(
             values.push(commitment.points()[i].clone());
         }
         for pt in values.iter_mut() {
-            if !pt.is_precopmuted() {
+            if !pt.is_precomputed() {
                 pt.precompute(EccPoint::DEFAULT_LUT_WINDOW_SIZE)?;
             }
         }

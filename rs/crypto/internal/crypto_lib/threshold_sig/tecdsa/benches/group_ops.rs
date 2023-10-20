@@ -309,7 +309,7 @@ fn point_mul(c: &mut Criterion) {
                         random_scalar(curve_type, rng),
                     );
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
-                        .expect("failed to precopmute point");
+                        .expect("failed to precompute point");
                     (p, s)
                 },
                 |(p, s)| p.scalar_mul_vartime(s),
@@ -327,7 +327,7 @@ fn point_mul(c: &mut Criterion) {
                 },
                 |(p, s)| {
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
-                        .expect("failed to precopmute point");
+                        .expect("failed to precompute point");
                     p.scalar_mul_vartime(s)
                 },
                 BatchSize::SmallInput,
@@ -345,7 +345,7 @@ fn point_mul(c: &mut Criterion) {
                                 random_scalar(curve_type, rng),
                             );
                             p.precompute(window_size)
-                                .expect("failed to precopmute point");
+                                .expect("failed to precompute point");
                             (p, s)
                         },
                         |(p, s)| p.scalar_mul_vartime(s),
@@ -366,7 +366,7 @@ fn point_mul(c: &mut Criterion) {
                         },
                         |(p, s)| {
                             p.precompute(window_size)
-                                .expect("failed to precopmute point");
+                                .expect("failed to precompute point");
                             p.scalar_mul_vartime(s)
                         },
                         BatchSize::SmallInput,
