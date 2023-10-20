@@ -14,7 +14,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::consensus::{Committee, HasCommittee, HasHeight};
 use ic_types::{
-    artifact::{CertificationMessageId, Priority, PriorityFn},
+    artifact::{CertificationMessageFilter, CertificationMessageId, Priority, PriorityFn},
     artifact_kind::CertificationArtifact,
     consensus::certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
@@ -92,9 +92,9 @@ impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact,
     ///    in there.
     /// 2. We might have certification in the pool that is not yet
     ///    verified or delivered to the state_manager.
-    fn get_filter(&self) -> Height {
+    fn get_filter(&self) -> CertificationMessageFilter {
         let to_certify = self.state_manager.list_state_hashes_to_certify();
-        if to_certify.is_empty() {
+        let filter_height = if to_certify.is_empty() {
             self.state_manager.latest_state_height()
         } else {
             let h = to_certify[0].0;
@@ -103,6 +103,9 @@ impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact,
                 "State height to certify must be 1 or above"
             );
             h.decrement()
+        };
+        CertificationMessageFilter {
+            height: filter_height,
         }
     }
 }

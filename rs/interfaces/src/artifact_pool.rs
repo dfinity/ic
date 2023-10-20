@@ -3,7 +3,7 @@
 use crate::time_source::TimeSource;
 use ic_types::{
     artifact::{Advert, ArtifactKind, PriorityFn},
-    Height, NodeId, Time,
+    NodeId, Time,
 };
 use serde::{Deserialize, Serialize};
 
@@ -71,8 +71,8 @@ pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync
     /// Returns a filter that represents what artifacts are needed.
     /// The filter is derived from the (persisted) state of the client and not directly
     /// from a pool content. Hence, no pool reference is used here.
-    fn get_filter(&self) -> Height {
-        Height::default()
+    fn get_filter(&self) -> Artifact::Filter {
+        Artifact::Filter::default()
     }
 }
 
@@ -96,7 +96,7 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
     /// A iterator over all the validated artifacts.
     fn get_all_validated_by_filter(
         &self,
-        filter: &Height,
+        filter: &T::Filter,
     ) -> Box<dyn Iterator<Item = T::Message> + '_>;
 }
 
