@@ -76,7 +76,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-const ENABLE_NEW_STATE_SYNC: bool = true;
+const ENABLE_NEW_STATE_SYNC: bool = false;
 
 /// The P2P state sync client.
 pub enum P2PStateSyncClient {
