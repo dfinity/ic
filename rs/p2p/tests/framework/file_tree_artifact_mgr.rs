@@ -60,7 +60,7 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
         ChangeResult {
             adverts,
             purged: Vec::new(),
-            changed,
+            poll_immediately: changed,
         }
     }
 }

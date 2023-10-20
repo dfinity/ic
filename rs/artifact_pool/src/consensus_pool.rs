@@ -707,7 +707,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: changed,
         }
     }
 }
@@ -1054,7 +1054,7 @@ mod tests {
             let result = pool.apply_changes(time_source.as_ref(), changeset);
             assert!(result.purged.is_empty());
             assert_eq!(result.adverts.len(), 2);
-            assert!(result.changed);
+            assert!(result.poll_immediately);
             assert_eq!(result.adverts[0].id, random_beacon_2.get_id());
             assert_eq!(result.adverts[1].id, random_beacon_3.get_id());
 
@@ -1066,7 +1066,7 @@ mod tests {
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.purged.len(), 3);
             assert!(result.purged.contains(&random_beacon_2.get_id()));
-            assert!(result.changed);
+            assert!(result.poll_immediately);
 
             let result = pool.apply_changes(
                 time_source.as_ref(),
@@ -1074,10 +1074,10 @@ mod tests {
             );
             assert!(result.adverts.is_empty());
             assert!(result.purged.is_empty());
-            assert!(result.changed);
+            assert!(result.poll_immediately);
 
             let result = pool.apply_changes(time_source.as_ref(), vec![]);
-            assert!(!result.changed);
+            assert!(!result.poll_immediately);
         })
     }
 
@@ -1130,7 +1130,7 @@ mod tests {
             // share 1 should remain in the unvalidated pool
             assert!(result.purged.is_empty());
             assert_eq!(result.adverts.len(), 1);
-            assert!(result.changed);
+            assert!(result.poll_immediately);
             assert_eq!(result.adverts[0].id, random_beacon_share_3.get_id());
 
             let result = pool.apply_changes(
@@ -1142,7 +1142,7 @@ mod tests {
             assert_eq!(result.purged.len(), 4);
             assert!(result.purged.contains(&random_beacon_share_2.get_id()));
             assert!(result.purged.contains(&random_beacon_share_3.get_id()));
-            assert!(result.changed);
+            assert!(result.poll_immediately);
         })
     }
 
