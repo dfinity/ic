@@ -6,6 +6,7 @@
 pub mod crypto;
 pub mod ecdsa_keys;
 pub mod firewall;
+pub mod hostos_version;
 pub mod node;
 pub mod node_operator;
 pub mod provisional_whitelist;

@@ -163,6 +163,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/nns/                                                @dfinity-lab/teams/nns-team
 /rs/observability/                                      @dfinity-lab/teams/DRE
 /rs/orchestrator/                                       @dfinity-lab/teams/consensus-owners
+/rs/orchestrator/src/hostos_upgrade.rs                  @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/node-team
 /rs/p2p/                                                @dfinity-lab/teams/networking-team
 /rs/pocket_ic_server/                                   @dfinity-lab/teams/ic-testing-verification
 /rs/prep/                                               @dfinity-lab/teams/ic-testing-verification

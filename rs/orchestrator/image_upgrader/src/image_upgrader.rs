@@ -114,7 +114,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     ) -> UpgradeResult<(Vec<String>, Option<String>)>;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
-    /// successfully. With a confirmation the image will be reverted on the next
+    /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
     async fn confirm_boot(&self) {
         if let Err(err) = Command::new(self.binary_dir().join("manageboot.sh").into_os_string())

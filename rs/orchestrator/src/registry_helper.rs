@@ -3,15 +3,18 @@ use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
+use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::firewall::FirewallRegistry;
+use ic_registry_client_helpers::hostos_version::HostosRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_keys::FirewallRulesScope;
+use ic_types::hostos_version::HostosVersion;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::net::IpAddr;
@@ -101,6 +104,20 @@ impl RegistryHelper {
             .ok_or(OrchestratorError::ReplicaVersionMissingError(
                 replica_version_id,
                 version,
+            ))
+    }
+
+    /// Return the `HostosVersionRecord` for the given HostOS version
+    pub(crate) fn get_hostos_version_record(
+        &self,
+        hostos_version_id: HostosVersion,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<HostosVersionRecord> {
+        self.registry_client
+            .get_hostos_version_record(&hostos_version_id, version)
+            .map_err(OrchestratorError::RegistryClientError)?
+            .ok_or(OrchestratorError::UpgradeError(
+                "HostOS version record not found at the given ID".to_string(),
             ))
     }
 
@@ -221,5 +238,25 @@ impl RegistryHelper {
         });
 
         node_operator_record.map(|v| v.dc_id)
+    }
+
+    /// Get the HostOS version of this node in the given registry version
+    pub(crate) fn get_node_hostos_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<Option<HostosVersion>> {
+        let node_record = self
+            .registry_client
+            .get_node_record(self.node_id, registry_version)
+            .map_err(OrchestratorError::RegistryClientError)?;
+
+        node_record
+            .and_then(|v| v.hostos_version_id)
+            .map(|v| {
+                HostosVersion::try_from(v).map_err(|_| {
+                    OrchestratorError::UpgradeError("Could not parse HostOS version".to_string())
+                })
+            })
+            .transpose()
     }
 }
