@@ -137,18 +137,22 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     async fn download_release_package(&self, version: &V) -> UpgradeResult<()> {
         let (mut release_package_urls, hash) = self.get_release_package_urls_and_hash(version)?;
 
+        let url_count = release_package_urls.len();
+        if url_count == 0 {
+            return Err(UpgradeError::GenericError(format!(
+                "No download URLs are provided for version {:?}",
+                version
+            )));
+        }
+
         // Load-balance, by making each node rotate the `release_package_urls` by some number.
         // Note that the order is the same for everyone; only the starting point is different.
         // This is okay because we do expect the first attempt to be successful.
-        let url_count = release_package_urls.len();
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
         // We return the last error if download attempts from all the URLs fail.
-        let mut error = UpgradeError::GenericError(format!(
-            "No download URLs are provided for version {:?}",
-            version
-        ));
-
+        // We will always either set `error`, or return `Ok` from this loop.
+        let mut error = UpgradeError::GenericError("unreachable".to_string());
         for release_package_url in release_package_urls.iter() {
             let req = format!(
                 "Request to download image {:?} from {}",
