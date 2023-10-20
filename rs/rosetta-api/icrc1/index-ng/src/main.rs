@@ -255,11 +255,7 @@ fn get_balance(account: Account) -> Tokens {
 fn change_balance(account: Account, f: impl FnOnce(Tokens) -> Tokens) {
     let key = balance_key(account);
     let new_balance = f(get_balance(account));
-    if Tokens::is_zero(&new_balance) {
-        with_account_data(|account_data| account_data.remove(&key));
-    } else {
-        with_account_data(|account_data| account_data.insert(key, new_balance));
-    }
+    with_account_data(|account_data| account_data.insert(key, new_balance));
 }
 
 fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
