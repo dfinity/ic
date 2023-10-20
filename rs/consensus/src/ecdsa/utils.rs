@@ -4,6 +4,7 @@ use crate::consensus::metrics::EcdsaPayloadMetrics;
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_crypto::get_tecdsa_master_public_key;
 use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
@@ -25,6 +26,7 @@ use ic_types::consensus::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
+use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use std::collections::BTreeSet;
@@ -34,7 +36,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct InvalidChainCacheError(String);
 
-pub(crate) struct EcdsaBlockReaderImpl {
+pub(super) struct EcdsaBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
 }
 
@@ -209,7 +211,7 @@ pub(super) fn block_chain_cache(
 /// Load the given transcripts
 /// Returns None if all the transcripts could be loaded successfully.
 /// Otherwise, returns the complaint change set to be added to the pool
-pub(crate) fn load_transcripts(
+pub(super) fn load_transcripts(
     ecdsa_pool: &dyn EcdsaPool,
     transcript_loader: &dyn EcdsaTranscriptLoader,
     transcripts: &[&IDkgTranscript],
@@ -237,7 +239,7 @@ pub(crate) fn load_transcripts(
 }
 
 /// Brief summary of the IDkgTranscriptOperation
-pub(crate) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
+pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
     match op {
         IDkgTranscriptOperation::Random => "Random".to_string(),
         IDkgTranscriptOperation::ReshareOfMasked(t) => {
@@ -258,45 +260,49 @@ pub(crate) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 pub(crate) fn inspect_ecdsa_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
 ) -> Result<Option<(EcdsaKeyId, InitialIDkgDealings)>, String> {
-    if !ecdsa_initializations.is_empty() {
-        if ecdsa_initializations.len() > 1 {
-            Err(
-                "More than one ecdsa_initialization is not supported. Choose the first one."
-                    .to_string(),
-            )
-        } else {
-            let ecdsa_init = ecdsa_initializations
-                .iter()
-                .next()
-                .expect("Error: Ecdsa Initialization is None")
-                .clone();
-            match (
-                (ecdsa_init
-                    .key_id
-                    .expect("Error: Failed to find key_id in ecdsa_initializations"))
-                .try_into(),
-                (&ecdsa_init
-                    .dealings
-                    .expect("Error: Failed to find dealings in ecdsa_initializations"))
-                    .try_into(),
-            ) {
-                (Ok(key_id), Ok(dealings)) => Ok(Some((key_id, dealings))),
-                (Err(err), _) => Err(format!(
-                    "Error reading ECDSA key_id: {:?}. Setting ecdsa_summary to None.",
-                    err
-                )),
-                (_, Err(err)) => Err(format!(
-                    "Error reading ECDSA dealings: {:?}. Setting ecdsa_summary to None.",
-                    err
-                )),
-            }
-        }
-    } else {
-        Ok(None)
+    if ecdsa_initializations.is_empty() {
+        return Ok(None);
     }
+
+    if ecdsa_initializations.len() > 1 {
+        return Err(
+            "More than one ecdsa_initialization is not supported. Choose the first one."
+                .to_string(),
+        );
+    }
+
+    let ecdsa_init = ecdsa_initializations
+        .get(0)
+        .expect("Error: Ecdsa Initialization is None");
+
+    let ecdsa_key_id = ecdsa_init
+        .key_id
+        .clone()
+        .expect("Error: Failed to find key_id in ecdsa_initializations")
+        .try_into()
+        .map_err(|err| {
+            format!(
+                "Error reading ECDSA key_id: {:?}. Setting ecdsa_summary to None.",
+                err
+            )
+        })?;
+
+    let dealings = ecdsa_init
+        .dealings
+        .as_ref()
+        .expect("Error: Failed to find dealings in ecdsa_initializations")
+        .try_into()
+        .map_err(|err| {
+            format!(
+                "Error reading ECDSA dealings: {:?}. Setting ecdsa_summary to None.",
+                err
+            )
+        })?;
+
+    Ok(Some((ecdsa_key_id, dealings)))
 }
 
-/// Return [EcdsaConfig] if it is enabled for the given subnet.
+/// Return [`EcdsaConfig`] if it is enabled for the given subnet.
 pub(crate) fn get_ecdsa_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -347,11 +353,77 @@ pub(crate) fn get_enabled_signing_keys(
         .collect())
 }
 
+/// This function returns the ECDSA subnet public key to be added to the batch, if required.
+/// We return `Ok(Some(key))`, if
+/// - The block contains an ECDSA payload with current key transcript ref, and
+/// - the corresponding transcript exists in past blocks, and
+/// - we can extract the tECDSA master public key from the transcript.
+/// Otherwise `Ok(None)` is returned.
+/// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
+/// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
+/// a newer CUP is already present in the pool and we should continue from there.
+pub(crate) fn get_ecdsa_subnet_public_key(
+    block: &Block,
+    pool: &PoolReader<'_>,
+    log: &ReplicaLogger,
+) -> Result<Option<(EcdsaKeyId, MasterEcdsaPublicKey)>, String> {
+    let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() else {
+        return Ok(None);
+    };
+
+    let Some(transcript_ref) = ecdsa_payload
+        .key_transcript
+        .current
+        .as_ref()
+        .map(|unmasked| *unmasked.as_ref())
+    else {
+        return Ok(None);
+    };
+
+    let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
+        return Err(format!(
+            "Failed to find dkg summary block for height {}",
+            block.height
+        ));
+    };
+    let chain = build_consensus_block_chain(pool.pool(), &summary, block);
+    let block_reader = EcdsaBlockReaderImpl::new(chain);
+
+    let ecdsa_subnet_public_key = match block_reader.transcript(&transcript_ref) {
+        Ok(transcript) => get_ecdsa_subnet_public_key_(&transcript, log),
+        Err(err) => {
+            warn!(
+                log,
+                "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
+            );
+
+            None
+        }
+    };
+
+    Ok(ecdsa_subnet_public_key
+        .map(|public_key| (ecdsa_payload.key_transcript.key_id.clone(), public_key)))
+}
+
+fn get_ecdsa_subnet_public_key_(
+    transcript: &IDkgTranscript,
+    log: &ReplicaLogger,
+) -> Option<MasterEcdsaPublicKey> {
+    match get_tecdsa_master_public_key(transcript) {
+        Ok(public_key) => Some(public_key),
+        Err(err) => {
+            warn!(log, "Failed to retrieve ECDSA subnet public key: {:?}", err);
+
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use assert_matches::assert_matches;
+    use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -362,7 +434,6 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::subnet_id_into_protobuf;
@@ -370,7 +441,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_inspect_ecdsa_initializations() {
+    fn test_inspect_ecdsa_initializations_no_keys() {
+        let init =
+            inspect_ecdsa_initializations(&[]).expect("Should successfully get initializations");
+
+        assert!(init.is_none());
+    }
+
+    #[test]
+    fn test_inspect_ecdsa_initializations_one_key() {
         let mut rng = reproducible_rng();
         let initial_dealings = dummy_initial_idkg_dealing_for_tests(&mut rng);
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
@@ -379,73 +458,141 @@ mod tests {
             dealings: Some((&initial_dealings).into()),
         };
 
-        let res = inspect_ecdsa_initializations(&[ecdsa_init.clone(), ecdsa_init.clone()]);
-        assert_matches!(res, Err(_));
+        let init = inspect_ecdsa_initializations(&[ecdsa_init])
+            .expect("Should successfully get initializations");
 
-        let res = inspect_ecdsa_initializations(&[ecdsa_init]);
-        assert_matches!(res, Ok(Some(_)));
-
-        let res = inspect_ecdsa_initializations(&[]);
-        assert_matches!(res, Ok(None));
+        assert_eq!(init, Some((key_id, initial_dealings)));
     }
 
     #[test]
-    fn test_get_ecdsa_config_if_enabled() {
+    fn test_inspect_ecdsa_initializations_multiple_keys() {
+        let mut rng = reproducible_rng();
+        let initial_dealings = dummy_initial_idkg_dealing_for_tests(&mut rng);
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let key_id_2 = EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap();
+        let ecdsa_init = EcdsaInitialization {
+            key_id: Some((&key_id).into()),
+            dealings: Some((&initial_dealings).into()),
+        };
+        let ecdsa_init_2 = EcdsaInitialization {
+            key_id: Some((&key_id_2).into()),
+            dealings: Some((&initial_dealings).into()),
+        };
+
+        inspect_ecdsa_initializations(&[ecdsa_init.clone(), ecdsa_init_2.clone()])
+            .expect_err("Should fail because of the multiple keys");
+    }
+
+    fn set_up_get_ecdsa_config_test(
+        config: &EcdsaConfig,
+        pool_config: ArtifactPoolConfig,
+    ) -> (SubnetId, Arc<FakeRegistryClient>, RegistryVersion) {
+        let Dependencies {
+            registry,
+            registry_data_provider,
+            ..
+        } = dependencies(pool_config, 1);
+        let subnet_id = subnet_test_id(1);
+        let registry_version = RegistryVersion::from(10);
+
+        add_subnet_record(
+            &registry_data_provider,
+            registry_version.get(),
+            subnet_id,
+            SubnetRecordBuilder::from(&[node_test_id(0)])
+                .with_ecdsa_config(config.clone())
+                .build(),
+        );
+        registry.update_to_latest_version();
+
+        (subnet_id, registry, registry_version)
+    }
+
+    #[test]
+    fn test_get_ecdsa_config_if_enabled_no_keys() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies {
-                registry,
-                registry_data_provider,
-                ..
-            } = dependencies(pool_config, 1);
-            let log = no_op_logger();
-            let subnet_id = subnet_test_id(1);
-            let node_ids = vec![node_test_id(0)];
-            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-            let ecdsa_config_malformed = EcdsaConfig {
+            let ecdsa_config_with_no_keys = EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id.clone(), key_id.clone()],
+                key_ids: vec![],
+                max_queue_size: Some(3),
                 ..EcdsaConfig::default()
             };
-            let mut registry_version = RegistryVersion::from(10);
+            let (subnet_id, registry, version) =
+                set_up_get_ecdsa_config_test(&ecdsa_config_with_no_keys, pool_config);
 
-            let update = |version: &mut RegistryVersion,
-                          config: &EcdsaConfig|
-             -> Result<Option<EcdsaConfig>, RegistryClientError> {
-                version.inc_assign();
-                let subnet_record = SubnetRecordBuilder::from(&node_ids)
-                    .with_ecdsa_config(config.clone())
-                    .build();
-                add_subnet_record(
-                    &registry_data_provider,
-                    version.get(),
-                    subnet_id,
-                    subnet_record,
-                );
-                registry.update_to_latest_version();
-                get_ecdsa_config_if_enabled(subnet_id, *version, registry.as_ref(), &log)
-            };
+            let config =
+                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
+                    .expect("Should successfully get the config");
 
-            let res = update(&mut registry_version, &ecdsa_config_malformed);
-            let ecdsa_config_valid = EcdsaConfig {
+            assert!(config.is_none());
+        })
+    }
+
+    #[test]
+    fn test_get_ecdsa_config_if_enabled_one_key() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ecdsa_config_with_one_key = EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                key_ids: vec![EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()],
+                max_queue_size: Some(3),
                 ..EcdsaConfig::default()
             };
-            assert_matches!(res, Ok(Some(config)) if config == ecdsa_config_valid);
+            let (subnet_id, registry, version) =
+                set_up_get_ecdsa_config_test(&ecdsa_config_with_one_key, pool_config);
 
-            let res = update(&mut registry_version, &ecdsa_config_valid);
-            assert_matches!(res, Ok(Some(config)) if config == ecdsa_config_valid);
+            let config =
+                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
+                    .expect("Should successfully get the config");
 
-            let mut ecdsa_config_invalid = ecdsa_config_valid.clone();
-            ecdsa_config_invalid.quadruples_to_create_in_advance = 0;
-            let res = update(&mut registry_version, &ecdsa_config_invalid);
-            assert_matches!(res, Ok(None));
+            assert_eq!(config, Some(ecdsa_config_with_one_key));
+        })
+    }
 
-            let mut ecdsa_config_invalid = ecdsa_config_valid;
-            ecdsa_config_invalid.key_ids = vec![];
-            let res = update(&mut registry_version, &ecdsa_config_invalid);
-            assert_matches!(res, Ok(None));
+    #[test]
+    fn test_get_ecdsa_config_if_enabled_multiple_keys() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap();
+            let key_id_2 = EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap();
+            let ecdsa_config_with_two_keys = EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![key_id.clone(), key_id_2.clone()],
+                max_queue_size: Some(3),
+                ..EcdsaConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_ecdsa_config_test(&ecdsa_config_with_two_keys, pool_config);
+
+            let config =
+                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
+                    .expect("Should successfully get the config");
+
+            assert_eq!(
+                config,
+                Some(EcdsaConfig {
+                    key_ids: vec![key_id],
+                    ..ecdsa_config_with_two_keys
+                })
+            );
+        })
+    }
+
+    #[test]
+    fn test_get_ecdsa_config_if_enabled_malformed() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let malformed_ecdsa_config = EcdsaConfig {
+                quadruples_to_create_in_advance: 0,
+                key_ids: vec![EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()],
+                max_queue_size: Some(3),
+                ..EcdsaConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_ecdsa_config_test(&malformed_ecdsa_config, pool_config);
+
+            let config =
+                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
+                    .expect("Should successfully get the config");
+
+            assert!(config.is_none());
         })
     }
 
