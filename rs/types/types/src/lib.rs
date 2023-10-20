@@ -72,6 +72,7 @@ pub mod consensus;
 pub mod crypto;
 pub mod filetree_sync;
 pub mod funds;
+pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behaviour;
 pub mod malicious_flags;

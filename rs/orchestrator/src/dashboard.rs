@@ -6,7 +6,10 @@ use crate::{
 use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_types::{consensus::HasHeight, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{
+    consensus::HasHeight, hostos_version::HostosVersion, NodeId, RegistryVersion, ReplicaVersion,
+    SubnetId,
+};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
@@ -22,6 +25,7 @@ pub(crate) struct OrchestratorDashboard {
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     replica_version: ReplicaVersion,
+    hostos_version: Option<HostosVersion>,
     cup_provider: Arc<CatchUpPackageProvider>,
     logger: ReplicaLogger,
 }
@@ -40,6 +44,7 @@ impl Dashboard for OrchestratorDashboard {
              subnet id: {}\n\
              replica process id: {}\n\
              replica version: {}\n\
+             host os version: {}\n\
              scheduled upgrade: {}\n\
              {}\n\
              firewall config registry version: {}\n\
@@ -53,6 +58,10 @@ impl Dashboard for OrchestratorDashboard {
             self.get_subnet_id().await,
             self.get_pid(),
             self.replica_version,
+            self.hostos_version
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "None".to_string()),
             self.get_scheduled_upgrade().await,
             self.get_local_cup_info(),
             *self.last_applied_firewall_version.read().await,
@@ -77,6 +86,7 @@ impl OrchestratorDashboard {
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         subnet_id: Arc<RwLock<Option<SubnetId>>>,
         replica_version: ReplicaVersion,
+        hostos_version: Option<HostosVersion>,
         cup_provider: Arc<CatchUpPackageProvider>,
         logger: ReplicaLogger,
     ) -> Self {
@@ -88,6 +98,7 @@ impl OrchestratorDashboard {
             replica_process,
             subnet_id,
             replica_version,
+            hostos_version,
             cup_provider,
             logger,
         }
