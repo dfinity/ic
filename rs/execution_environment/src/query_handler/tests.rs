@@ -14,7 +14,7 @@ use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilde
 use ic_types::{
     ingress::WasmResult,
     messages::{CanisterTask, UserQuery},
-    time, CountBytes, Cycles, NumInstructions,
+    time, CountBytes, Cycles, NumInstructions, QueryStatsEpoch,
 };
 use std::{sync::Arc, time::Duration};
 
@@ -2182,6 +2182,90 @@ fn composite_query_state_preserved_across_parallel_calls() {
             0
         ]))
     );
+}
+
+#[test]
+fn query_stats_are_collected() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_composite_queries()
+        .with_query_stats()
+        .build();
+
+    const NUM_CANISTERS: usize = 5;
+
+    let mut canisters = vec![];
+    for _ in 0..NUM_CANISTERS {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    let mut payload = wasm();
+
+    // Call each canister once. In each reply callback, increment the counter.
+    for canister in canisters.iter().take(NUM_CANISTERS - 1).skip(1) {
+        payload = payload.composite_query(
+            canister,
+            call_args()
+                .other_side(wasm().reply_data(b"ignore".as_ref()))
+                .on_reply(wasm().inc_global_counter()),
+        );
+    }
+
+    // From the "last" callback, return the counter value.
+    // Note that this works because we actually don't run calls in parallel.
+    // The implementation always sequentially executes all calls.
+    payload = payload.composite_query(
+        canisters[NUM_CANISTERS - 1],
+        call_args()
+            .other_side(wasm().reply_data(b"ignore".as_ref()))
+            .on_reply(
+                wasm()
+                    .inc_global_counter()
+                    .get_global_counter()
+                    .reply_int64(),
+            ),
+    );
+
+    // Set epoch, so that query stats can be recorded.
+    test.query_stats_set_epoch_for_testing(QueryStatsEpoch::from(0));
+
+    // Run query
+    let _ = test.query(
+        UserQuery {
+            source: user_test_id(2),
+            receiver: canisters[0],
+            method_name: "composite_query".to_string(),
+            method_payload: payload.build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+
+    // The following numbers might change, e.g. if instruction costs are updated.
+    // In that case, the easist is probably to print the values and update the test.
+
+    for (idx, c) in canisters.iter().enumerate() {
+        let canister_query_stats = test.query_stats_for_testing(c).unwrap();
+
+        // Each canister got one call
+        assert_eq!(canister_query_stats.num_calls, 1);
+
+        // Depending on whether we are looking at the root canister, or one of the child canisters,
+        // instructions and payload sizes differ. All child canisters have the same cost though.
+        assert_eq!(
+            canister_query_stats.num_instructions,
+            if idx == 0 { 69499 } else { 13575 }
+        );
+        assert_eq!(
+            canister_query_stats.ingress_payload_size,
+            if idx == 0 { 284 } else { 13 }
+        );
+        assert_eq!(
+            canister_query_stats.egress_payload_size,
+            if idx == 0 { 0 } else { 6 }
+        );
+    }
 }
 
 #[test]

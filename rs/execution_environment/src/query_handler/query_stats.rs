@@ -31,7 +31,7 @@ pub fn init_query_stats(
 /// the payload builder interface.
 pub struct QueryStatsCollector {
     log: ReplicaLogger,
-    current_query_stats: Mutex<BTreeMap<CanisterId, QueryStats>>,
+    pub current_query_stats: Mutex<BTreeMap<CanisterId, QueryStats>>, // Needs to be pub for testing
     current_epoch: Option<QueryStatsEpoch>,
     sender: Sender<LocalQueryStats>,
 }
