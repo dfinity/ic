@@ -107,6 +107,7 @@ pub async fn install_code(
         memory_allocation: Some(candid::Nat::from(MEMORY_ALLOCATION_BYTES)),
         query_allocation: None,
         sender_canister_version: env.canister_version(),
+        keep_main_memory: None,
     };
 
     env.call_canister(

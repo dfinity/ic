@@ -627,6 +627,7 @@ impl ExecutionTest {
             None,
             None,
             None,
+            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -648,6 +649,7 @@ impl ExecutionTest {
             compute_allocation,
             memory_allocation,
             None,
+            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -665,6 +667,7 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
+            None,
             None,
             None,
             None,
@@ -688,6 +691,7 @@ impl ExecutionTest {
             None,
             None,
             None,
+            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -705,6 +709,7 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
+            None,
             None,
             None,
             None,
@@ -726,6 +731,7 @@ impl ExecutionTest {
             vec![],
             compute_allocation,
             memory_allocation,
+            None,
             None,
         );
         let result = self.install_code(args)?;

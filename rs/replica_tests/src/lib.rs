@@ -412,6 +412,7 @@ impl LocalTestRuntime {
             None,
             None,
             None,
+            None,
         ))
     }
 
@@ -492,6 +493,7 @@ impl LocalTestRuntime {
             compute_allocation,
             memory_allocation,
             query_allocation,
+            None,
         );
 
         self.install_canister_helper(args)

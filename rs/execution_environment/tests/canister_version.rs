@@ -69,6 +69,7 @@ fn test(wat: &str, mode: CanisterInstallMode) {
             None,
             None,
             None,
+            None,
         )
         .encode(),
     )
@@ -82,8 +83,17 @@ fn test(wat: &str, mode: CanisterInstallMode) {
             user_id,
             ic00::IC_00,
             Method::InstallCode,
-            InstallCodeArgs::new(mode, canister_id, test_canister, vec![], None, None, None)
-                .encode(),
+            InstallCodeArgs::new(
+                mode,
+                canister_id,
+                test_canister,
+                vec![],
+                None,
+                None,
+                None,
+                None,
+            )
+            .encode(),
         )
         .unwrap();
         // check canister_version
