@@ -56,7 +56,31 @@ pub fn make_bootstrap_summary(
     subnet_id: SubnetId,
     key_id: EcdsaKeyId,
     height: Height,
-    initial_dealings: Option<InitialIDkgDealings>,
+) -> ecdsa::Summary {
+    Some(ecdsa::EcdsaPayload {
+        signature_agreements: BTreeMap::new(),
+        ongoing_signatures: BTreeMap::new(),
+        available_quadruples: BTreeMap::new(),
+        quadruples_in_creation: BTreeMap::new(),
+        uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id, height),
+        idkg_transcripts: BTreeMap::new(),
+        ongoing_xnet_reshares: BTreeMap::new(),
+        xnet_reshare_agreements: BTreeMap::new(),
+        key_transcript: ecdsa::EcdsaKeyTranscript {
+            current: None,
+            next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
+            key_id,
+        },
+    })
+}
+
+/// Builds the very first ecdsa summary block. This would trigger the subsequent
+/// data blocks to create the initial key transcript.
+pub fn make_bootstrap_summary_with_initial_dealings(
+    subnet_id: SubnetId,
+    key_id: EcdsaKeyId,
+    height: Height,
+    initial_dealings: InitialIDkgDealings,
     log: &ReplicaLogger,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let mut summary_payload = ecdsa::EcdsaPayload {
@@ -75,37 +99,37 @@ pub fn make_bootstrap_summary(
         },
     };
 
-    // Update the next_in_creation if boot strapping from initial dealings
-    if let Some(dealings) = initial_dealings {
-        match ecdsa::unpack_reshare_of_unmasked_params(height, dealings.params()) {
-            Some((params, transcript)) => {
-                summary_payload
-                    .idkg_transcripts
-                    .insert(transcript.transcript_id, transcript);
-                summary_payload.key_transcript.next_in_creation =
-                    ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
-                        Box::new(dealings),
-                        params,
-                    ));
-                info!(
-                    log,
-                    "make_ecdsa_genesis_summary(): height = {}, key_transcript = [{}]",
-                    height,
-                    summary_payload.key_transcript
-                );
-            }
-            None => {
-                // Leave the feature disabled if the initial dealings are incorrect.
-                warn!(
-                    log,
-                    "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
-                );
-                return Err(EcdsaPayloadError::InitialIDkgDealingsNotUnmaskedParams(
-                    Box::new(dealings),
+    match ecdsa::unpack_reshare_of_unmasked_params(height, initial_dealings.params()) {
+        Some((params, transcript)) => {
+            summary_payload
+                .idkg_transcripts
+                .insert(transcript.transcript_id, transcript);
+            summary_payload.key_transcript.next_in_creation =
+                ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
+                    Box::new(initial_dealings),
+                    params,
                 ));
-            }
+
+            info!(
+                log,
+                "make_ecdsa_genesis_summary(): height = {}, key_transcript = [{}]",
+                height,
+                summary_payload.key_transcript
+            );
+        }
+        None => {
+            // Leave the feature disabled if the initial dealings are incorrect.
+            warn!(
+                log,
+                "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
+            );
+
+            return Err(EcdsaPayloadError::InitialIDkgDealingsNotUnmaskedParams(
+                Box::new(initial_dealings),
+            ));
         }
     }
+
     Ok(Some(summary_payload))
 }
 
@@ -160,9 +184,7 @@ pub(crate) fn create_summary_payload(
             "Start to create ECDSA key {} on subnet {} at height {}", key_id, subnet_id, height
         );
 
-        return make_bootstrap_summary(
-            subnet_id, key_id, height, /*initial_dealings=*/ None, log,
-        );
+        return Ok(make_bootstrap_summary(subnet_id, key_id, height));
     };
 
     let block_reader = block_chain_reader(
@@ -2462,10 +2484,9 @@ mod tests {
             };
 
             // Step 1: initial bootstrap payload should be created successfully
-            let payload_0 =
-                make_bootstrap_summary(subnet_id, key_id, Height::from(0), None, &no_op_logger());
-            assert_matches!(payload_0, Ok(Some(_)));
-            let payload_0 = payload_0.unwrap().unwrap();
+            let payload_0 = make_bootstrap_summary(subnet_id, key_id, Height::from(0));
+            assert!(payload_0.is_some());
+            let payload_0 = payload_0.unwrap();
 
             // Step 2: a summary payload should be created successfully, with next_in_creation
             // set to Begin.
@@ -2604,11 +2625,11 @@ mod tests {
             let init_tid = initial_dealings.params().transcript_id();
 
             // Step 1: initial bootstrap payload should be created successfully
-            let payload_0 = make_bootstrap_summary(
+            let payload_0 = make_bootstrap_summary_with_initial_dealings(
                 subnet_id,
                 key_id,
                 Height::from(0),
-                Some(initial_dealings),
+                initial_dealings,
                 &no_op_logger(),
             );
             assert_matches!(payload_0, Ok(Some(_)));

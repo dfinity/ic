@@ -3,6 +3,7 @@
 //! crate.
 
 use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
+use crate::ecdsa::payload_builder::make_bootstrap_summary_with_initial_dealings;
 use crate::ecdsa::{
     make_bootstrap_summary,
     utils::{get_ecdsa_config_if_enabled, inspect_ecdsa_initializations},
@@ -27,6 +28,7 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
+use ic_types::consensus::ecdsa;
 use ic_types::{
     artifact::{Priority, PriorityFn},
     artifact_kind::DkgArtifact,
@@ -1399,35 +1401,27 @@ pub fn make_registry_cup_from_cup_contents(
     );
     let cup_height = Height::new(cup_contents.height);
 
-    let ecdsa_init = match inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations) {
-        Ok(Some((key_id, dealings))) => Some((key_id, Some(dealings))),
-        Ok(None) => {
-            match get_ecdsa_config_if_enabled(subnet_id, registry_version, registry, logger) {
-                Ok(Some(ecdsa_config)) => Some((ecdsa_config.key_ids[0].clone(), None)),
-                _ => None,
-            }
-        }
-        Err(err) => {
-            warn!(logger, "{}", err);
-            None
-        }
-    };
-    let ecdsa_summary = ecdsa_init.and_then(|(key_id, dealings)| {
-        match make_bootstrap_summary(subnet_id, key_id, cup_height, dealings, logger) {
+    let ecdsa_summary =
+        match bootstrap_ecdsa_summary(&cup_contents, subnet_id, registry_version, registry, logger)
+        {
             Ok(summary) => {
                 info!(
                     logger,
                     "Making CUP with ecdsa_summary with key_id {:?}",
                     summary.as_ref().map(|x| &x.key_transcript.key_id)
                 );
+
                 summary
             }
             Err(err) => {
-                warn!(logger, "{:?}", err);
+                warn!(
+                    logger,
+                    "Failed constructing ECDSA summary block from CUP contents: {}", err
+                );
+
                 None
             }
-        }
-    });
+        };
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)
@@ -1481,6 +1475,52 @@ pub fn make_registry_cup_from_cup_contents(
         }
         .into(),
     )
+}
+
+fn bootstrap_ecdsa_summary_from_cup_contents(
+    cup_contents: &CatchUpPackageContents,
+    subnet_id: SubnetId,
+    logger: &ReplicaLogger,
+) -> Result<ecdsa::Summary, String> {
+    let Some((key_id, dealings)) =
+        inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?
+    else {
+        return Ok(None);
+    };
+
+    make_bootstrap_summary_with_initial_dealings(
+        subnet_id,
+        key_id,
+        Height::new(cup_contents.height),
+        dealings,
+        logger,
+    )
+    .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
+}
+
+fn bootstrap_ecdsa_summary(
+    cup_contents: &CatchUpPackageContents,
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+    registry_client: &dyn RegistryClient,
+    logger: &ReplicaLogger,
+) -> Result<ecdsa::Summary, String> {
+    if let Some(summary) =
+        bootstrap_ecdsa_summary_from_cup_contents(cup_contents, subnet_id, logger)?
+    {
+        return Ok(Some(summary));
+    }
+
+    match get_ecdsa_config_if_enabled(subnet_id, registry_version, registry_client, logger)
+        .map_err(|err| format!("Failed getting the ECDSA config: {:?}", err))?
+    {
+        Some(ecdsa_config) => Ok(make_bootstrap_summary(
+            subnet_id,
+            ecdsa_config.key_ids[0].clone(),
+            Height::new(cup_contents.height),
+        )),
+        None => Ok(None),
+    }
 }
 
 #[cfg(test)]
