@@ -1615,7 +1615,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api::complexity_overhead!(STABLE64_WRITE, metering_type),
-                    size as u64,
+                    size,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_WRITE,
                         stable_dirty_pages,
@@ -2369,7 +2369,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     canister_id,
                     &mut caller,
                     system_api::complexity_overhead!(DATA_CERTIFICATE_COPY, metering_type),
-                    size as u64,
+                    size,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::DATA_CERTIFICATE_COPY,
                         ..Default::default()
