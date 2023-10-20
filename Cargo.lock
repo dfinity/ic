@@ -1544,9 +1544,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.9.6"
+version = "0.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88f6eec0ae850e006ef0fe306f362884d370624094ec55a6a26de18b251774be"
+checksum = "f391a0d11d997af68e1a06b5e2ab354079cecb82b6eefb26addb38adf66d351d"
 dependencies = [
  "anyhow",
  "binread",
@@ -1561,7 +1561,7 @@ dependencies = [
  "num-traits",
  "num_enum 0.6.1",
  "paste 1.0.12",
- "pretty 0.12.1",
+ "pretty 0.12.3",
  "serde",
  "serde_bytes",
  "sha2 0.10.6",
@@ -2202,9 +2202,9 @@ dependencies = [
 
 [[package]]
 name = "const-hex"
-version = "1.8.0"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08849ed393c907c90016652a01465a12d86361cd38ad2a7de026c56a520cc259"
+checksum = "aa72a10d0e914cad6bcad4e7409e68d230c1c2db67896e19a37f758b1fcbdab5"
 dependencies = [
  "cfg-if 1.0.0",
  "cpufeatures",
@@ -5522,12 +5522,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cbor"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ea3e22289cb2b7d8afa98f9a42d3ee559841edf84a2e9116a2971d89cf38d40"
+checksum = "767fe244224c02f2adad1d43909de93d35d5caada28eed3f270d89735ba5bdd0"
 dependencies = [
- "candid 0.9.6",
- "ic-certification 0.26.1",
+ "candid 0.9.7",
+ "ic-certification 1.2.0",
  "leb128",
  "nom 7.1.3",
  "thiserror",
@@ -5552,7 +5552,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d4c0b932bf454d5d60e61e13c3c944972fcfd74dc82b9ed5c8b0a75979cf50"
 dependencies = [
- "candid 0.9.6",
+ "candid 0.9.7",
  "ic-cdk-macros 0.7.1",
  "ic0",
  "serde",
@@ -5579,7 +5579,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "411c0dd4c149132b68e679274d397053332ee29996c6a541075895881916333b"
 dependencies = [
- "candid 0.9.6",
+ "candid 0.9.7",
  "proc-macro2 1.0.64",
  "quote 1.0.29",
  "serde",
@@ -5603,13 +5603,13 @@ dependencies = [
 
 [[package]]
 name = "ic-certificate-verification"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff07d2f6f19f9a986a24234994fe3e76733fe760b2a63a3b515b785026c2f467"
+checksum = "07bc3fa76751b637bb0c0e37f4089d7f5a3fbacfed3c5fbcfef0d6797a54d63f"
 dependencies = [
- "candid 0.9.6",
+ "candid 0.9.7",
  "ic-cbor",
- "ic-certification 0.26.1",
+ "ic-certification 1.2.0",
  "leb128",
  "miracl_core_bls12381",
  "nom 7.1.3",
@@ -5651,9 +5651,9 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "0.26.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d423020cc19ee52cb7fde4f64000d3dd6e8c5703947bf6d7911db5fb3428a8e"
+checksum = "a59dc342d11b2067e19d0f146bdec3674de921303ffc762f114d201ebbe0e68a"
 dependencies = [
  "hex",
  "sha2 0.10.6",
@@ -10021,9 +10021,9 @@ dependencies = [
 
 [[package]]
 name = "ic-representation-independent-hash"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed17f7c50c497229594763c92a2f98fef73bdfe34c9c2210e557dbc90a00d97c"
+checksum = "410e3ccb16b86e8c4bca7270981370f6961492f1921f29f5dd1de621efb869ea"
 dependencies = [
  "leb128",
  "sha2 0.10.6",
@@ -10031,18 +10031,18 @@ dependencies = [
 
 [[package]]
 name = "ic-response-verification"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa988769b9f4586db83f3a57c4c074405700df67b6e7d70d5505ee84c5657fa9"
+checksum = "bc87254b89cea2b84fb2e3101527e457d01da1bdfdbf8b8699dcbc40ad11dcea"
 dependencies = [
  "base64 0.21.0",
- "candid 0.9.6",
+ "candid 0.9.7",
  "flate2",
  "hex",
  "http",
  "ic-cbor",
  "ic-certificate-verification",
- "ic-certification 0.26.1",
+ "ic-certification 1.2.0",
  "ic-representation-independent-hash",
  "leb128",
  "log",
@@ -11667,9 +11667,9 @@ dependencies = [
 
 [[package]]
 name = "ic0"
-version = "0.18.11"
+version = "0.18.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "576c539151d4769fb4d1a0c25c4108dd18facd04c5695b02cf2d226ab4e43aa5"
+checksum = "16efdbe5d9b0ea368da50aedbf7640a054139569236f1a5249deb5fd9af5a5d5"
 
 [[package]]
 name = "ic_bls12_381"
@@ -11755,7 +11755,7 @@ checksum = "1de228913a69be63eec41a6435701d5c1daa6b4e156a92748cf5c50690ca8e40"
 dependencies = [
  "anyhow",
  "async-trait",
- "candid 0.9.6",
+ "candid 0.9.7",
  "serde",
  "thiserror",
 ]
@@ -11767,7 +11767,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "917e17fd43d9afc946d75422a1282ecacb03867dfee9ab3863868388c9a4b127"
 dependencies = [
  "anyhow",
- "candid 0.9.6",
+ "candid 0.9.7",
  "futures",
  "icrc1-test-env",
 ]
@@ -14220,7 +14220,7 @@ name = "pocket-ic"
 version = "0.0.1"
 dependencies = [
  "base64 0.21.0",
- "candid 0.9.6",
+ "candid 0.9.7",
  "ic-cdk 0.10.0",
  "reqwest",
  "serde",
@@ -14233,7 +14233,7 @@ name = "pocket-ic-backend"
 version = "0.0.1"
 dependencies = [
  "axum",
- "candid 0.9.6",
+ "candid 0.9.7",
  "clap 3.2.23",
  "hex",
  "ic-cdk 0.10.0",
@@ -14374,13 +14374,13 @@ dependencies = [
 
 [[package]]
 name = "pretty"
-version = "0.12.1"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "563c9d701c3a31dfffaaf9ce23507ba09cbe0b9125ba176d15e629b0235e9acc"
+checksum = "b55c4d17d994b637e2f4daf6e5dc5d660d209d5642377d675d7a1c3ab69fa579"
 dependencies = [
  "arrayvec 0.5.2",
  "typed-arena",
- "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]

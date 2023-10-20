@@ -2095,6 +2095,25 @@ pub(crate) fn syscalls<S: SystemApi>(
     linker
         .func_wrap("__", "update_available_memory", {
             move |mut caller: Caller<'_, StoreData<S>>,
+                  native_memory_grow_res: i32,
+                  additional_elements: i32,
+                  element_size: i32| {
+                with_system_api(&mut caller, |s| {
+                    s.update_available_memory(
+                        native_memory_grow_res as i64,
+                        additional_elements as u32 as u64,
+                        element_size as u32 as u64,
+                    )
+                })
+                .map(|()| native_memory_grow_res)
+                .map_err(|e| process_err(&mut caller, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("__", "update_available_memory_64", {
+            move |mut caller: Caller<'_, StoreData<S>>,
                   native_memory_grow_res: i64,
                   additional_elements: i64,
                   element_size: i32| {
