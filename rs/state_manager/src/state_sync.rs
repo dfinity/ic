@@ -349,7 +349,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
         ChangeResult {
             adverts,
             purged: Vec::new(),
-            changed: false,
+            poll_immediately: false,
         }
     }
 }

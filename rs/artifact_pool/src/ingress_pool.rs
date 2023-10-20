@@ -301,7 +301,6 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
         _time_source: &dyn TimeSource,
         change_set: ChangeSet,
     ) -> ChangeResult<IngressArtifact> {
-        let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for change_action in change_set {
@@ -394,7 +393,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: false,
         }
     }
 }
@@ -715,7 +714,7 @@ mod tests {
                 assert!(result.purged.is_empty());
                 assert_eq!(result.adverts.len(), 1);
                 assert_eq!(result.adverts[0].id, message_id0);
-                assert!(result.changed);
+                assert!(!result.poll_immediately);
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
                 assert_eq!(
@@ -778,7 +777,7 @@ mod tests {
                 assert!(result.purged.is_empty());
                 // adverts are only created for own node id
                 assert_eq!(result.adverts.len(), initial_count / nodes);
-                assert!(result.changed);
+                assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
@@ -786,7 +785,7 @@ mod tests {
                 let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
                 assert!(result.adverts.is_empty());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
-                assert!(result.changed);
+                assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
             })
         })

@@ -170,7 +170,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: changed,
         }
     }
 }
@@ -306,7 +306,7 @@ mod test {
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.adverts.len(), 2);
         assert!(result.purged.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
 
@@ -318,7 +318,7 @@ mod test {
         );
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
 
@@ -329,7 +329,7 @@ mod test {
         );
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);
     }

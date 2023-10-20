@@ -235,7 +235,7 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: changed,
         }
     }
 }
@@ -572,7 +572,7 @@ mod tests {
             );
             assert_eq!(result.adverts.len(), 2);
             assert!(result.purged.is_empty());
-            assert!(result.changed);
+            assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg))
@@ -608,7 +608,7 @@ mod tests {
             assert_eq!(result.adverts[0].id, expected);
             assert_eq!(result.adverts.len(), 1);
             assert!(result.purged.is_empty());
-            assert!(result.changed);
+            assert!(result.poll_immediately);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
                     .collect::<Vec<CertificationShare>>(),
@@ -687,7 +687,7 @@ mod tests {
             }
             assert!(result.adverts.is_empty());
             assert_eq!(result.purged.len(), 2);
-            assert!(result.changed);
+            assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
             assert!(pool.certification_at_height(Height::from(10)).is_none());
@@ -728,14 +728,14 @@ mod tests {
             );
             assert!(result.adverts.is_empty());
             assert!(result.purged.is_empty());
-            assert!(result.changed);
+            assert!(result.poll_immediately);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 0
             );
 
             let result = pool.apply_changes(&SysTimeSource::new(), vec![]);
-            assert!(!result.changed);
+            assert!(!result.poll_immediately);
         });
     }
 

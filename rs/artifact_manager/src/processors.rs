@@ -114,17 +114,9 @@ impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<
         let change_set = self
             .client
             .on_state_change(&self.ingress_pool.read().unwrap());
-        let result = self
-            .ingress_pool
+        self.ingress_pool
             .write()
             .unwrap()
-            .apply_changes(time_source, change_set);
-        // We ignore the ingress pool's "changed" result and return StateUnchanged,
-        // in order to not trigger an immediate re-processing.
-        ChangeResult {
-            adverts: result.adverts,
-            purged: result.purged,
-            changed: false,
-        }
+            .apply_changes(time_source, change_set)
     }
 }

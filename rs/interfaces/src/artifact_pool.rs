@@ -37,12 +37,10 @@ pub trait ChangeSetProducer<Pool>: Send {
 pub struct ChangeResult<Artifact: ArtifactKind> {
     pub purged: Vec<Artifact::Id>,
     pub adverts: Vec<Advert<Artifact>>,
-    /// The result of a single `apply_changes` call can result in either:
-    /// - new changes applied to the state. So `on_state_change` + `apply_changes` should be
-    ///   immediately called again.
-    /// - no change applied and state was unchanged. So calling `on_state_change` + `apply_changes` is
-    ///   not immediately required.
-    pub changed: bool,
+    /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
+    /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
+    /// true results in lower consensus latencies.
+    pub poll_immediately: bool,
 }
 
 /// Defines the canonical way for mutating an artifact pool.

@@ -158,7 +158,7 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: changed,
         }
     }
 }
@@ -262,7 +262,7 @@ mod tests {
 
         assert!(pool.contains(&id));
         assert_eq!(result.adverts[0].id, id);
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
         assert_eq!(share, pool.get_validated_by_identifier(&id).unwrap());
@@ -281,7 +281,7 @@ mod tests {
 
         assert!(!pool.contains(&id));
         assert!(result.adverts.is_empty());
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert_eq!(result.purged[0], id);
         assert!(pool.lookup_validated(&id).is_none());
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
@@ -310,7 +310,7 @@ mod tests {
         assert!(pool.contains(&id1));
         assert!(!pool.contains(&id2));
         assert_eq!(result.adverts[0].id, id1);
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
@@ -330,7 +330,7 @@ mod tests {
         );
 
         assert!(!pool.contains(&id));
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert!(result.adverts.is_empty());
     }
@@ -353,7 +353,7 @@ mod tests {
         );
 
         assert!(!pool.contains(&id));
-        assert!(result.changed);
+        assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert!(result.adverts.is_empty());
     }
