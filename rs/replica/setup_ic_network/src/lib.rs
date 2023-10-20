@@ -699,6 +699,7 @@ impl ArtifactKind for TestArtifact {
     type Message = TestArtifactMessage;
     type Id = TestArtifactId;
     type Attribute = ();
+    type Filter = ();
 
     /// The function converts a TestArtifactMessage to an advert for a
     /// TestArtifact.

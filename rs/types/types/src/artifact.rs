@@ -34,9 +34,9 @@ use crate::{
 use derive_more::{AsMut, AsRef, From, TryInto};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::p2p::v1 as p2p_pb;
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::{v1 as pb, v1::artifact::Kind};
-use ic_protobuf::{p2p::v1 as p2p_pb, proxy::try_from_option_field};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
@@ -234,7 +234,10 @@ impl From<&Artifact> for ArtifactTag {
 /// are interested in all filters.
 #[derive(AsMut, AsRef, Default, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ArtifactFilter {
-    pub height: Height,
+    pub consensus_filter: ConsensusMessageFilter,
+    pub certification_filter: CertificationMessageFilter,
+    pub state_sync_filter: StateSyncFilter,
+    pub no_filter: (),
 }
 
 /// Priority of artifact.
@@ -275,6 +278,7 @@ pub trait ArtifactKind: Sized {
     type Id;
     type Message;
     type Attribute;
+    type Filter: Default;
 
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
@@ -385,6 +389,12 @@ impl From<&ConsensusMessage> for ConsensusMessageId {
     }
 }
 
+/// Consensus message filter is by height.
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ConsensusMessageFilter {
+    pub height: Height,
+}
+
 // -----------------------------------------------------------------------------
 // Ingress artifacts
 
@@ -469,6 +479,15 @@ impl From<&CertificationMessageId> for pb::CertificationMessageId {
         }
     }
 }
+
+/// Certification message filter is by height.
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CertificationMessageFilter {
+    pub height: Height,
+}
+
+// -----------------------------------------------------------------------------
+// DKG artifacts
 
 impl TryFrom<&pb::CertificationMessageId> for CertificationMessageId {
     type Error = ProxyDecodeError;
@@ -639,6 +658,12 @@ impl std::hash::Hash for StateSyncMessage {
     }
 }
 
+/// State sync filter is by height.
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StateSyncFilter {
+    pub height: Height,
+}
+
 // ------------------------------------------------------------------------------
 // Conversions
 
@@ -686,16 +711,82 @@ impl TryFrom<pb::Artifact> for Artifact {
 impl From<ArtifactFilter> for pb::ArtifactFilter {
     fn from(filter: ArtifactFilter) -> Self {
         Self {
+            consensus_filter: Some(filter.consensus_filter.into()),
+            certification_message_filter: Some(filter.certification_filter.into()),
+            state_sync_filter: Some(filter.state_sync_filter.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::ArtifactFilter> for ArtifactFilter {
+    type Error = ProxyDecodeError;
+    fn try_from(filter: pb::ArtifactFilter) -> Result<Self, Self::Error> {
+        Ok(Self {
+            consensus_filter: try_from_option_field(
+                filter.consensus_filter,
+                "ArtifactFilter.consensus_filter",
+            )?,
+            certification_filter: try_from_option_field(
+                filter.certification_message_filter,
+                "ArtifactFilter.certification_message_filter",
+            )?,
+            state_sync_filter: try_from_option_field(
+                filter.state_sync_filter,
+                "ArtifactFilter.state_sync_filter",
+            )?,
+            no_filter: (),
+        })
+    }
+}
+
+impl From<ConsensusMessageFilter> for pb::ConsensusMessageFilter {
+    fn from(filter: ConsensusMessageFilter) -> Self {
+        Self {
             height: filter.height.get(),
         }
     }
 }
 
-impl From<pb::ArtifactFilter> for ArtifactFilter {
-    fn from(filter: pb::ArtifactFilter) -> Self {
+impl TryFrom<pb::ConsensusMessageFilter> for ConsensusMessageFilter {
+    type Error = ProxyDecodeError;
+    fn try_from(filter: pb::ConsensusMessageFilter) -> Result<Self, Self::Error> {
+        Ok(Self {
+            height: Height::from(filter.height),
+        })
+    }
+}
+
+impl From<CertificationMessageFilter> for pb::CertificationMessageFilter {
+    fn from(filter: CertificationMessageFilter) -> Self {
         Self {
-            height: filter.height.into(),
+            height: filter.height.get(),
         }
+    }
+}
+
+impl TryFrom<pb::CertificationMessageFilter> for CertificationMessageFilter {
+    type Error = ProxyDecodeError;
+    fn try_from(filter: pb::CertificationMessageFilter) -> Result<Self, Self::Error> {
+        Ok(Self {
+            height: Height::from(filter.height),
+        })
+    }
+}
+
+impl From<StateSyncFilter> for pb::StateSyncFilter {
+    fn from(filter: StateSyncFilter) -> Self {
+        Self {
+            height: filter.height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb::StateSyncFilter> for StateSyncFilter {
+    type Error = ProxyDecodeError;
+    fn try_from(filter: pb::StateSyncFilter) -> Result<Self, Self::Error> {
+        Ok(Self {
+            height: Height::from(filter.height),
+        })
     }
 }
 

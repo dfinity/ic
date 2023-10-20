@@ -21,7 +21,6 @@ use ic_types::{
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
     time::current_time,
-    Height,
 };
 use prometheus::IntCounter;
 
@@ -206,7 +205,7 @@ impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
 
     fn get_all_validated_by_filter(
         &self,
-        _filter: &Height,
+        _filter: &(),
     ) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
         unimplemented!()
     }
