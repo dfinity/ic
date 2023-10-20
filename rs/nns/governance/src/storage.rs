@@ -1,8 +1,13 @@
-use crate::pb::v1::{AuditEvent, Topic};
+use crate::{
+    governance::LOG_PREFIX,
+    pb::v1::{AuditEvent, Topic},
+};
 
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    BoundedStorable, DefaultMemoryImpl, StableLog, Storable,
+    BoundedStorable, DefaultMemoryImpl, Memory, StableLog, Storable,
 };
 use std::{borrow::Cow, cell::RefCell};
 
@@ -97,16 +102,40 @@ thread_local! {
         });
 }
 
+pub fn grow_upgrades_memory_to(target_pages: u64) {
+    UPGRADES_MEMORY.with(|upgrades_memory| {
+        let upgrades_memory = upgrades_memory.borrow();
+        let current_size = upgrades_memory.size();
+        let diff = target_pages.saturating_sub(current_size);
+        if diff == 0 {
+            return;
+        }
+
+        let previous_size = upgrades_memory.grow(diff);
+        if previous_size == -1 {
+            println!(
+                "{}WARNING: failed to grow upgrades memory by {} pages while current size is {}",
+                LOG_PREFIX, diff, current_size
+            );
+        } else {
+            let size_after_growth = upgrades_memory.size();
+            println!(
+                "{}Successfully grew upgrades memory by {} pages, size after growth: {}",
+                LOG_PREFIX, diff, size_after_growth
+            );
+        }
+    });
+}
+
 // Implement BoundedStorable
 // =========================
 
 // Signed32
 // --------
 
-// ic_stable_structures should implement (Bounded)Storable on i32, but does
-// not. Therefore, we do it here. Unfortunately, we must wrap it first, because
-// only ic_stable_structures can implement their traits on foreign types, such
-// as i32.
+// ic_stable_structures should implement (Bounded)Storable on i32, but does not. Therefore, we do it
+// here. Unfortunately, we must wrap it first, because only ic_stable_structures can implement their
+// traits on foreign types, such as i32.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Signed32(pub i32);
 
@@ -127,9 +156,9 @@ impl From<Signed32> for i32 {
     }
 }
 
-// The choice of little endian is somewhat arbitrary here; native or big endian
-// would also be fine. Little endian is chosen simply because that is what WASM
-// uses: https://webassembly.org/docs/portability/
+// The choice of little endian is somewhat arbitrary here; native or big endian would also be fine.
+// Little endian is chosen simply because that is what WASM uses:
+// https://webassembly.org/docs/portability/
 impl Storable for Signed32 {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         let serialized = Vec::from(self.0.to_le_bytes());
@@ -151,13 +180,55 @@ impl BoundedStorable for Signed32 {
 }
 
 // Types used in both NeuronStore and NeuronIndexes.  This indicates the need for some refactoring
-// so that neuron indexes are correctly owned by NeuronStore, which is blocked by changes needed
-// in Governance.
+// so that neuron indexes are correctly owned by NeuronStore, which is blocked by changes needed in
+// Governance.
 pub type NeuronIdU64 = u64;
 pub type TopicSigned32 = Signed32;
 
 impl From<Topic> for TopicSigned32 {
     fn from(topic: Topic) -> Self {
         Self(topic as i32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grow_upgrades_memory_to_success() {
+        grow_upgrades_memory_to(10);
+        UPGRADES_MEMORY.with(|upgrades_memory| {
+            assert_eq!(upgrades_memory.borrow().size(), 10);
+        });
+    }
+
+    #[test]
+    fn grow_upgrades_memory_to_smaller_no_op() {
+        grow_upgrades_memory_to(20);
+        UPGRADES_MEMORY.with(|upgrades_memory| {
+            assert_eq!(upgrades_memory.borrow().size(), 20);
+        });
+
+        grow_upgrades_memory_to(10);
+        UPGRADES_MEMORY.with(|upgrades_memory| {
+            assert_eq!(upgrades_memory.borrow().size(), 20);
+        });
+    }
+
+    #[test]
+    fn grow_upgrades_memory_to_fails() {
+        grow_upgrades_memory_to(10);
+        UPGRADES_MEMORY.with(|upgrades_memory| {
+            assert_eq!(upgrades_memory.borrow().size(), 10);
+        });
+
+        // Try to grow to 2^22 + 1, where 2^22 is the max number of pages allowed by stable
+        // structures memory manager. It's very unlikely that we want to grow to this number, but
+        // this test is just to make sure that we do not panic here.
+        grow_upgrades_memory_to(4_194_305);
+        UPGRADES_MEMORY.with(|upgrades_memory| {
+            assert_eq!(upgrades_memory.borrow().size(), 10);
+        });
     }
 }

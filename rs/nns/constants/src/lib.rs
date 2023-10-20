@@ -93,18 +93,18 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 10] = [
 // (4GiB)
 const NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
+// We preallocate 4GB stable memory for NNS governance so that pre_upgrade never fails trying to
+// grow stable memory, and we might also have some other data occupying stable memory.
+const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024 * 1024;
+
 // The default memory allocation to set for the remaining NNS canister (1GiB)
 const NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Returns the memory allocation of the given nns canister.
 pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
-    if [
-        LEDGER_CANISTER_ID,
-        GOVERNANCE_CANISTER_ID,
-        REGISTRY_CANISTER_ID,
-    ]
-    .contains(&canister_id)
-    {
+    if canister_id == GOVERNANCE_CANISTER_ID {
+        NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES
+    } else if [LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID].contains(&canister_id) {
         NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES
     } else {
         NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
