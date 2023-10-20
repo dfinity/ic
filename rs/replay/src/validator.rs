@@ -209,7 +209,6 @@ impl ReplayValidator {
 
         // This creates a new pool with just the genesis CUP.
         let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
-            self.replica_cfg.node_id,
             self.replica_cfg.subnet_id,
             cup,
             artifact_pool_config,

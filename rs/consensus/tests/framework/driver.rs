@@ -39,7 +39,6 @@ impl<'a> ConsensusDriver<'a> {
     ) -> ConsensusDriver<'a> {
         let ingress_pool = RefCell::new(TestIngressPool::new(node_id, pool_config.clone()));
         let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
-            node_id,
             pool_config,
             logger.clone(),
             metrics_registry,
