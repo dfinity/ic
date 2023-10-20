@@ -13,6 +13,9 @@ def sanitize_external_crates(sanitizers_enabled):
         "candid": FUZZING_ANNOTATION,
         "wasmtime": FUZZING_ANNOTATION,
         "bitcoin": FUZZING_ANNOTATION,
+        "bincode": FUZZING_ANNOTATION,
+        "hex": FUZZING_ANNOTATION,
+        "subtle": FUZZING_ANNOTATION,
     }
 
 def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, sanitizers_enabled):
