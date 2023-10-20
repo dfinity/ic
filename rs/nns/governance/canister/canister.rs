@@ -58,7 +58,7 @@ use ic_nns_governance::{
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
-    storage::UPGRADES_MEMORY,
+    storage::{grow_upgrades_memory_to, UPGRADES_MEMORY},
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
@@ -72,6 +72,12 @@ use std::{borrow::Cow, boxed::Box, ops::Deref, str::FromStr, time::SystemTime};
 /// Larger buffer size means we may not be able to serialize the heap fully in
 /// some cases.
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
+
+/// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
+/// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
+/// is to make sure that even if we have a bug causing stable memory getting full, we do not trap in
+/// pre_upgrade by trying to grow UPGRADES_MEMORY.
+const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
@@ -378,6 +384,7 @@ fn canister_post_upgrade() {
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
         )
     };
+    grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);
 
     canister_init_(proto);
 }

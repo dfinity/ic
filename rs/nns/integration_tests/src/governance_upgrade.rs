@@ -10,6 +10,7 @@ use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
@@ -17,7 +18,7 @@ use ic_nns_governance::{
         ManageNeuron, ManageNeuronResponse,
     },
 };
-use ic_nns_test_utils::{ids::TEST_NEURON_1_ID, itest_helpers::set_up_governance_canister};
+use ic_nns_test_utils::{ids::TEST_NEURON_1_ID, itest_helpers::install_governance_canister};
 
 /// This is a regression test: it used to be that, if two upgrades happened in a
 /// row, with the stable memory of the second being smaller than for the first,
@@ -37,7 +38,11 @@ fn test_upgrade_after_state_shrink() {
             .hot_keys
             .push(hot_key);
 
-        let mut canister = set_up_governance_canister(&runtime, governance_proto).await;
+        let mut canister = runtime
+            .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
+            .await
+            .unwrap();
+        install_governance_canister(&mut canister, governance_proto).await;
 
         // First let's do a self-upgrade
         canister.stop().await.unwrap();
