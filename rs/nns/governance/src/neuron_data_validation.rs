@@ -532,13 +532,7 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
         let cardinality_primary: u64 = neuron_store
             .heap_neurons()
             .values()
-            .map(|neuron| {
-                neuron
-                    .followees
-                    .values()
-                    .map(|followees_by_topic| followees_by_topic.followees.len() as u64)
-                    .sum::<u64>()
-            })
+            .map(|neuron| neuron.topic_followee_pairs().len() as u64)
             .sum();
         let cardinality_index =
             NEURON_INDEXES.with(|indexes| indexes.borrow().following().num_entries()) as u64;
@@ -949,8 +943,26 @@ mod tests {
 
     #[test]
     fn test_validator_valid() {
+        // Both followees and principals (controller is a hot key) have duplicates since we do allow
+        // it at this time.
         let neuron_store = NeuronStore::new_for_test(vec![Neuron {
             cached_neuron_stake_e8s: 1,
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            hot_keys: vec![
+                PrincipalId::new_user_test_id(2),
+                PrincipalId::new_user_test_id(3),
+                PrincipalId::new_user_test_id(1),
+            ],
+            followees: hashmap! {
+                1 => Followees{
+                    followees: vec![
+                        NeuronId { id: 2 },
+                        NeuronId { id: 4 },
+                        NeuronId { id: 3 },
+                        NeuronId { id: 2 },
+                    ],
+                },
+            },
             ..next_test_neuron()
         }]);
         let mut validator = NeuronDataValidator::new();
@@ -964,8 +976,8 @@ mod tests {
 
     #[test]
     fn test_validator_invalid_issues() {
-        // Step 1: Cause as many issues as possible by having an inactive neuron (without adding it to
-        // STABLE_NEURON_STORE, and remove the only neuron from indexes).
+        // Step 1: Cause as many issues as possible by having an inactive neuron (without adding it
+        // to STABLE_NEURON_STORE, and remove the only neuron from indexes).
         let neuron = next_test_neuron();
         let neuron_store = NeuronStore::new_for_test(vec![neuron.clone()]);
         NEURON_INDEXES
