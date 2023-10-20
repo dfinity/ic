@@ -100,12 +100,10 @@ impl OrthogonalPersistence {
         let page_index = page_chunk.page_index;
         let current_page = self.combined_memory.page_map.get_page(page_index);
         let new_page = self.new_memory.page_map.get_page(page_index);
-        let mut combined_page = current_page.clone();
+        let mut combined_page = *current_page;
         let start = page_chunk.offset;
         let end = start + page_chunk.length;
-        for index in start..end {
-            combined_page[index] = new_page[index];
-        }
+        combined_page[start..end].copy_from_slice(&new_page[start..end]);
         self.combined_memory
             .page_map
             .update(&[(page_index, &combined_page)]);
