@@ -1103,7 +1103,7 @@ fn validate_export_section(
 // expression. Required because of OP. See also:
 // instrumentation.rs
 fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
-    fn validate_segment(s: &DataSegment) -> Result<(), WasmValidationError> {
+    fn validate_segment(s: &DataSegment, memory64: bool) -> Result<(), WasmValidationError> {
         match &s.kind {
             DataSegmentKind::Passive => Err(WasmValidationError::InvalidDataSection(
                 "Empty offset in data segment.".to_string(),
@@ -1112,7 +1112,8 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
                 memory_index: _,
                 offset_expr,
             } => match offset_expr {
-                Operator::I64Const { .. } => Ok(()),
+                Operator::I32Const { .. } if !memory64 => Ok(()),
+                Operator::I64Const { .. } if memory64 => Ok(()),
                 _ => Err(WasmValidationError::InvalidDataSection(format!(
                     "Invalid offset expression in data segment: {:?}",
                     offset_expr
@@ -1122,7 +1123,7 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
     }
 
     for d in &module.data {
-        validate_segment(d)?;
+        validate_segment(d, module.memories[0].memory64)?;
     }
     Ok(())
 }
