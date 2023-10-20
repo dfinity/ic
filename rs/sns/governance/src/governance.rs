@@ -6879,6 +6879,7 @@ mod tests {
                         memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
                         query_allocation: None,
                         sender_canister_version: None,
+                        keep_main_memory: None,
                     })
                     .unwrap(),
                     Some(Ok(vec![])),

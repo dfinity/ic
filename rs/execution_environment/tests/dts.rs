@@ -265,6 +265,7 @@ fn setup_dts_install_code(
             None,
             None,
             None,
+            None,
         )
         .encode(),
     );
@@ -475,6 +476,7 @@ fn dts_pending_upgrade_with_heartbeat() {
             None,
             None,
             None,
+            None,
         );
         let payload = wasm()
             .call_simple(
@@ -576,6 +578,7 @@ fn dts_scheduling_of_install_code() {
             *c,
             binary.clone(),
             vec![],
+            None,
             None,
             None,
             None,
@@ -737,6 +740,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
             None,
             None,
             None,
+            None,
         );
         let payload = wasm()
             .call_simple(
@@ -863,6 +867,7 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
             None,
             None,
             None,
+            None,
         );
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
@@ -934,6 +939,7 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
             canister,
             binary,
             vec![],
+            None,
             None,
             None,
             None,
@@ -1033,6 +1039,7 @@ fn dts_long_running_install_and_update() {
             canister[i],
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
+            None,
             None,
             None,
             None,
@@ -1238,6 +1245,7 @@ fn dts_unrelated_subnet_messages_make_progress() {
             None,
             None,
             None,
+            None,
         );
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
@@ -1366,6 +1374,7 @@ fn dts_ingress_status_of_install_is_correct() {
             None,
             None,
             None,
+            None,
         );
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
@@ -1445,6 +1454,7 @@ fn dts_ingress_status_of_upgrade_is_correct() {
             canister,
             binary,
             vec![],
+            None,
             None,
             None,
             None,
@@ -1631,6 +1641,7 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
             canister,
             binary,
             vec![],
+            None,
             None,
             None,
             None,

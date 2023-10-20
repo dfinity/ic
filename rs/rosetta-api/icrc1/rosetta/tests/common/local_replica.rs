@@ -146,6 +146,7 @@ async fn install_canister(context: &ReplicaContext, init_arg: Vec<u8>, canister_
                 sender_canister_version: None,
                 memory_allocation: None,
                 compute_allocation: None,
+                keep_main_memory: None,
             })
             .unwrap(),
         )

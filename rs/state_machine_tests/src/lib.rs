@@ -1164,7 +1164,7 @@ impl StateMachine {
             sender,
             ic00::IC_00,
             Method::InstallCode,
-            InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None, None).encode(),
+            InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None, None, None).encode(),
         )
         .map(|_| ())
     }
