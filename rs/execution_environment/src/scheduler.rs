@@ -1950,10 +1950,10 @@ fn observe_replicated_state_metrics(
                 for (origin, origin_time) in &old_call_contexts {
                     warn!(
                         logger,
-                        "Call context has been open for {:?}: origin: {:?}, respondent: {}",
-                        state.time().saturating_sub(*origin_time),
+                        "Call context on canister {} with origin {:?} has been open for {:?}",
+                        canister.canister_id(),
                         origin,
-                        canister.canister_id()
+                        state.time().saturating_sub(*origin_time),
                     );
                 }
             }
