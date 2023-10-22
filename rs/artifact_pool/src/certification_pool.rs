@@ -13,6 +13,7 @@ use ic_types::artifact::ArtifactKind;
 use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
 use ic_types::{
+    artifact::CertificationMessageFilter,
     artifact::CertificationMessageId,
     artifact_kind::CertificationArtifact,
     consensus::certification::{
@@ -359,10 +360,10 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
 
     fn get_all_validated_by_filter(
         &self,
-        filter: &Height,
+        filter: &CertificationMessageFilter,
     ) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
         // Return all validated certifications and all shares above the filter
-        let min_height = filter.get();
+        let min_height = filter.height.get();
         let all_certs = self
             .validated_certifications()
             .filter(move |cert| cert.height > Height::from(min_height))
