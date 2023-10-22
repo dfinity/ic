@@ -3,14 +3,12 @@
 //! crate.
 
 use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
-use crate::ecdsa::payload_builder::make_bootstrap_summary_with_initial_dealings;
 use crate::ecdsa::{
     make_bootstrap_summary,
+    payload_builder::make_bootstrap_summary_with_initial_dealings,
     utils::{get_ecdsa_config_if_enabled, inspect_ecdsa_initializations},
 };
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::dkg::{DkgMessageValidationError, PermanentError, TransientError};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusPoolCache,
@@ -18,7 +16,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
@@ -28,7 +26,7 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::ecdsa;
+use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash};
 use ic_types::{
     artifact::{Priority, PriorityFn},
     artifact_kind::DkgArtifact,
@@ -36,23 +34,26 @@ use ic_types::{
     consensus::{
         dkg,
         dkg::{DealingContent, DkgMessageId, Message, Summary},
-        get_faults_tolerated, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock,
-        HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
+        ecdsa, get_faults_tolerated, Block, BlockPayload, CatchUpContent, CatchUpPackage,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
     crypto::{
         crypto_hash,
         threshold_sig::ni_dkg::{
             config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
+            errors::{
+                create_transcript_error::DkgCreateTranscriptError,
+                verify_dealing_error::DkgVerifyDealingError,
+            },
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
         },
-        Signed,
+        CryptoError, Signed,
     },
     messages::CallbackId,
+    registry::RegistryClientError,
     signature::ThresholdSignature,
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId, Time,
 };
-
-use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash};
 use phantom_newtype::Id;
 use prometheus::{Histogram, IntCounterVec};
 use rayon::prelude::*;
@@ -78,6 +79,90 @@ const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
 struct Metrics {
     pub on_state_change_duration: Histogram,
     pub on_state_change_processed: Histogram,
+}
+
+/// Transient Dkg message validation errors.
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub enum PermanentError {
+    CryptoError(CryptoError),
+    DkgCreateTranscriptError(DkgCreateTranscriptError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
+    MissingDkgConfigForDealing,
+    LastSummaryHasMultipleConfigsForSameTag,
+    DkgStartHeightDoesNotMatchParentBlock,
+    DkgSummaryAtNonStartHeight(Height),
+    DkgDealingAtStartHeight(Height),
+    MissingRegistryVersion(Height),
+    InvalidDealer(NodeId),
+    DealerAlreadyDealt(NodeId),
+    FailedToCreateDkgConfig(NiDkgConfigValidationError),
+}
+
+/// Permanent Dkg message validation errors.
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub enum TransientError {
+    /// Crypto related errors.
+    CryptoError(CryptoError),
+    StateManagerError(StateManagerError),
+    DkgCreateTranscriptError(DkgCreateTranscriptError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
+    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
+    MissingDkgStartBlock,
+}
+
+/// Dkg errors.
+pub type DkgMessageValidationError = ValidationError<PermanentError, TransientError>;
+
+impl From<DkgCreateTranscriptError> for PermanentError {
+    fn from(err: DkgCreateTranscriptError) -> Self {
+        PermanentError::DkgCreateTranscriptError(err)
+    }
+}
+
+impl From<DkgCreateTranscriptError> for TransientError {
+    fn from(err: DkgCreateTranscriptError) -> Self {
+        TransientError::DkgCreateTranscriptError(err)
+    }
+}
+
+impl From<DkgVerifyDealingError> for PermanentError {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        PermanentError::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<DkgVerifyDealingError> for TransientError {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        TransientError::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<CryptoError> for PermanentError {
+    fn from(err: CryptoError) -> Self {
+        PermanentError::CryptoError(err)
+    }
+}
+
+impl From<CryptoError> for TransientError {
+    fn from(err: CryptoError) -> Self {
+        TransientError::CryptoError(err)
+    }
+}
+
+impl From<PermanentError> for DkgMessageValidationError {
+    fn from(err: PermanentError) -> Self {
+        ValidationError::Permanent(err)
+    }
+}
+
+impl From<TransientError> for DkgMessageValidationError {
+    fn from(err: TransientError) -> Self {
+        ValidationError::Transient(err)
+    }
 }
 
 /// `DkgImpl` is responsible for holding DKG dependencies and for responding to
