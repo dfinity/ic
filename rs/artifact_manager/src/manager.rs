@@ -233,6 +233,7 @@ where
         + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
     Advert<Artifact>: Into<p2p::GossipAdvert>,
     for<'a> &'a Artifact::Id: TryFrom<&'a artifact::ArtifactId, Error = &'a artifact::ArtifactId>,
+    artifact::ArtifactFilter: AsMut<Artifact::Filter> + AsRef<Artifact::Filter>,
     for<'a> &'a Artifact::Attribute:
         TryFrom<&'a artifact::ArtifactAttribute, Error = &'a artifact::ArtifactAttribute>,
     Artifact::Attribute: 'static,

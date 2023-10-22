@@ -25,7 +25,7 @@ use ic_types::{
     artifact::{Advert, IngressMessageId, Priority, PriorityFn},
     artifact_kind::IngressArtifact,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
-    CountBytes, Height, NodeId, Time,
+    CountBytes, NodeId, Time,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
@@ -410,7 +410,7 @@ impl ValidatedPoolReader<IngressArtifact> for IngressPoolImpl {
 
     fn get_all_validated_by_filter<'a>(
         &'a self,
-        _filter: &Height,
+        _filter: &(),
     ) -> Box<dyn Iterator<Item = SignedIngress> + 'a> {
         Box::new(vec![].into_iter())
     }
@@ -651,7 +651,7 @@ mod tests {
                     );
                 }
                 // empty
-                let filtered_msgs = ingress_pool.get_all_validated_by_filter(&Height::default());
+                let filtered_msgs = ingress_pool.get_all_validated_by_filter(&());
                 assert!(filtered_msgs.count() == 0);
             })
         })

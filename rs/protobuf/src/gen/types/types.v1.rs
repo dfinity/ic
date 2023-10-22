@@ -1592,7 +1592,32 @@ pub mod gossip_chunk {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactFilter {
-    #[prost(uint64, tag = "5")]
+    #[prost(message, optional, tag = "6")]
+    pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
+    #[prost(message, optional, tag = "7")]
+    pub certification_message_filter: ::core::option::Option<CertificationMessageFilter>,
+    #[prost(message, optional, tag = "8")]
+    pub state_sync_filter: ::core::option::Option<StateSyncFilter>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageFilter {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageFilter {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StateSyncFilter {
+    #[prost(uint64, tag = "1")]
     pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
