@@ -1,12 +1,13 @@
 use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
+use ic_types::artifact::StateSyncMessage;
 use prometheus::{
     exponential_buckets, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
 };
 use tokio_metrics::TaskMonitor;
 
-use crate::ongoing::{CompletedStateSync, DownloadChunkError};
+use crate::ongoing::DownloadChunkError;
 
 const HANDLER_LABEL: &str = "handler";
 pub(crate) const CHUNK_HANDLER_LABEL: &str = "chunk";
@@ -124,7 +125,7 @@ impl OngoingStateSyncMetrics {
     /// Utility to record metrics for download result.
     pub fn record_chunk_download_result(
         &self,
-        res: &Result<Option<CompletedStateSync>, DownloadChunkError>,
+        res: &Result<Option<StateSyncMessage>, DownloadChunkError>,
     ) {
         match res {
             // Received chunk
