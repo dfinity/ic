@@ -834,6 +834,8 @@ message FinalizeSwapResponse {
 
   SettleCommunityFundParticipationResult settle_community_fund_participation_result = 6;
 
+  SweepResult create_sns_neuron_recipes_result = 8;
+
   // Explains what (if anything) went wrong.
   optional string error_message = 7;
 }

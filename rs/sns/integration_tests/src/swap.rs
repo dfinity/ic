@@ -1754,6 +1754,13 @@ fn assert_successful_swap_finalizes_correctly_legacy(
                     invalid: 0,
                     global_failures: 0,
                 }),
+                create_sns_neuron_recipes_result: Some(swap_pb::SweepResult {
+                    success: expected_neuron_count,
+                    failure: 0,
+                    skipped: 0,
+                    invalid: 0,
+                    global_failures: 0,
+                }),
                 sweep_sns_result: Some(swap_pb::SweepResult {
                     success: expected_neuron_count,
                     failure: 0,

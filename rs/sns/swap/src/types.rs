@@ -1076,6 +1076,18 @@ impl FinalizeSwapResponse {
         self.set_mode_call_result = Some(set_mode_call_result);
     }
 
+    pub fn set_create_sns_neuron_recipes_result(
+        &mut self,
+        create_sns_neuron_recipes_result: SweepResult,
+    ) {
+        if !create_sns_neuron_recipes_result.is_successful_sweep() {
+            self.set_error_message(
+                "Creating SnsNeuronRecipes did not complete fully, some data was invalid or failed. Halting swap finalization".to_string()
+            );
+        }
+        self.create_sns_neuron_recipes_result = Some(create_sns_neuron_recipes_result);
+    }
+
     pub fn has_error_message(&self) -> bool {
         self.error_message.is_some()
     }

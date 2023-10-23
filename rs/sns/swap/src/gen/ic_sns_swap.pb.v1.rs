@@ -941,6 +941,8 @@ pub struct FinalizeSwapResponse {
     #[prost(message, optional, tag = "6")]
     pub settle_community_fund_participation_result:
         ::core::option::Option<SettleCommunityFundParticipationResult>,
+    #[prost(message, optional, tag = "8")]
+    pub create_sns_neuron_recipes_result: ::core::option::Option<SweepResult>,
     /// Explains what (if anything) went wrong.
     #[prost(string, optional, tag = "7")]
     pub error_message: ::core::option::Option<::prost::alloc::string::String>,

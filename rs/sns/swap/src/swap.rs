@@ -882,13 +882,6 @@ impl Swap {
             return false;
         }
 
-        let sweep_result = self.create_sns_neuron_recipes();
-        // Assert that no failures occurred when creating SnsNeuronRecipes.
-        // Panic and rollback this message if not.
-        assert_eq!(sweep_result.failure, 0, "{:?}", sweep_result);
-        assert_eq!(sweep_result.invalid, 0, "{:?}", sweep_result);
-        assert_eq!(sweep_result.global_failures, 0, "{:?}", sweep_result);
-
         self.set_lifecycle(Lifecycle::Committed);
 
         true
@@ -1693,6 +1686,13 @@ impl Swap {
             // In the case of returning control of the dapp(s) to the fallback
             // controllers, finalize() need not do any more work, so always return
             // and end execution.
+            return finalize_swap_response;
+        }
+
+        // Create the SnsNeuronRecipes based on the contribution of direct and NF participants
+        finalize_swap_response
+            .set_create_sns_neuron_recipes_result(self.create_sns_neuron_recipes());
+        if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
 
