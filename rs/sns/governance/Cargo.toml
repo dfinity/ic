@@ -18,6 +18,10 @@ path = "tests/governance.rs"
 name = "governance-interleaving-test"
 path = "tests/interleaving_tests.rs"
 
+[[test]]
+name = "proposal-test"
+path = "tests/proposal.rs"
+
 [dependencies]
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!
 build-info = { version = "0.0.26", default-features = false, features = [] }
@@ -43,6 +47,7 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-constants = { path = "../../nns/constants" }

@@ -320,6 +320,7 @@ type Operation = variant {
   IncreaseDissolveDelay : IncreaseDissolveDelay;
   SetDissolveTimestamp : SetDissolveTimestamp;
 };
+type Percentage = record { basis_points : opt nat64 };
 type Proposal = record {
   url : text;
   title : text;
@@ -332,6 +333,7 @@ type ProposalData = record {
   action : nat64;
   failure_reason : opt GovernanceError;
   ballots : vec record { text; Ballot };
+  minimum_yes_proportion_of_total : opt Percentage;
   reward_event_round : nat64;
   failed_timestamp_seconds : nat64;
   reward_event_end_timestamp_seconds : opt nat64;

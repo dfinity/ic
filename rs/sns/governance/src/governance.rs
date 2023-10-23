@@ -2999,6 +2999,9 @@ impl Governance {
                 wait_for_quiet_state: ProposalData::default().wait_for_quiet_state,
                 reward_event_end_timestamp_seconds: ProposalData::default()
                     .reward_event_end_timestamp_seconds,
+                minimum_yes_proportion_of_total: Some(
+                    NervousSystemParameters::MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER,
+                ),
             };
 
             proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -5811,15 +5814,16 @@ mod tests {
         /// `evaluate_wait_for_quiet` fire, and that the wait-for-quiet
         /// deadline is only ever increased, if at all.
         #[test]
-        fn test_evaluate_wait_for_quiet_doesnt_shorten_deadline(initial_voting_period_seconds in 3600u64..604_800,
-                                        wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
-                                        now_seconds in 0u64..1_000_000,
-                                        old_yes in 0u64..1_000_000,
-                                        old_no in 0u64..1_000_000,
-                                        old_total in 10_000_000u64..100_000_000,
-                                        yes_votes in 0u64..1_000_000,
-                                        no_votes in 0u64..1_000_000,
-    ) {
+        fn test_evaluate_wait_for_quiet_doesnt_shorten_deadline(
+            initial_voting_period_seconds in 3600u64..604_800,
+            wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
+            now_seconds in 0u64..1_000_000,
+            old_yes in 0u64..1_000_000,
+            old_no in 0u64..1_000_000,
+            old_total in 10_000_000u64..100_000_000,
+            yes_votes in 0u64..1_000_000,
+            no_votes in 0u64..1_000_000,
+        ) {
             let proposal_creation_timestamp_seconds = 0; // initial timestamp is always 0
             let mut proposal = ProposalData {
                 id: Some(ProposalId { id: 0 }),
@@ -5861,11 +5865,12 @@ mod tests {
         /// deadline is increased the correct amount when there is a flip
         /// at the end of a proposal's lifetime.
         #[test]
-        fn test_evaluate_wait_for_quiet_flip_at_end(initial_voting_period_seconds in 3600u64..604_800,
-                                        wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
-                                        no_votes in 0u64..1_000_000,
-                                        yes_votes_margin in 1u64..1_000_000,
-                                        total in 10_000_000u64..100_000_000,
+        fn test_evaluate_wait_for_quiet_flip_at_end(
+            initial_voting_period_seconds in 3600u64..604_800,
+            wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
+            no_votes in 0u64..1_000_000,
+            yes_votes_margin in 1u64..1_000_000,
+            total in 10_000_000u64..100_000_000,
     ) {
             let now_seconds = initial_voting_period_seconds;
             let mut proposal = ProposalData {
@@ -5907,12 +5912,13 @@ mod tests {
         /// deadline is increased the correct amount when there is a flip
         /// at any point during of a proposal's lifetime.
         #[test]
-        fn test_evaluate_wait_for_quiet_flip(initial_voting_period_seconds in 3600u64..604_800,
-                                        wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
-                                        no_votes in 0u64..1_000_000,
-                                        yes_votes_margin in 1u64..1_000_000,
-                                        total in 10_000_000u64..100_000_000,
-                                        time in 0f32..=1f32,
+        fn test_evaluate_wait_for_quiet_flip(
+            initial_voting_period_seconds in 3600u64..604_800,
+            wait_for_quiet_deadline_increase_seconds in 0u64..604_800,
+            no_votes in 0u64..1_000_000,
+            yes_votes_margin in 1u64..1_000_000,
+            total in 10_000_000u64..100_000_000,
+            time in 0f32..=1f32,
     ) {
             // To make the math easy, we'll do the same trick we did in the previous test, where increase the `adjusted_wait_for_quiet_deadline_increase_seconds`
             // by the smallest time where any flip in the vote will cause a deadline increase.

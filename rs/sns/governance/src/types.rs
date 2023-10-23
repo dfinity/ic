@@ -39,6 +39,7 @@ use ic_crypto_sha2::Sha256;
 use ic_ic00_types::CanisterInstallModeError;
 use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
+use ic_nervous_system_proto::pb::v1::Percentage;
 use maplit::btreemap;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -357,6 +358,14 @@ impl NervousSystemParameters {
         // Without this permission, it would be impossible to submit a proposal.
         NeuronPermissionType::SubmitProposal,
     ];
+
+    /// The proportion of "yes votes" as basis points of the total voting power
+    /// that is required for the proposal to be adopted. For example, if this field
+    /// is 300bp, then the proposal can only be adopted if the number of "yes
+    /// votes" is greater than or equal to 3% of the total voting power.
+    pub const MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER: Percentage = Percentage {
+        basis_points: Some(300),
+    };
 
     pub fn with_default_values() -> Self {
         Self {
