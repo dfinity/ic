@@ -7,8 +7,6 @@ use bitcoin::{
 use hex::FromHex;
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
-pub mod bitcoind;
-
 type BlockHeight = u32;
 
 /// This is a hex dump of the first block on the BTC network: 00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048
