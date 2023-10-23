@@ -290,6 +290,7 @@ def main():
             "--group=root:0",
             "--mtime=UTC 1970-01-01 00:00:00",
             "--sparse",
+            "--hole-detection=raw",
             "-C",
             tmpdir,
             "partition.img",
