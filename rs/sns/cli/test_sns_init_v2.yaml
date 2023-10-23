@@ -92,6 +92,9 @@ Swap:
     minimum_icp: 123 tokens
     maximum_icp: 65000 tokens
 
+    minimum_direct_participation_icp: 113 tokens
+    maximum_direct_participation_icp: 64990 tokens
+
     minimum_participant_icp: 650 tokens
     maximum_participant_icp: 6500 tokens
 
