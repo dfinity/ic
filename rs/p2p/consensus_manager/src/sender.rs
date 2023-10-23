@@ -52,7 +52,7 @@ pub fn get_backoff_policy() -> backoff::ExponentialBackoff {
 }
 
 pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
-    _log: ReplicaLogger,
+    log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
@@ -83,7 +83,7 @@ where
         let slot_manager = SlotManager::new(log.clone(), metrics.clone());
 
         let manager = Self {
-            _log: log,
+            log,
             metrics,
             rt_handle: rt_handle.clone(),
             pool_reader,
@@ -113,7 +113,7 @@ where
     fn handle_advert_to_send(&mut self, advert: ArtifactProcessorEvent<Artifact>) {
         self.current_commit_id.inc_assign();
         match advert {
-            ArtifactProcessorEvent::Advert(advert) => {
+            ArtifactProcessorEvent::Advert { advert, is_relay } => {
                 self.metrics.adverts_to_send_total.inc();
                 // Only send advert if it is not already being sent.
                 if !self.active_adverts.contains_key(&advert.id) {
@@ -124,12 +124,15 @@ where
                     self.active_adverts.insert(
                         advert.id.clone(),
                         (
-                            self.rt_handle.spawn(send_advert_to_all_peers(
+                            self.rt_handle.spawn(Self::send_advert_to_all_peers(
                                 self.rt_handle.clone(),
+                                self.log.clone(),
+                                self.metrics.clone(),
                                 self.transport.clone(),
                                 self.current_commit_id,
                                 slot,
                                 advert,
+                                is_relay,
                                 self.pool_reader.clone(),
                             )),
                             slot,
@@ -146,89 +149,94 @@ where
             }
         }
     }
-}
 
-/// Sends an advert to all peers.
-///
-/// Memory Consumption:
-/// - JoinMap: #peers * (32 + ~32)
-/// - HashMap: #peers * (32 + 8)
-/// - advert: ±200
-/// For 10k tasks ~50Mb
-async fn send_advert_to_all_peers<Artifact>(
-    rt_handle: Handle,
-    transport: Arc<dyn Transport>,
-    commit_id: CommitId,
-    slot_number: SlotNumber,
-    advert: Advert<Artifact>,
-    pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
-) where
-    Artifact: ArtifactKind + Serialize + for<'a> Deserialize<'a> + Send + 'static,
-    <Artifact as ArtifactKind>::Id: Serialize + for<'a> Deserialize<'a> + Clone + Send,
-    <Artifact as ArtifactKind>::Message: Serialize + for<'a> Deserialize<'a> + Send,
-    <Artifact as ArtifactKind>::Attribute: Serialize + for<'a> Deserialize<'a> + Send,
-{
-    let mut in_progress_transmissions = JoinMap::new();
-    // stores the connection ID of the last successful transmission to a peer.
-    let mut completed_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
-    let mut periodic_check_interval = time::interval(Duration::from_secs(5));
+    /// Sends an advert to all peers.
+    ///
+    /// Memory Consumption:
+    /// - JoinMap: #peers * (32 + ~32)
+    /// - HashMap: #peers * (32 + 8)
+    /// - advert: ±200
+    /// For 10k tasks ~50Mb
+    async fn send_advert_to_all_peers(
+        rt_handle: Handle,
+        log: ReplicaLogger,
+        metrics: ConsensusManagerMetrics,
+        transport: Arc<dyn Transport>,
+        commit_id: CommitId,
+        slot_number: SlotNumber,
+        advert: Advert<Artifact>,
+        is_relay: bool,
+        pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
+    ) {
+        // Try to push artifact if size below threshold && the artifact is not a relay.
+        let push_artifact =
+            ENABLE_ARTIFACT_PUSH && !is_relay && advert.size <= ARTIFACT_PUSH_THRESHOLD;
 
-    // Try to push artifact if size below threshold
-    let artifact = if advert.size <= ARTIFACT_PUSH_THRESHOLD && ENABLE_ARTIFACT_PUSH {
-        let id = advert.id.clone();
-        tokio::task::spawn_blocking(move || {
-            pool_reader.read().unwrap().get_validated_by_identifier(&id)
-        })
-        .await
-        .expect("Should not be cancelled")
-    } else {
-        None
-    };
+        let data = if push_artifact {
+            let id = advert.id.clone();
 
-    let advert_update = if let Some(artifact) = artifact {
-        AdvertUpdate {
-            slot_number,
-            commit_id,
-            data: Data::Artifact(artifact),
-        }
-    } else {
-        AdvertUpdate {
-            slot_number,
-            commit_id,
-            data: Data::Advert(advert),
-        }
-    };
+            let artifact = tokio::task::spawn_blocking(move || {
+                pool_reader.read().unwrap().get_validated_by_identifier(&id)
+            })
+            .await
+            .expect("Should not be cancelled");
 
-    let body: Bytes = bincode::serialize(&advert_update)
-        .expect("Serializing advert update")
-        .into();
-
-    loop {
-        select! {
-            _ = periodic_check_interval.tick() => {
-                // check for new peers/connection IDs
-                // spawn task for peers with higher conn id or not in completed transmissions.
-                // add task to join map
-                for (peer, connection_id) in transport.peers() {
-                    let is_completed = completed_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
-
-                    if !is_completed {
-                        let task = send_advert_to_peer(transport.clone(), connection_id, body.clone(), peer, Artifact::TAG.into());
-                        in_progress_transmissions.spawn_on(peer, task, &rt_handle);
-                    }
+            match artifact {
+                Some(artifact) => {
+                    metrics.artifacts_pushed_total.inc();
+                    Data::Artifact(artifact)
+                }
+                None => {
+                    warn!(log, "Attempted to push Artifact, but the Artifact was not found in the pool. Sending an advert instead.");
+                    Data::Advert(advert)
                 }
             }
-            Some(result) = in_progress_transmissions.join_next() => {
-                match result {
-                    Ok((connection_id, peer)) => {
-                        completed_transmissions.insert(peer, connection_id);
-                    },
-                    Err(err) => {
-                        // Cancelling tasks is ok. Panicking tasks are not.
-                        if err.is_panic() {
-                            std::panic::resume_unwind(err.into_panic());
+        } else {
+            Data::Advert(advert)
+        };
+
+        let advert_update = AdvertUpdate {
+            slot_number,
+            commit_id,
+            data,
+        };
+
+        let body: Bytes = bincode::serialize(&advert_update)
+            .expect("Serializing advert update")
+            .into();
+
+        let mut in_progress_transmissions = JoinMap::new();
+        // stores the connection ID of the last successful transmission to a peer.
+        let mut completed_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
+        let mut periodic_check_interval = time::interval(Duration::from_secs(5));
+
+        loop {
+            select! {
+                _ = periodic_check_interval.tick() => {
+                    // check for new peers/connection IDs
+                    // spawn task for peers with higher conn id or not in completed transmissions.
+                    // add task to join map
+                    for (peer, connection_id) in transport.peers() {
+                        let is_completed = completed_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
+
+                        if !is_completed {
+                            let task = send_advert_to_peer(transport.clone(), connection_id, body.clone(), peer, Artifact::TAG.into());
+                            in_progress_transmissions.spawn_on(peer, task, &rt_handle);
                         }
-                    },
+                    }
+                }
+                Some(result) = in_progress_transmissions.join_next() => {
+                    match result {
+                        Ok((connection_id, peer)) => {
+                            completed_transmissions.insert(peer, connection_id);
+                        },
+                        Err(err) => {
+                            // Cancelling tasks is ok. Panicking tasks are not.
+                            if err.is_panic() {
+                                std::panic::resume_unwind(err.into_panic());
+                            }
+                        },
+                    }
                 }
             }
         }
