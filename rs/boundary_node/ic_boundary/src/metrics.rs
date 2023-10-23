@@ -498,7 +498,7 @@ pub async fn metrics_middleware(
             status = status_code.as_u16(),
             subnet_id,
             node_id,
-            canister_id = canister_id.unwrap().to_string(),
+            canister_id = canister_id.map(|x| x.to_string()),
             canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
             sender,
             method_name = ctx.method_name,
