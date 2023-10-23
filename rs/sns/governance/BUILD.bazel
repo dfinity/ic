@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
@@ -225,6 +226,7 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**"]) + [
         ":protos",
+        "//rs/nervous_system/proto:protos",
         "//rs/protobuf:protos",
         "//rs/rosetta-api/icp_ledger:protos",
         "//rs/types/base_types:protos",
