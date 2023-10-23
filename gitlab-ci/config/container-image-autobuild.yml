@@ -37,7 +37,7 @@ container-autobuild-protected:
 
 container-autobuild:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
