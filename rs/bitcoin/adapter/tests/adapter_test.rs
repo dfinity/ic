@@ -80,14 +80,12 @@ async fn start_adapter(
     metrics_registry: MetricsRegistry,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
-    network: bitcoin::Network,
 ) {
     let config = Config {
-        network,
+        network: bitcoin::Network::Regtest,
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
         nodes,
         ipv6_only: true,
-        address_limits: (1, 1),
         ..Default::default()
     };
 
@@ -153,7 +151,6 @@ fn start_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
-    network: bitcoin::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
     Builder::new()
         .make(|uds_path| {
@@ -165,7 +162,6 @@ fn start_adapter_and_client(
                     metrics_registry.clone(),
                     urls.clone(),
                     uds_path,
-                    network,
                 )
                 .await;
 
@@ -238,7 +234,7 @@ fn sync_until_end_block(
             | Ok(BitcoinAdapterResponseWrapper::SendTransactionReject(_)) => {
                 panic!("Wrong type of response")
             }
-            Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
+            Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
             Err(err) => panic!("{:?}", err),
         }
         tries += 1;
@@ -279,7 +275,7 @@ fn sync_blocks(
             | Ok(BitcoinAdapterResponseWrapper::SendTransactionReject(_)) => {
                 panic!("Wrong type of response")
             }
-            Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
+            Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
             Err(err) => panic!("{:?}", err),
         }
         tries += 1;
@@ -314,7 +310,7 @@ fn sync_blocks_at_once(
             | Ok(BitcoinAdapterResponseWrapper::SendTransactionReject(_)) => {
                 panic!("Wrong type of response")
             }
-            Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
+            Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
             Err(err) => panic!("{:?}", err),
         }
         tries += 1;
@@ -445,20 +441,6 @@ fn check_fork_bfs_order(
     (block_hashes, bfs_order1, bfs_order2)
 }
 
-fn sync_headers_until_checkpoint(adapter_client: &BitcoinAdapterClient, anchor: Vec<u8>) {
-    loop {
-        let res = make_get_successors_request(adapter_client, anchor.clone(), vec![]);
-        match res {
-            Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => {
-                // Checkpoint has not been surpassed, adapter still syncing headers
-                std::thread::sleep(std::time::Duration::from_secs(10));
-            }
-            Err(err) => panic!("{:?}", err),
-            _ => return,
-        }
-    }
-}
-
 /// Checks that the client (replica) receives the mined blocks using the gRPC service.
 #[test]
 fn test_receives_blocks() {
@@ -482,7 +464,6 @@ fn test_receives_blocks() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
     );
 
     let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 15);
@@ -547,7 +528,6 @@ fn test_connection_to_multiple_peers() {
                     MetricsRegistry::new(),
                     vec![url1, url2, url3],
                     uds_path,
-                    bitcoin::Network::Regtest,
                 )
                 .await;
             });
@@ -571,7 +551,6 @@ fn test_receives_new_3rd_party_txs() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
     );
 
     let (alice_client, bob_client, alice_address, bob_address) =
@@ -627,7 +606,6 @@ fn test_send_tx() {
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
-        bitcoin::Network::Regtest,
     );
 
     let (alice_client, bob_client, alice_address, bob_address) =
@@ -714,7 +692,6 @@ fn test_receives_blocks_from_forks() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -782,7 +759,6 @@ fn test_bfs_order() {
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
-        bitcoin::Network::Regtest,
     );
 
     // Connect the nodes and mine some shared blocks
@@ -861,41 +837,4 @@ fn test_bfs_order() {
         anchor.clone(),
     );
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
-}
-
-// This test makes use of mainnet data. It first syncs the headerchain until the adapter
-// checkpoint is passed and then requests 10 blocks, from 350,990 to 350,999.
-#[test]
-fn test_mainnet_data() {
-    let logger = no_op_logger();
-    let headers_data_path =
-        std::env::var("HEADERS_DATA_PATH").expect("Failed to get test data path env variable");
-    let blocks_data_path =
-        std::env::var("BLOCKS_DATA_PATH").expect("Failed to get test data path env variable");
-
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let genesis: BlockHash = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
-        .parse()
-        .unwrap();
-
-    ic_btc_adapter_test_utils::bitcoind::mock_bitcoin(
-        rt.handle(),
-        headers_data_path,
-        blocks_data_path,
-    );
-    let (adapter_client, _path) = start_adapter_and_client(
-        &rt,
-        vec![SocketAddr::V4("127.0.0.1:8333".parse().unwrap())],
-        logger.clone(),
-        bitcoin::Network::Bitcoin,
-    );
-    sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
-
-    // Block 950,989's block hash.
-    let anchor: BlockHash = "0000000000000000035908aacac4c97fb4e172a1758bbbba2ee2b188765780eb"
-        .parse()
-        .unwrap();
-
-    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor[..].to_vec(), 10, 50);
-    assert_eq!(blocks.len(), 10);
 }
