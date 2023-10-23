@@ -36,7 +36,7 @@ use tokio::{
         watch,
     },
     task::JoinSet,
-    time,
+    time::{self, MissedTickBehavior},
 };
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
@@ -193,15 +193,16 @@ where
     }
 
     async fn start_event_loop(mut self) {
-        // Todo: set tick behavior to skip missed ticks
         let mut pfn_interval = time::interval(Duration::from_secs(1));
+        pfn_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             select! {
                 _ = pfn_interval.tick() => {
                     let pool = &self.raw_pool.read().unwrap();
                     let priority_fn = self.priority_fn_producer.get_priority_function(pool);
-
                     self.current_priority_fn.send_replace(priority_fn);
+
+                    pfn_interval.reset();
                 }
                 Some((advert_update, peer_id, conn_id)) = self.adverts_received.recv() => {
                     self.metrics.adverts_received_total.inc();
