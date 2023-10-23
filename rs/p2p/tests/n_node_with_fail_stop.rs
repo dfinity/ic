@@ -17,7 +17,7 @@ const MAX_HEIGHT: u64 = 3;
 /// `MAX_HEIGHT`.
 #[test]
 fn n_node_gossip_with_failstop() {
-    framework::spawn_replicas_as_threads(true, NUM_TEST_INSTANCES, |p2p_test_context| {
+    framework::spawn_replicas_as_threads(NUM_TEST_INSTANCES, |p2p_test_context| {
         std::println!("Node id: {}", p2p_test_context.node_id);
         // Every ith node fails where i = INVERSE_RATIO_FAILSTOP_NODES.
         if (p2p_test_context.node_num + 1) % INVERSE_RATIO_FAILSTOP_NODES == 0 {

@@ -33,7 +33,7 @@ use ic_https_outcalls_consensus::{
 use ic_icos_sev::Sev;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
+    artifact_manager::{ArtifactProcessorEvent, JoinGuard},
     artifact_pool::UnvalidatedArtifactEvent,
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
@@ -84,11 +84,6 @@ pub enum P2PStateSyncClient {
     Client(StateSync),
     /// The test client variant.
     TestClient(),
-    /// The test chunking pool variant.
-    TestChunkingPool(
-        Box<dyn ArtifactClient<TestArtifact>>,
-        Box<dyn ArtifactProcessor<TestArtifact> + Sync + 'static>,
-    ),
 }
 
 /// The collection of all artifact pools.
@@ -188,7 +183,7 @@ pub fn setup_consensus_and_p2p(
         canister_http_adapter_client,
         time_source.clone(),
     );
-    let mut ingress_sender = p2p_clients.ingress.sender.clone();
+    let ingress_sender = p2p_clients.ingress.sender.clone();
     // P2P stack follows
 
     let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
@@ -208,32 +203,6 @@ pub fn setup_consensus_and_p2p(
 
     // StateSync
     let (state_sync_router, state_sync_client) = match state_sync_client {
-        P2PStateSyncClient::TestChunkingPool(pool_reader, client_on_state_change) => {
-            std::mem::take(&mut backends);
-            std::mem::take(&mut join_handles);
-            let (ingress_tx, _r) = crossbeam_channel::unbounded();
-            ingress_sender = ingress_tx;
-            let (jh, sender) = run_artifact_processor(
-                Arc::clone(&time_source) as Arc<_>,
-                metrics_registry.clone(),
-                client_on_state_change,
-                move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
-                    }
-                },
-            );
-            join_handles.push(jh);
-            backends.insert(
-                TestArtifact::TAG,
-                Box::new(ArtifactClientHandle {
-                    pool_reader,
-                    sender,
-                    time_source,
-                }),
-            );
-            (None, None)
-        }
         P2PStateSyncClient::Client(client) if ENABLE_NEW_STATE_SYNC => {
             let state_sync_client = Arc::new(client);
             let (router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
