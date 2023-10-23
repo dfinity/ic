@@ -235,9 +235,11 @@ impl ValidationInProgress {
             KnownNeuronIndexValidator,
         >::new()));
 
-        tasks.push_back(Box::new(NeuronCopyValidator::new(
-            INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
-        )));
+        if crate::is_copy_inactive_neurons_to_stable_memory_enabled() {
+            tasks.push_back(Box::new(NeuronCopyValidator::new(
+                INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
+            )));
+        }
 
         Self {
             started_time_seconds: now,
