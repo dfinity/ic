@@ -386,7 +386,12 @@ fn two_log_scrappings_should_not_overlap() {
 
     tick_until_next_http_request(&cketh.env, "eth_getLogs");
     let (from_block, to_block) = cketh.get_scrap_logs_range();
-    assert_ne!(first_to_block, from_block);
+    assert_eq!(
+        from_block,
+        first_to_block
+            .checked_add(BlockNumber::from(1_u64))
+            .unwrap()
+    );
     assert_eq!(
         to_block,
         from_block.checked_add(BlockNumber::from(1024_u64)).unwrap()
