@@ -86,7 +86,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
     info!(
-        msg = format!("Starting ic-boundary"),
+        msg = format!("Starting {SERVICE_NAME}"),
         metrics_addr = cli.monitoring.metrics_addr.to_string().as_str(),
     );
 
@@ -115,11 +115,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(cli.listen.http_timeout))
         .connect_timeout(Duration::from_secs(cli.listen.http_timeout_connect))
-        .pool_idle_timeout(Some(Duration::from_secs(20))) // After this duration the idle connection is closed (default 90s)
+        .pool_idle_timeout(Some(Duration::from_secs(10))) // After this duration the idle connection is closed (default 90s)
         .http2_keep_alive_interval(Some(keepalive)) // Keepalive interval for http2 connections
-        .http2_keep_alive_timeout(Duration::from_secs(5)) // Close connection if no reply after timeout
+        .http2_keep_alive_timeout(Duration::from_secs(3)) // Close connection if no reply after timeout
         .http2_keep_alive_while_idle(true) // Also ping connections that have no streams open
         .tcp_keepalive(Some(keepalive)) // Enable TCP keepalives
+        .user_agent(SERVICE_NAME)
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
         .use_preconfigured_tls(rustls_config)
         .dns_resolver(Arc::new(dns_resolver))
         .build()
