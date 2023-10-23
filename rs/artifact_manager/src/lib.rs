@@ -300,7 +300,10 @@ fn process_messages<
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
         for advert in adverts {
             metrics.outbound_artifact_bytes.observe(advert.size as f64);
-            send_advert(ArtifactProcessorEvent::Advert(advert));
+            send_advert(ArtifactProcessorEvent::Advert {
+                advert,
+                is_relay: false,
+            });
         }
         last_on_state_change_result = poll_immediately;
     }
