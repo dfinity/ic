@@ -55,6 +55,7 @@ def main():
         + COMPRESSOR_PROGRAMS[compression]
         + [
             "--sparse",
+            "--hole-detection=raw",
             "-C",
             tmpdir,
             ".",
