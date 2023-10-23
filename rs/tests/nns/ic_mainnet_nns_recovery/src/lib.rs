@@ -12,6 +12,7 @@ use candid::CandidType;
 use canister_test::Canister;
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use dfn_candid::candid_one;
+use flate2::read::GzDecoder;
 use ic_canister_client::Sender;
 use ic_canister_client_sender::{Ed25519KeyPair, SigKeys};
 use ic_nervous_system_common::E8;
@@ -23,11 +24,6 @@ use ic_recovery::nns_recovery_failover_nodes::{
 };
 use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
-use ic_replay::cmd::{
-    ClapSubnetId, ReplayToolArgs, SubCommand, WithLedgerAccountCmd,
-    WithTrustedNeuronsFollowingNeuronCmd,
-};
-use ic_replay::replay;
 use ic_sns_wasm::pb::v1::{
     GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateAllowedPrincipalsRequest,
     UpdateSnsSubnetListRequest,
@@ -63,12 +59,15 @@ use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use std::fs;
 use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
 use std::net::IpAddr;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Output};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
@@ -87,6 +86,7 @@ const RECOVERY_WORKING_DIR: &str = "recovery/working_dir";
 const IC_CONFIG_DESTINATION: &str = "recovery/working_dir/ic.json5";
 const NNS_STATE_DIR_PATH: &str = "recovery/working_dir/data";
 const NNS_STATE_BACKUP_TARBALL_PATH: &str = "nns_state.tar.zst";
+const IC_REPLAY: &str = "ic-replay";
 
 /// Path to temporarily store a tarball of the IC registry local store.
 /// This tarball will be created on the recovered NNS node and scp-ed from it.
@@ -209,6 +209,12 @@ fn setup_recovered_nns(
     rx_aux_node: Receiver<DeployedUniversalVm>,
 ) {
     let logger = env.logger();
+
+    let env_clone = env.clone();
+    let fetch_mainnet_ic_replay_thread = std::thread::spawn(move || {
+        fetch_mainnet_ic_replay(env_clone);
+    });
+
     fetch_nns_state_from_backup_pod(env.clone());
 
     let topology = rx_topology.recv().unwrap();
@@ -226,6 +232,10 @@ fn setup_recovered_nns(
     // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
     let recovery_dir = env.get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
+
+    fetch_mainnet_ic_replay_thread
+        .join()
+        .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-replay because {e:?}"));
 
     let neuron_id: NeuronId = prepare_nns_state(env.clone(), account_id);
 
@@ -530,26 +540,20 @@ fn fetch_ic_config(env: TestEnv, nns_node: IcNodeSnapshot) {
     );
 }
 
-fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
+fn ic_replay(env: TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output {
     let logger: slog::Logger = env.logger();
-    let ic_config_file = env.get_path(IC_CONFIG_DESTINATION);
-    let nns_state_dir = env.get_path(NNS_STATE_DIR_PATH);
-    let controller = PrincipalId::from_str(CONTROLLER).unwrap();
+    let ic_replay_path = env.get_path(IC_REPLAY);
     let subnet_id = SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap());
-    let clap_subnet_id = ClapSubnetId(subnet_id);
+    let nns_state_dir = env.get_path(NNS_STATE_DIR_PATH);
+    let ic_config_file = env.get_path(IC_CONFIG_DESTINATION);
 
-    info!(logger, "Create a neuron followed by trusted neurons ...");
-    let neuron_stake_e8s: u64 = 1_000_000_000 * E8;
-    let ic_replay_path = env.get_dependency_path("rs/replay/ic-replay");
     let mut cmd = Command::new(ic_replay_path);
     cmd.arg("--subnet-id")
         .arg(subnet_id.to_string())
         .arg("--data-root")
         .arg(nns_state_dir.clone())
-        .arg(ic_config_file.clone())
-        .arg("with-neuron-for-tests")
-        .arg(controller.to_string())
-        .arg(neuron_stake_e8s.to_string());
+        .arg(ic_config_file.clone());
+    mutate_cmd(&mut cmd);
     info!(logger, "{cmd:?} ...");
     let ic_replay_out = cmd.output().expect("Failed to run {cmd:?}");
     if !ic_replay_out.status.success() {
@@ -557,6 +561,21 @@ fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
         std::io::stderr().write_all(&ic_replay_out.stderr).unwrap();
         panic!("Failed to run {cmd:?}!");
     }
+    ic_replay_out
+}
+
+fn with_neuron_for_tests(env: TestEnv) -> NeuronId {
+    let logger: slog::Logger = env.logger();
+    let controller = PrincipalId::from_str(CONTROLLER).unwrap();
+
+    info!(logger, "Create a neuron followed by trusted neurons ...");
+    let neuron_stake_e8s: u64 = 1_000_000_000 * E8;
+    let ic_replay_out = ic_replay(env, |cmd| {
+        cmd.arg("with-neuron-for-tests")
+            .arg(controller.to_string())
+            .arg(neuron_stake_e8s.to_string());
+    });
+
     let prefix = "neuron_id=";
     let neuron_id = match std::str::from_utf8(&ic_replay_out.stdout)
         .unwrap()
@@ -572,57 +591,80 @@ fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
         _ => panic!("Line didn't start with \"neuron_id=\"!"),
     };
     info!(logger, "Created neuron with id {neuron_id:?}");
+    neuron_id
+}
 
-    /*
-    TODO: replace the above using the ic-replay library:
-    replay(ReplayToolArgs {
-        config: Some(ic_config_file),
-        canister_caller_id: None,
-        subcmd: Some(SubCommand::WithNeuronForTests(WithNeuronCmd {
-            neuron_controller: controller,
-            neuron_stake_e8s: neuron_stake_e8s,
-        })),
-        subnet_id: Some(clap_subnet_id),
-        data_root: Some(nns_state_dir),
-        replay_until_height: None,
-    })
-    .unwrap();
-    */
-
+fn with_trusted_neurons_following_neuron_for_tests(env: TestEnv, neuron_id: NeuronId) {
     let NeuronId(id) = neuron_id;
-    replay(ReplayToolArgs {
-        config: Some(ic_config_file.clone()),
-        canister_caller_id: None,
-        subcmd: Some(SubCommand::WithTrustedNeuronsFollowingNeuronForTests(
-            WithTrustedNeuronsFollowingNeuronCmd {
-                neuron_id: id,
-                neuron_controller: controller,
-            },
-        )),
-        subnet_id: Some(clap_subnet_id),
-        data_root: Some(nns_state_dir.clone()),
-        replay_until_height: None,
-    })
-    .unwrap();
+    let controller = PrincipalId::from_str(CONTROLLER).unwrap();
+    ic_replay(env, |cmd| {
+        cmd.arg("with-trusted-neurons-following-neuron-for-tests")
+            .arg(id.to_string())
+            .arg(controller.to_string());
+    });
+}
 
+fn with_ledger_account_for_tests(env: TestEnv, account_id: AccountIdentifier) {
+    let logger: slog::Logger = env.logger();
     info!(logger, "Giving our principal 1 million ICP ...");
-    let clap_subnet_id = ClapSubnetId(subnet_id);
-    replay(ReplayToolArgs {
-        config: Some(ic_config_file),
-        canister_caller_id: None,
-        subcmd: Some(SubCommand::WithLedgerAccountForTests(
-            WithLedgerAccountCmd {
-                account_identifier: account_id,
-                e8s_to_mint: 1_000_000 * E8,
-            },
-        )),
-        subnet_id: Some(clap_subnet_id),
-        data_root: Some(nns_state_dir),
-        replay_until_height: None,
-    })
-    .unwrap();
+    ic_replay(env, |cmd| {
+        cmd.arg("with-ledger-account-for-tests")
+            .arg(account_id.to_string())
+            .arg((1_000_000 * E8).to_string());
+    });
     info!(logger, "Our principal now has 1 million ICP");
+}
 
+fn fetch_mainnet_ic_replay(env: TestEnv) {
+    let logger = env.logger();
+    let version = env
+        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+        .unwrap();
+    let mainnet_ic_replica_url =
+        format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
+    let ic_replay_path = env.get_path(IC_REPLAY);
+    let ic_replay_gz_path = env.get_path("ic-replay.gz");
+    // let mut tmp_file = tempfile::tempfile().unwrap();
+    info!(
+        logger,
+        "Downloading {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?} ..."
+    );
+    let response = reqwest::blocking::get(mainnet_ic_replica_url.clone())
+        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_replica_url:?} because {e:?}"));
+    if !response.status().is_success() {
+        panic!("Failed to download {mainnet_ic_replica_url}");
+    }
+    let bytes = response.bytes().unwrap();
+    let mut content = Cursor::new(bytes);
+    let mut ic_replay_gz_file = File::create(ic_replay_gz_path.clone()).unwrap();
+    std::io::copy(&mut content, &mut ic_replay_gz_file).unwrap_or_else(|e| {
+        panic!("Can't copy {mainnet_ic_replica_url} to {ic_replay_gz_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Downloaded {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?}. Uncompressing to {ic_replay_path:?} ..."
+    );
+    let ic_replay_gz_file = File::open(ic_replay_gz_path.clone()).unwrap();
+    let mut gz = GzDecoder::new(&ic_replay_gz_file);
+    let mut ic_replay_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .mode(0o755)
+        .open(ic_replay_path.clone())
+        .unwrap();
+    std::io::copy(&mut gz, &mut ic_replay_file).unwrap_or_else(|e| {
+        panic!("Can't uncompress {ic_replay_gz_path:?} to {ic_replay_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Uncompressed {ic_replay_gz_path:?} to {ic_replay_path:?}"
+    );
+}
+
+fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
+    let neuron_id = with_neuron_for_tests(env.clone());
+    with_trusted_neurons_following_neuron_for_tests(env.clone(), neuron_id);
+    with_ledger_account_for_tests(env.clone(), account_id);
     neuron_id
 }
 
