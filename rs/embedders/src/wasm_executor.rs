@@ -780,7 +780,7 @@ pub fn get_initial_globals_and_memory(
     };
 
     Ok((
-        instance.get_exported_globals(),
+        instance.get_exported_globals()?,
         wasm_memory_delta,
         instance.heap_size(CanisterMemoryType::Heap),
     ))

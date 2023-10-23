@@ -949,7 +949,7 @@ impl WasmtimeInstance {
 
         match result {
             Ok(_) => Ok(InstanceRunResult {
-                exported_globals: self.get_exported_globals(),
+                exported_globals: self.get_exported_globals()?,
                 dirty_pages: access.dirty_pages,
                 stable_memory_dirty_pages,
             }),
@@ -1110,7 +1110,7 @@ impl WasmtimeInstance {
     }
 
     /// Returns a list of exported globals.
-    pub fn get_exported_globals(&mut self) -> Vec<Global> {
+    pub fn get_exported_globals(&mut self) -> HypervisorResult<Vec<Global>> {
         let globals = get_exported_globals(
             self.wasm_native_stable_memory,
             &self.instance,
@@ -1120,11 +1120,21 @@ impl WasmtimeInstance {
         globals
             .iter()
             .map(|g| match g.ty(&self.store).content() {
-                ValType::I32 => Global::I32(g.get(&mut self.store).i32().expect("global i32")),
-                ValType::I64 => Global::I64(g.get(&mut self.store).i64().expect("global i64")),
-                ValType::F32 => Global::F32(g.get(&mut self.store).f32().expect("global f32")),
-                ValType::F64 => Global::F64(g.get(&mut self.store).f64().expect("global f64")),
-                _ => panic!("unexpected global value type"),
+                ValType::I32 => Ok(Global::I32(
+                    g.get(&mut self.store).i32().expect("global i32"),
+                )),
+                ValType::I64 => Ok(Global::I64(
+                    g.get(&mut self.store).i64().expect("global i64"),
+                )),
+                ValType::F32 => Ok(Global::F32(
+                    g.get(&mut self.store).f32().expect("global f32"),
+                )),
+                ValType::F64 => Ok(Global::F64(
+                    g.get(&mut self.store).f64().expect("global f64"),
+                )),
+                _ => Err(HypervisorError::WasmEngineError(WasmEngineError::Other(
+                    "unexpected global value type".to_string(),
+                ))),
             })
             .collect()
     }
