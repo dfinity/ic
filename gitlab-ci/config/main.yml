@@ -1,6 +1,6 @@
 no-interrupt:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
   interruptible: False
@@ -783,7 +783,7 @@ build-determinism-release:
 
 test-push-branch:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       when: on_success
@@ -802,7 +802,7 @@ test-push-branch:
 
 cut-release-candidate:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"'
   dependencies: []  # don't copy artifacts from other jobs
@@ -877,7 +877,7 @@ release-boundary-node-service-worker:
 
 notify-gitlab-success:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     # Run on schedule pipelines as several Honeycomb alert rules rely on this.
     # TODO(IDX-2856): Disable when alerts will be send from superset.
@@ -906,7 +906,7 @@ notify-gitlab-success:
 
 notify-gitlab-failure:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     # Send a slack alert on rc--* pipeline failures.
     # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
