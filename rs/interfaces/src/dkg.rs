@@ -1,16 +1,10 @@
 //! The DKG public interface.
 use ic_types::{consensus::dkg, Height};
-use std::time::Duration;
 
 /// The DkgPool is used to store messages that are exchanged between nodes in
 /// the process of executing dkg.
 pub trait DkgPool: Send + Sync {
     fn get_validated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_>;
-    /// Returns the validated entries older than the age threshold
-    fn get_validated_older_than(
-        &self,
-        age_threshold: Duration,
-    ) -> Box<dyn Iterator<Item = &dkg::Message> + '_>;
     fn get_unvalidated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_>;
     /// The start height of the currently _computed_ DKG interval; the invariant
     /// we want to maintain for all messages in validated and unvalidated

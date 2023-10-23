@@ -3,30 +3,22 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
-    },
+    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     dkg::{ChangeAction, ChangeSet, DkgPool},
     time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::ArtifactKind,
-    artifact_kind::DkgArtifact,
-    consensus,
-    consensus::dkg,
-    consensus::dkg::DkgMessageId,
-    time::{current_time, Time},
-    Height,
+    artifact::ArtifactKind, artifact_kind::DkgArtifact, consensus, consensus::dkg,
+    consensus::dkg::DkgMessageId, Height,
 };
 use prometheus::IntCounter;
-use std::time::Duration;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
 /// the process of executing DKG.
 pub struct DkgPoolImpl {
-    validated: PoolSection<DkgMessageId, ValidatedArtifact<dkg::Message>>,
+    validated: PoolSection<DkgMessageId, dkg::Message>,
     unvalidated: PoolSection<DkgMessageId, UnvalidatedArtifact<dkg::Message>>,
     invalidated_artifacts: IntCounter,
     current_start_height: Height,
@@ -55,7 +47,6 @@ impl DkgPoolImpl {
     pub fn get(&self, id: &DkgMessageId) -> Option<&dkg::Message> {
         self.validated
             .get(id)
-            .map(|artifact| artifact.as_ref())
             .or_else(|| self.unvalidated.get(id).map(|pa| &pa.message))
     }
 
@@ -85,16 +76,6 @@ impl DkgPoolImpl {
             self.validated.remove(hash);
         }
         validated_keys
-    }
-
-    /// Returns the validated entries that have creation timestamp <= timestamp
-    fn entries_older_than(&self, timestamp: Time) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
-        Box::new(
-            self.validated
-                .values()
-                .filter(move |artifact| artifact.timestamp <= timestamp)
-                .map(|artifact| artifact.as_ref()),
-        )
     }
 }
 
@@ -136,13 +117,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
                 }
                 ChangeAction::AddToValidated(message) => {
                     adverts.push(DkgArtifact::message_to_advert(&message));
-                    self.validated.insert(
-                        DkgMessageId::from(&message),
-                        ValidatedArtifact {
-                            msg: message,
-                            timestamp: current_time(),
-                        },
-                    );
+                    self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
                     adverts.push(DkgArtifact::message_to_advert(&message));
@@ -150,13 +125,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
                     self.unvalidated
                         .remove(&id)
                         .expect("Unvalidated artifact was not found.");
-                    self.validated.insert(
-                        id,
-                        ValidatedArtifact {
-                            msg: message,
-                            timestamp: current_time(),
-                        },
-                    );
+                    self.validated.insert(id, message);
                 }
                 ChangeAction::RemoveFromUnvalidated(message) => {
                     let id = DkgMessageId::from(&message);
@@ -181,10 +150,7 @@ impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
     }
 
     fn get_validated_by_identifier(&self, id: &DkgMessageId) -> Option<dkg::Message> {
-        self.validated
-            .get(id)
-            .map(|artifact| artifact.as_ref())
-            .cloned()
+        self.validated.get(id).cloned()
     }
 
     fn get_all_validated_by_filter(
@@ -197,14 +163,7 @@ impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
 
 impl DkgPool for DkgPoolImpl {
     fn get_validated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
-        Box::new(self.validated.values().map(|artifact| artifact.as_ref()))
-    }
-
-    fn get_validated_older_than(
-        &self,
-        age_threshold: Duration,
-    ) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
-        self.entries_older_than(current_time().saturating_sub_duration(age_threshold))
+        Box::new(self.validated.values())
     }
 
     fn get_unvalidated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
@@ -240,7 +199,6 @@ mod test {
         signature::BasicSignature,
         NodeId,
     };
-    use std::ops::Add;
 
     fn make_message(start_height: Height, node_id: NodeId) -> dkg::Message {
         let dkg_id = NiDkgId {
@@ -337,72 +295,21 @@ mod test {
     #[test]
     fn test_dkg_pool_filter_by_age() {
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-        let now = current_time();
 
         // 200 sec old
         let msg = make_message(Height::from(1), node_test_id(1));
-        pool.validated.insert(
-            DkgMessageId::from(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.saturating_sub_duration(Duration::from_secs(200)),
-            },
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
 
         // 100 sec old
         let msg = make_message(Height::from(2), node_test_id(2));
-        pool.validated.insert(
-            DkgMessageId::from(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.saturating_sub_duration(Duration::from_secs(100)),
-            },
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
 
         // 50 sec old
         let msg = make_message(Height::from(3), node_test_id(3));
-        pool.validated.insert(
-            DkgMessageId::from(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.saturating_sub_duration(Duration::from_secs(50)),
-            },
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
 
         // In future
         let msg = make_message(Height::from(4), node_test_id(4));
-        pool.validated.insert(
-            DkgMessageId::from(&msg),
-            ValidatedArtifact {
-                msg,
-                timestamp: now.add(Duration::from_secs(50)),
-            },
-        );
-
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(300)))
-                .count(),
-            0
-        );
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(150)))
-                .count(),
-            1
-        );
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(75)))
-                .count(),
-            2
-        );
-        assert_eq!(
-            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(50)))
-                .count(),
-            3
-        );
-        assert_eq!(
-            pool.entries_older_than(now.add(Duration::from_secs(500)))
-                .count(),
-            4
-        );
+        pool.validated.insert(DkgMessageId::from(&msg), msg);
     }
 }

@@ -510,7 +510,6 @@ pub fn create_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
-    dealing_age_threshold_ms: u64,
 ) -> Result<dkg::Payload, TransientError> {
     let height = parent.height.increment();
     // Get the last summary from the chain.
@@ -541,13 +540,12 @@ pub fn create_payload(
 
     // Get all dealer ids from the chain.
     let dealers_from_chain = get_dealers_from_chain(pool_reader, parent);
-    let age_threshold = Duration::from_millis(dealing_age_threshold_ms);
     // Filter from the validated pool all dealings whose dealer has no dealing on
     // the chain yet.
     let new_validated_dealings = dkg_pool
         .read()
         .expect("Couldn't lock DKG pool for reading.")
-        .get_validated_older_than(age_threshold)
+        .get_validated()
         .filter(|msg| {
             // Make sure the message relates to one of the ongoing DKGs.
             last_dkg_summary.configs.contains_key(&msg.content.dkg_id) &&

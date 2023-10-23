@@ -150,7 +150,6 @@ fn dkg_payload_builder_fn(
             validation_context,
             no_op_logger(),
             10, // at most dealings per block
-            0,  // dealings age in secs
         )
         .unwrap_or_else(|err| panic!("Couldn't create the payload: {:?}", err))
     })
