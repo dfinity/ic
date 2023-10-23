@@ -2627,6 +2627,7 @@ dependencies = [
  "debug_stub_derive",
  "derive_more 0.99.8-alpha.0",
  "digest 0.9.0",
+ "dyn-clone",
  "ed25519-consensus",
  "educe",
  "either",
@@ -2985,6 +2986,12 @@ name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23d2f3407d9a573d666de4b5bdf10569d73ca9478087346697dcbae6244bfbcd"
 
 [[package]]
 name = "ecdsa"

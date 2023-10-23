@@ -1,5 +1,5 @@
 {
-  "checksum": "3a8f090c1d61ee9fe7ff2ab37ffbd92e538890c8f4fc704500ec0775dd2d37bf",
+  "checksum": "cb0afd422bd630e3ce5b98f253ca59d68f58f53515544cb1b3ee11e652b76cb7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13427,6 +13427,10 @@
               "target": "digest"
             },
             {
+              "id": "dyn-clone 1.0.14",
+              "target": "dyn_clone"
+            },
+            {
               "id": "ed25519-consensus 2.1.0",
               "target": "ed25519_consensus"
             },
@@ -14996,6 +15000,36 @@
         "version": "0.11.0"
       },
       "license": "MIT"
+    },
+    "dyn-clone 1.0.14": {
+      "name": "dyn-clone",
+      "version": "1.0.14",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/dyn-clone/1.0.14/download",
+          "sha256": "23d2f3407d9a573d666de4b5bdf10569d73ca9478087346697dcbae6244bfbcd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dyn_clone",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "dyn_clone",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.0.14"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "ecdsa 0.16.8": {
       "name": "ecdsa",
