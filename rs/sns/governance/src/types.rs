@@ -1796,7 +1796,7 @@ impl ClaimSwapNeuronsResponse {
         }
     }
 
-    pub(crate) fn new(swap_neurons: Vec<SwapNeuron>) -> Self {
+    pub fn new(swap_neurons: Vec<SwapNeuron>) -> Self {
         ClaimSwapNeuronsResponse {
             claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
                 swap_neurons,

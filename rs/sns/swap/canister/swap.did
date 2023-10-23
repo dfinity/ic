@@ -54,6 +54,7 @@ type FailedUpdate = record {
 };
 type FinalizeSwapResponse = record {
   set_dapp_controllers_call_result : opt SetDappControllersCallResult;
+  create_sns_neuron_recipes_result : opt SweepResult;
   settle_community_fund_participation_result : opt SettleCommunityFundParticipationResult;
   error_message : opt text;
   set_mode_call_result : opt SetModeCallResult;
