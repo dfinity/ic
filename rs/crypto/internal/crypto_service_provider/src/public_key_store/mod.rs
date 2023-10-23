@@ -111,8 +111,7 @@ pub trait PublicKeyStore: Send + Sync {
         oldest_public_key_to_keep: &PublicKeyProto,
     ) -> Result<bool, PublicKeyRetainError>;
 
-    /// Checks to see if a call to `retain_most_recent_idkg_public_keys_up_to_inclusive` would
-    /// modify the keystore.
+    /// Checks to see if a call to `retain_idkg_public_keys_since` would modify the keystore.
     ///
     /// Returns `true` if the keystore would be modified, `false` otherwise.
     ///
