@@ -152,8 +152,11 @@ fn test_parse() {
         swap: Swap {
             minimum_participants: 50,
 
-            minimum_icp: nervous_system_pb::Tokens::from_e8s(12_300_000_000),
+            minimum_icp: nervous_system_pb::Tokens::from_tokens(123),
             maximum_icp: nervous_system_pb::Tokens::from_tokens(65000),
+
+            minimum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(113)),
+            maximum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(64990)),
 
             minimum_participant_icp: nervous_system_pb::Tokens::from_tokens(650),
             maximum_participant_icp: nervous_system_pb::Tokens::from_tokens(6500),
