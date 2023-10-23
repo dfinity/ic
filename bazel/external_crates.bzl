@@ -336,6 +336,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "digest": crate.spec(
                 version = "^0.9.0",
             ),
+            "dyn-clone": crate.spec(
+                version = "^1.0.14",
+            ),
             "ed25519-consensus": crate.spec(
                 version = "^2.0.1",
             ),

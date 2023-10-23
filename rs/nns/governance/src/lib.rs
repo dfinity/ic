@@ -120,6 +120,8 @@
 //! without need for a quorum of voting power to participate, and it
 //! can also always decide upon proposals in a timely manner.
 
+use mockall::automock;
+
 mod audit_event;
 /// The 'governance' module contains the canister (smart contract)
 /// that manages neurons, proposals, voting, voter following, voting
@@ -147,7 +149,54 @@ mod subaccount_index;
 
 use std::{collections::HashMap, io};
 
-use crate::governance::Governance;
+use crate::governance::{Governance, TimeWarp};
+
+#[automock]
+trait Clock {
+    fn now(&self) -> u64;
+    fn set_time_warp(&mut self, new_time_warp: TimeWarp);
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct IcClock {
+    time_warp: TimeWarp,
+}
+
+impl IcClock {
+    fn new() -> Self {
+        let time_warp = TimeWarp { delta_s: 0 };
+
+        Self { time_warp }
+    }
+}
+
+impl Clock for IcClock {
+    fn now(&self) -> u64 {
+        // Step 1: Read the real time.
+        let real_timestamp_seconds = dfn_core::api::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .expect("IcClock malfunctioned.")
+            .as_secs();
+
+        // Step 2: Apply time warp.
+        let TimeWarp { delta_s } = self.time_warp;
+        let modified_timestamp_seconds = i64::try_from(real_timestamp_seconds)
+            .expect("Timestamp does not fit in i64.")
+            .saturating_add(delta_s);
+
+        // Step 3: Convert back to u64.
+        u64::try_from(modified_timestamp_seconds).unwrap_or_else(|err| {
+            panic!(
+                "Timestamp no longer fits in u64 {} + {}. err: {}",
+                real_timestamp_seconds, delta_s, err,
+            );
+        })
+    }
+
+    fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
+        self.time_warp = new_time_warp;
+    }
+}
 
 trait Metric {
     fn into(self) -> f64;

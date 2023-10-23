@@ -1,7 +1,10 @@
 use super::*;
 use crate::{
     governance::{Governance, MockEnvironment},
-    pb::v1::{neuron::Followees, Governance as GovernanceProto},
+    pb::v1::{
+        neuron::{DissolveState, Followees},
+        Governance as GovernanceProto,
+    },
 };
 use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger};
 use maplit::{btreemap, hashmap, hashset};
@@ -245,13 +248,9 @@ fn test_modify_neuron_after_indexes_migration() {
     );
 
     neuron_store
-        .with_neuron_mut(
-            &neuron.id.unwrap(),
-            |_| false,
-            |neuron| {
-                neuron.controller = Some(PrincipalId::new_user_test_id(2));
-            },
-        )
+        .with_neuron_mut(&neuron.id.unwrap(), |neuron| {
+            neuron.controller = Some(PrincipalId::new_user_test_id(2));
+        })
         .unwrap();
 
     let neuron_ids_found_by_new_controller = NEURON_INDEXES.with(|indexes| {
@@ -415,13 +414,9 @@ fn test_modify_neuron_during_indexes_migration() {
     let new_principal_id =
         PrincipalId::new_user_test_id(NEURON_INDEXES_MIGRATION_BATCH_SIZE as u64 * 2);
     neuron_store
-        .with_neuron_mut(
-            &neuron_id,
-            |_| false,
-            |neuron| {
-                neuron.controller = Some(new_principal_id);
-            },
-        )
+        .with_neuron_mut(&neuron_id, |neuron| {
+            neuron.controller = Some(new_principal_id);
+        })
         .unwrap();
 
     // Step 4: assert that the principal index has not picked up the neuron.
@@ -588,11 +583,16 @@ fn test_heap_range_with_begin_and_limit() {
 #[test]
 fn test_with_neuron_mut_inactive_neuron() {
     // Step 1: Prepare the world.
+    let now = u64::MAX;
 
     // Step 1.1: The main characters: a couple of Neurons, one active, the other inactive.
     let funded_neuron = Neuron {
         id: Some(NeuronId { id: 42 }),
         cached_neuron_stake_e8s: 1, // Funded. Thus, no stable memory.
+
+        // This is in the "(sufficiently) distant past" to not be ruled out from being "inactive".
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
+
         ..Default::default()
     };
     let funded_neuron_id = funded_neuron.id.unwrap();
@@ -600,20 +600,18 @@ fn test_with_neuron_mut_inactive_neuron() {
     let unfunded_neuron = Neuron {
         id: Some(NeuronId { id: 777 }),
         cached_neuron_stake_e8s: 0, // Unfunded. Thus, should be copied to stable memory.
+
+        // This is in the "(sufficiently) distant past" to not be ruled out from being "inactive".
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
+
         ..Default::default()
     };
     let unfunded_neuron_id = unfunded_neuron.id.unwrap();
 
     // Make sure our test data is correct. Here, we use dummy values for proposals and
     // in_flight_commands.
-    {
-        let proposals = Default::default();
-        let in_flight_commands = Default::default();
-        let is_neuron_inactive =
-            |neuron: &Neuron| neuron.is_inactive(&proposals, &in_flight_commands);
-        assert!(is_neuron_inactive(&unfunded_neuron), "{:#?}", funded_neuron);
-        assert!(!is_neuron_inactive(&funded_neuron), "{:#?}", funded_neuron);
-    }
+    assert!(unfunded_neuron.is_inactive(now), "{:#?}", unfunded_neuron);
+    assert!(!funded_neuron.is_inactive(now), "{:#?}", funded_neuron);
 
     // Step 1.2: Construct collaborators of Governance, and Governance itself.
     let mut governance = {

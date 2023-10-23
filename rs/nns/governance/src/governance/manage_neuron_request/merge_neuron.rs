@@ -110,7 +110,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             ));
         }
 
-        if source_neuron.is_community_fund_neuron() || target_neuron.is_community_fund_neuron() {
+        if source_neuron.is_a_neurons_fund_member() || target_neuron.is_a_neurons_fund_member() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot merge neurons that have been dedicated to the community fund",

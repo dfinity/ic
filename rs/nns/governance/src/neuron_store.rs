@@ -1,5 +1,7 @@
 use crate::{
-    governance::{Environment, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+    governance::{
+        Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+    },
     is_copy_inactive_neurons_to_stable_memory_enabled,
     neuron::neuron_id_range_to_u64_range,
     pb::v1::{
@@ -14,9 +16,11 @@ use crate::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
         NeuronIdU64, TopicSigned32, NEURON_INDEXES, STABLE_NEURON_STORE,
     },
+    Clock, IcClock,
 };
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{add_neuron_followees, HeapNeuronFollowingIndex, NeuronFollowingIndex},
@@ -29,7 +33,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use std::{
     collections::{BTreeMap, HashSet},
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     ops::RangeBounds,
 };
 
@@ -169,6 +173,11 @@ pub fn get_neuron_subaccount(
     })?
 }
 
+trait PracticalClock: Clock + Send + Sync + Debug + DynClone {}
+dyn_clone::clone_trait_object!(PracticalClock);
+
+impl PracticalClock for IcClock {}
+
 /// This structure represents a whole Neuron's Fund neuron.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NeuronsFundNeuron {
@@ -179,7 +188,7 @@ pub struct NeuronsFundNeuron {
 
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
-#[cfg_attr(test, derive(Clone, Debug, PartialEq))]
+#[cfg_attr(test, derive(Clone, Debug))]
 pub struct NeuronStore {
     heap_neurons: BTreeMap<u64, Neuron>,
 
@@ -206,6 +215,34 @@ pub struct NeuronStore {
 
     /// Neuron indexes migration state.
     indexes_migration: Migration,
+
+    // In non-test builds, Box would suffice. However, in test, the containing struct (to wit,
+    // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
+    clock: Box<dyn PracticalClock>,
+}
+
+/// Does not use clock, but other than that, behaves as you would expect.
+///
+/// clock is excluded, because you cannot compare two objects of type `Box<dyn SomeTrait>`.
+#[cfg(test)]
+impl PartialEq for NeuronStore {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            heap_neurons,
+            topic_followee_index,
+            principal_to_neuron_ids_index,
+            known_neuron_name_set,
+            indexes_migration,
+
+            clock: _,
+        } = self;
+
+        *heap_neurons == other.heap_neurons
+            && *topic_followee_index == other.topic_followee_index
+            && *principal_to_neuron_ids_index == other.principal_to_neuron_ids_index
+            && *known_neuron_name_set == other.known_neuron_name_set
+            && *indexes_migration == other.indexes_migration
+    }
 }
 
 impl NeuronStore {
@@ -220,6 +257,7 @@ impl NeuronStore {
 
         let principal_to_neuron_ids_index = build_principal_to_neuron_ids_index(&heap_neurons);
         let known_neuron_name_set = build_known_neuron_name_index(&heap_neurons);
+        let clock = Box::new(IcClock::new());
 
         Self {
             heap_neurons,
@@ -227,6 +265,7 @@ impl NeuronStore {
             principal_to_neuron_ids_index,
             known_neuron_name_set,
             indexes_migration,
+            clock,
         }
     }
 
@@ -244,6 +283,7 @@ impl NeuronStore {
                 progress: None,
             },
         );
+
         assert_eq!(
             neuron_store
                 .batch_add_heap_neurons_to_stable_indexes(NeuronId { id: 0 }, u64::MAX as usize)
@@ -265,6 +305,15 @@ impl NeuronStore {
         &mut self,
     ) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
         std::mem::take(&mut self.topic_followee_index)
+    }
+
+    /// If there is a bug (related to lock acquisition), this could return u64::MAX.
+    fn now(&self) -> u64 {
+        self.clock.now()
+    }
+
+    pub fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
+        self.clock.set_time_warp(new_time_warp);
     }
 
     pub fn new_neuron_id(&self, env: &mut dyn Environment) -> NeuronId {
@@ -464,12 +513,10 @@ impl NeuronStore {
     }
 
     /// List all neuron ids that are in the community fund.
-    pub fn list_active_neurons_fund_neurons(
-        &self,
-        is_neuron_inactive: impl Fn(&Neuron) -> bool,
-    ) -> Vec<NeuronsFundNeuron> {
+    pub fn list_active_neurons_fund_neurons(&self) -> Vec<NeuronsFundNeuron> {
+        let now = self.now();
         let filter = |n: &Neuron| {
-            !is_neuron_inactive(n)
+            !n.is_inactive(now)
                 && n.joined_community_fund_timestamp_seconds
                     .unwrap_or_default()
                     > 0
@@ -538,9 +585,9 @@ impl NeuronStore {
     pub fn with_neuron_mut<R>(
         &mut self,
         neuron_id: &NeuronId,
-        is_neuron_inactive: impl Fn(&Neuron) -> bool,
         f: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
+        let now = self.now();
         let old_neuron = self
             .heap_neurons
             .get(&neuron_id.id)
@@ -550,7 +597,7 @@ impl NeuronStore {
         // Clone and call f() to possibly modify the neuron.
         let mut new_neuron = old_neuron.clone();
 
-        // TODO(NNS1-2584): let was_inactive_before = is_neuron_inactive(neuron);
+        // TODO(NNS1-2584): let was_inactive_before = neuron.is_inactive(self.now());
         // TODO(NNS1-2582): let original_neuron = neuron.clone()
 
         let result = Ok(f(&mut new_neuron));
@@ -558,7 +605,7 @@ impl NeuronStore {
         // Update STABLE_NEURON_STORE. For now, this functionality is disabled by default. It is
         // enabled when building tests, and when feature = "test" is enabled.
         if is_copy_inactive_neurons_to_stable_memory_enabled() {
-            write_through_to_stable_neuron_store(is_neuron_inactive, &new_neuron);
+            write_through_to_stable_neuron_store(&new_neuron, now);
         }
 
         self.update_neuron_indexes(&old_neuron, &new_neuron);
@@ -719,11 +766,6 @@ impl NeuronStore {
     /// aforementioned needed supporting auxiliary data. Of course, to do this, Governance still
     /// needs some help from self to scan a range of heap neurons based on begin, and limit
     /// (i.e. batch size). That functionality is provided by heap_neurons_range_with_begin_and_limit
-    ///
-    // Alternatively, we could have caller (Governance) pass the auxilliary data. Even better if
-    // this took a lambda (named is_neuron_inactive) that captures the necessary auxiliary data from
-    // Governance. need-to-know basis for the win!
-    #[allow(dead_code)]
     pub(crate) fn batch_add_inactive_neurons_to_stable_memory(
         &mut self,
         batch: Vec<(Neuron, /* is_inactive */ bool)>,
@@ -917,10 +959,7 @@ pub struct NeuronIndexesLens {
     pub known_neuron: usize,
 }
 
-fn write_through_to_stable_neuron_store(
-    is_neuron_inactive: impl Fn(&Neuron) -> bool,
-    neuron: &Neuron,
-) {
+fn write_through_to_stable_neuron_store(neuron: &Neuron, now: u64) {
     let neuron_id = match neuron.id {
         Some(ok) => ok,
         None => {
@@ -936,7 +975,7 @@ fn write_through_to_stable_neuron_store(
         }
     };
 
-    if is_neuron_inactive(neuron) {
+    if neuron.is_inactive(now) {
         // TODO(NNS1-2584): Once a full copy sweep of inactive Neuron copying has been
         // performed, then we can use was_inactive_before to know precisely whether we
         // should be calling create or update here (instead of upsert), and expect Ok is

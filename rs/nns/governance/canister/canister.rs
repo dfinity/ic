@@ -397,7 +397,7 @@ fn set_time_warp() {
 
 #[cfg(feature = "test")]
 fn set_time_warp_(new_time_warp: TimeWarp) {
-    governance_mut().env.set_time_warp(new_time_warp);
+    governance_mut().set_time_warp(new_time_warp);
 }
 
 #[export_name = "canister_update update_authz"]

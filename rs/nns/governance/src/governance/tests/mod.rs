@@ -555,9 +555,7 @@ fn assert_clean_refund(
     let mut original_neuron_store =
         NeuronStore::new(original_id_to_neuron, None, Migration::default());
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
-    let failed_refunds =
-        refund_community_fund_maturity(neuron_store, cf_participants, is_neuron_inactive);
+    let failed_refunds = refund_community_fund_maturity(neuron_store, cf_participants);
     assert!(failed_refunds.is_empty(), "{:#?}", failed_refunds);
 
     // Assert that neurons have been restored to the way they were originally.
@@ -594,13 +592,8 @@ fn assert_clean_refund(
     extra_cf_participants.push(cf_participant.clone());
     expected_failed_refunds.push(cf_participant);
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     assert_eq!(
-        refund_community_fund_maturity(
-            &mut original_neuron_store,
-            &extra_cf_participants,
-            is_neuron_inactive
-        ),
+        refund_community_fund_maturity(&mut original_neuron_store, &extra_cf_participants,),
         expected_failed_refunds,
     );
     assert_eq!(original_neuron_store, *expected_neuron_store);
@@ -621,13 +614,11 @@ fn draw_funds_from_the_community_fund_all_cf_neurons_have_zero_maturity() {
     ]);
     let original_neuron_store = neuron_store.clone();
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60,
         &PARAMS,
-        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -655,13 +646,11 @@ fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
     ]);
     let original_neuron_store = neuron_store.clone();
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 0,
         &PARAMS,
-        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -677,13 +666,11 @@ fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
 #[test]
 fn draw_funds_from_the_community_fund_typical() {
     let mut neuron_store = NEURON_STORE.clone();
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
-        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -724,13 +711,11 @@ fn draw_funds_from_the_community_fund_typical() {
 fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
     let mut neuron_store = NEURON_STORE.clone();
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         2 * *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
-        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -771,13 +756,11 @@ fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
 fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
     let mut neuron_store = NEURON_STORE.clone();
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT / 2,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
-        is_neuron_inactive,
     );
 
     // Inspect results. Same as typical (copy n' pasted).
@@ -819,13 +802,11 @@ fn draw_funds_from_the_community_fund_trivial() {
     let mut neuron_store = NeuronStore::new(btreemap! {}, None, Migration::default());
     let original_total_community_fund_maturity_e8s_equivalent = 0;
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         original_total_community_fund_maturity_e8s_equivalent,
         /* withdrawal_amount_e8s = */ 60,
         &PARAMS,
-        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -846,13 +827,11 @@ fn draw_funds_from_the_community_fund_trivial() {
 fn draw_funds_from_the_community_fund_cf_not_large_enough() {
     let mut neuron_store = NEURON_STORE.clone();
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 1000 * E8,
         &PARAMS,
-        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -898,13 +877,11 @@ fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
     };
     let mut neuron_store = NEURON_STORE.clone();
 
-    let is_neuron_inactive = |_neuron: &Neuron| false; // This keeps all Neurons in heap, and none in stable memory.
     let observed_cf_neurons = draw_funds_from_the_community_fund(
         &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 600 * E8,
         &params,
-        is_neuron_inactive,
     );
 
     // Inspect results.
@@ -1926,202 +1903,135 @@ mod metrics_tests {
 }
 
 mod neuron_archiving_tests {
-    use crate::{
-        governance::{
-            tests::{MockEnvironment, StubCMC, StubIcpLedger},
-            Governance,
-        },
-        pb::v1::{
-            governance::NeuronInFlightCommand, manage_neuron::NeuronIdOrSubaccount, proposal,
-            Governance as GovernanceProto, ManageNeuron, Motion, Neuron, Proposal, ProposalData,
-        },
-    };
-    use ic_nns_common::pb::v1::NeuronId;
-    use maplit::{btreemap, hashmap};
+    use crate::pb::v1::{neuron::DissolveState, Neuron};
     use proptest::proptest;
-    use std::sync::{Arc, Mutex};
 
-    fn empty_neuron_id_1() -> Neuron {
-        Neuron {
-            id: Some(NeuronId { id: 1 }),
-            account: vec![],
-            cached_neuron_stake_e8s: 0,
-            neuron_fees_e8s: 0,
-            staked_maturity_e8s_equivalent: None,
+    #[test]
+    fn test_neuron_is_inactive_based_on_neurons_fund_membership() {
+        const NOW: u64 = 123_456_789;
+
+        // Dissolved in the distant past.
+        let model_neuron = Neuron {
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
             ..Default::default()
-        }
+        };
+        assert!(model_neuron.is_inactive(NOW), "{:#?}", model_neuron);
+
+        // Case Some(positive): Active.
+        let neuron = Neuron {
+            joined_community_fund_timestamp_seconds: Some(42),
+            ..model_neuron.clone()
+        };
+        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
+
+        // Case Some(0): Inactive.
+        let neuron = Neuron {
+            joined_community_fund_timestamp_seconds: Some(0),
+            ..model_neuron.clone()
+        };
+        assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
+
+        // Case None: Same as Some(0), i.e. Inactive
+        let neuron = Neuron {
+            joined_community_fund_timestamp_seconds: None,
+            ..model_neuron.clone()
+        };
+        assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
+
+        // This is just so that clone is always called in all of the above cases.
+        drop(model_neuron);
     }
 
     #[test]
-    fn test_neuron_is_inactive_involved_with_proposals() {
-        let inactive_neuron = empty_neuron_id_1();
+    fn test_neuron_is_inactive_based_on_dissolve_state() {
+        const NOW: u64 = 123_456_789;
 
-        let neuron_2_is_proposer = ProposalData {
-            proposer: Some(NeuronId { id: 2 }),
-            proposal: Some(Proposal {
-                title: Some("Foo Foo Bar".to_string()),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "Text for this motion".to_string(),
-                })),
-                ..Proposal::default()
-            }),
-            ..ProposalData::default()
+        // Case 0: None: Active
+        let neuron = Neuron::default();
+        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
+
+        // Case 1a: Dissolved in the "distant" past: Inactive. This is the only case where
+        // "inactive" is the expected result.
+        let neuron = Neuron {
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
+            ..Default::default()
         };
+        assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        let neuron_3_is_managed_neuron = ProposalData {
-            proposal: Some(Proposal {
-                title: Some("Woo hoo".to_string()),
-                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                    id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-                        id: 3,
-                    })),
-                    command: None,
-                }))),
-                ..Proposal::default()
-            }),
-            ..ProposalData::default()
+        // Case 1b: Dissolved right now: Active
+        let neuron = Neuron {
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(NOW)),
+            ..Default::default()
         };
+        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        let subaccount_123_is_managed_neuron = ProposalData {
-            proposal: Some(Proposal {
-                title: Some("Woo hoo".to_string()),
-                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                    id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(vec![1, 2, 3])),
-                    command: None,
-                }))),
-                ..Proposal::default()
-            }),
-            ..ProposalData::default()
+        // Case 1c: Dissolved right now: Active (again).
+        let neuron = Neuron {
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(NOW + 42)),
+            ..Default::default()
         };
+        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        let governance = Governance::new(
-            GovernanceProto {
-                proposals: btreemap! {
-                    1 => neuron_2_is_proposer,
-                    2 => neuron_3_is_managed_neuron,
-                    3 => subaccount_123_is_managed_neuron
-                },
-                ..GovernanceProto::default()
-            },
-            Box::new(MockEnvironment {
-                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-                now: Arc::new(Mutex::new(0)),
-            }),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
-        );
-
-        assert!(inactive_neuron.is_inactive(
-            &governance.heap_data.proposals,
-            &governance.heap_data.in_flight_commands,
-        ));
-
-        let neuron_is_proposer = Neuron {
-            id: Some(NeuronId { id: 2 }),
-            ..inactive_neuron.clone()
+        // Case 2a: DissolveDelay(0): Active
+        let neuron = Neuron {
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
+            ..Default::default()
         };
+        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        assert!(!neuron_is_proposer.is_inactive(
-            &governance.heap_data.proposals,
-            &governance.heap_data.in_flight_commands,
-        ));
-
-        let managed_by_proposal_neuron = Neuron {
-            id: Some(NeuronId { id: 3 }),
-            ..inactive_neuron.clone()
+        // Case 2b: DissolveDelay(positive): Active
+        let neuron = Neuron {
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+            ..Default::default()
         };
-
-        assert!(!managed_by_proposal_neuron.is_inactive(
-            &governance.heap_data.proposals,
-            &governance.heap_data.in_flight_commands,
-        ));
-
-        let subaccount_is_managed_neuron_in_proposal = Neuron {
-            account: vec![1, 2, 3],
-            ..inactive_neuron
-        };
-
-        assert!(!subaccount_is_managed_neuron_in_proposal.is_inactive(
-            &governance.heap_data.proposals,
-            &governance.heap_data.in_flight_commands,
-        ));
-    }
-
-    #[test]
-    fn test_neuron_is_inactive_neuron_locks() {
-        let inactive_neuron = empty_neuron_id_1();
-
-        let governance = Governance::new(
-            GovernanceProto {
-                proposals: btreemap! {},
-                in_flight_commands: hashmap! {
-                    4 => NeuronInFlightCommand { timestamp: 123, command: None}
-                },
-                ..GovernanceProto::default()
-            },
-            Box::new(MockEnvironment {
-                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-                now: Arc::new(Mutex::new(0)),
-            }),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
-        );
-
-        assert!(inactive_neuron.is_inactive(
-            &governance.heap_data.proposals,
-            &governance.heap_data.in_flight_commands,
-        ));
-
-        let has_neuron_lock = Neuron {
-            id: Some(NeuronId { id: 4 }),
-            ..inactive_neuron
-        };
-
-        assert!(!has_neuron_lock.is_inactive(
-            &governance.heap_data.proposals,
-            &governance.heap_data.in_flight_commands,
-        ));
+        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
     }
 
     proptest! {
-    #[test]
-    fn test_neuron_is_inactive_stake_and_maturity(stake in 0u64..10_000,
-                                              staked_maturity in 0u64..10_000,
-                                              fees in 0u64..10_000,
-                                              maturity in 0u64..10_000) {
-        let inactive_neuron = empty_neuron_id_1();
+        #[test]
+        fn test_neuron_is_inactive_based_on_funding(
+            cached_neuron_stake_e8s in 0_u64..10,
+            staked_maturity_e8s_equivalent in 0_u64..10,
+            neuron_fees_e8s in 0_u64..10,
+            maturity_e8s_equivalent in 0_u64..10,
+        ) {
+            let net_funding_e8s = (
+                cached_neuron_stake_e8s
+                    .saturating_sub(neuron_fees_e8s)
+                    .saturating_add(staked_maturity_e8s_equivalent)
+            )
+            + maturity_e8s_equivalent;
+            let is_funded = net_funding_e8s > 0;
 
-        let governance = Governance::new(
-            GovernanceProto::default(),
-            Box::new(MockEnvironment {
-                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-                now: Arc::new(Mutex::new(0)),
-            }),
-            Box::new(StubIcpLedger {}),
-            Box::new(StubCMC {}),
-        );
+            // The test subject will be WhenDissolved(reasonable_time). Therefore, by living in the
+            // distant future, the test subject will be considered "dissolved in the sufficiently
+            // distant past". Thus, the dissolve_state requirement to be "inactive" is met.
+            let now = 123_456_789;
 
+            let staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent);
+            let neuron = Neuron {
+                cached_neuron_stake_e8s,
+                staked_maturity_e8s_equivalent,
+                neuron_fees_e8s,
+                maturity_e8s_equivalent,
 
-        let neuron = Neuron {
-            cached_neuron_stake_e8s: stake,
-            staked_maturity_e8s_equivalent: Some(staked_maturity),
-            neuron_fees_e8s: fees,
-            maturity_e8s_equivalent: maturity,
-            ..inactive_neuron
-        };
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
 
-        assert_eq!(
-            neuron.is_inactive(
-                &governance.heap_data.proposals,
-                &governance.heap_data.in_flight_commands,
-            ),
-            neuron.stake_e8s() == 0 && neuron.maturity_e8s_equivalent == 0,
-            "{:#?}",
-            neuron,
-        );
-    }} // end proptest
+                ..Default::default()
+            };
+
+            assert_eq!(
+                neuron.is_inactive(now),
+                !is_funded,
+                "cached stake: {cached_neuron_stake_e8s}\n\
+                 staked maturity: {staked_maturity_e8s_equivalent:?}\n\
+                 fees: {neuron_fees_e8s}\n\
+                 maturity: {maturity_e8s_equivalent}\n\
+                 net funding: {net_funding_e8s}\n\
+                 Neuron:\n{neuron:#?}",
+            );
+        }
+    } // end proptest
 }
 
 #[test]
@@ -2181,12 +2091,18 @@ fn test_should_copy_next_batch_of_inactive_neurons_to_stable_memory_migration_ex
     }
 }
 
+const NOW_TIMESTAMP_SECONDS: u64 = 111_222_333_444_555;
+
 lazy_static! {
     static ref ORIGINAL_HEAP_NEURONS: BTreeMap<u64, Neuron> = {
         fn new_neuron(id: u64, maturity_e8s_equivalent: u64) -> Neuron {
             Neuron {
                 id: Some(NeuronId { id }),
                 maturity_e8s_equivalent,
+
+                // Reached the dissolved state a "long" time ago, compared to NOW_TIMESTAMP_SECONDS.
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
+
                 ..Default::default()
             }
         }
@@ -2230,7 +2146,7 @@ fn copy_next_batch_of_inactive_neurons_to_stable_memory_from_last_neuron_id(
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-            now: Arc::new(Mutex::new(0)),
+            now: Arc::new(Mutex::new(NOW_TIMESTAMP_SECONDS)),
         }),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
@@ -2737,7 +2653,6 @@ mod cast_vote_and_cascade_follow {
             &NeuronId { id: 1 },
             Vote::Yes,
             topic,
-            |_| false,
             &mut neuron_store,
         );
 

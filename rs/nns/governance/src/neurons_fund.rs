@@ -2031,27 +2031,25 @@ impl NeuronsFundAction {
 /// need to be adjusted, as the function will retain their original maturity in case of errors.
 fn apply_neurons_fund_snapshot(
     neuron_store: &mut NeuronStore,
-    is_neuron_inactive: impl Fn(&Neuron) -> bool,
     snapshot: &NeuronsFundSnapshot,
     action: NeuronsFundAction,
 ) -> Result<(), String> {
     let mut neurons_fund_action_error = vec![];
     for (neuron_id, neuron_delta) in snapshot.neurons().iter() {
-        let refund_result =
-            neuron_store.with_neuron_mut(neuron_id, &is_neuron_inactive, |nns_neuron| {
-                let old_nns_neuron_maturity_e8s = nns_neuron.maturity_e8s_equivalent;
-                let maturity_delta_e8s = neuron_delta.amount_icp_e8s;
-                nns_neuron.maturity_e8s_equivalent = action
-                    .checked_apply(old_nns_neuron_maturity_e8s, maturity_delta_e8s)
-                    .unwrap_or_else(|verb| {
-                        neurons_fund_action_error.push(format!(
-                            "u64 overflow while {verb} maturity from {neuron_id:?} \
+        let refund_result = neuron_store.with_neuron_mut(neuron_id, |nns_neuron| {
+            let old_nns_neuron_maturity_e8s = nns_neuron.maturity_e8s_equivalent;
+            let maturity_delta_e8s = neuron_delta.amount_icp_e8s;
+            nns_neuron.maturity_e8s_equivalent = action
+                .checked_apply(old_nns_neuron_maturity_e8s, maturity_delta_e8s)
+                .unwrap_or_else(|verb| {
+                    neurons_fund_action_error.push(format!(
+                        "u64 overflow while {verb} maturity from {neuron_id:?} \
                             (*kept* original maturity e8s = {old_nns_neuron_maturity_e8s}; \
                             requested maturity delta e8s = {maturity_delta_e8s})."
-                        ));
-                        old_nns_neuron_maturity_e8s
-                    });
-            });
+                    ));
+                    old_nns_neuron_maturity_e8s
+                });
+        });
         if let Err(with_neuron_mut_error) = refund_result {
             neurons_fund_action_error.push(with_neuron_mut_error.to_string());
         }
@@ -2069,13 +2067,11 @@ fn apply_neurons_fund_snapshot(
 pub trait NeuronsFund {
     fn draw_maturity_from_neurons_fund(
         &mut self,
-        is_neuron_inactive: impl Fn(&Neuron) -> bool,
         snapshot: &NeuronsFundSnapshot,
     ) -> Result<(), String>;
 
     fn refund_maturity_to_neurons_fund(
         &mut self,
-        is_neuron_inactive: impl Fn(&Neuron) -> bool,
         snapshot: &NeuronsFundSnapshot,
     ) -> Result<(), String>;
 }
@@ -2083,28 +2079,16 @@ pub trait NeuronsFund {
 impl NeuronsFund for NeuronStore {
     fn draw_maturity_from_neurons_fund(
         &mut self,
-        is_neuron_inactive: impl Fn(&Neuron) -> bool,
         snapshot: &NeuronsFundSnapshot,
     ) -> Result<(), String> {
-        apply_neurons_fund_snapshot(
-            self,
-            is_neuron_inactive,
-            snapshot,
-            NeuronsFundAction::DrawMaturity,
-        )
+        apply_neurons_fund_snapshot(self, snapshot, NeuronsFundAction::DrawMaturity)
     }
 
     fn refund_maturity_to_neurons_fund(
         &mut self,
-        is_neuron_inactive: impl Fn(&Neuron) -> bool,
         snapshot: &NeuronsFundSnapshot,
     ) -> Result<(), String> {
-        apply_neurons_fund_snapshot(
-            self,
-            is_neuron_inactive,
-            snapshot,
-            NeuronsFundAction::RefundMaturity,
-        )
+        apply_neurons_fund_snapshot(self, snapshot, NeuronsFundAction::RefundMaturity)
     }
 }
 
