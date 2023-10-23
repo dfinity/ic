@@ -158,7 +158,6 @@ system_test(
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS +
         GRAFANA_RUNTIME_DEPS + [
-            "//rs/replay:ic-replay",
             "//rs/sns/cli:sns",
             "//rs/tests:recovery/binaries",
             "//rs/tests/nns:secret_key.pem",
