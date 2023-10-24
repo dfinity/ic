@@ -79,6 +79,32 @@ untar = rule(
     },
 )
 
+def _mcopy(ctx):
+    """Copies Unix files to MSDOS images.
+    """
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
+    for src in ctx.files.srcs:
+        command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
+
+    # TODO: install mcopy as dependency.
+    ctx.actions.run_shell(
+        command = command,
+        inputs = ctx.files.srcs + [ctx.file.fs],
+        outputs = [out],
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+mcopy = rule(
+    implementation = _mcopy,
+    attrs = {
+        "srcs": attr.label_list(allow_files = True),
+        "fs": attr.label(allow_single_file = True),
+        "remap_paths": attr.string_dict(),
+    },
+)
+
 def _sha256sum2url_impl(ctx):
     """
     Returns cas url pointing to the artifact with checksum specified.

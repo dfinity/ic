@@ -75,5 +75,4 @@ size=$((2 * size + 1048576))
 echo "image size: $size"
 truncate -s $size "$tmp"
 mkfs.vfat -n "$LABEL" "$tmp"
-mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
 cp $tmp $OUTPUT_FILE
