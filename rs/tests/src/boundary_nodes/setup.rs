@@ -172,3 +172,33 @@ pub fn setup_ic_with_bn(
     };
     env.sync_with_prometheus();
 }
+
+pub fn setup_ic(env: TestEnv) {
+    let log = env.logger();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .with_unassigned_nodes(2)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
+        .expect("could not install NNS canisters");
+    info!(&log, "Checking readiness of all replica nodes ...");
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            node.await_status_is_healthy()
+                .expect("Replica did not come up healthy.");
+        }
+    }
+    env.sync_with_prometheus();
+}

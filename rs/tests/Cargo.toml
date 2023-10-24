@@ -608,3 +608,7 @@ path = "consensus/tecdsa/tecdsa_performance.rs"
 [[bin]]
 name = "ic-systest-boundary-node-performance"
 path = "boundary_nodes/boundary_node_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-api-boundary-node-decentralization"
+path = "boundary_nodes/api_boundary_node_decentralization_test.rs"
