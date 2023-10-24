@@ -20,15 +20,7 @@ const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(5 * 60);
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA; // This should be a bit larger than the workload execution time.
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
-    let config = |env| {
-        config(
-            env,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            USE_BOUNDARY_NODE,
-            None,
-        )
-    };
+    let config = |env| config(env, SMALL_APP_SUBNET_MAX_SIZE, USE_BOUNDARY_NODE, None);
     let test = |env| {
         test(
             env,

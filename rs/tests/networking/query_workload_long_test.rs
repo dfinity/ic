@@ -28,7 +28,6 @@ fn main() -> Result<()> {
         config(
             env,
             SMALL_APP_SUBNET_MAX_SIZE,
-            SMALL_APP_SUBNET_MAX_SIZE,
             USE_BOUNDARY_NODE,
             // Since this is a long-running test, it accumulates a lot of disk space.
             // This is why we increase the default of 50 GiB to 500 GiB.
