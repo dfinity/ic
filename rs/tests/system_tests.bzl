@@ -4,7 +4,7 @@ Rules for system-tests.
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:defs.bzl", "untar", "zstd_compress")
+load("//bazel:defs.bzl", "mcopy", "untar", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
@@ -249,13 +249,16 @@ uvm_config_image_impl = rule(
     },
 )
 
-def uvm_config_image(name, tags = None, visibility = None, **kwargs):
+def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, **kwargs):
     """This macro creates bazel targets for uvm config images.
 
     Args:
         name: This name will be used for the target.
         tags: Controls execution of targets. "manual" excludes a target from wildcard targets like (..., :*, :all). See: https://bazel.build/reference/test-encyclopedia#tag-conventions
         visibility: Target visibility controls who may depend on a target.
+        srcs: Source files that are copied into a vfat image.
+        remap_paths: Dict that maps a current filename to a desired filename,
+            e.g. {"activate.sh": "activate"}
         **kwargs: Keyworded arguments for pkg_tar.
     """
     tar = name + "_tar"
@@ -263,6 +266,8 @@ def uvm_config_image(name, tags = None, visibility = None, **kwargs):
     # TODO: remove tar and untar by copy with remap and mode
     pkg_tar(
         name = tar,
+        srcs = srcs,
+        remap_paths = remap_paths,
         tags = ["manual"],
         visibility = ["//visibility:private"],
         **kwargs
@@ -276,15 +281,24 @@ def uvm_config_image(name, tags = None, visibility = None, **kwargs):
     )
 
     uvm_config_image_impl(
-        name = name + "_uncompressed",
+        name = name + "_vfat",
         src = ":" + name + "_untar",
+        tags = ["manual"],
+        visibility = ["//visibility:private"],
+    )
+
+    mcopy(
+        name = name + "_mcopy",
+        srcs = srcs,
+        fs = ":" + name + "_vfat",
+        remap_paths = remap_paths,
         tags = ["manual"],
         visibility = ["//visibility:private"],
     )
 
     zstd_compress(
         name = name + ".zst",
-        srcs = [":" + name + "_uncompressed"],
+        srcs = [":" + name + "_mcopy"],
         target_compatible_with = ["@platforms//os:linux"],
         tags = tags,
         visibility = ["//visibility:private"],

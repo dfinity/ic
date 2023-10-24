@@ -75,7 +75,7 @@ uvm_config_image(
         "activate": "775",
     },
     remap_paths = {
-        "/activate-systest-uvm-config": "/activate",
+        "activate-systest-uvm-config": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -174,7 +174,7 @@ uvm_config_image(
         "activate": "775",
     },
     remap_paths = {
-        "/btc_activate.sh": "/activate",
+        "btc_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -208,9 +208,9 @@ uvm_config_image(
         "activate": "775",
     },
     remap_paths = {
-        "/universal_vm_activation.sh": "/activate",
-        "/canister_http_test_ca.cert": "/cert.pem",
-        "/canister_http_test_ca.key": "/key.pem",
+        "universal_vm_activation.sh": "activate",
+        "canister_http_test_ca.cert": "cert.pem",
+        "canister_http_test_ca.key": "key.pem",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -320,6 +320,6 @@ uvm_config_image(
     ],
     mode = "664",
     modes = {"activate": "775"},
-    remap_paths = {"/activate.sh": "/activate"},
+    remap_paths = {"activate.sh": "activate"},
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
