@@ -659,6 +659,7 @@ impl BackupHelper {
     }
 
     fn log_disk_stats(&self) -> Result<(), String> {
+        let mut stats = Vec::new();
         for (dir, threshold) in &[
             (&self.root_dir, self.hot_disk_resource_threshold_percentage),
             (
@@ -672,9 +673,10 @@ impl BackupHelper {
                 self.log,
                 "[{:?}] Space: {}% Inodes: {}%", dir, space, inodes
             );
-            self.notification_client
-                .push_metrics_disk_stats(dir, space, inodes);
+            stats.push((dir.as_path(), space, inodes));
         }
+        self.notification_client
+            .push_metrics_disk_stats(stats.as_slice());
         Ok(())
     }
 
