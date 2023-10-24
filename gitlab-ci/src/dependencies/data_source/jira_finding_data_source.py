@@ -116,9 +116,10 @@ class JiraFindingDataSource(FindingDataSource):
             # each row is parsed char by char
             # "|" is treated as column separator unless it appears within square brackets,
             # because in that case it is a link: [link text | http://www.example.com]
-            # nested square brackets or more than one pipe within 2 square brackets is not supported
+            # or a smart link: [http://www.example.com | http://www.example.com | smart-link]
+            # nested square brackets are not supported
             parts: List[str] = []
-            is_link = pipe_seen_in_link = False
+            is_link = False
             parsed = ''
             for c in row:
                 if c == '[':
@@ -129,14 +130,10 @@ class JiraFindingDataSource(FindingDataSource):
                         is_link = True
                         parsed += c
                 elif c == ']':
-                    is_link = pipe_seen_in_link = False
+                    is_link = False
                     parsed += c
                 elif c == '|':
                     if is_link:
-                        if pipe_seen_in_link:
-                            # more than one pipe in link
-                            return None
-                        pipe_seen_in_link = True
                         parsed += c
                     else:
                         parts.append(parsed)
