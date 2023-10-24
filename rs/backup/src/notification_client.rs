@@ -112,16 +112,32 @@ impl NotificationClient {
         self.push_metrics(message)
     }
 
-    pub fn push_metrics_disk_stats(&self, dir: &Path, space: u32, inodes: u32) {
+    pub fn push_metrics_disk_stats(
+        &self,
+        stats: &[(
+            &Path,
+            /*space % usage*/ u32,
+            /*inodes % usage*/ u32,
+        )],
+    ) {
         let message = format!(
             "# TYPE backup_disk_usage gauge\n\
-            # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
-            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"space\"}} {2}\n\
-            backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"inodes\"}} {3}\n",
-            self.network_name,
-            dir.to_str().unwrap_or_default(),
-            space,
-            inodes
+             # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
+             {}",
+            stats
+                .iter()
+                .map(|(dir, space, inodes)| {
+                    format!(
+                        "backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"space\"}} {2}\n\
+                         backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"inodes\"}} {3}\n",
+                        self.network_name,
+                        dir.to_str().unwrap_or_default(),
+                        space,
+                        inodes
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
         );
         self.push_metrics(message)
     }
