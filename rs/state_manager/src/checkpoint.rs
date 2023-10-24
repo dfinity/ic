@@ -283,6 +283,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let wasm_memory = Memory::new(
                 PageMap::open(
                     &canister_layout.vmemory_0(),
+                    &canister_layout.vmemory_0_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -294,6 +295,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let stable_memory = Memory::new(
                 PageMap::open(
                     &canister_layout.stable_memory_blob(),
+                    &canister_layout.stable_memory_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -354,6 +356,7 @@ pub fn load_canister_state<P: ReadPolicy>(
     let wasm_chunk_store_data = if canister_layout.wasm_chunk_store().exists() {
         PageMap::open(
             &canister_layout.wasm_chunk_store(),
+            &canister_layout.wasm_chunk_store_overlays()?,
             height,
             Arc::clone(&fd_factory),
         )?

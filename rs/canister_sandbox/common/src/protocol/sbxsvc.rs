@@ -10,7 +10,7 @@ use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
         CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
-        PageMapSerialization,
+        PageMapSerialization, StorageSerialization,
     },
     Global, NumWasmPages,
 };
@@ -115,7 +115,7 @@ impl EnumerateInnerFileDescriptors for MemorySerialization {
 // canister-sandbox.
 impl EnumerateInnerFileDescriptors for PageMapSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        self.checkpoint.enumerate_fds(fds);
+        self.storage.enumerate_fds(fds);
         self.page_allocator.enumerate_fds(fds);
     }
 }
@@ -127,6 +127,15 @@ impl EnumerateInnerFileDescriptors for CheckpointSerialization {
         if let Some(mapping) = self.mapping.as_mut() {
             mapping.enumerate_fds(fds)
         }
+    }
+}
+
+// The trait is implemented here to avoid dependency of relicated-state on
+// canister-sandbox.
+impl EnumerateInnerFileDescriptors for StorageSerialization {
+    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        self.base.enumerate_fds(fds);
+        // TODO(IC-1306): Enumerate overlay fds
     }
 }
 

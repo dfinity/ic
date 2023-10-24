@@ -28,9 +28,11 @@ fn assert_equal_page_maps(page_map1: &PageMap, page_map2: &PageMap) {
 fn duplicate_file_descriptors(
     mut serialized_page_map: PageMapSerialization,
 ) -> PageMapSerialization {
-    serialized_page_map.checkpoint.mapping =
+    // TODO(IC-1306): Duplicate overlay fds
+    serialized_page_map.storage.base.mapping =
         serialized_page_map
-            .checkpoint
+            .storage
+            .base
             .mapping
             .map(|mapping| MappingSerialization {
                 file_descriptor: FileDescriptor {
@@ -118,6 +120,7 @@ fn persisted_map_is_equivalent_to_the_original() {
         pagemap.persist_delta(heap_file).unwrap();
         let persisted_map = PageMap::open(
             heap_file,
+            &[],
             Height::new(0),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
@@ -189,6 +192,7 @@ fn can_persist_and_load_an_empty_page_map() {
     original_map.persist_delta(&heap_file).unwrap();
     let persisted_map = PageMap::open(
         &heap_file,
+        &[],
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -217,6 +221,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
 
     match PageMap::open(
         &heap_file,
+        &[],
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     ) {
@@ -421,6 +426,7 @@ fn get_memory_instructions_returns_deltas() {
 
     let mut page_map = PageMap::open(
         &heap_file,
+        &[],
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
