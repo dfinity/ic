@@ -163,15 +163,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         let token_pool: Nat = ledger.balances().token_pool.into();
         w.encode_gauge(
             "ledger_balances_token_pool",
-            // TODO: support larger integers in metrics
-            token_pool.0.to_u128().unwrap() as f64,
+            token_pool.0.to_f64().unwrap_or(f64::INFINITY),
             "Total number of Tokens in the pool.",
         )?;
         let total_supply: Nat = ledger.balances().total_supply().into();
         w.encode_gauge(
             "ledger_total_supply",
-            // TODO: support larger integers in metrics
-            total_supply.0.to_u128().unwrap() as f64,
+            total_supply.0.to_f64().unwrap_or(f64::INFINITY),
             "Total number of tokens in circulation.",
         )?;
         w.encode_gauge(

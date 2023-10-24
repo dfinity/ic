@@ -516,7 +516,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.3.1",
             ),
             "ic-metrics-encoder": crate.spec(
-                version = "^1.1.0",
+                version = "^1.1.1",
             ),
             "ic-stable-structures": crate.spec(
                 version = "^0.5.0",
