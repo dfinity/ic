@@ -27,7 +27,7 @@ ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 icrc-ledger-client = { path = "../../../../packages/icrc-ledger-client" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = "1.1.1"
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"
 serde = "1.0"

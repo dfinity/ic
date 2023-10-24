@@ -1,5 +1,5 @@
 {
-  "checksum": "0af78fe9aebfaa1f1e2744a2173efaa84461cd21a65a56e750c74d93e5072006",
+  "checksum": "a52de662beb0b76c7274611ccb0c66d7078f0b40656f1261329da316e4da24dc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13430,7 +13430,7 @@
               "target": "ic_certified_map"
             },
             {
-              "id": "ic-metrics-encoder 1.1.0",
+              "id": "ic-metrics-encoder 1.1.1",
               "target": "ic_metrics_encoder"
             },
             {
@@ -22107,13 +22107,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-metrics-encoder 1.1.0": {
+    "ic-metrics-encoder 1.1.1": {
       "name": "ic-metrics-encoder",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-metrics-encoder/1.1.0/download",
-          "sha256": "7cb321e571828d64d62319deeaaec4c8e68cdf93144dd6fe248e7a51ab2d3b5d"
+          "url": "https://crates.io/api/v1/crates/ic-metrics-encoder/1.1.1/download",
+          "sha256": "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
         }
       },
       "targets": [
@@ -22133,7 +22133,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.1.1"
       },
       "license": "Apache-2.0"
     },
@@ -26960,12 +26960,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -26999,12 +27014,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2021",
         "version": "0.4.3"
