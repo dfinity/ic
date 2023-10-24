@@ -23,7 +23,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 slog = "2.7.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 

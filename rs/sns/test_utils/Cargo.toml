@@ -43,4 +43,4 @@ maplit = "1.0.2"
 num-traits = "0.2.14"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }

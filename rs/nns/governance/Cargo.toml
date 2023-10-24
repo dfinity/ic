@@ -96,7 +96,7 @@ ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-test = "0.4.2"
 
 [features]

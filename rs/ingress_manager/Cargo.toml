@@ -38,7 +38,7 @@ ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 proptest = { version = "1.0.0" }
 rand = "0.8"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 
 [[bench]]
 name = "build_payload"

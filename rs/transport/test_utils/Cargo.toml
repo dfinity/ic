@@ -20,6 +20,6 @@ ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" 
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-transport = { path = "../../transport" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tower = { workspace = true }
 tower-test = "0.4.0"

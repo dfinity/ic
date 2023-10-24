@@ -27,7 +27,7 @@ serde_json = "1.0"
 slog = "2.7.0"
 slog-async = "2.7.0"
 thiserror = "1.0.26"
-tokio = { version = "1.32.0", features = ["full", "macros"] }
+tokio = { workspace = true }
 tokio-socks = "0.5.1"
 tonic = { workspace = true }
 tower = { workspace = true, optional = true }

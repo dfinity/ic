@@ -24,7 +24,7 @@ slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 threadpool = "1.8.1"
 url = "2.1.1"
 

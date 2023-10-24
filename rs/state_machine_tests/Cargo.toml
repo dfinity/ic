@@ -59,7 +59,7 @@ slog = { version = "2.5.2", features = [
 ] }
 slog-term = "2.6.0"
 tempfile = "3.1.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 wat = "1.0.52"
 maplit = "1.0.2"
 

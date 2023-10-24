@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 tempfile = "3.1.0"
 candid = { workspace = true }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }

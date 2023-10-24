@@ -9,4 +9,4 @@ ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-xnet-uri = { path = "../uri" }
 socket2 = { version = "0.5", features = ["all"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }

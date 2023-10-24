@@ -27,6 +27,6 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types = { path = "../types/types" }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = "1.32.0"
+tokio = { workspace = true }
 wat = "1.0.52"
 

@@ -33,5 +33,5 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 mockall = "0.11.4"
 quinn = { version = "0.10.2", features = ["ring"] }
 tempfile = "3.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 turmoil = "0.5"

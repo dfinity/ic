@@ -28,7 +28,7 @@ slog = { version = "2.5.2", features = [
     "release_max_level_debug",
 ] }
 tester = "0.7.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = "2.1.1"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }

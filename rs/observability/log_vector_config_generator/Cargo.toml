@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 service-discovery = { path = "../service_discovery" }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"

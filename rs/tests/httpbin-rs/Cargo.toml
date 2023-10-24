@@ -12,4 +12,4 @@ clap = { version = "4.0", features = ["derive"] }
 rustls = "0.21.1"
 rustls-pemfile = "1.0.2"
 serde_json = { version = "1.0" }
-tokio = "1.32.0"
+tokio = { workspace = true }
