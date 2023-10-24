@@ -28,7 +28,6 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-nns-constants = { path = "../../nns/constants" }
 ic-pprof = { path = "../../monitoring/pprof" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }

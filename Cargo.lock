@@ -7306,7 +7306,6 @@ dependencies = [
  "ic-interfaces-state-manager-mocks",
  "ic-logger",
  "ic-metrics",
- "ic-nns-constants",
  "ic-pprof",
  "ic-protobuf",
  "ic-registry-client-helpers",
