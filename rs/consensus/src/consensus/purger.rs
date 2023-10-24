@@ -31,6 +31,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::Height;
 use std::{cell::RefCell, sync::Arc};
 
+use super::MINIMUM_CHAIN_LENGTH;
+
 /// The Purger sub-component.
 pub struct Purger {
     prev_expected_batch_height: RefCell<Height>,
@@ -297,9 +299,6 @@ impl Purger {
             .set(cup_height.get() as i64);
     }
 }
-
-/// We always keep a minimum chain length below catch-up height.
-const MINIMUM_CHAIN_LENGTH: u64 = 50;
 
 /// Compute the purge height by looking at available CatchUpPackage(s) in the
 /// validated pool. Usually things with height less than a min_length below the

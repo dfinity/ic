@@ -1,3 +1,5 @@
+use crate::consensus::MINIMUM_CHAIN_LENGTH;
+
 use super::{verifier::VerifierImpl, CertificationCrypto};
 use ic_consensus_utils::{
     active_high_threshold_transcript, aggregate, membership::Membership, registry_version_at_height,
@@ -27,9 +29,6 @@ use prometheus::{Histogram, IntCounter, IntGauge};
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Instant;
-
-/// We always keep a minimum chain length below catch-up height
-pub const MINIMUM_CHAIN_LENGTH: u64 = 100;
 
 /// The Certification component, processing the changes on the certification
 /// pool and submitting the corresponding change sets.
