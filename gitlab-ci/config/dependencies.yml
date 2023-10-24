@@ -17,6 +17,7 @@ dependencies-check:
   script:
     - |
       set -euo pipefail
+      pip3 install --ignore-installed -r requirements.txt
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
@@ -35,6 +36,7 @@ dependency-scan-nightly:
   script:
     - |
       set -euo pipefail
+      pip3 install --ignore-installed -r requirements.txt
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
@@ -61,6 +63,7 @@ dependency-scan-release-cut:
   script:
     - |
       set -euo pipefail
+      pip3 install --ignore-installed -r requirements.txt
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py

@@ -41,7 +41,6 @@ container-autobuild:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
-        - requirements.txt
         - .bazelversion
         - gitlab-ci/container/**/*
         - gitlab-ci/config/container-image-autobuild.yml

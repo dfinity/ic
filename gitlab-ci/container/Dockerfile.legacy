@@ -152,10 +152,6 @@ RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
 COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
 
-# Install all python requirements
-COPY ./requirements.txt /tmp/requirements.txt
-RUN pip3 install --ignore-installed -r /tmp/requirements.txt
-
 # Add mold linker
 ARG mold_version=1.11.0
 RUN curl -L --retry 10 --silent --show-error "https://github.com/rui314/mold/releases/download/v${mold_version}/mold-${mold_version}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
