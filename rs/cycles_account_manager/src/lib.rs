@@ -42,6 +42,10 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
 const USE_COST_SCALING_FLAG: bool = true;
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
+/// Maximum payload size of a management call to update_settings
+/// overriding the canister's freezing threshold.
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 200;
+
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CyclesAccountManagerError {
@@ -141,6 +145,16 @@ impl ResourceSaturation {
             capacity: self.capacity,
         }
     }
+}
+
+// The fee for `UpdateSettings` is charged after applying
+// the settings to allow users to unfreeze canisters
+// after accidentally setting the freezing threshold too high.
+// To satisfy this use case, it is sufficient to send
+// a payload of a small size and thus we only delay
+// the ingress induction cost for small payloads.
+pub fn is_delayed_ingress_induction_cost(arg: &[u8]) -> bool {
+    arg.len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
 }
 
 /// Handles any operation related to cycles accounting, such as charging (due to
@@ -559,10 +573,14 @@ impl CyclesAccountManager {
             // If a subnet message, get effective canister id who will pay for the message.
             true => {
                 if let Ok(Method::UpdateSettings) = Method::from_str(ingress.method_name()) {
-                    // The fee for `UpdateSettings` is charged after applying the settings
-                    // to allow users to unfreeze canisters after accidentally setting
-                    // the freezing threshold too high.
-                    None
+                    // The fee for `UpdateSettings` with small payload is charged after
+                    // applying the settings to allow users to unfreeze canisters
+                    // after accidentally setting the freezing threshold too high.
+                    if is_delayed_ingress_induction_cost(ingress.arg()) {
+                        None
+                    } else {
+                        effective_canister_id
+                    }
                 } else {
                     effective_canister_id
                 }
@@ -1100,6 +1118,8 @@ pub enum IngressInductionCostError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use candid::Encode;
+    use ic_ic00_types::{CanisterSettingsArgs, UpdateSettingsArgs};
     use ic_test_utilities::types::ids::subnet_test_id;
 
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
@@ -1113,6 +1133,23 @@ mod tests {
             config,
             use_cost_scaling_flag: true,
         }
+    }
+
+    #[test]
+    fn max_delayed_ingress_cost_payload_size_test() {
+        let default_freezing_limit = 30 * 24 * 3600; // 30 days
+        let payload = UpdateSettingsArgs {
+            canister_id: CanisterId::from_u64(0).into(),
+            settings: CanisterSettingsArgs::new(
+                None,
+                None,
+                None,
+                Some(default_freezing_limit),
+                None,
+            ),
+            sender_canister_version: None, // ingress messages are not supposed to set this field
+        };
+        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
     }
 
     #[test]

@@ -58,6 +58,7 @@ fn main() -> Result<()> {
                     canister_large_initial_memory_small_memory_allocation
                 ))
                 .add_test(systest!(refunds_after_uninstall_are_refunded))
+                .add_test(systest!(update_settings_of_frozen_canister))
                 .add_test(systest!(
                     update_settings_with_controller_and_controllers_fails
                 ))

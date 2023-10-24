@@ -21,6 +21,7 @@ The test (module `execution::canister_lifecycle`) currently covers (at least) th
 . Attempting to install a canister on a subnet with an exhausted compute allocation fails.
 . After deleting a canister, a new canister can be installed taking up the freed compute allocation.
 . A controller can control (install/stop/delete) a controllee across different subnets.
+. Changing settings of a frozen canister succeeds.
 
 AKA:: Testcase 2.4
 
@@ -43,7 +44,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
-use ic_utils::interfaces::{management_canister::builders::InstallMode, ManagementCanister};
+use ic_utils::interfaces::{
+    management_canister::{builders::InstallMode, UpdateCanisterBuilder},
+    ManagementCanister,
+};
 use slog::info;
 
 pub fn create_canister_via_ingress_fails(env: TestEnv) {
@@ -125,6 +129,138 @@ pub fn create_canister_with_controller_and_controllers_fails(env: TestEnv) {
                             .canister_id
                     }),
                 RejectCode::CanisterReject,
+            );
+        }
+    });
+}
+
+pub fn update_settings_of_frozen_canister(env: TestEnv) {
+    use ic_base_types::NumBytes;
+    use ic_cdk::api::management_canister::main::{CanisterSettings, UpdateSettingsArgument};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_cycles_account_manager::CyclesAccountManager;
+
+    let logger = env.logger();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on({
+        async move {
+            let mgr = ManagementCanister::create(&agent);
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+
+            // Construct large `UpdateSettings` argument.
+            let mut controllers = mgr
+                .canister_status(&canister.canister_id())
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0
+                .settings
+                .controllers;
+            for i in 0..9 {
+                controllers.push(PrincipalId::new_derived(&controllers[0].into(), &[i]).into());
+            }
+            let low_freezing_threshold = 30 * 24 * 3600; // 30 days default
+            let arg = UpdateSettingsArgument {
+                canister_id: canister.canister_id(),
+                settings: CanisterSettings {
+                    controllers: Some(controllers),
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    freezing_threshold: Some(low_freezing_threshold.into()),
+                },
+            };
+            let bytes = Encode!(&arg).unwrap();
+
+            // Check that the canister is not frozen.
+            canister
+                .update(wasm().reply_data(&[]).build())
+                .await
+                .unwrap();
+
+            // Update freezing threshold to a very high value to make the canister frozen.
+            let high_freezing_threshold = 1_u64 << 62;
+            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
+                .with_optional_freezing_threshold(Some(high_freezing_threshold))
+                .call_and_wait()
+                .await
+                .expect("setting freezing threshold on unfrozen canister failed");
+
+            // Check that the canister is indeed frozen.
+            canister
+                .update(wasm().reply_data(&[]).build())
+                .await
+                .unwrap_err();
+
+            // Updating freezing threshold on a frozen canister back to a low value
+            // fails if `UpdateSettings` argument is too large.
+            mgr.update_("update_settings")
+                .with_arg_raw(bytes.clone())
+                .with_effective_canister_id(canister.canister_id())
+                .build::<((),)>()
+                .call_and_wait()
+                .await
+                .unwrap_err();
+
+            // Update freezing threshold on a frozen canister back to a low value.
+            let low_freezing_threshold = 30 * 24 * 3600; // 30 days default
+            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
+                .with_optional_freezing_threshold(Some(low_freezing_threshold))
+                .call_and_wait()
+                .await
+                .expect("setting freezing threshold on frozen canister failed");
+
+            // Check that the canister is not frozen anymore.
+            canister
+                .update(wasm().reply_data(&[]).build())
+                .await
+                .unwrap();
+
+            let balance_before = mgr
+                .canister_status(&canister.canister_id())
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0
+                .cycles;
+
+            // Updating freezing threshold on a not frozen canister to a low value
+            // now succeeds also if `UpdateSettings` argument is too large
+            // and charges the canister appropriately.
+            mgr.update_("update_settings")
+                .with_arg_raw(bytes.clone())
+                .with_effective_canister_id(canister.canister_id())
+                .build::<((),)>()
+                .call_and_wait()
+                .await
+                .unwrap();
+
+            let balance_after = mgr
+                .canister_status(&canister.canister_id())
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0
+                .cycles;
+
+            let cycles_account_manager = CyclesAccountManager::new(
+                SchedulerConfig::application_subnet().max_instructions_per_message,
+                SubnetType::Application,
+                app_node.subnet_id().unwrap(),
+                CyclesAccountManagerConfig::application_subnet(),
+            );
+
+            assert!(
+                balance_after < balance_before
+                    && balance_before - balance_after
+                        > cycles_account_manager
+                            .ingress_induction_cost_from_bytes(NumBytes::new(bytes.len() as u64), 1)
+                            .get()
             );
         }
     });
