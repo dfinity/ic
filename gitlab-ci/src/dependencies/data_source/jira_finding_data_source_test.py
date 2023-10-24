@@ -185,7 +185,7 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
         "|https://crates.io/crates/syn|syn|1.0|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
         "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1| |\n"
-        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit: [look here for more info| https://example.com]|\n",
+        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[
             0
         ]: "||*dep / vuln*||RUSTSEC-2020-0159||RUSTSEC-2022-0051||\n"
@@ -228,7 +228,7 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.vulnerabilities[1].name == "RUSTSEC-2022-0051"
     assert res1.vulnerabilities[1].description == "Memory corruption in liblz4"
     assert res1.vulnerabilities[1].score == 100
-    assert res1.vulnerabilities[1].risk_note == "crit: [look here for more info| https://example.com]"
+    assert res1.vulnerabilities[1].risk_note == "crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]"
     assert len(res1.first_level_dependencies) == 1
     assert res1.first_level_dependencies[0].id == "https://crates.io/crates/syn"
     assert res1.first_level_dependencies[0].name == "syn"
