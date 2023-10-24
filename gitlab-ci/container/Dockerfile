@@ -124,5 +124,13 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     echo "4d17d89e0c6a7c4c08ba5e0d3bbe9fd9c01ba227212307e157722c910e9a88be  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
+
+# Add kubectl
+ARG KUBECTL_BIN="/usr/local/bin/kubectl"
+ARG KUBECTL_VERSION="1.22.17"
+RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
+    echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
+    chmod +x "${KUBECTL_BIN}"
+
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
