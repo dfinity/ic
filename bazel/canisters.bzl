@@ -4,6 +4,7 @@ This module defines utilities for building Rust canisters.
 
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:candid.bzl", "did_git_test")
 
 def _wasm_rust_transition_impl(_settings, _attr):
     return {
@@ -71,6 +72,11 @@ def rust_canister(name, service_file, **kwargs):
     wasm_rust_binary_rule(
         name = name + ".raw",
         binary = ":" + wasm_name,
+    )
+
+    did_git_test(
+        name = name + "_did_git_test",
+        did = service_file,
     )
 
     # Invokes canister WebAssembly module optimizer and attaches the candid file.
