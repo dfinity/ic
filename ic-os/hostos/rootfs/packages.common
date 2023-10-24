@@ -18,7 +18,6 @@ chrony
 openssh-server
 
 # Smartcard support
-pcsc-tools
 pcscd
 opensc
 
@@ -70,3 +69,6 @@ ovmf
 python3-libvirt
 python3-requests
 xxd
+
+# QEMU required dependencies for version 6.2
+libpixman-1-0
