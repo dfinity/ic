@@ -54,11 +54,16 @@ EOF
             # it. Also, explicitly turn off router advertisements,
             # otherwise we may end up with two (distinct)
             # addresses on the same interface.
+            if lsblk --nodeps -o name,serial | grep -q config; then
+                # turn off DAD for tnet on k8s
+                DADCONFIG="IPv6DuplicateAddressDetection=0"
+            fi
             cat <<EOF
 [Network]
 Address=$ipv6_address
 Gateway=$ipv6_gateway
 IPv6AcceptRA=false
+${DADCONFIG:-}
 EOF
 
         else
