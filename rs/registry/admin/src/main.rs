@@ -4519,7 +4519,19 @@ async fn main() {
                     seen.insert(node);
                 }
             }
-            println!("}}");
+            println!("}},");
+            // list all API Boundary Nodes
+            let api_bn_node_ids = get_api_boundary_node_ids(opts.nns_url.clone());
+            println!(
+                "\"api_boundary_nodes\": {},",
+                serde_json::to_string_pretty(&api_bn_node_ids).unwrap()
+            );
+            seen.extend(
+                api_bn_node_ids
+                    .iter()
+                    .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap())),
+            );
+            // list all remaining nodes as unassigned nodes
             let node_ids = get_node_list_since(0, registry_canister)
                 .await
                 .into_iter()
@@ -4529,7 +4541,7 @@ async fn main() {
                 })
                 .collect::<Vec<_>>();
             println!(
-                ",\"unassigned_nodes\": {}",
+                "\"unassigned_nodes\": {}",
                 serde_json::to_string_pretty(&node_ids).unwrap()
             );
             println!("}}}}");
@@ -5655,27 +5667,7 @@ async fn main() {
             .await;
         }
         SubCommand::GetApiBoundaryNodes => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    vec![opts.nns_url.clone()],
-                )),
-                None,
-            );
-            // maximum number of retries, let the user ctrl+c if necessary
-            registry_client
-                .try_polling_latest_version(usize::MAX)
-                .unwrap();
-            let keys = registry_client
-                .get_key_family(
-                    API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
-                    registry_client.get_latest_version(),
-                )
-                .unwrap();
-            let records = keys
-                .iter()
-                .map(|k| k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX).unwrap())
-                .collect::<Vec<_>>();
+            let records = get_api_boundary_node_ids(opts.nns_url.clone());
             println!(
                 "{}",
                 serde_json::to_string_pretty(&records)
@@ -6346,6 +6338,35 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
         }
         Err(error) => panic!("Error getting value from registry: {:?}", error),
     }
+}
+
+fn get_api_boundary_node_ids(nns_url: Url) -> Vec<String> {
+    let registry_client = RegistryClientImpl::new(
+        Arc::new(NnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            vec![nns_url],
+        )),
+        None,
+    );
+    // maximum number of retries, let the user ctrl+c if necessary
+    registry_client
+        .try_polling_latest_version(usize::MAX)
+        .unwrap();
+    let keys = registry_client
+        .get_key_family(
+            API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
+            registry_client.get_latest_version(),
+        )
+        .unwrap();
+    let records = keys
+        .iter()
+        .map(|k| {
+            k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
+                .unwrap()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    records
 }
 
 /// Writes a threshold signing public key to the given path.
