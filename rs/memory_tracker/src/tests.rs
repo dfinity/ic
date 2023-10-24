@@ -37,6 +37,7 @@ fn setup(
     tmpfile.as_file().sync_all().unwrap();
     let mut page_map = PageMap::open(
         tmpfile.path(),
+        &[],
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )

@@ -1375,16 +1375,81 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join(CANISTER_FILE).into()
     }
 
+    /// List all overlay files with a particular name ending.
+    ///
+    /// All overlay files have the format {number}{name_end}`, where `name_end` distinguises
+    /// between wasm memory, stable memory etc, and the number imposes an ordering of the
+    /// overlay files, with higher number denoting a higher-priority overlay. The number is
+    /// typically the height when the overlay was written.
+    fn overlays_impl(&self, name_end: &str) -> Result<Vec<PathBuf>, LayoutError> {
+        let map_error = |err| LayoutError::IoError {
+            path: self.canister_root.clone(),
+            message: "Failed list overlays".to_string(),
+            io_err: err,
+        };
+
+        let files = std::fs::read_dir(&self.canister_root).map_err(map_error)?;
+        let mut result = Vec::default();
+        for file in files {
+            let path = file.map_err(map_error)?.path();
+            match path.to_str() {
+                Some(p) if p.ends_with(name_end) => {
+                    result.push(path);
+                }
+                _ => (),
+            }
+        }
+        result.sort();
+
+        Ok(result)
+    }
+
+    /// Base file for wasm memory.
     pub fn vmemory_0(&self) -> PathBuf {
         self.canister_root.join("vmemory_0.bin")
     }
 
+    /// List of existing overlay files for wasm memory.
+    pub fn vmemory_0_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_vmemory_0.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the wasm memory written at `height`.
+    pub fn vmemory_0_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_vmemory_0.overlay", height.get()))
+    }
+
+    /// Base file for stable memory.
     pub fn stable_memory_blob(&self) -> PathBuf {
         self.canister_root.join("stable_memory.bin")
     }
 
+    /// List of existing overlay files for stable memory.
+    pub fn stable_memory_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_stable_memory.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the stable memory written at `height`.
+    pub fn stable_memory_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_stable_memory.overlay", height.get()))
+    }
+
+    /// Base file for wasm chunk store.
     pub fn wasm_chunk_store(&self) -> PathBuf {
         self.canister_root.join("wasm_chunk_store.bin")
+    }
+
+    /// List of existing overlay files for wasm chunk store.
+    pub fn wasm_chunk_store_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_wasm_chunk_store.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the wasm chunk store written at `height`.
+    pub fn wasm_chunk_store_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_wasm_chunk_store.overlay", height.get()))
     }
 }
 
