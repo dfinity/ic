@@ -1,8 +1,12 @@
 use crate::numeric::wei_from_milli_ether;
 
 mod retrieve_eth_guard {
+    use crate::address::Address;
     use crate::guard::tests::init_state;
-    use crate::guard::{retrieve_eth_guard, GuardError, MAX_CONCURRENT};
+    use crate::guard::{retrieve_eth_guard, GuardError, MAX_CONCURRENT, MAX_PENDING};
+    use crate::numeric::{LedgerBurnIndex, Wei};
+    use crate::state::mutate_state;
+    use crate::transactions::EthWithdrawalRequest;
     use candid::Principal;
 
     #[test]
@@ -46,6 +50,35 @@ mod retrieve_eth_guard {
             let _guard = guards.pop().expect("should have at least one guard");
         }
         assert!(retrieve_eth_guard(principal_with_id(MAX_CONCURRENT as u64)).is_ok());
+    }
+
+    #[test]
+    fn should_allow_limited_number_of_pending_requests() {
+        init_state();
+        for i in 0..MAX_PENDING {
+            let _guard = retrieve_eth_guard(principal_with_id(i as u64)).unwrap();
+            record_withdrawal_request(LedgerBurnIndex::new(i as u64));
+        }
+
+        for additional_principal in MAX_PENDING..2 * MAX_PENDING {
+            assert_eq!(
+                retrieve_eth_guard(principal_with_id(additional_principal as u64)),
+                Err(GuardError::TooManyPendingRequests)
+            );
+        }
+
+        fn record_withdrawal_request(ledger_burn_index: LedgerBurnIndex) {
+            mutate_state(|s| {
+                s.eth_transactions
+                    .record_withdrawal_request(EthWithdrawalRequest {
+                        withdrawal_amount: Wei::ONE,
+                        destination: Address::ZERO,
+                        ledger_burn_index,
+                        from: Principal::anonymous(),
+                        from_subaccount: None,
+                    })
+            })
+        }
     }
 
     fn principal_with_id(id: u64) -> Principal {
