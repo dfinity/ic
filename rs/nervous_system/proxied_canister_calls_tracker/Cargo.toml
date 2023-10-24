@@ -9,4 +9,4 @@ ic-base-types = { path = "../../types/base_types" }
 [dev-dependencies]
 maplit = "1.0.2"
 pretty_assertions = "0.6.1"
-tokio = { version = "1.32.0", features = [ "full" ] }
+tokio = { workspace = true }

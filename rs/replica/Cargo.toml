@@ -72,7 +72,7 @@ slog-async = "2.5.0"
 static_assertions = "0.3.4"
 tempfile = "3.1.0"
 thread_profiler = { version = "0.3", optional = true }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tracing = "0.1.13"
 tower = { workspace = true }
 

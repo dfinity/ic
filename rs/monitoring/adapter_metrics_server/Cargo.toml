@@ -12,5 +12,5 @@ ic-metrics = { path = "../metrics" }
 prometheus = { workspace = true }
 protobuf = "2.27.1"
 slog = "2.7.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tonic = { workspace = true }

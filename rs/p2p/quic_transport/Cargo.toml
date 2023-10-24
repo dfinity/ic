@@ -34,7 +34,7 @@ slog = { version = "2.5.2", features = [
     "release_max_level_debug",
 ] }
 socket2 = { version = "0.5", features = ["all"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-metrics = "0.3.0"
 tokio-rustls = "0.24.0"
 tokio-util = { version = "0.7.4", features = ["codec", "time"] }

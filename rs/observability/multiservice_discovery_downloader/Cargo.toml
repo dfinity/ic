@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 multiservice_discovery_shared ={ path = "../multiservice_discovery_shared" }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 url = "2.2.2"
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }

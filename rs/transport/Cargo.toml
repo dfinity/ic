@@ -24,7 +24,7 @@ slog = { version = "2.5.2", features = [
     "release_max_level_debug",
 ] }
 strum = { version = "0.24", features = ["derive"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-util = { version = "0.7.4", features = ["io"] }
 tower = { workspace = true }
 

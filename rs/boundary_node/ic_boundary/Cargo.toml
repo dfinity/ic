@@ -67,7 +67,7 @@ slog = "2.5.2"
 stretto = { version = "^0.8", features = ["full"] }
 tempfile = "3.6.0"
 thiserror = "1.0.40"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
 tower = { workspace = true }
 tower_governor = "0.1"

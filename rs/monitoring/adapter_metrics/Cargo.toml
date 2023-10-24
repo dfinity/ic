@@ -11,6 +11,6 @@ prometheus = { workspace = true }
 protobuf = "2.27.1"
 slog = "2.7.0"
 slog-async = "2.7.0"
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
