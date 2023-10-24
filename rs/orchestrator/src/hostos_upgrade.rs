@@ -46,6 +46,9 @@ impl HostosUpgrader {
         interval: Duration,
         timeout: Duration,
     ) {
+        // Wait for a minute before starting the loop, to allow the registry
+        // some time to catch up, after starting.
+        tokio::time::sleep(Duration::from_secs(60)).await;
         while !*exit_signal.borrow() {
             if let Err(e) = tokio::time::timeout(timeout, self.check_for_upgrade()).await {
                 warn!(&self.logger, "Check for upgrade failed: {:?}", e);

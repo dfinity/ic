@@ -161,7 +161,10 @@ fn run_upgrade() -> Response {
 
     handle_command_output(command_output)?;
 
-    let command_output = std::process::Command::new("reboot").output();
+    // Schedule a reboot for +1 minute
+    let command_output = std::process::Command::new("shutdown")
+        .arg("--reboot")
+        .output();
 
     handle_command_output(command_output)
 }

@@ -216,7 +216,7 @@ impl UtilityCommand {
                 // At this point, HostOS should reboot and take us down. The
                 // timeout on the HostOS upgrade task will catch us if we
                 // actually get stuck.
-                std::thread::sleep(std::time::Duration::from_secs(30));
+                std::thread::sleep(std::time::Duration::from_secs(90));
             }
         }
 
