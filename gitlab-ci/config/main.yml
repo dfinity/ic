@@ -326,6 +326,9 @@ bazel-test-all-rebuild:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
   timeout: 2h
+  script:
+    - pip3 install --ignore-installed -r requirements.txt
+    - !reference [.bazel-test-all, script]
 
 bazel-build-macos:
   extends:
@@ -721,6 +724,7 @@ host-os-upgrade-test:
       curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.gz"
       curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/SHA256SUMS" -o "ic-os/hostos/build-out/update-img/SHA256SUMS"
 
+      pip3 install --ignore-installed -r requirements.txt
       # shellcheck disable=SC2154
       $SHELL_WRAPPER timeout -k 10 "${HOST_OS_TEST_TIMEOUT}" \
           "$CI_PROJECT_DIR"/ic-os/hostos/tests/hostos-upgrade.sh "$CI_PROJECT_DIR"

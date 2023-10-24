@@ -1639,7 +1639,8 @@ bazel-test-all-rebuild:
       when: manual
     - if: $SCHEDULE_NAME == "run-all-master"
   script:
-    - "./gitlab-ci/src/bazel-ci/main.sh"
+    - pip3 install --ignore-installed -r requirements.txt
+    - - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
     - bazel
@@ -3756,6 +3757,7 @@ host-os-upgrade-test:
       curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/update-img-test.tar.gz" -o "ic-os/hostos/build-out/update-img/update-img-test.tar.gz"
       curl -fsSL "https://download.dfinity.systems/ic/${VERSION}/host-os/update-img/SHA256SUMS" -o "ic-os/hostos/build-out/update-img/SHA256SUMS"
 
+      pip3 install --ignore-installed -r requirements.txt
       # shellcheck disable=SC2154
       $SHELL_WRAPPER timeout -k 10 "${HOST_OS_TEST_TIMEOUT}" \
           "$CI_PROJECT_DIR"/ic-os/hostos/tests/hostos-upgrade.sh "$CI_PROJECT_DIR"
