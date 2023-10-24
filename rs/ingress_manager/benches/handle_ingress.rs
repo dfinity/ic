@@ -33,7 +33,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
-    consensus::MockConsensusCache,
+    consensus::MockConsensusTime,
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
@@ -194,9 +194,9 @@ where
                 )
             });
 
-            let mut consensus_pool_cache = MockConsensusCache::new();
+            let mut consensus_time = MockConsensusTime::new();
             let time_source_cl = time_source.clone();
-            consensus_pool_cache
+            consensus_time
                 .expect_consensus_time()
                 .returning(move || Some(time_source_cl.get_relative_time()));
 
@@ -223,7 +223,7 @@ where
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
             let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
-                Arc::new(consensus_pool_cache),
+                Arc::new(consensus_time),
                 Box::new(ingress_hist_reader),
                 ingress_pool,
                 setup_registry(subnet_id, runtime.handle().clone()),

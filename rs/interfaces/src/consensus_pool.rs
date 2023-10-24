@@ -275,14 +275,17 @@ pub trait HeightIndexedPool<T> {
 }
 // end::interface[]
 
+/// Reader of time in the latest/highest finalized block.
+pub trait ConsensusTime: Send + Sync {
+    /// Return the time as recorded in the latest/highest finalized block.
+    /// Return None if there has not been any finalized block since genesis.
+    fn consensus_time(&self) -> Option<Time>;
+}
+
 /// Reader of consensus related states.
 pub trait ConsensusPoolCache: Send + Sync {
     /// Return the latest/highest finalized block.
     fn finalized_block(&self) -> Block;
-
-    /// Return the time as recorded in the latest/highest finalized block.
-    /// Return None if there has not been any finalized block since genesis.
-    fn consensus_time(&self) -> Option<Time>;
 
     /// Return the latest/highest CatchUpPackage.
     fn catch_up_package(&self) -> CatchUpPackage;

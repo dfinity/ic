@@ -11,7 +11,7 @@ mod proptests;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
-    consensus_pool::ConsensusPoolCache,
+    consensus_pool::ConsensusTime,
     execution_environment::IngressHistoryReader,
     ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
 };
@@ -112,7 +112,7 @@ impl IngressManagerMetrics {
 /// advertizes, purges ingresses, and selects the ingresses to be included in
 /// the blocks.
 pub struct IngressManager {
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    consensus_time: Arc<dyn ConsensusTime>,
     ingress_hist_reader: Box<dyn IngressHistoryReader>,
     ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
     ingress_pool: IngressPoolSelectWrapper,
@@ -134,7 +134,7 @@ impl IngressManager {
     #[allow(clippy::too_many_arguments)]
     /// Constructs an IngressManager
     pub fn new(
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+        consensus_time: Arc<dyn ConsensusTime>,
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
         ingress_pool: Arc<RwLock<dyn IngressPoolSelect>>,
         registry_client: Arc<dyn RegistryClient>,
@@ -165,7 +165,7 @@ impl IngressManager {
             Arc::new(HttpRequestVerifierImpl::new(ingress_signature_crypto)) as Arc<_>
         };
         Self {
-            consensus_pool_cache,
+            consensus_time,
             ingress_hist_reader,
             ingress_payload_cache: Arc::new(RwLock::new(BTreeMap::new())),
             ingress_pool: IngressPoolSelectWrapper::new(&ingress_pool),
@@ -240,7 +240,7 @@ pub(crate) mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
-        consensus::MockConsensusCache,
+        consensus::MockConsensusTime,
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
@@ -278,7 +278,7 @@ pub(crate) mod tests {
     pub(crate) fn setup_with_params(
         ingress_hist_reader: Option<Box<dyn IngressHistoryReader>>,
         registry_and_subnet_id: Option<(Arc<dyn RegistryClient>, SubnetId)>,
-        consensus_pool_cache: Option<Arc<dyn ConsensusPoolCache>>,
+        consensus_time: Option<Arc<dyn ConsensusTime>>,
         state: Option<ReplicatedState>,
         run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>),
     ) {
@@ -293,8 +293,7 @@ pub(crate) mod tests {
             let subnet_id = subnet_test_id(0);
             (setup_registry(subnet_id, 60 * 1024 * 1024), subnet_id)
         });
-        let consensus_pool_cache =
-            consensus_pool_cache.unwrap_or_else(|| Arc::new(MockConsensusCache::new()));
+        let consensus_time = consensus_time.unwrap_or_else(|| Arc::new(MockConsensusTime::new()));
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_get_state_at().return_const(Ok(
@@ -323,7 +322,7 @@ pub(crate) mod tests {
                 )));
                 run(
                     IngressManager::new(
-                        consensus_pool_cache,
+                        consensus_time,
                         ingress_hist_reader,
                         ingress_pool.clone(),
                         registry,

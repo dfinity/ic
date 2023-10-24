@@ -367,6 +367,7 @@ fn start_consensus(
     let mut join_handles = vec![];
 
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
+    let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
     let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
     let replica_config = ReplicaConfig { node_id, subnet_id };
     let membership = Arc::new(Membership::new(
@@ -376,7 +377,7 @@ fn start_consensus(
     ));
 
     let ingress_manager = Arc::new(IngressManager::new(
-        consensus_pool_cache.clone(),
+        consensus_time,
         ingress_history_reader,
         artifact_pools.ingress_pool.clone(),
         Arc::clone(&registry_client),
