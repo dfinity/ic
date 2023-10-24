@@ -43,8 +43,7 @@ type CreateCanisterArg = record {
   subnet_type: opt text;
 
   // Optional instructions to select on which subnet the new canister will be created on.
-  // vec may contain no more than one element.
-  subnet_selection: opt vec SubnetSelection;
+  subnet_selection: opt SubnetSelection;
 };
 
 // The argument of the [notify_create_canister] method.
