@@ -46,7 +46,6 @@ DEPENDENCIES = [
     "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:rcgen",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:simple_asn1",
     "@crate_index//:slog",

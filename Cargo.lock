@@ -6213,7 +6213,6 @@ dependencies = [
  "rcgen 0.10.0",
  "rsa",
  "serde",
- "serde_bytes",
  "serde_cbor",
  "simple_asn1",
  "slog",
