@@ -50,6 +50,7 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cup-explorer = { path = "../cup_explorer" }
+ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }

@@ -7002,6 +7002,7 @@ dependencies = [
 name = "ic-cycles-account-manager"
 version = "0.8.0"
 dependencies = [
+ "candid",
  "ic-base-types",
  "ic-config",
  "ic-constants",
@@ -16988,6 +16989,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-cup-explorer",
+ "ic-cycles-account-manager",
  "ic-http-utils",
  "ic-ic00-types",
  "ic-icrc1",

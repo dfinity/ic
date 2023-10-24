@@ -23,7 +23,10 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
-use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost, ResourceSaturation};
+use ic_cycles_account_manager::{
+    is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
+    ResourceSaturation,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -635,27 +638,29 @@ impl ExecutionEnvironment {
                         // high that topping up the canister is not feasible.
                         if let CanisterCall::Ingress(ingress) = &msg {
                             if let Ok(canister) = get_canister_mut(canister_id, &mut state) {
-                                let bytes_to_charge =
-                                    ingress.method_payload.len() + ingress.method_name.len();
-                                let induction_cost = self
-                                    .cycles_account_manager
-                                    .ingress_induction_cost_from_bytes(
-                                        NumBytes::from(bytes_to_charge as u64),
+                                if is_delayed_ingress_induction_cost(&ingress.method_payload) {
+                                    let bytes_to_charge =
+                                        ingress.method_payload.len() + ingress.method_name.len();
+                                    let induction_cost = self
+                                        .cycles_account_manager
+                                        .ingress_induction_cost_from_bytes(
+                                            NumBytes::from(bytes_to_charge as u64),
+                                            registry_settings.subnet_size,
+                                        );
+                                    let memory_usage = canister.memory_usage();
+                                    let message_memory_usage = canister.message_memory_usage();
+                                    // This call may fail with `CanisterOutOfCyclesError`,
+                                    // which is not actionable at this point.
+                                    let _ignore_error = self.cycles_account_manager.consume_cycles(
+                                        &mut canister.system_state,
+                                        memory_usage,
+                                        message_memory_usage,
+                                        canister.scheduler_state.compute_allocation,
+                                        induction_cost,
                                         registry_settings.subnet_size,
+                                        CyclesUseCase::IngressInduction,
                                     );
-                                let memory_usage = canister.memory_usage();
-                                let message_memory_usage = canister.message_memory_usage();
-                                // This call may fail with `CanisterOutOfCyclesError`,
-                                // which is not actionable at this point.
-                                let _ignore_error = self.cycles_account_manager.consume_cycles(
-                                    &mut canister.system_state,
-                                    memory_usage,
-                                    message_memory_usage,
-                                    canister.scheduler_state.compute_allocation,
-                                    induction_cost,
-                                    registry_settings.subnet_size,
-                                    CyclesUseCase::IngressInduction,
-                                );
+                                }
                             }
                         }
                         info!(

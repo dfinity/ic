@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/cup_explorer",
+    "//rs/cycles_account_manager",
     "//rs/http_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
