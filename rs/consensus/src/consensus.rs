@@ -95,6 +95,10 @@ enum ConsensusSubcomponent {
 /// registry for longer than this, the subnet should halt.
 pub const HALT_AFTER_REGISTRY_UNREACHABLE: Duration = Duration::from_secs(60 * 60);
 
+/// When purging consensus or certification artifacts, we always keep a
+/// minimum chain length below the catch-up height.
+pub(crate) const MINIMUM_CHAIN_LENGTH: u64 = 50;
+
 /// Describe expected version and artifact version when there is a mismatch.
 #[derive(Debug)]
 pub(crate) struct ReplicaVersionMismatch {}
