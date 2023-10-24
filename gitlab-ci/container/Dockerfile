@@ -90,11 +90,6 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
     rustup target add wasm32-unknown-unknown
 
-# Install all python requirements
-COPY ./requirements.txt /tmp/requirements.txt
-RUN sudo pip3 install --ignore-installed -r /tmp/requirements.txt
-RUN sudo pip3 install pre-commit
-
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
 ARG BUF_VERSION="1.25.1"

@@ -60,6 +60,8 @@ boundary-node-service-worker:
         sha256sum dfinity-service-worker-*.tgz > SHA256SUMS
       )
 
+      pip3 install --ignore-installed -r requirements.txt
+
       ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/find-build-id.sh)
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
@@ -380,6 +382,8 @@ macos-openssl-static-binaries:
       set -euo pipefail
       VERSION=$(git rev-parse HEAD)
 
+      pip3 install --ignore-installed -r requirements.txt
+
       if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
           # read NNS release version from git tree
           NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
@@ -512,6 +516,8 @@ pre-commit:
 
       rustup default stable
 
+      pip3 install pre-commit
+
       # Make sure CI can pull from the private repo.
       if ! SKIP=bazel_rust_format_check,bazel_smoke pre-commit run -a --hook-stage=manual ; then
         echo "Pre-commit checks failed. Here is the diff of the changes:"
@@ -549,6 +555,7 @@ python-gitlab-ci-tests:
   script:
     - |
       set -xeuo pipefail
+      pip3 install --ignore-installed -r requirements.txt
       cd gitlab-ci/src
       pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
 
@@ -834,6 +841,8 @@ release-boundary-node-service-worker:
       node --version
       npm --version
 
+      pip3 install --ignore-installed -r requirements.txt
+
       # download previously built artifact (during merge commit pipeline)
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/find-build-id.sh)
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
@@ -892,6 +901,8 @@ notify-gitlab-success:
   dependencies: []  # don't copy artifacts from other jobs
   script:
     - |
+      pip3 install --ignore-installed -r requirements.txt
+
       # TODO(IDX-2856): remove this top level "if" when we will not need to run the job for schedule pipelines.
       if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
         if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
@@ -917,6 +928,8 @@ notify-gitlab-failure:
   dependencies: []  # don't copy artifacts from other jobs
   script:
     - |
+      pip3 install --ignore-installed -r requirements.txt
+
       echo "notify gitlab failure"
       if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
           MESSAGE="✘ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 🌶🌶🌶"
