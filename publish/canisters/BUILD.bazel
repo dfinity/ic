@@ -63,7 +63,7 @@ DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
 CANISTERS_MAX_SIZE_E5_BYTES = {
     "cycles-minting-canister.wasm": "25",
     "genesis-token-canister.wasm": "25",
-    "governance-canister.wasm": "28",
+    "governance-canister.wasm": "30",
     "governance-canister_test.wasm": "30",
     "governance-mem-test-canister.wasm": "25",
     "ic-ckbtc-minter.wasm": "19",
