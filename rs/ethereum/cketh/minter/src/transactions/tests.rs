@@ -73,7 +73,14 @@ mod eth_transactions {
 
     mod withdrawal_requests_batch {
         use super::*;
+        use crate::transactions::tests::{
+            create_and_record_signed_transaction, create_and_record_transaction,
+            create_and_record_withdrawal_request, transaction_price,
+        };
+        use crate::transactions::EthWithdrawalRequest;
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use proptest::proptest;
+        use rand::Rng;
 
         #[test]
         fn should_be_empty_when_no_withdrawal_requests() {
@@ -127,6 +134,80 @@ mod eth_transactions {
                         withdrawal_request_with_index(LedgerBurnIndex::new(2)),
                     ]
                 );
+            }
+        }
+
+        #[test]
+        fn should_limit_batch_size_when_too_many_pending_transactions() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let mut rng = reproducible_rng();
+            for i in 0..997 {
+                let withdrawal_request = create_and_record_withdrawal_request(
+                    &mut transactions,
+                    LedgerBurnIndex::new(i),
+                );
+                create_and_record_pending_transaction(
+                    &mut transactions,
+                    withdrawal_request,
+                    rng.gen(),
+                );
+            }
+            for i in 997..1000 {
+                create_and_record_withdrawal_request(&mut transactions, LedgerBurnIndex::new(i));
+            }
+
+            assert_eq!(
+                transactions.withdrawal_requests_batch(3),
+                vec![
+                    withdrawal_request_with_index(LedgerBurnIndex::new(997)),
+                    withdrawal_request_with_index(LedgerBurnIndex::new(998)),
+                    withdrawal_request_with_index(LedgerBurnIndex::new(999)),
+                ]
+            );
+
+            create_and_record_pending_transaction(
+                &mut transactions,
+                withdrawal_request_with_index(LedgerBurnIndex::new(997)),
+                rng.gen(),
+            );
+            assert_eq!(
+                transactions.withdrawal_requests_batch(3),
+                vec![
+                    withdrawal_request_with_index(LedgerBurnIndex::new(998)),
+                    withdrawal_request_with_index(LedgerBurnIndex::new(999)),
+                ]
+            );
+
+            create_and_record_pending_transaction(
+                &mut transactions,
+                withdrawal_request_with_index(LedgerBurnIndex::new(998)),
+                rng.gen(),
+            );
+            assert_eq!(
+                transactions.withdrawal_requests_batch(3),
+                vec![withdrawal_request_with_index(LedgerBurnIndex::new(999))]
+            );
+
+            create_and_record_pending_transaction(
+                &mut transactions,
+                withdrawal_request_with_index(LedgerBurnIndex::new(999)),
+                rng.gen(),
+            );
+            assert_eq!(transactions.withdrawal_requests_batch(3), vec![]);
+        }
+
+        fn create_and_record_pending_transaction(
+            transactions: &mut EthTransactions,
+            withdrawal_request: EthWithdrawalRequest,
+            to_sign: bool,
+        ) {
+            let tx = create_and_record_transaction(
+                transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+            if to_sign {
+                create_and_record_signed_transaction(transactions, tx);
             }
         }
     }
@@ -380,7 +461,7 @@ mod eth_transactions {
 
                 transactions.record_signed_transaction(signed_tx.clone());
 
-                assert_eq!(transactions.created_transactions_iter().next(), None);
+                assert_eq!(transactions.transactions_to_sign_iter().next(), None);
                 assert_eq!(
                     transactions.sent_tx.get_alt(&ledger_burn_index),
                     Some(&vec![signed_tx])
@@ -717,7 +798,7 @@ mod eth_transactions {
                 transactions.record_resubmit_transaction(transaction.clone());
                 let signed_tx = sign_transaction(transaction.clone());
                 transactions.record_signed_transaction(signed_tx.clone());
-                assert_eq!(transactions.created_transactions_iter().next(), None);
+                assert_eq!(transactions.transactions_to_sign_iter().next(), None);
                 assert_eq!(
                     transactions.sent_tx,
                     MultiKeyMap::from_iter(vec![(
@@ -805,7 +886,7 @@ mod eth_transactions {
             );
             transactions.record_resubmit_transaction(expected_resubmitted_tx1);
             assert_eq!(
-                transactions.created_transactions_iter().collect::<Vec<_>>(),
+                transactions.transactions_to_sign_iter().collect::<Vec<_>>(),
                 vec![(
                     &TransactionNonce::ZERO,
                     &ledger_burn_index,
@@ -835,7 +916,7 @@ mod eth_transactions {
             );
             transactions.record_resubmit_transaction(expected_resubmitted_tx2);
             assert_eq!(
-                transactions.created_transactions_iter().collect::<Vec<_>>(),
+                transactions.transactions_to_sign_iter().collect::<Vec<_>>(),
                 vec![(
                     &TransactionNonce::ZERO,
                     &ledger_burn_index,
@@ -845,7 +926,7 @@ mod eth_transactions {
         }
     }
 
-    mod transactions_to_send_iter {
+    mod transactions_to_send_batch {
         use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce};
         use crate::transactions::tests::arbitrary::arb_checked_amount_of;
         use crate::transactions::tests::{
@@ -919,32 +1000,13 @@ mod eth_transactions {
             );
 
             assert_eq!(
-                transactions
-                    .transactions_to_send_iter(TransactionCount::ZERO)
-                    .collect::<Vec<_>>(),
-                vec![
-                    (
-                        &TransactionNonce::ZERO,
-                        &first_ledger_burn_index,
-                        &last_first_tx
-                    ),
-                    (
-                        &TransactionNonce::ONE,
-                        &second_ledger_burn_index,
-                        &second_tx
-                    )
-                ]
+                transactions.transactions_to_send_batch(TransactionCount::ZERO, usize::MAX),
+                vec![last_first_tx, second_tx.clone()]
             );
 
             assert_eq!(
-                transactions
-                    .transactions_to_send_iter(TransactionCount::ONE)
-                    .collect::<Vec<_>>(),
-                vec![(
-                    &TransactionNonce::ONE,
-                    &second_ledger_burn_index,
-                    &second_tx
-                )]
+                transactions.transactions_to_send_batch(TransactionCount::ONE, usize::MAX),
+                vec![second_tx]
             );
 
             assert_transactions_to_send_iter_is_empty(&transactions, TransactionCount::TWO);
@@ -955,9 +1017,7 @@ mod eth_transactions {
             latest_tx_count: TransactionCount,
         ) {
             assert_eq!(
-                transactions
-                    .transactions_to_send_iter(latest_tx_count)
-                    .collect::<Vec<_>>(),
+                transactions.transactions_to_send_batch(latest_tx_count, usize::MAX),
                 vec![]
             );
         }
@@ -1150,7 +1210,7 @@ mod eth_transactions {
                     &signed_tx.try_finalize(receipt).unwrap()
                 )]
             );
-            assert_eq!(transactions.created_transactions_iter().next(), None);
+            assert_eq!(transactions.transactions_to_sign_iter().next(), None);
             assert_eq!(transactions.sent_transactions_iter().next(), None);
         }
 
@@ -1181,7 +1241,7 @@ mod eth_transactions {
                     signed_tx.try_finalize(receipt).unwrap()
                 )])
             );
-            assert_eq!(transactions.created_transactions_iter().next(), None);
+            assert_eq!(transactions.transactions_to_sign_iter().next(), None);
             assert_eq!(transactions.sent_transactions_iter().next(), None);
         }
     }
@@ -1377,7 +1437,7 @@ mod withdrawal_flow {
                 }
             }
 
-            let created_txs: Vec<_> = wrapped_txs.borrow().created_transactions_iter().map(|(_nonce, _ledger_burn_index, tx)| tx)
+            let created_txs: Vec<_> = wrapped_txs.borrow().transactions_to_sign_iter().map(|(_nonce, _ledger_burn_index, tx)| tx)
             .cloned()
             .collect();
             for created_tx in created_txs {

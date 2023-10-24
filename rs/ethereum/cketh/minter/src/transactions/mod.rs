@@ -15,7 +15,8 @@ use crate::tx::{
 use candid::Principal;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, VecDeque};
+use std::cmp::min;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 
 /// Ethereum withdrawal request issued by the user.
@@ -373,11 +374,24 @@ impl EthTransactions {
         RetrieveEthStatus::NotFound
     }
 
-    pub fn withdrawal_requests_batch(&self, batch_size: usize) -> Vec<EthWithdrawalRequest> {
-        // TODO FI-948: maybe look ahead at the size of created_tx and adapt the batch size accordingly
-        // to ensure that at each state we do not process more that batch size
+    pub fn withdrawal_requests_batch(
+        &self,
+        requested_batch_size: usize,
+    ) -> Vec<EthWithdrawalRequest> {
+        // The number of pending transaction nonces is counted and not the number of pending transactions
+        // because a nonce may be associated with several distinct transactions (due to re-submission and dynamic fees).
+        // However, once a nonce is chosen for a withdrawal request, it's in our interest that the corresponding transaction be finalized asap.
+        // Limiting the number of transactions would be counter-productive.
+        const MAX_NUM_PENDING_TRANSACTION_NONCES: usize = 1000;
+        let unique_pending_transaction_nonces: BTreeSet<_> =
+            self.created_tx.keys().chain(self.sent_tx.keys()).collect();
+        let actual_batch_size = min(
+            MAX_NUM_PENDING_TRANSACTION_NONCES
+                .saturating_sub(unique_pending_transaction_nonces.len()),
+            requested_batch_size,
+        );
         self.withdrawal_requests_iter()
-            .take(batch_size)
+            .take(actual_batch_size)
             .cloned()
             .collect()
     }
@@ -386,7 +400,11 @@ impl EthTransactions {
         self.withdrawal_requests.iter()
     }
 
-    pub fn created_transactions_iter(
+    pub fn withdrawal_requests_len(&self) -> usize {
+        self.withdrawal_requests.len()
+    }
+
+    pub fn transactions_to_sign_iter(
         &self,
     ) -> impl Iterator<
         Item = (
@@ -398,16 +416,21 @@ impl EthTransactions {
         self.created_tx.iter()
     }
 
-    pub fn transactions_to_send_iter(
+    pub fn transactions_to_sign_batch(
+        &self,
+        batch_size: usize,
+    ) -> Vec<(LedgerBurnIndex, Eip1559TransactionRequest)> {
+        self.transactions_to_sign_iter()
+            .take(batch_size)
+            .map(|(_nonce, withdrawal_id, tx)| (*withdrawal_id, tx.clone()))
+            .collect()
+    }
+
+    pub fn transactions_to_send_batch(
         &self,
         latest_transaction_count: TransactionCount,
-    ) -> impl Iterator<
-        Item = (
-            &TransactionNonce,
-            &LedgerBurnIndex,
-            &SignedEip1559TransactionRequest,
-        ),
-    > {
+        batch_size: usize,
+    ) -> Vec<SignedEip1559TransactionRequest> {
         let first_pending_tx_nonce: TransactionNonce = latest_transaction_count.change_units();
         self.sent_tx
             .iter()
@@ -416,6 +439,10 @@ impl EthTransactions {
                     .map(|tx| (nonce, ledger_burn_index, tx))
                     .filter(|(nonce, _ledger_burn_index, _tx)| *nonce >= &first_pending_tx_nonce)
             })
+            .take(batch_size)
+            .map(|(_nonce, _index, tx)| tx)
+            .cloned()
+            .collect()
     }
 
     pub fn sent_transactions_iter(
@@ -446,8 +473,10 @@ impl EthTransactions {
         self.sent_tx.is_empty()
     }
 
-    pub fn nothing_to_process(&self) -> bool {
-        self.withdrawal_requests.is_empty() && self.created_tx.is_empty() && self.sent_tx.is_empty()
+    pub fn has_pending_requests(&self) -> bool {
+        !self.withdrawal_requests.is_empty()
+            || !self.created_tx.is_empty()
+            || !self.sent_tx.is_empty()
     }
 
     fn remove_withdrawal_request(&mut self, request: &EthWithdrawalRequest) {

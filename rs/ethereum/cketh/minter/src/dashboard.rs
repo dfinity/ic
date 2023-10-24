@@ -64,7 +64,7 @@ impl DashboardTemplate {
 
         let mut pending_transactions: Vec<_> = state
             .eth_transactions
-            .created_transactions_iter()
+            .transactions_to_sign_iter()
             .map(
                 |(_nonce, ledger_burn_index, tx)| DashboardPendingTransaction {
                     ledger_burn_index: *ledger_burn_index,

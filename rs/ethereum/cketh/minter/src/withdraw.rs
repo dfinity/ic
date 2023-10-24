@@ -18,6 +18,10 @@ use ic_canister_log::log;
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::zip;
 
+const WITHDRAWAL_REQUESTS_BATCH_SIZE: usize = 5;
+const TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
+const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
+
 pub async fn process_retrieve_eth_requests() {
     let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
         Ok(guard) => guard,
@@ -30,7 +34,7 @@ pub async fn process_retrieve_eth_requests() {
         }
     };
 
-    if read_state(|s| s.eth_transactions.nothing_to_process()) {
+    if read_state(|s| !s.eth_transactions.has_pending_requests()) {
         return;
     }
 
@@ -57,6 +61,13 @@ pub async fn process_retrieve_eth_requests() {
     sign_transactions_batch().await;
     send_transactions_batch(latest_transaction_count).await;
     finalize_transactions_batch().await;
+
+    if read_state(|s| s.eth_transactions.has_pending_requests()) {
+        ic_cdk_timers::set_timer(
+            crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
+            || ic_cdk::spawn(process_retrieve_eth_requests()),
+        );
+    }
 }
 
 async fn latest_transaction_count() -> Option<TransactionCount> {
@@ -117,7 +128,10 @@ async fn resubmit_transactions_batch(
 }
 
 fn create_transactions_batch(transaction_price: TransactionPrice) {
-    for request in read_state(|s| s.eth_transactions.withdrawal_requests_batch(5)) {
+    for request in read_state(|s| {
+        s.eth_transactions
+            .withdrawal_requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
+    }) {
         log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
         let ethereum_network = read_state(State::ethereum_network);
         let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
@@ -158,9 +172,7 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
 async fn sign_transactions_batch() {
     let transactions_batch: Vec<_> = read_state(|s| {
         s.eth_transactions
-            .created_transactions_iter()
-            .map(|(_nonce, withdrawal_id, tx)| (*withdrawal_id, tx.clone()))
-            .collect()
+            .transactions_to_sign_batch(TRANSACTIONS_TO_SIGN_BATCH_SIZE)
     });
     log!(DEBUG, "Signing transactions {transactions_batch:?}");
     let results = join_all(
@@ -203,10 +215,7 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     };
     let transactions_to_send: Vec<_> = read_state(|s| {
         s.eth_transactions
-            .transactions_to_send_iter(latest_transaction_count)
-            .map(|(_nonce, _index, tx)| tx)
-            .cloned()
-            .collect()
+            .transactions_to_send_batch(latest_transaction_count, TRANSACTIONS_TO_SEND_BATCH_SIZE)
     });
 
     let rpc_client = read_state(EthRpcClient::from_state);

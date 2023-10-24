@@ -147,6 +147,10 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
             .map(|(key, alt_key)| (key, alt_key, &self.by_alt_key[alt_key]))
     }
 
+    pub fn keys(&self) -> impl Iterator<Item = &Key> {
+        self.by_key.keys()
+    }
+
     pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(Key, AltKey, V)>
     where
         Key: Borrow<Q>,
