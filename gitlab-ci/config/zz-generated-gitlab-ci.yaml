@@ -1645,7 +1645,6 @@ bazel-test-all-rebuild:
       when: manual
     - if: $SCHEDULE_NAME == "run-all-master"
   script:
-    - pip3 install --ignore-installed -r requirements.txt
     - - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
