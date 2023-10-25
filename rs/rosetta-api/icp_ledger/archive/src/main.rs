@@ -326,9 +326,9 @@ fn check_archive_candid_interface_compatibility() {
     let expected_interface_path =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ledger_archive.did");
 
-    candid::utils::service_compatible(
+    candid::utils::service_equal(
         CandidSource::Text(&actual_interface),
         CandidSource::File(&expected_interface_path),
     )
-    .expect("ledger archive canister interface is not compatible with the ledger_archive.did file");
+    .expect("ledger archive canister interface is not equal with the ledger_archive.did file");
 }

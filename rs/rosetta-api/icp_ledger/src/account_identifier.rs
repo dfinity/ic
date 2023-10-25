@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
@@ -167,6 +167,12 @@ impl<'de> Deserialize<'de> for AccountIdentifier {
     {
         let hex: [u8; 32] = hex::serde::deserialize(deserializer)?;
         check_sum(hex).map_err(D::Error::custom)
+    }
+}
+
+impl From<Principal> for AccountIdentifier {
+    fn from(pid: Principal) -> Self {
+        AccountIdentifier::new(PrincipalId(pid), None)
     }
 }
 
