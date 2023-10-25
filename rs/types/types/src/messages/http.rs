@@ -18,7 +18,12 @@ use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{ser::SerializeTuple, Deserialize, Serialize};
-use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+    error::Error,
+    fmt,
+};
 
 #[cfg(test)]
 mod tests;
@@ -558,6 +563,7 @@ pub enum RawHttpRequestVal {
     String(String),
     U64(u64),
     Array(Vec<RawHttpRequestVal>),
+    Map(BTreeMap<String, RawHttpRequestVal>),
 }
 
 /// The reply to an update call.
@@ -594,11 +600,15 @@ impl QueryResponseHash {
 
         let self_map_representation = match response {
             HttpQueryResponse::Replied { reply } => {
+                let map_of_reply = btreemap! {
+                    "arg".to_string() => RawHttpRequestVal::Bytes(reply.arg.0.clone()),
+                };
+
                 btreemap! {
                     "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
                     "status".to_string() => String("replied".to_string()),
                     "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
-                    "reply".to_string() => Bytes(reply.representation_independent_hash().to_vec()),
+                    "reply".to_string() => Map(map_of_reply)
                 }
             }
             HttpQueryResponse::Rejected {
@@ -621,6 +631,10 @@ impl QueryResponseHash {
         let hash = hash_of_map(&self_map_representation);
 
         Self(hash)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 
@@ -676,15 +690,6 @@ pub struct NodeSignature {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HttpQueryResponseReply {
     pub arg: Blob,
-}
-
-impl HttpQueryResponseReply {
-    /// Returns the representation-independent hash.
-    pub fn representation_independent_hash(&self) -> [u8; 32] {
-        hash_of_map(&btreemap! {
-            "arg".to_string() => RawHttpRequestVal::Bytes(self.arg.0.clone()),
-        })
-    }
 }
 
 /// The response to a `read_state` request.
