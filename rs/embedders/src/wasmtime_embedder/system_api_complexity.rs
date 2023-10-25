@@ -244,18 +244,6 @@ pub mod cpu {
 }
 
 pub mod system_api {
-    // Select between the system api complexity overhead constants based on the metering type.
-    // Takes as parameter a constant name and the metering type.
-    macro_rules! complexity_overhead {
-        ($name:ident, $metering_type:expr) => {
-            match $metering_type {
-                MeteringType::Old => system_api_complexity::overhead::old::$name,
-                MeteringType::New => system_api_complexity::overhead::new::$name,
-                MeteringType::None => system_api_complexity::overhead::old::$name,
-            }
-        };
-    }
-
     // Select between the system api complexity for native stable memory constants based on the metering type.
     // Takes as parameter a constant name and the metering type.
     macro_rules! complexity_overhead_native {
@@ -268,6 +256,5 @@ pub mod system_api {
         };
     }
 
-    pub(crate) use complexity_overhead;
     pub(crate) use complexity_overhead_native;
 }
