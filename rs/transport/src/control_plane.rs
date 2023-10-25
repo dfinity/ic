@@ -271,29 +271,33 @@ impl TransportImpl {
                             .tcp_connects
                             .with_label_values(&[STATUS_SUCCESS])
                             .inc();
-
-                        let peer_map = arc_self.peer_map.read().await;
-                        let peer_state_mu = match peer_map.get(&peer_id) {
-                            Some(peer_state) => peer_state,
-                            None => continue,
-                        };
-                        let mut peer_state = peer_state_mu.write().await;
-                        if peer_state.get_connected().is_some() {
-                            // TODO: P2P-516
-                            continue;
-                        }
                         match arc_self.tls_client_handshake(peer_id, stream).await {
                             Ok(tls_stream) => {
                                 arc_self.control_plane_metrics
                                 .tls_handshakes
                                     .with_label_values(&[ConnectionRole::Client.as_ref(), STATUS_SUCCESS])
                                     .inc();
+                                // It is important to not hold these lock across the tls handshake since in the worst case
+                                // this can take 10+s. By doing the peer map operation after the handshake it is ensured
+                                // that the looks are held as short as possible.
+                                let peer_map = arc_self.peer_map.read().await;
+                                let peer_state_mu = match peer_map.get(&peer_id) {
+                                    Some(peer_state) => peer_state,
+                                    None => continue,
+                                };
+
+                                let mut peer_state = peer_state_mu.write().await;
+                                if peer_state.get_connected().is_some() {
+                                    continue;
+                                }
+
                                 let mut event_handler = match arc_self.event_handler.lock().await.as_ref() {
                                     Some(event_handler) => event_handler.clone(),
                                     None => continue,
                                 };
                                 let weak_self_clone = arc_self.weak_self.read().unwrap().clone();
                                 let event_handler_clone = event_handler.clone();
+
                                 if let Ok(connected_state) = create_connected_state(
                                     peer_id,
                                     channel_id,
