@@ -4,6 +4,7 @@
 // but it doesn't seem like making this always available creates much risk. A
 // the same time, trying to hide this behind "test" would create more hurdles.
 use super::*;
+use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
 use lazy_static::lazy_static;
 
@@ -161,5 +162,34 @@ lazy_static! {
             // Disabled until IS_MATCHED_FUNDING_ENABLED == True
             neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED { Some(true) } else { None },
         })
+    };
+
+    pub static ref CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING: CreateServiceNervousSystem = {
+        let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .clone()
+            .unwrap();
+        CreateServiceNervousSystem {
+            swap_parameters: Some(src::SwapParameters {
+                minimum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(36_000 * E8),
+                }),
+                maximum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(45_000 * E8),
+                }),
+                minimum_participant_icp: Some(pb::Tokens {
+                    e8s: Some(50 * E8),
+                }),
+                maximum_participant_icp: Some(pb::Tokens {
+                    e8s: Some(1_000 * E8),
+                }),
+                // Unset legacy fields
+                minimum_icp: None,
+                maximum_icp: None,
+                neurons_fund_investment_icp: None,
+                ..swap_parameters
+            }),
+            ..CREATE_SERVICE_NERVOUS_SYSTEM.clone()
+        }
     };
 }

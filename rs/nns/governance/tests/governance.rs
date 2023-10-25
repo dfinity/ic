@@ -39,7 +39,10 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::{
     governance::{
-        get_node_provider_reward, test_data::CREATE_SERVICE_NERVOUS_SYSTEM,
+        get_node_provider_reward,
+        test_data::{
+            CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+        },
         validate_proposal_title, Environment, Governance, HeapGrowthPotential,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
         MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
@@ -48,6 +51,7 @@ use ic_nns_governance::{
         WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
+    neurons_fund::{PolynomialMatchingFunction, SerializableFunction},
     pb::v1::{
         add_or_remove_node_provider::Change,
         governance::{
@@ -11135,21 +11139,7 @@ struct MockEnvironment<'a> {
     call_canister_method_min_duration: Option<std::time::Duration>,
 }
 
-fn format_call_request(c: &ExpectedCallCanisterMethodCallArguments) -> String {
-    match c.method_name {
-        "deploy_new_sns" => {
-            format!("{:?}", Decode!(&c.request, DeployNewSnsRequest))
-        }
-        "open" => {
-            format!("{:?}", Decode!(&c.request, sns_swap_pb::OpenRequest))
-        }
-        _ => {
-            format!("<{} undecoded bytes>{:?}", c.request.len(), c.request)
-        }
-    }
-}
-
-#[inline]
+#[track_caller]
 fn assert_calls_eq(
     observed: &ExpectedCallCanisterMethodCallArguments,
     expected: &ExpectedCallCanisterMethodCallArguments,
@@ -11161,13 +11151,33 @@ fn assert_calls_eq(
         observed.target,
         observed.method_name
     );
-    assert_eq!(
-        format_call_request(observed),
-        format_call_request(expected),
-        "unexpected call request to {}.{}",
-        observed.target,
-        observed.method_name
-    );
+    match observed.method_name {
+        "deploy_new_sns" => {
+            assert_eq!(
+                Decode!(&observed.request, DeployNewSnsRequest).unwrap(),
+                Decode!(&expected.request, DeployNewSnsRequest).unwrap(),
+                "unexpected call request to {}.{}",
+                observed.target,
+                observed.method_name,
+            );
+        }
+        "open" => {
+            assert_eq!(
+                Decode!(&observed.request, sns_swap_pb::OpenRequest).unwrap(),
+                Decode!(&expected.request, sns_swap_pb::OpenRequest).unwrap(),
+                "unexpected call request to {}.{}",
+                observed.target,
+                observed.method_name,
+            );
+        }
+        _ => {
+            assert_eq!(
+                observed.request, expected.request,
+                "unexpected call request to {}.{}",
+                observed.target, observed.method_name,
+            );
+        }
+    }
 }
 
 #[async_trait]
@@ -11314,21 +11324,21 @@ lazy_static! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal(1)),
-                maturity_e8s_equivalent: 60 * E8,
+                maturity_e8s_equivalent: 600_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
             2 => Neuron {
                 id: Some(NeuronId { id: 2 }),
                 controller: Some(principal(1)),
-                maturity_e8s_equivalent: 10 * E8,
+                maturity_e8s_equivalent: 100_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
             3 => Neuron {
                 id: Some(NeuronId { id: 3 }),
                 controller: Some(principal(2)),
-                maturity_e8s_equivalent: 30 * E8,
+                maturity_e8s_equivalent: 300_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
@@ -11370,12 +11380,14 @@ lazy_static! {
         result
     };
 
+    static ref SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR: Option<String> = Some(
+        PolynomialMatchingFunction::new(1_000_000 * E8).serialize()
+    );
+
     static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
-                serialized_representation: Some(
-                    "<SimpleLinearFunction>".to_string(),
-                ),
+                serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
             },
         ),
         neurons_fund_reserves: Some(
@@ -11388,10 +11400,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            600000000,
+                            41663623082,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            6000000000,
+                            600_000 * E8,
                         ),
                         hotkey_principal: Some(principal(1)),
                         is_capped: Some(
@@ -11405,10 +11417,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            100000000,
+                            6943937180,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            1000000000,
+                            100_000 * E8,
                         ),
                         hotkey_principal: Some(principal(1)),
                         is_capped: Some(
@@ -11422,10 +11434,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            300000000,
+                            20831811541,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            3000000000,
+                            300_000 * E8,
                         ),
                         hotkey_principal: Some(principal(2)),
                         is_capped: Some(
@@ -11438,39 +11450,37 @@ lazy_static! {
         swap_participation_limits: Some(
             SwapParticipationLimits {
                 min_direct_participation_icp_e8s: Some(
-                    6200000000,
+                    36_000 * E8,
                 ),
                 max_direct_participation_icp_e8s: Some(
-                    18900000000,
+                    4500000000000,
                 ),
                 min_participant_icp_e8s: Some(
-                    100000000,
+                    50 * E8,
                 ),
                 max_participant_icp_e8s: Some(
-                    10000000000,
+                    1_000 * E8,
                 ),
             },
         ),
         direct_participation_icp_e8s: Some(
-            18900000000,
+            4500000000000,
         ),
         total_maturity_equivalent_icp_e8s: Some(
-            10000000000,
+            1_000_000 * E8,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            1000000000,
+            69439371804,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            1000000000,
+            69439371804,
         ),
     });
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION_ABORT: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
-                serialized_representation: Some(
-                    "<SimpleLinearFunction>".to_string(),
-                ),
+                serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
             },
         ),
         neurons_fund_reserves: Some(
@@ -11481,16 +11491,16 @@ lazy_static! {
         swap_participation_limits: Some(
             SwapParticipationLimits {
                 min_direct_participation_icp_e8s: Some(
-                    6200000000,
+                    3600000000000,
                 ),
                 max_direct_participation_icp_e8s: Some(
-                    18900000000,
+                    4500000000000,
                 ),
                 min_participant_icp_e8s: Some(
-                    100000000,
+                    5000000000,
                 ),
                 max_participant_icp_e8s: Some(
-                    10000000000,
+                    100000000000,
                 ),
             },
         ),
@@ -11498,10 +11508,10 @@ lazy_static! {
             0,
         ),
         total_maturity_equivalent_icp_e8s: Some(
-            10000000000,
+            100000000000000,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            1000000000,
+            69439371804,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
             0,
@@ -11511,9 +11521,7 @@ lazy_static! {
     static ref INITIAL_NEURONS_FUND_PARTICIPATION_COMMIT: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
-                serialized_representation: Some(
-                    "<SimpleLinearFunction>".to_string(),
-                ),
+                serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
             },
         ),
         neurons_fund_reserves: Some(
@@ -11526,10 +11534,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            300000000,
+                            12144577009,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            6000000000,
+                            60000000000000,
                         ),
                         hotkey_principal: Some(principal(1)),
                         is_capped: Some(
@@ -11543,10 +11551,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            150000000,
+                            6072288505,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            3000000000,
+                            30000000000000,
                         ),
                         hotkey_principal: Some(principal(2)),
                         is_capped: Some(
@@ -11559,30 +11567,30 @@ lazy_static! {
         swap_participation_limits: Some(
             SwapParticipationLimits {
                 min_direct_participation_icp_e8s: Some(
-                    6200000000,
+                    3600000000000,
                 ),
                 max_direct_participation_icp_e8s: Some(
-                    18900000000,
+                    4500000000000,
                 ),
                 min_participant_icp_e8s: Some(
-                    100000000,
+                    5000000000,
                 ),
                 max_participant_icp_e8s: Some(
-                    10000000000,
+                    100000000000,
                 ),
             },
         ),
         direct_participation_icp_e8s: Some(
-            500000000,
+            4000000000000,
         ),
         total_maturity_equivalent_icp_e8s: Some(
-            10000000000,
+            100000000000000,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            1000000000,
+            69439371804,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            500000000,
+            20240961682,
         ),
     });
 
@@ -11595,10 +11603,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    600000000,
+                    41663623082,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    6000000000,
+                    60000000000000,
                 ),
                 hotkey_principal: Some(principal(1)),
                 is_capped: Some(
@@ -11612,10 +11620,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    100000000,
+                    6943937180,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    1000000000,
+                    10000000000000,
                 ),
                 hotkey_principal: Some(principal(1)),
                 is_capped: Some(
@@ -11629,10 +11637,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    300000000,
+                    20831811541,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    3000000000,
+                    30000000000000,
                 ),
                 hotkey_principal: Some(principal(2)),
                 is_capped: Some(
@@ -11651,10 +11659,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    300000000,
+                    29519046073,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    6000000000,
+                    60000000000000,
                 ),
                 hotkey_principal: Some(principal(1)),
                 is_capped: Some(
@@ -11668,10 +11676,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    100000000,
+                    6943937180,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    1000000000,
+                    10000000000000,
                 ),
                 hotkey_principal: Some(principal(1)),
                 is_capped: Some(
@@ -11685,10 +11693,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    150000000,
+                    14759523036,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    3000000000,
+                    30000000000000,
                 ),
                 hotkey_principal: Some(principal(2)),
                 is_capped: Some(
@@ -11726,12 +11734,12 @@ lazy_static! {
         // Will need to be fixed after NNS1-2591 is resolved. See
         // `NeuronsFundParticipation::compute_constraints` in rs/nns/governance/src/neurons_fund.rs
         NeuronsFundParticipationConstraints {
-            min_direct_participation_threshold_icp_e8s: Some(6200000000),
-            max_neurons_fund_participation_icp_e8s: Some(1000000000),
+            min_direct_participation_threshold_icp_e8s: Some(36_000 * E8),
+            max_neurons_fund_participation_icp_e8s: Some(69_439_371_804),
             coefficient_intervals: vec![
                 LinearScalingCoefficient {
                     from_direct_participation_icp_e8s: Some(0),
-                    to_direct_participation_icp_e8s: Some(1000000000),
+                    to_direct_participation_icp_e8s: Some(u64::MAX),
                     slope_numerator: Some(1),
                     slope_denominator: Some(1),
                     intercept_icp_e8s: Some(0),
@@ -11884,10 +11892,17 @@ lazy_static! {
         ..Default::default()
     };
 
-    static ref CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL: Proposal = Proposal {
+    static ref LEGACY_CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL: Proposal = Proposal {
         title: Some("Create a Service Nervous System".to_string()),
         summary: "".to_string(),
         action: Some(proposal::Action::CreateServiceNervousSystem(CREATE_SERVICE_NERVOUS_SYSTEM.clone())),
+        ..Default::default()
+    };
+
+    static ref CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL: Proposal = Proposal {
+        title: Some("Create a Service Nervous System".to_string()),
+        summary: "".to_string(),
+        action: Some(proposal::Action::CreateServiceNervousSystem(CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone())),
         ..Default::default()
     };
 
@@ -11903,8 +11918,8 @@ lazy_static! {
     }).unwrap();
 
     static ref SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
-       current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-        create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+        current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+        create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
         proposal_id: 1,
         neurons_fund_participants: vec![],
         random_swap_start_time: GlobalTimeOfDay {
@@ -12584,7 +12599,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
                 nns_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-                    total_direct_participation_icp_e8s: Some(100_000 * E8),
+                    total_direct_participation_icp_e8s: Some(45_000 * E8),
                     total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
                 })),
             },
@@ -12697,7 +12712,7 @@ async fn test_create_service_nervous_system_settles_community_fund_commit() {
     gov.make_proposal(
         &NeuronId { id: 1 },
         &principal(1),
-        &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
+        &LEGACY_CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
     .await
     .unwrap();
@@ -12920,8 +12935,9 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
                     nns_proposal_id: Some(proposal.id.unwrap().id),
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-                        total_direct_participation_icp_e8s: Some(5 * E8),
-                        total_neurons_fund_participation_icp_e8s: Some(5 * E8),
+                        // This amount should result in some NF funds and some refunds.
+                        total_direct_participation_icp_e8s: Some(40_000 * E8),
+                        total_neurons_fund_participation_icp_e8s: Some(69_439_371_803),
                     })),
                 },
             )
@@ -12949,7 +12965,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
             Some(sns_swap_pb::Lifecycle::Committed as i32),
         );
         assert!(proposal.can_be_purged(now, voting_period_seconds));
-
         assert_eq!(
             proposal.neurons_fund_data,
             *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
@@ -13005,7 +13020,7 @@ async fn test_create_service_nervous_system_settles_community_fund_abort() {
     gov.make_proposal(
         &NeuronId { id: 1 },
         &principal(1),
-        &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
+        &LEGACY_CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
     .await
     .unwrap();
@@ -13156,8 +13171,10 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         "{:#?}",
         gov.heap_data.proposals
     );
+
     let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
     let (_id, proposal) = proposals.pop().unwrap();
+
     assert_eq!(
         proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
         "Create a Service Nervous System",
@@ -13176,7 +13193,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
-
     assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 
@@ -13203,7 +13219,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         );
     }
 
-    // Cannot be purged yet, because Community Fund participation has not been settled yet.
+    // Cannot be purged yet, because Neurons Fund participation has not been settled yet.
     let proposal = ProposalData {
         reward_event_round: 1, // Pretend that proposal is now settled.
         ..proposal.clone()
@@ -13421,7 +13437,7 @@ async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_sys
         .make_proposal(
             &NeuronId { id: 1 },
             &principal(1),
-            &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
+            &LEGACY_CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
         )
         .await
         .unwrap();

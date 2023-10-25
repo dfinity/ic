@@ -53,6 +53,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:strum",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],

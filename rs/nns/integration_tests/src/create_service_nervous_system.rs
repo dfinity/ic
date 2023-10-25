@@ -54,7 +54,7 @@ fn test_several_proposals() {
     // Step 1.1: Boot up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
-        .with_test_neurons()
+        .with_test_neurons_fund_neurons(100_000_000_000_000)
         .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
         // TODO: Delete this once the SNS_WASM canister takes any requests

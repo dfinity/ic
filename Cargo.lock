@@ -8593,6 +8593,7 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
+ "serde_json",
  "strum 0.23.0",
  "strum_macros 0.23.1",
  "tempfile",

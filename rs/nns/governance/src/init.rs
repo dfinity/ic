@@ -80,10 +80,11 @@ impl GovernanceCanisterInitPayloadBuilder {
         Subaccount(bytes)
     }
 
-    /// Initializes the governance canister with a few neurons to be used
-    /// in tests.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn with_test_neurons(&mut self) -> &mut Self {
+    pub fn with_test_neurons_impl(
+        &mut self,
+        maturity_equivalent_icp_e8s: Option<u64>,
+    ) -> &mut Self {
         use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
@@ -92,7 +93,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             TEST_NEURON_3_OWNER_PRINCIPAL,
         };
 
-        let neuron1 = {
+        let mut neuron1 = {
             let neuron_id = NeuronIdProto::from(self.new_neuron_id());
             let subaccount = self.make_subaccount().into();
             Neuron {
@@ -106,6 +107,11 @@ impl GovernanceCanisterInitPayloadBuilder {
                 ..Default::default()
             }
         };
+
+        if let Some(maturity_equivalent_icp_e8s) = maturity_equivalent_icp_e8s {
+            neuron1.maturity_e8s_equivalent = maturity_equivalent_icp_e8s;
+            neuron1.joined_community_fund_timestamp_seconds = Some(1);
+        }
 
         let neuron2 = {
             let neuron_id = NeuronIdProto::from(self.new_neuron_id());
@@ -141,6 +147,22 @@ impl GovernanceCanisterInitPayloadBuilder {
             }
         };
         self.with_additional_neurons(vec![neuron1, neuron2, neuron3])
+    }
+
+    /// Initializes the governance canister with a few neurons to be used in tests.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_test_neurons(&mut self) -> &mut Self {
+        self.with_test_neurons_impl(None)
+    }
+
+    /// Initializes the governance canister with a few neurons to be used in tests. One of
+    /// the neurons will have `maturity_equivalent_icp_e8s` and had joined the Neurons' Fund.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_test_neurons_fund_neurons(
+        &mut self,
+        maturity_equivalent_icp_e8s: u64,
+    ) -> &mut Self {
+        self.with_test_neurons_impl(Some(maturity_equivalent_icp_e8s))
     }
 
     /// Initializes the governance canister with the given neurons.
