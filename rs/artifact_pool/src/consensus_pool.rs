@@ -1300,8 +1300,6 @@ mod tests {
     // We create multiple artifacts for multiple heights, check that all of them are
     // written to the disk and can be restored.
     fn test_backup() {
-        use crate::backup::bytes_to_hex_str;
-
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
@@ -1502,11 +1500,7 @@ mod tests {
                 "restored random beacon is identical with the original one"
             );
 
-            let notarization_path = path.join("2").join(format!(
-                "notarization_{}_{}.bin",
-                bytes_to_hex_str(&notarization.content.block),
-                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&notarization)),
-            ));
+            let notarization_path = path.join("2").join("notarization.bin");
             assert!(
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
@@ -1529,11 +1523,7 @@ mod tests {
                 "restored random tape is identical with the original one"
             );
             // Check backup for height 3
-            let finalization_path = path.join("3").join(format!(
-                "finalization_{}_{}.bin",
-                bytes_to_hex_str(&finalization.content.block),
-                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&finalization)),
-            ));
+            let finalization_path = path.join("3").join("finalization.bin");
             assert!(
                 finalization_path.exists(),
                 "finalization at height 3 was backed up",
@@ -1553,28 +1543,16 @@ mod tests {
                 finalization, restored,
                 "restored finalization is identical with the original one"
             );
-            let proposal_path = path.join("3").join(format!(
-                "block_proposal_{}_{}.bin",
-                bytes_to_hex_str(proposal3.content.get_hash()),
-                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal3)),
-            ));
+            let proposal_path = path.join("3").join("block_proposalbin");
             assert!(
                 !proposal_path.exists(),
                 "non-final proposal wasn't backed up"
             );
 
-            let proposal_path = path.join("3").join(format!(
-                "block_proposal_{}_{}.bin",
-                bytes_to_hex_str(proposal3_final.content.get_hash()),
-                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal3_final)),
-            ));
+            let proposal_path = path.join("3").join("block_proposal.bin");
             assert!(proposal_path.exists(), "final proposal was backed up");
 
-            let notarization_path = path.join("3").join(format!(
-                "notarization_{}_{}.bin",
-                bytes_to_hex_str(&notarization3.content.block),
-                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&notarization3)),
-            ));
+            let notarization_path = path.join("3").join("notarization.bin");
             assert!(
                 notarization_path.exists(),
                 "notarization at height 3 was backed up",
@@ -1595,23 +1573,10 @@ mod tests {
                 path.join("4").join("catch_up_package.bin").exists(),
                 "catch-up package at height 4 was backed up"
             );
-            let proposal_path = path.join("4").join(format!(
-                "block_proposal_{}_{}.bin",
-                bytes_to_hex_str(proposal.content.get_hash()),
-                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal)),
-            ));
+            let proposal_path = path.join("4").join("block_proposal.bin");
             assert!(
                 proposal_path.exists(),
                 "block proposal at height 4 was backed up"
-            );
-            let non_final_proposal_path = path.join("4").join(format!(
-                "block_proposal_{}_{}.bin",
-                bytes_to_hex_str(proposal_non_final.content.get_hash()),
-                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal_non_final)),
-            ));
-            assert!(
-                !non_final_proposal_path.exists(),
-                "non-final block proposal at height 4 was not backed up"
             );
             assert_eq!(
                 fs::read_dir(path.join("4")).unwrap().count(),

@@ -27,7 +27,6 @@ use ic_types::{
         BlockProposal, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, Notarization,
         RandomBeacon, RandomTape,
     },
-    crypto::CryptoHashOf,
     time::{Time, UNIX_EPOCH},
     Height,
 };
@@ -567,7 +566,7 @@ impl BackupArtifact {
         fs::create_dir_all(&file_directory)?;
         let full_path = file_directory.join(file_name);
         // If the file exists, it will be overwritten (this is required on
-        // intializations).
+        // initializations).
         let serialized = self.serialize()?;
         ic_utils::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
     }
@@ -601,56 +600,22 @@ impl BackupArtifact {
     /// ways on different replicas, so we need to put their hashes into the artifact
     /// name.
     pub fn file_location(&self, path: &Path) -> (PathBuf, String) {
-        // Create a subdir for the height
-        use BackupArtifact::*;
+        // Create a subdirectory for the height
         let (height, file_name) = match self {
-            Finalization(artifact) => (
-                artifact.height(),
-                format!(
-                    "finalization_{}_{}.bin",
-                    bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            Notarization(artifact) => (
-                artifact.height(),
-                format!(
-                    "notarization_{}_{}.bin",
-                    bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            BlockProposal(artifact) => (
-                artifact.height(),
-                format!(
-                    "block_proposal_{}_{}.bin",
-                    bytes_to_hex_str(artifact.content.get_hash()),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            RandomTape(artifact) => (artifact.height(), "random_tape.bin".to_string()),
-            RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin".to_string()),
-            CatchUpPackage(artifact) => (artifact.height(), "catch_up_package.bin".to_string()),
+            BackupArtifact::Finalization(artifact) => (artifact.height(), "finalization.bin"),
+            BackupArtifact::Notarization(artifact) => (artifact.height(), "notarization.bin"),
+            BackupArtifact::BlockProposal(artifact) => (artifact.height(), "block_proposal.bin"),
+            BackupArtifact::RandomTape(artifact) => (artifact.height(), "random_tape.bin"),
+            BackupArtifact::RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin"),
+            BackupArtifact::CatchUpPackage(artifact) => (artifact.height(), "catch_up_package.bin"),
         };
         // We group heights by directories to avoid running into any kind of unexpected
         // FS inode limitations. Each group directory will contain at most
-        // `BACKUP_GROUP_SIZE` heights.
+        // [BACKUP_GROUP_SIZE] heights.
         let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
         let path_with_height = path.join(group_key.to_string()).join(height.to_string());
-        (path_with_height, file_name)
+        (path_with_height, file_name.to_string())
     }
-}
-
-// Dumps a CryptoHash to a hex-encoded string.
-pub(super) fn bytes_to_hex_str<T>(hash: &CryptoHashOf<T>) -> String {
-    hash.clone()
-        .get()
-        .0
-        .iter()
-        .fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{:X}", byte));
-            hash
-        })
 }
 
 #[cfg(test)]
