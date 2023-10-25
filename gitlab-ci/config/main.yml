@@ -328,7 +328,6 @@ bazel-test-all-rebuild:
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
   timeout: 2h
   script:
-    - pip3 install --ignore-installed -r requirements.txt
     - !reference [.bazel-test-all, script]
 
 bazel-build-macos:
