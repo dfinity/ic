@@ -940,10 +940,8 @@ impl SnsInitPayload {
             self.validate_all_non_legacy_pre_execution_swap_parameters_are_set(),
             self.validate_neuron_basket_construction_params(),
             self.validate_min_participants(),
-            // TODO NNS1-2590: Add self.validate_min_direct_participation_icp_e8s(),
-            // TODO NNS-2590: Add self.validate_max_direct_participation_icp_e8s(),
-            self.validate_min_icp_e8s(),
-            self.validate_max_icp_e8s(),
+            self.validate_min_direct_participation_icp_e8s(),
+            self.validate_max_direct_participation_icp_e8s(),
             self.validate_min_participant_icp_e8s(),
             self.validate_max_participant_icp_e8s(),
             // Ensure that the values that can only be known after the execution
@@ -1683,6 +1681,10 @@ impl SnsInitPayload {
     }
 
     fn validate_max_icp_e8s(&self) -> Result<(), String> {
+        if self.max_direct_participation_icp_e8s.is_some() {
+            return Ok(());
+        }
+
         let max_icp_e8s = self
             .max_icp_e8s
             .ok_or("Error: max_icp_e8s must be specified")?;
@@ -1717,6 +1719,10 @@ impl SnsInitPayload {
     }
 
     fn validate_min_icp_e8s(&self) -> Result<(), String> {
+        if self.min_direct_participation_icp_e8s.is_some() {
+            return Ok(());
+        }
+
         let min_icp_e8s = self
             .min_icp_e8s
             .ok_or("Error: min_icp_e8s must be specified")?;
@@ -2161,11 +2167,11 @@ impl SnsInitPayload {
         if self.min_participants.is_none() {
             missing_one_proposal_fields.push("min_participants")
         }
-        if self.min_icp_e8s.is_none() {
-            missing_one_proposal_fields.push("min_icp_e8s")
+        if self.min_icp_e8s.is_none() && self.min_direct_participation_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("min_direct_participation_icp_e8s")
         }
-        if self.max_icp_e8s.is_none() {
-            missing_one_proposal_fields.push("max_icp_e8s")
+        if self.max_icp_e8s.is_none() && self.max_direct_participation_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("max_direct_participation_icp_e8s")
         }
         if self.min_participant_icp_e8s.is_none() {
             missing_one_proposal_fields.push("min_participant_icp_e8s")

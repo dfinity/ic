@@ -197,7 +197,7 @@ impl SnsInitializationFlowTestSetup {
             // SNS token swap.
             let mut n = 1;
             for (i, neuron) in neurons.values_mut().enumerate() {
-                neuron.maturity_e8s_equivalent = n * 25 * E8;
+                neuron.maturity_e8s_equivalent = n * 250_000 * E8;
                 n *= 3;
 
                 if i < 2 {

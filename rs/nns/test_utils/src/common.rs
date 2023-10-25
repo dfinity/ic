@@ -129,6 +129,15 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_test_neurons_fund_neurons(
+        &mut self,
+        maturity_equalivaltn_icp_e8s: u64,
+    ) -> &mut Self {
+        self.governance
+            .with_test_neurons_fund_neurons(maturity_equalivaltn_icp_e8s);
+        self
+    }
+
     pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
         self.governance.with_additional_neurons(neurons);
         self

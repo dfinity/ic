@@ -7725,15 +7725,12 @@ impl Governance {
         let swap_participation_limits =
             SwapParticipationLimits::try_from_swap_parameters(swap_participation_limits)?;
         let neurons_fund = self.neuron_store.list_active_neurons_fund_neurons();
-        let initial_neurons_fund_participation = NeuronsFundParticipation::new(
-            swap_participation_limits,
-            neurons_fund,
-            Box::from(crate::neurons_fund::SimpleLinearFunction {}),
-        )?;
+        let initial_neurons_fund_participation =
+            NeuronsFundParticipation::new(swap_participation_limits, neurons_fund)?;
         let constraints = initial_neurons_fund_participation.compute_constraints()?;
         let initial_neurons_fund_participation_snapshot =
             initial_neurons_fund_participation.snapshot_cloned();
-        // First check if the ProposalData is available (and error out if not); the actually draw
+        // First check if the ProposalData is available (and error out if not); then actually draw
         // the funds from the Neurons' Fund. This way, we do not need to issue refunds in case
         // of an error.
         if self.get_proposal_data(*proposal_id).is_none() {
