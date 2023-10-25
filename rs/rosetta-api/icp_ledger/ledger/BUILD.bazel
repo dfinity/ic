@@ -110,7 +110,7 @@ rust_test(
     name = "ledger_canister_unit_test",
     compile_data = LEDGER_CANISTER_DATA,
     crate = ":_wasm_ledger-canister-wasm",
-    data = LEDGER_CANISTER_DATA,
+    data = LEDGER_CANISTER_DATA + ["//rs/rosetta-api/icp_ledger:ledger_archive.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
     },

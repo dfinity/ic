@@ -11,6 +11,7 @@ type Operation = variant {
     };
     Burn : record {
         from : AccountIdentifier;
+        spender : opt AccountIdentifier;
         amount : Tokens;
     };
     Transfer : record {
@@ -18,20 +19,17 @@ type Operation = variant {
         to : AccountIdentifier;
         amount : Tokens;
         fee : Tokens;
+        spender : opt vec nat8;
     };
     Approve : record {
         from : AccountIdentifier;
         spender : AccountIdentifier;
+        // This field is deprecated and should not be used.
         allowance_e8s : int;
+        allowance: Tokens;
         fee : Tokens;
         expires_at : opt Timestamp;
-    };
-    TransferFrom : record {
-        from : AccountIdentifier;
-        to : AccountIdentifier;
-        spender : AccountIdentifier;
-        amount : Tokens;
-        fee : Tokens;
+        expected_allowance : opt Tokens;
     };
 };
 
