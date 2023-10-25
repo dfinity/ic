@@ -230,14 +230,10 @@ impl Hypervisor {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
-        match own_subnet_type {
-            SubnetType::System => {
-                embedder_config.metering_type = ic_config::embedders::MeteringType::Old
-            }
-            SubnetType::VerifiedApplication => {
-                embedder_config.metering_type = ic_config::embedders::MeteringType::Old
-            }
-            SubnetType::Application => (),
+
+        // Use old metering for System subnets.
+        if own_subnet_type == SubnetType::System {
+            embedder_config.metering_type = ic_config::embedders::MeteringType::Old;
         }
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
