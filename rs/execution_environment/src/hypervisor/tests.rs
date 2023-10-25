@@ -2869,7 +2869,8 @@ fn install_code_calls_canister_init_and_start() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let dirty_heap_cost = NumInstructions::from(2 * test.dirty_heap_page_overhead());
     assert_eq!(
-        NumInstructions::from(6) + wat_compilation_cost(wat) + dirty_heap_cost,
+        // Function is 1 instruction.
+        NumInstructions::from(8) + wat_compilation_cost(wat) + dirty_heap_cost,
         test.executed_instructions()
     );
     let result = test.ingress(canister_id, "read", vec![]);
@@ -3284,7 +3285,8 @@ fn ic0_trap_preserves_some_cycles() {
         instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP.get()
             + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 })
-            + 12, /* trap data */
+            + 12 /* trap data */
+            + 1, // Function is 1 instruction.
     );
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert_eq!(

@@ -298,7 +298,8 @@ fn metering_plain() {
     assert_eq!(g[0], Global::I64(10));
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, cost_a(10));
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10));
 
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
@@ -331,7 +332,8 @@ fn metering_plain() {
 
     let instructions_used = instr_used(&mut instance);
     let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
-    assert_eq!(instructions_used, cost_a(10) + cret);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10) + cret);
 
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
@@ -361,7 +363,8 @@ fn metering_plain() {
 
     let instructions_used = instr_used(&mut instance);
     let ctrap = instruction_to_cost_new(&wasmparser::Operator::Unreachable);
-    assert_eq!(instructions_used, cost_a(10) + ctrap);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10) + ctrap);
 }
 
 #[test]
@@ -388,7 +391,8 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(10));
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, cost_a(10));
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10));
 
     // another one, more complex
     let wat = format!(
@@ -431,7 +435,8 @@ fn metering_block() {
 
     let instructions_used = instr_used(&mut instance);
     let cbr = instruction_to_cost_new(&wasmparser::Operator::Br { relative_depth: 1 });
-    assert_eq!(instructions_used, cost_a(100) + cost_a(10) * 2 + cbr);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) * 2 + cbr);
 
     // another one, with return
     let wat = format!(
@@ -474,7 +479,8 @@ fn metering_block() {
 
     let instructions_used = instr_used(&mut instance);
     let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
-    assert_eq!(instructions_used, cost_a(100) + cost_a(10) + cret);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) + cret);
 }
 
 #[test]
@@ -525,7 +531,8 @@ fn metering_if() {
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
         instructions_used,
-        cost_a(5) + cost_a(20) + cost_a(30) + cc + cif
+        // Function is 1 instruction.
+        1 + cost_a(5) + cost_a(20) + cost_a(30) + cc + cif
     );
 
     let wat = format!(
@@ -570,7 +577,11 @@ fn metering_if() {
     let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, cost_a(5) + cost_a(10) + cc + cif + cret);
+    // Function is 1 instruction.
+    assert_eq!(
+        instructions_used,
+        1 + cost_a(5) + cost_a(10) + cc + cif + cret
+    );
 }
 
 #[test]
@@ -633,7 +644,8 @@ fn metering_loop() {
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
         instructions_used,
-        cost_a(5) + (c_loop) * 5 + cost_a(20) + cost_a(30)
+        // Function is 1 instruction.
+        1 + cost_a(5) + (c_loop) * 5 + cost_a(20) + cost_a(30)
     );
 }
 
@@ -679,7 +691,8 @@ fn charge_for_dirty_heap() {
         .get();
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, 5 * cc + cg + 2 * cs + cl + 2 * cd);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + 5 * cc + cg + 2 * cs + cl + 2 * cd);
 
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
@@ -777,7 +790,8 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
     // 2 dirty stable pages and one heap
     assert_eq!(
         instructions_used,
-        cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
+        // Function is 1 instruction.
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
     );
 
     // Now run the same with insufficient instructions
@@ -887,7 +901,8 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
     // 2 dirty stable pages and one heap
     assert_eq!(
         instructions_used,
-        cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
+        // Function is 1 instruction.
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
     );
 
     // Now run the same with insufficient instructions
@@ -933,7 +948,8 @@ fn test_metering_for_table_fill() {
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
         instructions_used,
-        param1 + param2 + param3 + table_fill + dynamic_cost_table_fill
+        // Function is 1 instruction.
+        1 + param1 + param2 + param3 + table_fill + dynamic_cost_table_fill
     );
 
     let mut instance = new_instance(wat, instructions_used);

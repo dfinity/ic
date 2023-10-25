@@ -99,7 +99,8 @@ mod test {
         let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
         let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
 
-        let expected_instructions = 3 * const_cost
+        let expected_instructions = 1 // Function is 1 instruction.
+            + 3 * const_cost
             + call_cost
             + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
             + data_size;
@@ -168,7 +169,8 @@ mod test {
         // So, the first perf counter will catch the whole test func static part
         // + first data copy and performance counter dynamic part.
         // The second perf counter will catch on top the second data copy dynamic part.
-        let expected_instructions_counter1 = 3 * const_cost
+        let expected_instructions_counter1 = 1 // Function is 1 instruction.
+            + 3 * const_cost
             + call_cost
             + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
             + data_size
@@ -310,7 +312,8 @@ mod test {
 
         let call_8_const_cost = call_cost + 8 * const_cost;
         let drop_call_cost = drop_cost + call_cost;
-        let expected_instructions = call_8_const_cost
+        let expected_instructions = 1 // Function is 1 instruction.
+            + call_8_const_cost
             + system_api_complexity::overhead::new::CALL_NEW.get()
             + drop_call_cost
             + system_api_complexity::overhead::new::CALL_PERFORM.get();
@@ -451,7 +454,8 @@ mod test {
                 Global::I64(0),
                 Global::I32(42),
                 Global::I64(1357),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64)
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1)
             ]
         );
 
@@ -477,7 +481,8 @@ mod test {
                 Global::I64(5),
                 Global::I32(12),
                 Global::I64(2468),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64),
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1),
             ]
         );
     }
@@ -507,7 +512,8 @@ mod test {
             [
                 Global::F64(0.0),
                 Global::F32(42.42),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64),
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1),
             ]
         );
 
@@ -530,7 +536,8 @@ mod test {
             [
                 Global::F64(5.3),
                 Global::F32(12.37),
-                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64),
+                // Minus 1 instruction for function.
+                Global::I64(DEFAULT_NUM_INSTRUCTIONS.get() as i64 - 1),
             ]
         );
     }

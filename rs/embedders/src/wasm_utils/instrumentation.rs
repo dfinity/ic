@@ -1148,9 +1148,9 @@ struct InjectionPoint {
 }
 
 impl InjectionPoint {
-    fn new_static_cost(position: usize, scope: Scope) -> Self {
+    fn new_static_cost(position: usize, scope: Scope, cost: u64) -> Self {
         InjectionPoint {
-            cost_detail: InjectionPointCostDetail::StaticCost { scope, cost: 0 },
+            cost_detail: InjectionPointCostDetail::StaticCost { scope, cost },
             position,
         }
     }
@@ -1525,24 +1525,25 @@ fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
     let mut stack = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
-    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
+    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 0);
     for (position, i) in code.iter().enumerate() {
         curr.cost_detail.increment_cost(instruction_to_cost(i));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
                 stack.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart, 0);
             }
             // Start of a non re-entrant code block.
             If { .. } | Block { .. } => {
                 stack.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart);
+                curr =
+                    InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart, 0);
             }
             // End of a code block but still more code left.
             Else | Br { .. } | BrIf { .. } | BrTable { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             // `End` signals the end of a code block. If there's nothing more on the stack, we've
             // gone through all the code.
@@ -1581,34 +1582,37 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
-    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
+    // Start with at least one fuel being consumed because even empty
+    // functions should consume at least some fuel.
+    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
         curr.cost_detail.increment_cost(instruction_to_cost_new(i));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart, 0);
             }
             // Start of a non re-entrant code block.
             If { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart);
+                curr =
+                    InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart, 0);
             }
             // End of a code block but still more code left.
             Else | Br { .. } | BrIf { .. } | BrTable { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             End => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             Return | Unreachable | ReturnCall { .. } | ReturnCallIndirect { .. } => {
                 res.push(curr);
                 // This injection point will be unreachable itself (most likely empty)
                 // but we create it to keep the algorithm uniform
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
