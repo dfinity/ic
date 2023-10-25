@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use clap::Parser;
-use reqwest::blocking::{Client, Response};
+use reqwest::blocking::Client;
 use serde::Serialize;
 use slog::{o, Drain};
 use tempfile::tempdir;
@@ -17,7 +17,7 @@ use ic_prep_lib::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::driver::{
-    farm::{CreateVmRequest, Farm, GroupSpec, ImageLocation, VmType},
+    farm::{CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType},
     ic::{Subnet, VmAllocationStrategy},
 };
 use ic_types::ReplicaVersion;
@@ -62,14 +62,28 @@ fn main() {
     let build_bootstrap_script = args.build_bootstrap_script;
     let ssh_key_path = args.ssh_key_path;
 
-    let group_name = if let Ok(user) = std::env::var("USER") {
-        format!("testvm-{user}-{version}")
-    } else {
-        format!("testvm-{version}")
+    let test_name = "test_single_vm";
+
+    let metadata = GroupMetadata {
+        user: Some(if let Ok(user) = std::env::var("HOSTUSER") {
+            user
+        } else {
+            "unknown".to_string()
+        }),
+        job_schedule: Some(if let Ok(ci_job_name) = std::env::var("CI_JOB_NAME") {
+            ci_job_name.to_string()
+        } else {
+            "manual".to_string()
+        }),
+        test_name: Some(test_name.to_string()),
     };
 
-    // Delete any old groups
-    let _res = delete_group(&group_name);
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Falied to retrieve unix epoch")
+        .as_millis();
+    // Group name is now unique, so not deleting old ones
+    let group_name = format!("{}--{:?}", test_name, timestamp);
 
     // Create a new group
     create_group(
@@ -80,7 +94,7 @@ fn main() {
                 vm_allocation: Some(VmAllocationStrategy::DistributeAcrossDcs),
                 required_host_features: Vec::new(),
                 preferred_network: None,
-                metadata: None,
+                metadata: Some(metadata),
             },
         },
     );
@@ -213,16 +227,6 @@ fn subnet_to_subnet_config(
         subnet.ssh_backup_access,
         subnet.running_state,
     )
-}
-
-/// Delete a group from Farm, without retries
-fn delete_group(group_name: &str) -> Response {
-    let client = Client::new();
-
-    client
-        .delete(format!("{FARM_BASE_URL}/group/{group_name}"))
-        .send()
-        .unwrap()
 }
 
 // Need to create our own, as the one from Farm is private

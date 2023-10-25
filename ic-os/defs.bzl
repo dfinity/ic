@@ -470,7 +470,7 @@ def icos_build(
         name = "launch-remote-vm",
         srcs = [
             "//rs/ic_os/launch-single-vm",
-            ":disk-img-url",
+            ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
             "//ic-os:scripts/build-bootstrap-config-image.sh",
             ":version.txt",
@@ -479,7 +479,7 @@ def icos_build(
         cmd = """
         BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
         VERSION="$$(cat $(location :version.txt))"
-        URL="$$(cat $(location :disk-img-url))"
+        URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
         SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
         cat <<EOF > $@
