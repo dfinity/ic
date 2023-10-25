@@ -669,11 +669,10 @@ mod tests {
                 .slice_instructions_executed(instruction_counter);
 
             // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
-            let expected_instructions =
-                instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP
-                        .get()
-                    + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+            let expected_instructions = 1 // Function is 1 instruction.
+                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP.get()
+                + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
@@ -740,6 +739,7 @@ mod tests {
                 + instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
                 + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
                 + 3 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
+                + 1 // Function is 1 instruction.
         }
 
         #[test]

@@ -3128,7 +3128,8 @@ fn failed_upgrade_hooks_consume_instructions() {
             &mut state,
             &mut round_limits,
         );
-        let expected = NumInstructions::from(1)
+        // Function + unreachable.
+        let expected = NumInstructions::from(2)
             + if fails_before_compiling_upgrade_wasm {
                 NumInstructions::new(0)
             } else {
@@ -3251,7 +3252,8 @@ fn failed_install_hooks_consume_instructions() {
         assert_matches!(result, Err(CanisterManagerError::Hypervisor(_, _)));
         assert_eq!(
             MAX_NUM_INSTRUCTIONS - instructions_left,
-            NumInstructions::from(1) + compilation_cost,
+            // Func + unreachable.
+            NumInstructions::from(2) + compilation_cost,
             "initial instructions {} left {} diff {} expected {}",
             MAX_NUM_INSTRUCTIONS,
             instructions_left,
@@ -3379,8 +3381,9 @@ fn install_code_respects_instruction_limit() {
 
     // Enough instructions result in successful installation.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(5) + compilation_cost),
+        instructions: as_round_instructions(NumInstructions::from(6) + compilation_cost),
         execution_complexity: ExecutionComplexity::MAX,
+        // Function is 1 instruction.
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3399,7 +3402,7 @@ fn install_code_respects_instruction_limit() {
         &mut round_limits,
     );
     assert!(result.is_ok());
-    assert_eq!(instructions_left, NumInstructions::from(1));
+    assert_eq!(instructions_left, NumInstructions::from(0));
     state.put_canister_state(canister.unwrap());
 
     // Too few instructions result in failed upgrade.
@@ -3455,7 +3458,7 @@ fn install_code_respects_instruction_limit() {
         &mut round_limits,
     );
     assert!(result.is_ok());
-    assert_eq!(instructions_left, NumInstructions::from(4));
+    assert_eq!(instructions_left, NumInstructions::from(1));
 }
 
 #[test]
