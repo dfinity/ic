@@ -7,9 +7,9 @@ use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgsV2,
-    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SignWithECDSAArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
+    SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -69,6 +69,18 @@ pub(super) fn resolve_destination(
             // Find the destination canister from the payload.
             let args = InstallCodeArgsV2::decode(payload)?;
             let canister_id = args.get_canister_id();
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
+                })
+        }
+        Ok(Ic00Method::InstallChunkedCode) => {
+            // Find the destination canister from the payload.
+            let args = InstallChunkedCodeArgs::decode(payload)?;
+            let canister_id = args.target_canister_id();
             network_topology
                 .routing_table
                 .route(canister_id.get())

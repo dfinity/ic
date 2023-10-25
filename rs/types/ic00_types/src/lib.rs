@@ -56,6 +56,7 @@ pub enum Method {
     HttpRequest,
     ECDSAPublicKey,
     InstallCode,
+    InstallChunkedCode,
     RawRand,
     SetupInitialDKG,
     SignWithECDSA,
@@ -2202,3 +2203,81 @@ pub struct UploadChunkReply {
 }
 
 impl Payload<'_> for UploadChunkReply {}
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     mode : variant {
+///         install;
+///         reinstall;
+///         upgrade: opt record {
+///             skip_pre_upgrade: opt bool
+///         }
+///     };
+///     target_canister_id: principal;
+///     store_canister_id: opt principal;
+///     chunk_hashes_list: vec blob;
+///     wasm_module_hash: blob;
+///     arg: blob;
+///     sender_canister_version : opt nat64;
+/// })`
+#[derive(Clone, CandidType, Deserialize, Debug)]
+pub struct InstallChunkedCodeArgs {
+    pub mode: CanisterInstallModeV2,
+    pub target_canister: PrincipalId,
+    pub store_canister: Option<PrincipalId>,
+    pub chunk_hashes_list: Vec<serde_bytes::ByteBuf>,
+    #[serde(with = "serde_bytes")]
+    pub wasm_module_hash: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub arg: Vec<u8>,
+    pub sender_canister_version: Option<u64>,
+}
+
+impl std::fmt::Display for InstallChunkedCodeArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "InstallChunkedCodeArgs {{")?;
+        writeln!(f, "  mode: {:?}", &self.mode)?;
+        writeln!(f, "  target_canister: {:?}", &self.target_canister)?;
+        writeln!(f, "  store_canister: {:?}", &self.store_canister)?;
+        writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
+        writeln!(f, "}}")
+    }
+}
+
+impl Payload<'_> for InstallChunkedCodeArgs {}
+
+impl InstallChunkedCodeArgs {
+    pub fn new(
+        mode: CanisterInstallModeV2,
+        target_canister: CanisterId,
+        store_canister: Option<CanisterId>,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Self {
+        Self {
+            mode,
+            target_canister: target_canister.into(),
+            store_canister: store_canister.map(|p| p.into()),
+            chunk_hashes_list: chunk_hashes_list
+                .into_iter()
+                .map(serde_bytes::ByteBuf::from)
+                .collect(),
+            wasm_module_hash,
+            arg,
+            sender_canister_version: None,
+        }
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
+
+    pub fn target_canister_id(&self) -> CanisterId {
+        CanisterId::new(self.target_canister).unwrap()
+    }
+
+    pub fn store_canister_id(&self) -> Option<CanisterId> {
+        self.store_canister.map(|p| CanisterId::new(p).unwrap())
+    }
+}

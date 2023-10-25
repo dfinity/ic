@@ -8,7 +8,7 @@ use ic_cycles_account_manager::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CreateCanisterArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
+    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
@@ -210,6 +210,8 @@ impl SystemStateChanges {
         let payload = msg.method_payload();
         match method {
             Ok(Ic00Method::InstallCode) => InstallCodeArgsV2::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::InstallChunkedCode) => InstallChunkedCodeArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::CreateCanister) => CreateCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),

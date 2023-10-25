@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/constants",
     "//rs/crypto/prng",
+    "//rs/crypto/sha2",
     "//rs/crypto/tecdsa",
     "//rs/crypto/tree_hash",
     "//rs/cycles_account_manager",
@@ -60,7 +61,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha2",
     "//rs/interfaces/state_manager/mocks",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
