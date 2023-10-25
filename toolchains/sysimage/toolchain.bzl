@@ -29,13 +29,14 @@ def _build_container_filesystem_impl(ctx):
     args.extend(["--tmpfs-container-sys-dir"])
     args.extend(["--no-cache"])
 
-    tool = ctx.executable._tool
+    tool = ctx.attr._tool
+
     ctx.actions.run(
-        executable = tool.path,
+        executable = tool.files_to_run,
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [tool],
+        tools = [tool.files_to_run],
     )
 
     return [DefaultInfo(
@@ -57,8 +58,7 @@ build_container_filesystem = rule(
             allow_single_file = True,
         ),
         "_tool": attr.label(
-            default = Label("//toolchains/sysimage:build_container_filesystem_tar.py"),
-            allow_single_file = True,
+            default = "//toolchains/sysimage:build_container_filesystem_tar",
             executable = True,
             cfg = "exec",
         ),
