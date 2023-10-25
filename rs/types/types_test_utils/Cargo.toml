@@ -9,4 +9,4 @@ ic-certification-version = { path = "../../canonical_state/certification_version
 ic-canonical-state = { path = "../../canonical_state" }
 ic-types = { path = "../types" }
 proptest = "1.0"
-strum = "0.23.0"
+strum = { workspace = true }

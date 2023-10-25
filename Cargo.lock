@@ -1905,21 +1905,6 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "2.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
-dependencies = [
- "ansi_term 0.12.1",
- "atty",
- "bitflags 1.3.2",
- "strsim 0.8.0",
- "textwrap 0.11.0",
- "unicode-width",
- "vec_map",
-]
-
-[[package]]
-name = "clap"
 version = "3.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71655c45cb9845d3270c9d6df84ebe72b4dad3c2ba3f7023ad47c144e4e473a5"
@@ -1930,9 +1915,9 @@ dependencies = [
  "clap_lex 0.2.4",
  "indexmap 1.9.2",
  "once_cell",
- "strsim 0.10.0",
+ "strsim",
  "termcolor",
- "textwrap 0.16.0",
+ "textwrap",
 ]
 
 [[package]]
@@ -1954,7 +1939,7 @@ dependencies = [
  "anstream",
  "anstyle",
  "clap_lex 0.5.0",
- "strsim 0.10.0",
+ "strsim",
 ]
 
 [[package]]
@@ -2722,7 +2707,7 @@ dependencies = [
  "ident_case",
  "proc-macro2 1.0.66",
  "quote 1.0.31",
- "strsim 0.10.0",
+ "strsim",
  "syn 1.0.109",
 ]
 
@@ -4599,8 +4584,8 @@ dependencies = [
  "serde-bytes-repr",
  "serde_cbor",
  "serde_json",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "tokio",
  "url",
@@ -4709,7 +4694,7 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
- "strum 0.23.0",
+ "strum 0.24.1",
  "tempfile",
 ]
 
@@ -4818,8 +4803,8 @@ dependencies = [
  "prost",
  "serde",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
 ]
 
@@ -5303,8 +5288,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "thiserror",
 ]
@@ -5469,8 +5454,8 @@ dependencies = [
 name = "ic-certification-version"
 version = "0.8.0"
 dependencies = [
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -5611,8 +5596,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "thiserror",
  "thousands",
 ]
@@ -5695,7 +5680,7 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
- "strum_macros 0.23.1",
+ "strum_macros 0.24.3",
  "tempfile",
 ]
 
@@ -5870,8 +5855,8 @@ dependencies = [
  "sha2 0.10.6",
  "simple_asn1",
  "slog",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "tokio",
  "tokio-rustls",
@@ -6055,7 +6040,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "simple_asn1",
- "strum 0.23.0",
+ "strum 0.24.1",
  "wycheproof",
  "zeroize",
 ]
@@ -6217,8 +6202,8 @@ dependencies = [
  "simple_asn1",
  "slog",
  "slog-async",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "stubborn-io",
  "tarpc",
  "tempfile",
@@ -6250,7 +6235,7 @@ dependencies = [
  "ic-types",
  "paste 1.0.12",
  "proptest",
- "strum 0.23.0",
+ "strum 0.24.1",
 ]
 
 [[package]]
@@ -6299,8 +6284,8 @@ dependencies = [
  "convert_case 0.6.0",
  "ic-metrics",
  "prometheus",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -6351,8 +6336,8 @@ version = "0.8.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -6380,7 +6365,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum_macros 0.23.1",
+ "strum_macros 0.24.3",
  "subtle",
  "zeroize",
 ]
@@ -6419,8 +6404,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "subtle",
  "zeroize",
 ]
@@ -6457,8 +6442,8 @@ dependencies = [
  "phantom_newtype",
  "serde",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "thiserror",
  "zeroize",
 ]
@@ -6530,8 +6515,8 @@ dependencies = [
  "ic-types-test-utils",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -6583,7 +6568,7 @@ dependencies = [
  "p256",
  "rand 0.8.5",
  "simple_asn1",
- "strum 0.23.0",
+ "strum 0.24.1",
 ]
 
 [[package]]
@@ -6661,7 +6646,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
- "strum_macros 0.23.1",
+ "strum_macros 0.24.3",
  "tokio",
 ]
 
@@ -6766,8 +6751,8 @@ dependencies = [
  "ic-metrics",
  "ic-test-utilities-metrics",
  "prometheus",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -7036,7 +7021,7 @@ dependencies = [
 name = "ic-determinism-test"
 version = "0.8.0"
 dependencies = [
- "clap 2.34.0",
+ "clap 3.2.23",
  "hex",
  "ic-config",
  "ic-cycles-account-manager",
@@ -7156,8 +7141,8 @@ version = "0.8.0"
 dependencies = [
  "ic-utils 0.8.0",
  "serde",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -7228,7 +7213,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "slog",
- "strum 0.23.0",
+ "strum 0.24.1",
  "tempfile",
  "test-strategy",
  "threadpool",
@@ -7473,8 +7458,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -8594,8 +8579,8 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_json",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "tokio",
  "tokio-test",
@@ -8848,7 +8833,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_bytes",
- "strum 0.23.0",
+ "strum 0.24.1",
  "tokio",
  "wat",
  "xrc-mock",
@@ -8957,8 +8942,8 @@ dependencies = [
  "prometheus",
  "serde",
  "slog",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "threadpool",
  "tokio",
@@ -9046,8 +9031,8 @@ dependencies = [
  "slog-async",
  "slog-term",
  "slog_derive",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "thiserror",
  "tokio",
@@ -9065,8 +9050,8 @@ dependencies = [
  "serde",
  "slog",
  "slog-async",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "thiserror",
 ]
 
@@ -9520,8 +9505,8 @@ dependencies = [
  "candid",
  "ic-protobuf",
  "serde",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -9909,8 +9894,8 @@ dependencies = [
  "serde_cbor",
  "serde_derive",
  "serde_json",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tokio",
  "url",
 ]
@@ -10061,8 +10046,8 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
- "strum 0.18.0",
- "strum_macros 0.18.0",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "tokio",
  "tokio-test",
@@ -10550,7 +10535,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "slog",
- "strum 0.23.0",
+ "strum 0.24.1",
  "tempfile",
  "tree-deserializer",
  "uuid 1.3.0",
@@ -10580,8 +10565,8 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "slog",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tokio",
  "tokio-metrics",
  "turmoil",
@@ -11038,8 +11023,8 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_with",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "thiserror",
  "thousands",
 ]
@@ -11052,7 +11037,7 @@ dependencies = [
  "ic-certification-version",
  "ic-types",
  "proptest",
- "strum 0.23.0",
+ "strum 0.24.1",
 ]
 
 [[package]]
@@ -11161,8 +11146,8 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "simple_asn1",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
 ]
 
 [[package]]
@@ -11188,7 +11173,7 @@ dependencies = [
  "ic-validator",
  "ic-validator-http-request-test-utils",
  "rand 0.8.5",
- "strum 0.23.0",
+ "strum 0.24.1",
 ]
 
 [[package]]
@@ -13585,8 +13570,8 @@ dependencies = [
  "serde_cbor",
  "slog",
  "slog-async",
- "strum 0.23.0",
- "strum_macros 0.23.1",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tempfile",
  "tokio",
  "url",
@@ -16554,12 +16539,6 @@ dependencies = [
 
 [[package]]
 name = "strsim"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
-
-[[package]]
-name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
@@ -16589,18 +16568,6 @@ dependencies = [
 
 [[package]]
 name = "strum"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57bd81eb48f4c437cadc685403cad539345bf703d78e63707418431cecd4522b"
-
-[[package]]
-name = "strum"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cae14b91c7d11c9a851d3fbc80a963198998c2a64eec840477fa92d8ce9b70bb"
-
-[[package]]
-name = "strum"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
@@ -16615,31 +16582,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
 dependencies = [
  "strum_macros 0.25.1",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87c85aa3f8ea653bfd3ddf25f7ee357ee4d204731f6aa9ad04002306f6e2774c"
-dependencies = [
- "heck 0.3.3",
- "proc-macro2 1.0.66",
- "quote 1.0.31",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bb0dc7ee9c15cea6199cde9a127fa16a4c5819af85395457ad72d68edc85a38"
-dependencies = [
- "heck 0.3.3",
- "proc-macro2 1.0.66",
- "quote 1.0.31",
- "rustversion",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -17100,15 +17042,6 @@ dependencies = [
  "walkdir",
  "wat",
  "xnet-test",
-]
-
-[[package]]
-name = "textwrap"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
-dependencies = [
- "unicode-width",
 ]
 
 [[package]]
@@ -18084,12 +18017,6 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
-
-[[package]]
-name = "vec_map"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
 name = "vector_config_generator"

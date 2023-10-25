@@ -9,5 +9,5 @@ edition = "2021"
 convert_case = "0.6.0"
 ic-metrics = { path = "../../../monitoring/metrics" }
 prometheus = { workspace = true }
-strum = "0.23.0"
-strum_macros = "0.23.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }

@@ -67,7 +67,7 @@ ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-wasm-types = { path = "../types/wasm_types" }
 maplit = "1.0.2"
 proptest = "1.0"
-strum = "0.23.0"
+strum = { workspace = true }
 tempfile = "3.1.0"
 
 [[bench]]

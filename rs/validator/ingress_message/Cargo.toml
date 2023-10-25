@@ -26,4 +26,4 @@ ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-validator-http-request-test-utils = { path = "../http_request_test_utils" }
 rand = "0.8"
-strum = "0.23.0"
+strum = { workspace = true }

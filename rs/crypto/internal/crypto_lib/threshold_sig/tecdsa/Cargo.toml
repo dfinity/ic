@@ -25,8 +25,8 @@ subtle = "2.4"
 serde = "1.0.130"
 serde_cbor = "0.11.1"
 serde_bytes = "0.11"
-strum = "0.23.0"
-strum_macros = "0.23.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 lazy_static = "1.4.0"
 
 [dev-dependencies]

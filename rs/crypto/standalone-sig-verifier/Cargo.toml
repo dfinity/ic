@@ -27,4 +27,4 @@ ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng
 p256 = { workspace = true }
 rand = "0.8"
 simple_asn1 = { workspace = true }
-strum = "0.23.0"
+strum = { workspace = true }

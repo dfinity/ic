@@ -46,8 +46,8 @@ slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
 # We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
