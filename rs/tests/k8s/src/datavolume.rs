@@ -16,7 +16,7 @@ spec:
     - ReadWriteOnce
     resources:
       requests:
-        storage: {size}
+        storage: {quantity}
   source:
     http:
       url: {url}
