@@ -11,13 +11,19 @@ use axum::{
     routing::method_routing::{get, post},
     Router,
 };
-use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
+use ic_types::messages::{
+    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
+};
 use prometheus::Registry;
 use tower::{Service, ServiceBuilder};
 use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
 
 use crate::{
-    metrics::{metrics_middleware_status, HttpMetricParamsStatus},
+    management::btc_mw,
+    metrics::{
+        metrics_middleware, metrics_middleware_status, HttpMetricParams, HttpMetricParamsStatus,
+    },
     persist::test::node,
 };
 
@@ -39,12 +45,20 @@ impl ProxyRouter {
 impl Proxy for ProxyRouter {
     async fn proxy(
         &self,
-        _request_type: RequestType,
+        request_type: RequestType,
         _request: Request<Body>,
         _node: Node,
         _canister_id: CanisterId,
     ) -> Result<Response, ErrorCause> {
-        Ok("test_response".into_response())
+        let mut resp = "test_response".into_response();
+
+        let status = match request_type {
+            RequestType::Call => StatusCode::ACCEPTED,
+            _ => StatusCode::OK,
+        };
+
+        *resp.status_mut() = status;
+        Ok(resp)
     }
 }
 
@@ -287,7 +301,7 @@ async fn test_status() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn test_query() -> Result<(), Error> {
+async fn test_calls() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
     let state = Arc::new(ProxyRouter {
@@ -301,9 +315,34 @@ async fn test_query() -> Result<(), Error> {
         state.clone() as Arc<dyn Proxy>,
     );
 
+    let registry: Registry = Registry::new_custom(None, None)?;
+    let metric_params = HttpMetricParams::new(&registry, "foo");
+
+    let mut app = Router::new()
+        .route(
+            PATH_QUERY,
+            post(handle_call).with_state(state_proxy.clone()),
+        )
+        .route(PATH_CALL, post(handle_call).with_state(state_proxy.clone()))
+        .route(PATH_READ_STATE, post(handle_call).with_state(state_proxy))
+        .layer(
+            ServiceBuilder::new()
+                .layer(middleware::from_fn(validate_request))
+                .set_x_request_id(MakeRequestUuid)
+                .propagate_x_request_id()
+                .layer(middleware::from_fn_with_state(
+                    metric_params,
+                    metrics_middleware,
+                ))
+                .layer(middleware::from_fn(preprocess_request))
+                .layer(middleware::from_fn(btc_mw))
+                .layer(middleware::from_fn_with_state(state_lookup, lookup_node)),
+        );
+
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
     let canister_id = Principal::from_text("sxiki-5ygae-aq").unwrap();
 
+    // Test query
     let content = HttpQueryContent::Query {
         query: HttpUserQuery {
             canister_id: Blob(canister_id.as_slice().to_vec()),
@@ -332,14 +371,79 @@ async fn test_query() -> Result<(), Error> {
         .body(Body::from(body))
         .unwrap();
 
-    // here the middlewares are applied bottom->top
-    let mut app = Router::new()
-        .route(PATH_QUERY, post(handle_call).with_state(state_proxy))
-        .layer(middleware::from_fn_with_state(state_lookup, lookup_node))
-        .layer(middleware::from_fn(preprocess_request));
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let (_parts, body) = resp.into_parts();
+    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!(body, "test_response");
+
+    // Test call
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "foobar".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v2/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body))
+        .unwrap();
 
     let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
 
+    let (_parts, body) = resp.into_parts();
+    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!(body, "test_response");
+
+    // Test read_state
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+            paths: vec![],
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpReadStateContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v2/canister/{canister_id}/read_state"
+        ))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (_parts, body) = resp.into_parts();

@@ -22,7 +22,7 @@ use url::Url;
 use crate::{
     core::{Run, WithRetryLimited},
     http::HttpClient,
-    metrics::{MetricParams, WithMetrics},
+    metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
     snapshot::RegistrySnapshot,
     snapshot::{Node, Subnet},
@@ -364,13 +364,13 @@ impl<T: Check> Check for WithRetryLimited<T> {
 }
 
 #[async_trait]
-impl<T: Check> Check for WithMetrics<T> {
+impl<T: Check> Check for WithMetricsCheck<T> {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
         let start_time = Instant::now();
         let out = self.0.check(node).await;
         let duration = start_time.elapsed().as_secs_f64();
 
-        let status = match &out {
+        let result = match &out {
             Ok(_) => "ok".to_string(),
             Err(e) => format!("error_{}", e.short()),
         };
@@ -379,10 +379,10 @@ impl<T: Check> Check for WithMetrics<T> {
             (out.height as i64, out.replica_version.as_str())
         });
 
-        let MetricParams {
-            action,
+        let MetricParamsCheck {
             counter,
             recorder,
+            status,
         } = &self.1;
 
         let subnet_id = node.subnet_id.to_string();
@@ -390,25 +390,28 @@ impl<T: Check> Check for WithMetrics<T> {
         let node_addr = node.addr.to_string();
 
         let labels = &[
-            status.as_str(),
-            subnet_id.as_str(),
+            result.as_str(),
             node_id.as_str(),
+            subnet_id.as_str(),
             node_addr.as_str(),
         ];
 
         counter.with_label_values(labels).inc();
         recorder.with_label_values(labels).observe(duration);
+        status
+            .with_label_values(&labels[1..4])
+            .set(out.is_ok().into());
 
         info!(
-            action,
-            status,
+            action = "check",
+            result,
             duration,
             block_height,
             replica_version,
             subnet_id,
             node_id,
             node_addr,
-            error = ?out.as_ref().err(),
+            error = out.as_ref().err().map(|x| x.to_string()),
         );
 
         out
