@@ -129,17 +129,6 @@ rust_canister(
     deps = DEPENDENCIES + [":sns-wasm"],
 )
 
-rust_canister(
-    name = "sns-wasm-canister-test",
-    srcs = ["canister/canister.rs"],
-    aliases = ALIASES,
-    compile_data = ["canister/sns-wasm.did"],
-    crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":canister/sns-wasm.did",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":sns-wasm--test_feature"],
-)
-
 rust_test(
     name = "canister_unit_test",
     crate = ":_wasm_sns-wasm-canister",

@@ -5,6 +5,7 @@ use crate::pb::v1::{
 };
 use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
+use ic_nns_constants::IS_MATCHED_FUNDING_ENABLED;
 use ic_sns_init::pb::v1::{
     self as sns_init_pb, sns_init_payload, NeuronsFundParticipants, SnsInitPayload,
 };
@@ -482,6 +483,15 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
                         .unwrap_or_default(),
                 },
             );
+
+        // TODO NNS1-2687: move this check to sns/init
+        if IS_MATCHED_FUNDING_ENABLED {
+            if swap_parameters.neurons_fund_participation.is_none() {
+                defects.push("Error: neurons_fund_participation must be specified.".to_string());
+            }
+        } else if swap_parameters.neurons_fund_participation.is_some() {
+            defects.push("Error: neurons_fund_participation must not be specified until Matched Funding is enabled.".to_string());
+        }
 
         if !defects.is_empty() {
             return Err(format!(
