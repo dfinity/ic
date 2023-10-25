@@ -28,5 +28,5 @@ num-bigint = "0.4.3"
 proptest = "1.0"
 proptest-derive = "0.3.0"
 serde_cbor = "0.11.1"
-strum = "0.23.0"
+strum = { workspace = true }
 wycheproof = "0.5"

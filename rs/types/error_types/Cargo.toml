@@ -6,5 +6,5 @@ edition = "2021"
 [dependencies]
 ic-utils = { path = "../../utils" }
 serde = { version = "1.0.99", features = ["derive"] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }

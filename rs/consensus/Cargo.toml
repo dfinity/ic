@@ -35,7 +35,7 @@ slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-strum_macros = "0.23.0"
+strum_macros = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.3.0"

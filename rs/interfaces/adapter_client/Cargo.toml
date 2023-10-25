@@ -4,5 +4,5 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-strum_macros = "0.24"
+strum_macros = { workspace = true }
 thiserror = "1.0"

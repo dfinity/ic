@@ -27,7 +27,7 @@ slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-strum = "0.23.0"
+strum = { workspace = true }
 tempfile = "3.1.0"
 lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
 nix = { workspace = true }

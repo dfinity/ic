@@ -23,8 +23,8 @@ url = { version = "2.1.1", features = ["serde"] }
 serde = { version = "1.0.115", features = ["derive"] }
 serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["release_max_level_trace"] }
-strum = "0.24.1"
-strum_macros = "0.24.1"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-tmpdir = { path = "../../test_utilities/tmpdir" }

@@ -38,7 +38,7 @@ ic-stable-structures = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 lifeline = { path = "../handlers/lifeline/impl" }
 prost = { workspace = true }
-strum = "0.23.0"
+strum = { workspace = true }
 lazy_static = "1.4.0"
 
 # Dependencies required to compile the tests.
