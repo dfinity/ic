@@ -8514,7 +8514,6 @@ name = "ic-nns-constants"
 version = "0.8.0"
 dependencies = [
  "ic-base-types",
- "lazy_static",
 ]
 
 [[package]]

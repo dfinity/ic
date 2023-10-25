@@ -2,9 +2,7 @@ use candid::Encode;
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, NNS_SUBNET_ID,
-};
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_test_utils::registry::new_node_keys_and_node_id;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -28,7 +26,8 @@ use ic_test_utilities::types::ids::user_test_id;
 use ic_types::{p2p::build_default_gossip_config, ReplicaVersion};
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder, mutations::do_delete_subnet::DeleteSubnetPayload,
+    init::RegistryCanisterInitPayloadBuilder,
+    mutations::do_delete_subnet::{DeleteSubnetPayload, NNS_SUBNET_ID},
 };
 
 #[test]

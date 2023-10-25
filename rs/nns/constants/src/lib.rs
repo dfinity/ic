@@ -1,6 +1,4 @@
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use lazy_static::lazy_static;
-use std::str::FromStr;
+use ic_base_types::CanisterId;
 
 // WARNING: The NNS canisters MUST be installed in the NNS subnet,
 // in the following order, otherwise they won't be able to find
@@ -44,13 +42,6 @@ pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "ic-icrc1-ledger",
     "ic-ckbtc-minter",
 ];
-
-lazy_static! {
-    pub static ref NNS_SUBNET_ID: SubnetId = SubnetId::new(
-        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-            .unwrap()
-    );
-}
 
 pub const NUM_NNS_CANISTERS: usize = ALL_NNS_CANISTER_IDS.len();
 
