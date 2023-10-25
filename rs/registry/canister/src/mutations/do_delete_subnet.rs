@@ -10,7 +10,7 @@ use candid::{CandidType, Deserialize};
 use cycles_minting_canister::RemoveSubnetFromAuthorizedSubnetListArgs;
 use dfn_core::call;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, NNS_SUBNET_ID};
+use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID};
 use ic_protobuf::registry::routing_table::v1::RoutingTable as RoutingTablePb;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -19,6 +19,15 @@ use ic_registry_keys::{
 };
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::{delete, update};
+use lazy_static::lazy_static;
+use std::str::FromStr;
+
+lazy_static! {
+    pub static ref NNS_SUBNET_ID: SubnetId = SubnetId::new(
+        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+    );
+}
 
 impl Registry {
     /// Delete an existing Subnet from the Registry.

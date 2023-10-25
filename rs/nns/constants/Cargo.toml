@@ -5,4 +5,3 @@ edition = "2021"
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types"}
-lazy_static = "1.4.0"
