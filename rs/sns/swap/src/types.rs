@@ -406,7 +406,7 @@ impl Init {
     /// - `self.is_swap_init_for_single_proposal()`
     pub fn mk_open_sns_request(&self) -> OpenRequest {
         assert!(
-            self.is_swap_init_for_one_proposal_flow(),
+            self.validate_swap_init_for_one_proposal_flow().is_ok(),
             "cannot make an `OpenRequest` instance from a legacy `SnsInitPayload`"
         );
         // This is checked by the previous assert, but repeating here to be explicit
@@ -447,19 +447,53 @@ impl Init {
     /// Indicates whether this swap `Init` payload matches the legacy structure,
     /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
     /// are **unset**, as they will be passed explicitly via the `Swap.open` API.
-    pub fn is_swap_init_for_legacy(&self) -> bool {
-        self.swap_opening_field_states(None)
-            .values()
-            .all(|x| x.is_none())
+    pub fn validate_swap_init_for_legacy(&self) -> Result<(), String> {
+        let unexpected_fields: Vec<String> = self
+            .swap_opening_field_states(None)
+            .iter()
+            .filter_map(|(field_name, outcome)| {
+                if outcome.is_some() {
+                    Some(field_name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if unexpected_fields.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Swap Init cannot be used for legacy flow as there are {} unexpected fields: {}.",
+                unexpected_fields.len(),
+                unexpected_fields.join(", "),
+            ))
+        }
     }
 
     /// Indicates whether this swap `Init` payload matches the new structure,
     /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
     /// are **set**.
-    pub fn is_swap_init_for_one_proposal_flow(&self) -> bool {
-        self.swap_opening_field_states(None)
-            .values()
-            .all(|x| x.is_some())
+    pub fn validate_swap_init_for_one_proposal_flow(&self) -> Result<(), String> {
+        let missing_fields: Vec<String> = self
+            .swap_opening_field_states(None)
+            .iter()
+            .filter_map(|(field_name, outcome)| {
+                if outcome.is_none() {
+                    Some(field_name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if missing_fields.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Swap Init cannot be used for 1-proposal as there are {} missing fields: {}.",
+                missing_fields.len(),
+                missing_fields.join(", "),
+            ))
+        }
     }
 
     /// Indicates whether an `OpenRequest` instance contradicts this swap `Init`
@@ -503,11 +537,14 @@ impl Init {
 
         // TODO[NNS1-2362] Re-validate also the fields that were filled out by
         // TODO[NNS1-2362] trusted code.
-
-        if !self.is_swap_init_for_legacy() && !self.is_swap_init_for_one_proposal_flow() {
-            return Err(
-                "fields listed in `swap_opening_field_states` must either all be set (for 1-proposal) or all be unset (legacy).".to_string()
-            );
+        if let (Err(legacy_error), Err(one_proposal_error)) = (
+            self.validate_swap_init_for_legacy(),
+            self.validate_swap_init_for_one_proposal_flow(),
+        ) {
+            return Err(format!(
+                "Swap Init is inconsistent. On the one hand, {}. But on the other hand, {}.",
+                legacy_error, one_proposal_error,
+            ));
         }
 
         if self.should_auto_finalize.is_none() {
@@ -1613,7 +1650,7 @@ mod tests {
         // fields are `None`).
         {
             let default_init: Init = Default::default();
-            assert!(default_init.is_swap_init_for_legacy());
+            assert!(default_init.validate_swap_init_for_legacy().is_ok());
         }
         // There exists some `SnsInitPayload` that is not suitable for both
         // single-proposal and legacy flows.
@@ -1623,8 +1660,10 @@ mod tests {
                 ..Default::default()
             };
             assert!(
-                !incorrect_init.is_swap_init_for_one_proposal_flow()
-                    && !incorrect_init.is_swap_init_for_legacy()
+                incorrect_init
+                    .validate_swap_init_for_one_proposal_flow()
+                    .is_err()
+                    && incorrect_init.validate_swap_init_for_legacy().is_err()
             );
         }
         let mut init = Init {
@@ -1650,7 +1689,7 @@ mod tests {
         };
         // There exists some `SnsInitPayload` that is suitable for the new
         // single-proposal flow.
-        assert!(init.is_swap_init_for_one_proposal_flow());
+        assert!(init.validate_swap_init_for_one_proposal_flow().is_ok());
 
         let neurons_fund_participant_a = CfParticipant {
             hotkey_principal: "HotKeyA".to_string(),

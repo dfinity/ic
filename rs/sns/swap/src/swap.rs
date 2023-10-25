@@ -559,7 +559,7 @@ impl Swap {
             direct_participation_icp_e8s: None,
             neurons_fund_participation_icp_e8s: None,
         };
-        if init.is_swap_init_for_one_proposal_flow() {
+        if init.validate_swap_init_for_one_proposal_flow().is_ok() {
             // Automatically fill out the fields that the (legacy) open request
             // used to provide, supporting clients who read legacy Swap fields.
             {
