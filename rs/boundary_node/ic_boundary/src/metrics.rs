@@ -18,8 +18,8 @@ use ic_types::{messages::ReplicaHealthStatus, CanisterId};
 use jemalloc_ctl::{epoch, stats};
 use prometheus::{
     register_histogram_vec_with_registry, register_int_counter_vec_with_registry,
-    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
-    IntGauge, Registry, TextEncoder,
+    register_int_gauge_vec_with_registry, register_int_gauge_with_registry, Encoder, HistogramOpts,
+    HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
@@ -289,7 +289,7 @@ pub struct MetricParamsPersist {
 impl MetricParamsPersist {
     pub fn new(registry: &Registry) -> Self {
         Self {
-            // Count
+            // Number of ranges
             ranges: register_int_gauge_with_registry!(
                 format!("persist_ranges"),
                 format!("Number of canister ranges currently published"),
@@ -297,10 +297,53 @@ impl MetricParamsPersist {
             )
             .unwrap(),
 
-            // Duration
+            // Number of nodes
             nodes: register_int_gauge_with_registry!(
                 format!("persist_nodes"),
                 format!("Number of nodes currently published"),
+                registry
+            )
+            .unwrap(),
+        }
+    }
+}
+
+pub struct WithMetricsCheck<T>(pub T, pub MetricParamsCheck);
+
+#[derive(Clone)]
+pub struct MetricParamsCheck {
+    pub counter: IntCounterVec,
+    pub recorder: HistogramVec,
+    pub status: IntGaugeVec,
+}
+
+impl MetricParamsCheck {
+    pub fn new(registry: &Registry) -> Self {
+        let mut opts = HistogramOpts::new(
+            "check_duration_sec",
+            "Records the duration of check calls in seconds",
+        );
+        opts.buckets = HTTP_DURATION_BUCKETS.to_vec();
+
+        let labels = &["status", "node_id", "subnet_id", "addr"];
+
+        Self {
+            counter: register_int_counter_vec_with_registry!(
+                "check_total",
+                "Counts occurrences of check calls",
+                labels,
+                registry
+            )
+            .unwrap(),
+
+            // Duration
+            recorder: register_histogram_vec_with_registry!(opts, labels, registry).unwrap(),
+
+            // Status of node
+            status: register_int_gauge_vec_with_registry!(
+                "check_status",
+                "Last check result of a given node",
+                &labels[1..4],
                 registry
             )
             .unwrap(),

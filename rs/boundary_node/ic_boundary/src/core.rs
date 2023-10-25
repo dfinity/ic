@@ -45,8 +45,9 @@ use crate::{
     http::ReqwestClient,
     management,
     metrics::{
-        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsPersist,
-        MetricsCache, MetricsRunner, WithMetrics, WithMetricsPersist, HTTP_DURATION_BUCKETS,
+        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
+        MetricParamsPersist, MetricsCache, MetricsRunner, WithMetrics, WithMetricsCheck,
+        WithMetricsPersist,
     },
     nns::{Load, Loader},
     persist,
@@ -371,15 +372,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     let checker = Checker::new(http_client);
-    let checker = WithMetrics(
-        checker,
-        MetricParams::new_with_opts(
-            &registry,
-            "check",
-            &["status", "node_id", "subnet_id", "addr"],
-            Some(HTTP_DURATION_BUCKETS),
-        ),
-    );
+    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
     let checker = WithRetryLimited(
         checker,
         cli.health.check_retries,

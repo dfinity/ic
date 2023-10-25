@@ -179,8 +179,12 @@ impl<T: Persist> Persist for WithMetricsPersist<T> {
                 ranges.set(s.ranges_new as i64);
 
                 info!(
+                    action = "persist",
                     "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
-                    s.ranges_old, s.ranges_new, s.nodes_old, s.nodes_new,
+                    s.ranges_old,
+                    s.ranges_new,
+                    s.nodes_old,
+                    s.nodes_new,
                 );
             }
         }
