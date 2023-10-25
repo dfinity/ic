@@ -68,21 +68,19 @@ Distribution:
 Swap:
     minimum_participants: 1
 
+    minimum_direct_participation_icp: 1000000000 e8s
+    maximum_direct_participation_icp: 3000000000000 e8s
+
     minimum_icp: 1000000000 e8s
     maximum_icp: 3000000000000 e8s
 
     minimum_participant_icp: 1000000000 e8s
     maximum_participant_icp: 3000000000000 e8s
 
-#    confirmation_text: Hello, world?
-
-#    restricted_countries: []
-
     VestingSchedule:
-        events: 3000
+        events: 3
         interval: 100 seconds
 
-#     start_time: 12:00 UTC
     duration: 7 days
 
     neurons_fund_investment_icp: 0 tokens
