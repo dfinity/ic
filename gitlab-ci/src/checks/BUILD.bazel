@@ -1,1 +1,0 @@
-exports_files(["candid_changes_are_backwards_compatible.py"])

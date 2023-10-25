@@ -542,7 +542,7 @@ pre-commit:
 
 python-gitlab-ci-tests:
   extends:
-    - .build-k8s-legacy
+    - .build-k8s
   rules:
     # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
