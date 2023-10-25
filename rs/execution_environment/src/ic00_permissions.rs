@@ -63,6 +63,11 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::InstallChunkedCode => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::RawRand => Self {
                 method,
                 allow_remote_subnet_sender: false,

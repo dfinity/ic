@@ -5,7 +5,8 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        inspect_message, nonreplicated_query::execute_non_replicated_query,
+        inspect_message, install_code::validate_controller,
+        nonreplicated_query::execute_non_replicated_query,
         replicated_query::execute_replicated_query, response::execute_response,
         update::execute_update,
     },
@@ -32,10 +33,10 @@ use ic_ic00_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallCodeArgsV2, Method as Ic00Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    IC_00,
+    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    Method as Ic00Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -470,6 +471,22 @@ impl ExecutionEnvironment {
 
         let result = match method {
             Ok(Ic00Method::InstallCode) => {
+                // Tail call is needed for deterministic time slicing here to
+                // properly handle the case of a paused execution.
+                return self.execute_install_code(
+                    msg,
+                    None,
+                    None,
+                    DtsInstallCodeStatus::StartingFirstExecution,
+                    state,
+                    instruction_limits,
+                    round_limits,
+                    registry_settings.subnet_size,
+                );
+            }
+            Ok(Ic00Method::InstallChunkedCode)
+                if self.config.wasm_chunk_store == FlagStatus::Enabled =>
+            {
                 // Tail call is needed for deterministic time slicing here to
                 // properly handle the case of a paused execution.
                 return self.execute_install_code(
@@ -1028,7 +1045,8 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::StoredChunks)
             | Ok(Ic00Method::DeleteChunks)
-            | Ok(Ic00Method::ClearChunkStore) => Some((
+            | Ok(Ic00Method::ClearChunkStore)
+            | Ok(Ic00Method::InstallChunkedCode) => Some((
                 Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "Chunked upload API is not yet implemented.",
@@ -2057,6 +2075,65 @@ impl ExecutionEnvironment {
         Ok(())
     }
 
+    /// A helper function to make error handling more compact using `?`.
+    fn decode_input_and_take_canister(
+        msg: &CanisterCall,
+        state: &mut ReplicatedState,
+    ) -> Result<(InstallCodeContext, CanisterState), UserError> {
+        let payload = msg.method_payload();
+        let method = Ic00Method::from_str(msg.method_name()).map_err(|_| {
+            UserError::new(
+                ErrorCode::CanisterMethodNotFound,
+                format!("Management canister has no method '{}'", msg.method_name()),
+            )
+        })?;
+        let install_context = match method {
+            Ic00Method::InstallCode => {
+                let args = InstallCodeArgsV2::decode(payload)?;
+                InstallCodeContext::try_from((
+                    msg.canister_change_origin(args.get_sender_canister_version()),
+                    args,
+                ))?
+            }
+            Ic00Method::InstallChunkedCode => {
+                let args = InstallChunkedCodeArgs::decode(payload)?;
+                let origin = msg.canister_change_origin(args.get_sender_canister_version());
+
+                let store_canister_id = args
+                    .store_canister_id()
+                    .unwrap_or(args.target_canister_id());
+
+                let store_canister = &state
+                        .canister_state(&store_canister_id)
+                        .ok_or_else(|| {
+                            UserError::new(
+                                ErrorCode::CanisterNotFound,
+                                format!("InstallChunkedCode Error: Store canister {} was not found on subnet {} of target canister {}", store_canister_id, state.metadata.own_subnet_id, args.target_canister_id()),
+                            )
+                        })?;
+                validate_controller(store_canister, &origin.origin())?;
+                InstallCodeContext::chunked_install(
+                    origin,
+                    args,
+                    &store_canister.system_state.wasm_chunk_store,
+                )?
+            }
+            other => {
+                return Err(UserError::new(
+                    ErrorCode::UnknownManagementMessage,
+                    format!("Expected an install code message, but found {}", other),
+                ))
+            }
+        };
+
+        let canister = state
+            .take_canister_state(&install_context.canister_id)
+            .ok_or(CanisterManagerError::CanisterNotFound(
+                install_context.canister_id,
+            ))?;
+        Ok((install_context, canister))
+    }
+
     /// Starts execution of the given `install_code` subnet message.
     /// With deterministic time slicing, the execution may be paused if it
     /// exceeds the given slice limit.
@@ -2085,39 +2162,19 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> (ReplicatedState, Option<NumInstructions>) {
-        // A helper function to make error handling more compact using `?`.
-        fn decode_input_and_take_canister(
-            msg: &CanisterCall,
-            state: &mut ReplicatedState,
-        ) -> Result<(InstallCodeContext, CanisterState), UserError> {
-            let payload = msg.method_payload();
-
-            let args = InstallCodeArgsV2::decode(payload)?;
-            let install_context = InstallCodeContext::try_from((
-                msg.canister_change_origin(args.get_sender_canister_version()),
-                args,
-            ))?;
-            let canister = state
-                .take_canister_state(&install_context.canister_id)
-                .ok_or(CanisterManagerError::CanisterNotFound(
-                    install_context.canister_id,
-                ))?;
-            Ok((install_context, canister))
-        }
-
         // Start logging execution time for `install_code`.
         let timer = Timer::start();
 
-        let (install_context, old_canister) = match decode_input_and_take_canister(&msg, &mut state)
-        {
-            Ok(result) => result,
-            Err(err) => {
-                let refund = msg.take_cycles();
-                let state =
-                    self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
-                return (state, Some(NumInstructions::from(0)));
-            }
-        };
+        let (install_context, old_canister) =
+            match Self::decode_input_and_take_canister(&msg, &mut state) {
+                Ok(result) => result,
+                Err(err) => {
+                    let refund = msg.take_cycles();
+                    let state =
+                        self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
+                    return (state, Some(NumInstructions::from(0)));
+                }
+            };
 
         // Track whether the deprecated fields in install_code were used.
         if install_context.compute_allocation.is_some() {

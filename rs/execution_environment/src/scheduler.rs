@@ -2085,7 +2085,7 @@ fn can_execute_msg(
     }
 
     if ongoing_long_install_code {
-        let maybe_instal_code_method = match msg {
+        let maybe_install_code_method = match msg {
             CanisterMessage::Ingress(ingress) => {
                 Ic00Method::from_str(ingress.method_name.as_str()).ok()
             }
@@ -2096,8 +2096,9 @@ fn can_execute_msg(
         };
 
         // Only one install code message allowed at a time.
-        if let Some(Ic00Method::InstallCode) = maybe_instal_code_method {
-            return false;
+        match maybe_install_code_method {
+            Some(Ic00Method::InstallCode) | Some(Ic00Method::InstallChunkedCode) => return false,
+            _ => {}
         }
     }
 
@@ -2157,7 +2158,7 @@ fn get_instructions_limits_for_subnet_message(
             | StoredChunks
             | DeleteChunks
             | ClearChunkStore => default_limits,
-            InstallCode => InstructionLimits::new(
+            InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,
                 config.max_instructions_per_install_code_slice,

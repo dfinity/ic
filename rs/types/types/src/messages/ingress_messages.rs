@@ -11,8 +11,8 @@ use crate::{
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgsV2, Method, Payload, UpdateSettingsArgs,
-    UploadChunkArgs, IC_00,
+    CanisterIdRecord, CanisterInfoRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, Method,
+    Payload, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -476,6 +476,10 @@ pub fn extract_effective_canister_id(
         },
         Ok(Method::InstallCode) => match InstallCodeArgsV2::decode(ingress.arg()) {
             Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::InstallChunkedCode) => match InstallChunkedCodeArgs::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.target_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
         Ok(Method::UploadChunk) => match UploadChunkArgs::decode(ingress.arg()) {

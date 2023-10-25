@@ -13,6 +13,7 @@ ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_c
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-prng = { path = "../crypto/prng" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
@@ -63,7 +64,6 @@ canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { version = "0.5", features = ["html_reports"] }
 execution-environment-bench = { path = "benches/lib" }
 ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }

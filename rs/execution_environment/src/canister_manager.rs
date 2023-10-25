@@ -16,7 +16,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, InstallCodeArgsV2, Method as Ic00Method, UploadChunkReply,
+    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
+    UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -165,6 +166,7 @@ pub enum InstallCodeContextError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),
     InvalidCanisterId(String),
+    InvalidHash(String),
 }
 
 impl From<InstallCodeContextError> for UserError {
@@ -193,6 +195,9 @@ impl From<InstallCodeContextError> for UserError {
                     hex::encode(&bytes[..])
                 ),
             ),
+            InstallCodeContextError::InvalidHash(err) => {
+                UserError::new(ErrorCode::CanisterContractViolation, err)
+            }
         }
     }
 }
@@ -206,6 +211,52 @@ impl From<InvalidComputeAllocationError> for InstallCodeContextError {
 impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
     fn from(err: InvalidMemoryAllocationError) -> Self {
         Self::MemoryAllocation(err)
+    }
+}
+
+impl InstallCodeContext {
+    pub(crate) fn chunked_install(
+        origin: CanisterChangeOrigin,
+        args: InstallChunkedCodeArgs,
+        store: &WasmChunkStore,
+    ) -> Result<Self, InstallCodeContextError> {
+        let canister_id = args.target_canister_id();
+        // Assume each chunk uses the full chunk size even though the actual
+        // size might be smaller.
+        let mut wasm_module = Vec::with_capacity(
+            args.chunk_hashes_list.len() * wasm_chunk_store::chunk_size().get() as usize,
+        );
+        for hash in args.chunk_hashes_list {
+            let hash = hash.as_slice().try_into().map_err(|_| {
+                InstallCodeContextError::InvalidHash(
+                    "Chunk hash is invalid. The length is not 32".to_string(),
+                )
+            })?;
+            for page in store.get_chunk_data(&hash).ok_or_else(|| {
+                InstallCodeContextError::InvalidHash(format!(
+                    "Chunk hash {:?} was not found",
+                    &hash[..32]
+                ))
+            })? {
+                wasm_module.extend_from_slice(page)
+            }
+        }
+        let hash = ic_crypto_sha2::Sha256::hash(&wasm_module);
+        if hash[..] != args.wasm_module_hash {
+            return Err(InstallCodeContextError::InvalidHash(format!(
+                "Wasm module hash {:?} does not match given hash {:?}",
+                hash, args.wasm_module_hash
+            )));
+        }
+        Ok(InstallCodeContext {
+            origin,
+            mode: args.mode,
+            canister_id,
+            wasm_module: CanisterModule::new(wasm_module),
+            arg: args.arg,
+            compute_allocation: None,
+            memory_allocation: None,
+        })
     }
 }
 
@@ -334,9 +385,10 @@ impl CanisterManager {
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister) |
-            Ok(Ic00Method::UpdateSettings)|
-            Ok(Ic00Method::InstallCode) => {
+            | Ok(Ic00Method::DeleteCanister)
+            | Ok(Ic00Method::UpdateSettings)
+            | Ok(Ic00Method::InstallCode)
+            | Ok(Ic00Method::InstallChunkedCode) => {
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
