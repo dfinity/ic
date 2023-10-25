@@ -110,12 +110,12 @@ impl From<[u8; EXPECTED_MESSAGE_ID_LENGTH]> for MessageId {
     }
 }
 
-fn hash_string(value: String) -> Vec<u8> {
-    Sha256::hash(&value.into_bytes()).to_vec()
+fn hash_string(value: &str) -> Vec<u8> {
+    Sha256::hash(value.as_bytes()).to_vec()
 }
 
-fn hash_bytes(value: Vec<u8>) -> Vec<u8> {
-    Sha256::hash(&value).to_vec()
+fn hash_bytes<T: AsRef<[u8]>>(value: T) -> Vec<u8> {
+    Sha256::hash(value.as_ref()).to_vec()
 }
 
 fn hash_u64(value: u64) -> Vec<u8> {
@@ -138,31 +138,32 @@ fn hash_u64(value: u64) -> Vec<u8> {
         }
     }
 
-    hash_bytes(buf[..=i].to_vec())
+    hash_bytes(&buf[..=i])
 }
 
 // arrays, encoded as the concatenation of the hashes of the encodings of the
 // array elements.
-fn hash_array(elements: Vec<RawHttpRequestVal>) -> Vec<u8> {
+fn hash_array(elements: &[RawHttpRequestVal]) -> Vec<u8> {
     let mut hasher = Sha256::new();
     elements
-        .into_iter()
+        .iter()
         // Hash the encoding of all the array elements.
         .for_each(|e| hasher.write(hash_val(e).as_slice()));
     hasher.finish().to_vec() // hash the concatenation of the hashes.
 }
 
-fn hash_val(val: RawHttpRequestVal) -> Vec<u8> {
+fn hash_val(val: &RawHttpRequestVal) -> Vec<u8> {
     match val {
         RawHttpRequestVal::String(string) => hash_string(string),
         RawHttpRequestVal::Bytes(bytes) => hash_bytes(bytes),
-        RawHttpRequestVal::U64(integer) => hash_u64(integer),
+        RawHttpRequestVal::U64(integer) => hash_u64(*integer),
         RawHttpRequestVal::Array(elements) => hash_array(elements),
+        RawHttpRequestVal::Map(map) => hash_of_map(map).to_vec(),
     }
 }
 
-fn hash_key_val(key: String, val: RawHttpRequestVal) -> Vec<u8> {
-    let mut key_hash = hash_string(key);
+fn hash_key_val(key: String, val: &RawHttpRequestVal) -> Vec<u8> {
+    let mut key_hash = hash_string(&key);
     let mut val_hash = hash_val(val);
     key_hash.append(&mut val_hash);
     key_hash
@@ -172,7 +173,7 @@ fn hash_key_val(key: String, val: RawHttpRequestVal) -> Vec<u8> {
 pub(crate) fn hash_of_map<S: ToString>(map: &BTreeMap<S, RawHttpRequestVal>) -> [u8; 32] {
     let mut hashes: Vec<Vec<u8>> = Vec::new();
     for (key, val) in map.iter() {
-        hashes.push(hash_key_val(key.to_string(), val.clone()));
+        hashes.push(hash_key_val(key.to_string(), val));
     }
 
     // Computes hash by first sorting by "field name" hash, which is the
@@ -251,11 +252,42 @@ mod tests {
     use hex_literal::hex;
 
     #[test]
+    /// The test covers all the supported values of `RawHttpRequestVal` and calculates the `hash_of_map` for a nested map.
+    /// The expected hash serves as a guard against any future changes to the `hash_of_map` function, ensuring its stability.
+    fn test_hash_of_map() {
+        use maplit::btreemap;
+        use RawHttpRequestVal::*;
+
+        let inner_map_0 = btreemap! {
+            "key_string_0".to_string() => String("test_string_0".to_string()),
+        };
+        let inner_map_1 = btreemap! {
+            "key_string_1".to_string() => String("test_string_1".to_string()),
+        };
+        let inner_map_2 = btreemap! {
+            "key_string_2".to_string() => String("test_string_2".to_string()),
+        };
+
+        let outer_map = btreemap! {
+            "key_bytes".to_string() => Bytes(vec![1; 10]),
+            "key_string".to_string() => String("test_string".to_string()),
+            "key_u64".to_string() => U64(42),
+            "key_array".to_string() => Array(vec![Map(inner_map_0), Map(inner_map_1)]),
+            "key_inner".to_string() => Map(inner_map_2)
+        };
+
+        assert_eq!(
+            hash_of_map(&outer_map),
+            hex!("ace3c6e84b170c6235faff2ee1152d831c332a7e3c932fb7d129f973d6913ff2")
+        );
+    }
+
+    #[test]
     fn message_id_icf_key_val_reference_1() {
         assert_eq!(
             hash_key_val(
                 "request_type".to_string(),
-                RawHttpRequestVal::String("call".to_string())
+                &RawHttpRequestVal::String("call".to_string())
             ),
             hex!(
                 "
@@ -291,7 +323,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_1() {
         assert_eq!(
-            hash_string("request_type".to_string()),
+            hash_string("request_type"),
             hex!("769e6f87bdda39c859642b74ce9763cdd37cb1cd672733e8c54efaa33ab78af9"),
         );
     }
@@ -299,7 +331,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_2() {
         assert_eq!(
-            hash_string("call".to_string()),
+            hash_string("call"),
             hex!("7edb360f06acaef2cc80dba16cf563f199d347db4443da04da0c8173e3f9e4ed"),
         );
     }
@@ -307,7 +339,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_3() {
         assert_eq!(
-            hash_string("callee".to_string()),
+            hash_string("callee"),
             hex!("92ca4c0ced628df1e7b9f336416ead190bd0348615b6f71a64b21d1b68d4e7e2"),
         );
     }
@@ -315,7 +347,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_4() {
         assert_eq!(
-            hash_string("method_name".to_string()),
+            hash_string("method_name"),
             hex!("293536232cf9231c86002f4ee293176a0179c002daa9fc24be9bb51acdd642b6"),
         );
     }
@@ -323,7 +355,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_5() {
         assert_eq!(
-            hash_string("hello".to_string()),
+            hash_string("hello"),
             hex!("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"),
         );
     }
@@ -331,7 +363,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_6() {
         assert_eq!(
-            hash_string("arg".to_string()),
+            hash_string("arg"),
             hex!("b25f03dedd69be07f356a06fe35c1b0ddc0de77dcd9066c4be0c6bbde14b23ff"),
         );
     }
@@ -339,7 +371,7 @@ mod tests {
     #[test]
     fn message_id_array_reference_1() {
         assert_eq!(
-            hash_array(vec![RawHttpRequestVal::String("a".to_string())]),
+            hash_array(&[RawHttpRequestVal::String("a".to_string())]),
             // hash(hash("a"))
             hex!("bf5d3affb73efd2ec6c36ad3112dd933efed63c4e1cbffcfa88e2759c144f2d8"),
         );
@@ -348,7 +380,7 @@ mod tests {
     #[test]
     fn message_id_array_reference_2() {
         assert_eq!(
-            hash_array(vec![
+            hash_array(&[
                 RawHttpRequestVal::String("a".to_string()),
                 RawHttpRequestVal::String("b".to_string()),
             ]),
@@ -360,7 +392,7 @@ mod tests {
     #[test]
     fn message_id_array_reference_3() {
         assert_eq!(
-            hash_array(vec![
+            hash_array(&[
                 RawHttpRequestVal::Bytes(vec![97]), // "a" as a byte string.
                 RawHttpRequestVal::String("b".to_string()),
             ]),
@@ -372,9 +404,9 @@ mod tests {
     #[test]
     fn message_id_array_reference_4() {
         assert_eq!(
-            hash_array(vec![RawHttpRequestVal::Array(vec![
-                RawHttpRequestVal::String("a".to_string())
-            ])]),
+            hash_array(&[RawHttpRequestVal::Array(vec![RawHttpRequestVal::String(
+                "a".to_string()
+            )])]),
             // hash(hash(hash("a"))
             hex!("eb48bdfa15fc43dbea3aabb1ee847b6e69232c0f0d9705935e50d60cce77877f"),
         );
@@ -383,7 +415,7 @@ mod tests {
     #[test]
     fn message_id_array_reference_5() {
         assert_eq!(
-            hash_array(vec![RawHttpRequestVal::Array(vec![
+            hash_array(&[RawHttpRequestVal::Array(vec![
                 RawHttpRequestVal::String("a".to_string()),
                 RawHttpRequestVal::String("b".to_string())
             ])]),
@@ -395,7 +427,7 @@ mod tests {
     #[test]
     fn message_id_array_reference_6() {
         assert_eq!(
-            hash_array(vec![
+            hash_array(&[
                 RawHttpRequestVal::Array(vec![
                     RawHttpRequestVal::String("a".to_string()),
                     RawHttpRequestVal::String("b".to_string())
@@ -412,7 +444,7 @@ mod tests {
         assert_eq!(
             // D    I    D    L    \0   \253 *"
             // 68   73   68   76   0    253  42
-            hash_bytes(vec![68, 73, 68, 76, 0, 253, 42]),
+            hash_bytes([68, 73, 68, 76, 0, 253, 42]),
             hex!("6c0b2ae49718f6995c02ac5700c9c789d7b7862a0d53e6d40a73f1fcd2f70189")
         );
     }
