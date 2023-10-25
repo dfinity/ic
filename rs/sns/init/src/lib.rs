@@ -11,7 +11,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IS_MATCHED_FUNDING_ENABLED,
+    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
 use ic_sns_governance::{
@@ -528,11 +528,7 @@ impl SnsInitPayload {
             neurons_fund_participants: Some(NeuronsFundParticipants {
                 participants: vec![],
             }),
-            neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED {
-                Some(true)
-            } else {
-                None
-            },
+            neurons_fund_participation: Some(true),
             ..SnsInitPayload::with_default_values()
         }
     }
@@ -1975,13 +1971,7 @@ impl SnsInitPayload {
     }
 
     pub fn validate_neurons_fund_participation(&self) -> Result<(), String> {
-        if IS_MATCHED_FUNDING_ENABLED {
-            if self.neurons_fund_participation.is_none() {
-                return Err("Error: neurons_fund_participation must be specified.".to_string());
-            }
-        } else if self.neurons_fund_participation.is_some() {
-            return Err("Error: neurons_fund_participation must not be specified until Matched Funding is enabled.".to_string());
-        }
+        // TODO NNS1-2687: Verify that self.neurons_fund_participation.is_some()
         Ok(())
     }
 

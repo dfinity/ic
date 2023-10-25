@@ -1822,6 +1822,72 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             25_000_000_000 // Subtract neurons_fund_investment_icp
         );
     }
+
+    // TODO NNS1-2687: remove this test entirely
+    #[test]
+    #[cfg(not(feature = "test"))]
+    fn test_neurons_fund_participation_false_not_allowed() {
+        // Step 1: Prepare the world. (In this case, trivial.)
+
+        // Step 2: Call the code under test.
+        let payload = CreateServiceNervousSystem {
+            swap_parameters: Some(SwapParameters {
+                neurons_fund_participation: Some(false),
+                ..CREATE_SERVICE_NERVOUS_SYSTEM
+                    .swap_parameters
+                    .clone()
+                    .unwrap()
+            }),
+            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
+        };
+        let error = SnsInitPayload::try_from(payload).unwrap_err();
+
+        assert!(error.contains("neurons_fund_participation"));
+    }
+
+    // TODO NNS1-2687: remove this test entirely
+    #[test]
+    #[cfg(not(feature = "test"))]
+    fn test_neurons_fund_participation_true_not_allowed() {
+        // Step 1: Prepare the world. (In this case, trivial.)
+
+        // Step 2: Call the code under test.
+        let payload = CreateServiceNervousSystem {
+            swap_parameters: Some(SwapParameters {
+                neurons_fund_participation: Some(true),
+                ..CREATE_SERVICE_NERVOUS_SYSTEM
+                    .swap_parameters
+                    .clone()
+                    .unwrap()
+            }),
+            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
+        };
+        let error = SnsInitPayload::try_from(payload).unwrap_err();
+
+        assert!(error.contains("neurons_fund_participation"));
+    }
+
+    // TODO NNS1-2687: remove this test once the check is moved to sns/init
+    #[test]
+    #[cfg(feature = "test")]
+    fn test_neurons_fund_participation_required() {
+        // Step 1: Prepare the world. (In this case, trivial.)
+
+        // Step 2: Call the code under test.
+        let payload = CreateServiceNervousSystem {
+            swap_parameters: Some(SwapParameters {
+                neurons_fund_participation: None,
+                ..CREATE_SERVICE_NERVOUS_SYSTEM
+                    .swap_parameters
+                    .clone()
+                    .unwrap()
+            }),
+            ..(CREATE_SERVICE_NERVOUS_SYSTEM.clone())
+        };
+        let error = SnsInitPayload::try_from(payload).unwrap_err();
+
+        assert!(error.contains("neurons_fund_participation"));
+    }
 }
 
 mod metrics_tests {
