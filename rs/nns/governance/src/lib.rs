@@ -356,7 +356,7 @@ pub fn encode_metrics(
         "The total voting power, according to the most recent proposal.",
     )?;
 
-    if migrations::neuron_stable_indexes_building_is_enabled() {
+    if neuron_stable_indexes_building_is_enabled() {
         let neuron_store::NeuronIndexesLens {
             subaccount: subaccount_index_len,
             principal: principal_index_len,
@@ -525,6 +525,18 @@ pub fn encode_metrics(
     Ok(())
 }
 
+/// Whether we should start to copy inactive neurons into stable memory.
 fn is_copy_inactive_neurons_to_stable_memory_enabled() -> bool {
+    cfg! { any(test, feature = "test") }
+}
+
+/// Whether we should start to build neuron indexes in stable storage.
+fn neuron_stable_indexes_building_is_enabled() -> bool {
+    true
+}
+
+/// Whether we should use neuron indexes in stable storage (instead of the ones on heap memory).
+#[allow(dead_code)]
+fn use_neuron_stable_indexes() -> bool {
     cfg! { any(test, feature = "test") }
 }

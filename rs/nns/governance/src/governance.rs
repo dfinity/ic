@@ -11,7 +11,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData,
     },
     is_copy_inactive_neurons_to_stable_memory_enabled,
-    migrations::{maybe_run_migrations, neuron_stable_indexes_building_is_enabled},
+    migrations::maybe_run_migrations,
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     pb::v1::{
         add_or_remove_node_provider::Change,
@@ -6617,7 +6617,7 @@ impl Governance {
     fn maybe_run_validations(&mut self) {
         // We do not run validations when any migration is in progress since the data might not be
         // valid yet.
-        if !neuron_stable_indexes_building_is_enabled() {
+        if !crate::neuron_stable_indexes_building_is_enabled() {
             return;
         }
         // Running validations might increase heap size. Do not run it when heap should not grow.
