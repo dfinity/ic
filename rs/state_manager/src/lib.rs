@@ -30,7 +30,7 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateReader, Labeled,
+    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
     PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
     StateManagerResult, StateReader, TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
 };
@@ -2442,14 +2442,14 @@ impl StateManagerImpl {
         self.tip_channel.send(TipRequest::Wait { sender }).unwrap();
     }
 
-    fn certified_state_reader(&self) -> Option<CertifiedStateReaderImpl> {
+    fn certified_state_reader(&self) -> Option<CertifiedStateSnapshotImpl> {
         let read_certified_state_duration_histogram = self
             .metrics
             .api_call_duration
             .with_label_values(&["read_certified_state"]);
 
         let (state, certification, hash_tree) = self.latest_certified_state()?;
-        Some(CertifiedStateReaderImpl {
+        Some(CertifiedStateSnapshotImpl {
             read_certified_state_duration_histogram,
             state,
             certification,
@@ -3158,14 +3158,14 @@ impl StateManager for StateManagerImpl {
     }
 }
 
-struct CertifiedStateReaderImpl {
+struct CertifiedStateSnapshotImpl {
     certification: Certification,
     state: Arc<ReplicatedState>,
     hash_tree: Arc<HashTree>,
     read_certified_state_duration_histogram: Histogram,
 }
 
-impl CertifiedStateReader for CertifiedStateReaderImpl {
+impl CertifiedStateSnapshot for CertifiedStateSnapshotImpl {
     type State = ReplicatedState;
 
     fn get_state(&self) -> &Self::State {
@@ -3275,9 +3275,9 @@ impl StateReader for StateManagerImpl {
         Some((reader.state, mixed_hash_tree, certification))
     }
 
-    fn get_certified_state_reader(
+    fn get_certified_state_snapshot(
         &self,
-    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
+    ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>> {
         self.certified_state_reader()
             .map(|reader| Box::new(reader) as Box<_>)
     }
