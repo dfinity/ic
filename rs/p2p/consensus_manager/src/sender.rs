@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     hash::Hash,
     sync::{Arc, RwLock},
     time::Duration,
@@ -98,55 +98,68 @@ where
     }
 
     async fn start_event_loop(mut self) {
-        loop {
-            if let Some(advert) = self.adverts_to_send.recv().await {
-                self.handle_advert_to_send(advert);
+        // Check if we have artifacts in the validated pool on startup.
+        // This can for example happen if the node restarts.
+        let artifacts_in_validated_pool: Vec<Artifact::Message> = {
+            let pool_read_lock = self.pool_reader.read().unwrap();
+            pool_read_lock
+                .get_all_validated_by_filter(&Artifact::Filter::default())
+                .collect()
+        };
 
-                self.metrics
-                    .active_advert_transmits
-                    .set(self.active_adverts.len() as i64);
+        for artifact in artifacts_in_validated_pool {
+            let advert = Artifact::message_to_advert(&artifact);
+            self.handle_send_advert(advert, false);
+        }
+
+        while let Some(advert) = self.adverts_to_send.recv().await {
+            match advert {
+                ArtifactProcessorEvent::Advert { advert, is_relay } => {
+                    self.handle_send_advert(advert, is_relay)
+                }
+                ArtifactProcessorEvent::Purge(id) => {
+                    self.handle_purge_advert(&id);
+                }
             }
+
+            self.current_commit_id.inc_assign();
+
+            self.metrics
+                .active_advert_transmits
+                .set(self.active_adverts.len() as i64);
         }
     }
 
-    // TODO: rename this method. This function also handles purging adverts.
-    fn handle_advert_to_send(&mut self, advert: ArtifactProcessorEvent<Artifact>) {
-        self.current_commit_id.inc_assign();
-        match advert {
-            ArtifactProcessorEvent::Advert { advert, is_relay } => {
-                self.metrics.adverts_to_send_total.inc();
-                // Only send advert if it is not already being sent.
-                if !self.active_adverts.contains_key(&advert.id) {
-                    let slot = self.slot_manager.take_free_slot();
-                    if advert.size <= ARTIFACT_PUSH_THRESHOLD && ENABLE_ARTIFACT_PUSH {
-                        self.metrics.artifacts_pushed_total.inc();
-                    }
-                    self.active_adverts.insert(
-                        advert.id.clone(),
-                        (
-                            self.rt_handle.spawn(Self::send_advert_to_all_peers(
-                                self.rt_handle.clone(),
-                                self.log.clone(),
-                                self.metrics.clone(),
-                                self.transport.clone(),
-                                self.current_commit_id,
-                                slot,
-                                advert,
-                                is_relay,
-                                self.pool_reader.clone(),
-                            )),
-                            slot,
-                        ),
-                    );
-                }
-            }
-            ArtifactProcessorEvent::Purge(id) => {
-                self.metrics.adverts_to_purge_total.inc();
-                if let Some((send_task, free_slot)) = self.active_adverts.remove(&id) {
-                    send_task.abort();
-                    self.slot_manager.give_slot(free_slot);
-                }
-            }
+    fn handle_purge_advert(&mut self, id: &Artifact::Id) {
+        // TODO: Add a warning if we get purge requests for unseen advert.
+        if let Some((send_task, free_slot)) = self.active_adverts.remove(id) {
+            self.metrics.adverts_to_purge_total.inc();
+            send_task.abort();
+            self.slot_manager.give_slot(free_slot);
+        }
+    }
+
+    fn handle_send_advert(&mut self, advert: Advert<Artifact>, is_relay: bool) {
+        let entry = self.active_adverts.entry(advert.id.clone());
+
+        if let Entry::Vacant(entry) = entry {
+            self.metrics.adverts_to_send_total.inc();
+
+            let slot = self.slot_manager.take_free_slot();
+
+            let send_future = Self::send_advert_to_all_peers(
+                self.rt_handle.clone(),
+                self.log.clone(),
+                self.metrics.clone(),
+                self.transport.clone(),
+                self.current_commit_id,
+                slot,
+                advert,
+                is_relay,
+                self.pool_reader.clone(),
+            );
+
+            entry.insert((self.rt_handle.spawn(send_future), slot));
         }
     }
 
