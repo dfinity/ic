@@ -32,7 +32,7 @@ use ic_crypto_tree_hash::{
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::CertifiedStateReader;
+use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::Pprof;
 use ic_protobuf::registry::crypto::v1::{
@@ -948,11 +948,11 @@ fn can_retrieve_subnet_metrics() {
 
     let cloned_certificate = certificate.clone();
     mock_state_manager
-        .expect_get_certified_state_reader()
+        .expect_get_certified_state_snapshot()
         .returning(move || {
-            struct FakeCertifiedStateReader(Arc<ReplicatedState>, MixedHashTree, Certification);
+            struct FakeCertifiedStateSnapshot(Arc<ReplicatedState>, MixedHashTree, Certification);
 
-            impl CertifiedStateReader for FakeCertifiedStateReader {
+            impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
                 type State = ReplicatedState;
 
                 fn get_state(&self) -> &ReplicatedState {
@@ -969,7 +969,7 @@ fn can_retrieve_subnet_metrics() {
 
             let (state, hash_tree, certification) = mock_certified_state(certificate.clone());
 
-            Some(Box::new(FakeCertifiedStateReader(
+            Some(Box::new(FakeCertifiedStateSnapshot(
                 state,
                 hash_tree,
                 certification,

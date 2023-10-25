@@ -165,7 +165,7 @@ impl Service<Request<Bytes>> for CanisterReadStateService {
                 )
             };
             let certified_state_reader =
-                match state_reader_executor.get_certified_state_reader().await {
+                match state_reader_executor.get_certified_state_snapshot().await {
                     Ok(Some(reader)) => reader,
                     Ok(None) => return Ok(make_service_unavailable_response()),
                     Err(HttpError { status, message }) => {

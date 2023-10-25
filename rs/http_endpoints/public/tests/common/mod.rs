@@ -18,7 +18,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::{CertifiedStateReader, Labeled, StateReader};
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -159,10 +159,10 @@ pub fn default_read_certified_state(
 }
 
 pub fn default_certified_state_reader(
-) -> Option<Box<dyn CertifiedStateReader<State = ReplicatedState> + 'static>> {
-    struct FakeCertifiedStateReader(Arc<ReplicatedState>, MixedHashTree, Certification);
+) -> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
+    struct FakeCertifiedStateSnapshot(Arc<ReplicatedState>, MixedHashTree, Certification);
 
-    impl CertifiedStateReader for FakeCertifiedStateReader {
+    impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
         type State = ReplicatedState;
 
         fn get_state(&self) -> &ReplicatedState {
@@ -178,7 +178,7 @@ pub fn default_certified_state_reader(
     }
 
     let (state, hash_tree, certification) = default_read_certified_state(&LabeledTree::Leaf(()))?;
-    Some(Box::new(FakeCertifiedStateReader(
+    Some(Box::new(FakeCertifiedStateSnapshot(
         state,
         hash_tree,
         certification,
@@ -237,7 +237,7 @@ pub fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_latest_certified_height);
 
     mock_state_manager
-        .expect_get_certified_state_reader()
+        .expect_get_certified_state_snapshot()
         .returning(default_certified_state_reader);
 
     mock_state_manager

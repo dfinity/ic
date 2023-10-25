@@ -7,29 +7,16 @@ use phantom_newtype::BitMask;
 use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StateManagerError {
     /// The state at the specified height was removed and cannot be recovered
     /// anymore.
+    #[error("state at height {0} has already been removed")]
     StateRemoved(Height),
     /// The state at the specified height is not committed yet.
+    #[error("state at height {0} is not committed yet")]
     StateNotCommittedYet(Height),
 }
-
-impl std::fmt::Display for StateManagerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::StateRemoved(height) => {
-                write!(f, "state at height {} has already been removed", height)
-            }
-            Self::StateNotCommittedYet(height) => {
-                write!(f, "state at height {} is not committed yet", height)
-            }
-        }
-    }
-}
-
-impl std::error::Error for StateManagerError {}
 
 pub type StateManagerResult<T> = Result<T, StateManagerError>;
 
@@ -334,10 +321,10 @@ pub trait StateManager: StateReader {
 
 /// This component bundles a version of the state with the corresponding hash tree and
 /// certifications.
-pub trait CertifiedStateReader: Send + Sync {
+pub trait CertifiedStateSnapshot: Send + Sync {
     type State;
 
-    /// Returns a reference to the underlying state.
+    /// Returns a reference to the underlying certified state.
     fn get_state(&self) -> &Self::State;
 
     /// This method runs the same computation as [StateReader::read_certified_state],
@@ -419,8 +406,8 @@ pub trait StateReader: Send + Sync {
         paths: &LabeledTree<()>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)>;
 
-    /// Returns a CertifiedStateReader corresponding to the latest certified state.
-    fn get_certified_state_reader(
+    /// Returns a CertifiedStateSnapshot corresponding to the latest certified state.
+    fn get_certified_state_snapshot(
         &self,
-    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>>;
+    ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>>;
 }

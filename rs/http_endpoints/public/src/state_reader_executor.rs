@@ -4,7 +4,7 @@
 use crate::HttpError;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces_state_manager::{CertifiedStateReader, Labeled, StateReader};
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{consensus::certification::Certification, Height};
 use std::sync::{Arc, Mutex};
@@ -57,11 +57,11 @@ impl StateReaderExecutor {
             .await
     }
 
-    pub async fn get_certified_state_reader(
+    pub async fn get_certified_state_snapshot(
         &self,
-    ) -> Result<Option<Box<dyn CertifiedStateReader<State = ReplicatedState> + 'static>>, HttpError>
+    ) -> Result<Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>>, HttpError>
     {
-        self.serve_with_state_reader(|reader| reader.get_certified_state_reader())
+        self.serve_with_state_reader(|reader| reader.get_certified_state_snapshot())
             .await
     }
 
