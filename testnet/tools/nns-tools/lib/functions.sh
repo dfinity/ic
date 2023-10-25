@@ -563,8 +563,8 @@ wait_for_proposal_to_execute() {
     local NNS_URL=$1
     local PROPOSAL_ID=$2
 
-    for i in {1..20}; do
-        echo "Testing to see if NNS proposal ${PROPOSAL_ID} executed successfully (${i}/20)"
+    for i in {1..30}; do
+        echo "Testing to see if NNS proposal ${PROPOSAL_ID} executed successfully (${i}/30)"
         EXECUTED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].executed_timestamp_seconds')
         if [[ "${EXECUTED}" != 0 ]]; then
             print_green "NNS proposal ${PROPOSAL_ID} executed successfully"
