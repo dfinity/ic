@@ -30,10 +30,13 @@ def _upload_artifact_impl(ctx):
     if rclone_endpoint != "":
         rclone_config = ctx.file.rclone_anon_config
 
+    rc = ctx.attr._rc[BuildSettingInfo].value
+
     ctx.actions.expand_template(
         template = ctx.file._artifacts_uploader_template,
         output = uploader,
         substitutions = {
+            "@@RC@@": "True" if rc else "False",
             "@@RCLONE@@": ctx.file._rclone.path,
             "@@RCLONE_CONFIG@@": rclone_config.path,
             "@@REMOTE_SUBDIR@@": remote_subdir,
@@ -106,6 +109,7 @@ _upload_artifacts = rule(
         "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
         "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
         "_s3_endpoint": attr.label(default = ":s3_endpoint"),
+        "_rc": attr.label(default = ":rc"),
     },
 )
 
