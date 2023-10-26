@@ -372,13 +372,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
             defects.push(err);
         }
         Ok(id) => {
-            // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-            // check does nothing.
-            if let Err(err) = CanisterId::new(*id) {
-                defects.push(format!("Specified canister ID was invalid: {}", err));
-            } else {
-                canister_id = *id;
-            }
+            canister_id = *id;
         }
     }
 
@@ -509,15 +503,7 @@ fn validate_canister_id(
             defects.push(format!("{} field was not populated.", field_name));
             None
         }
-        // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-        // check does nothing.
-        Some(canister_id) => match CanisterId::new(*canister_id) {
-            Err(err) => {
-                defects.push(format!("{} was invalid: {}", field_name, err));
-                None
-            }
-            Ok(target_canister_id) => Some(target_canister_id),
-        },
+        Some(canister_id) => Some(CanisterId::unchecked_from_principal(*canister_id)),
     }
 }
 
@@ -730,9 +716,8 @@ fn validate_and_render_register_dapp_canisters(
     let canisters_to_register = register_dapp_canisters
         .canister_ids
         .iter()
-        .map(|id| CanisterId::new(*id))
-        .collect::<Result<HashSet<CanisterId>, _>>()
-        .map_err(|err| err.to_string())?;
+        .map(|id| CanisterId::unchecked_from_principal(*id))
+        .collect::<HashSet<CanisterId>>();
 
     let error_canister_ids: HashSet<&CanisterId> = disallowed_canister_ids
         .intersection(&canisters_to_register)
@@ -779,9 +764,8 @@ fn validate_and_render_deregister_dapp_canisters(
     let canisters_to_deregister = deregister_dapp_canisters
         .canister_ids
         .iter()
-        .map(|id| CanisterId::new(*id))
-        .collect::<Result<HashSet<CanisterId>, _>>()
-        .map_err(|err| err.to_string())?;
+        .map(|id| CanisterId::unchecked_from_principal(*id))
+        .collect::<HashSet<CanisterId>>();
 
     let error_canister_ids: HashSet<&CanisterId> = disallowed_canister_ids
         .intersection(&canisters_to_deregister)
@@ -2516,9 +2500,8 @@ Version {
             .take(1)
             // convert to CanisterId
             .cloned()
-            .map(CanisterId::new)
-            .collect::<Result<HashSet<_>, _>>()
-            .unwrap();
+            .map(CanisterId::unchecked_from_principal)
+            .collect::<HashSet<_>>();
 
         let register_dapp_canisters = RegisterDappCanisters { canister_ids };
         let rendered_err = validate_and_render_register_dapp_canisters(
@@ -2602,9 +2585,8 @@ Version {
             .take(1)
             // convert to CanisterId
             .cloned()
-            .map(CanisterId::new)
-            .collect::<Result<HashSet<_>, _>>()
-            .unwrap();
+            .map(CanisterId::unchecked_from_principal)
+            .collect::<HashSet<_>>();
 
         let deregister_dapp_canisters = DeregisterDappCanisters {
             canister_ids,

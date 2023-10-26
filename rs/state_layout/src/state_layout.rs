@@ -1184,11 +1184,10 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
         )
     })?;
 
-    CanisterId::new(
+    Ok(CanisterId::unchecked_from_principal(
         PrincipalId::try_from(&blob[..])
             .map_err(|err| format!("failed to parse principal ID: {}", err))?,
-    )
-    .map_err(|err| format!("failed to create canister ID: {}", err))
+    ))
 }
 
 /// Parses the canister ID from a relative path, if it is the path of a canister

@@ -781,7 +781,7 @@ fn test_query_archived_blocks() {
     // query the archive
     let block_range = Decode!(
         &env.query(
-            CanisterId::new(callback.canister_id.into()).unwrap(),
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
             callback.method.to_owned(),
             Encode!(&GetBlocksArgs {
                 start: *start,

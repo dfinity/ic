@@ -202,7 +202,7 @@ fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::
         let canister_id = archived.callback.canister_id;
         let res = env
             .execute_ingress(
-                CanisterId::new(PrincipalId(canister_id)).unwrap(),
+                CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
                 archived.callback.method,
                 req,
             )

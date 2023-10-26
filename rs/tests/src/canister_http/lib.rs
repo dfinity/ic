@@ -170,6 +170,6 @@ pub fn create_proxy_canister<'a>(
     );
     Canister::new(
         runtime,
-        CanisterId::new(PrincipalId::from(proxy_canister_id)).unwrap(),
+        CanisterId::unchecked_from_principal(PrincipalId::from(proxy_canister_id)),
     )
 }

@@ -82,9 +82,7 @@ impl IngressStatus {
             IngressStatus::Known { receiver, .. } => Some(*receiver),
             IngressStatus::Unknown => None,
         }
-        .map(|receiver| {
-            CanisterId::new(receiver).expect("Receiver in IngressStatus must be a Canister ID.")
-        })
+        .map(CanisterId::unchecked_from_principal)
     }
 
     /// Returns the name of this status as specified in the interface spec:

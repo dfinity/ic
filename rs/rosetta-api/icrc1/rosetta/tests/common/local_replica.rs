@@ -164,7 +164,7 @@ async fn create_canister(context: &ReplicaContext) -> CanisterId {
         pub canister_id: Principal,
     }
     let create_response = Decode!(&response, CreateCanisterResult).unwrap();
-    CanisterId::new(create_response.canister_id.into()).unwrap()
+    CanisterId::unchecked_from_principal(create_response.canister_id.into())
 }
 
 // Return the wasm of the icrc ledger

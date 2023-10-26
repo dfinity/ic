@@ -57,8 +57,10 @@ impl CanisterId {
         self.0
     }
 
-    pub const fn new(principal_id: PrincipalId) -> Result<Self, CanisterIdError> {
-        Ok(Self(principal_id))
+    /// No validation is performed on `principal_id` to check that it actually
+    /// comes from a `CanisterId`.
+    pub const fn unchecked_from_principal(principal_id: PrincipalId) -> Self {
+        Self(principal_id)
     }
 
     pub const fn from_u64(val: u64) -> Self {
@@ -112,7 +114,7 @@ impl TryFrom<PrincipalId> for CanisterId {
     type Error = CanisterIdError;
 
     fn try_from(principal_id: PrincipalId) -> Result<Self, Self::Error> {
-        Self::new(principal_id)
+        Ok(Self::unchecked_from_principal(principal_id))
     }
 }
 
@@ -142,7 +144,7 @@ impl TryFrom<Vec<u8>> for CanisterId {
 // TODO(EXC-241)
 impl From<SubnetId> for CanisterId {
     fn from(subnet_id: SubnetId) -> Self {
-        CanisterId::new(subnet_id.get()).unwrap()
+        CanisterId::unchecked_from_principal(subnet_id.get())
     }
 }
 
@@ -202,7 +204,7 @@ impl std::str::FromStr for CanisterId {
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let principal_id =
             PrincipalId::from_str(input).map_err(CanisterIdError::PrincipalIdParseError)?;
-        CanisterId::new(principal_id)
+        Ok(CanisterId::unchecked_from_principal(principal_id))
     }
 }
 

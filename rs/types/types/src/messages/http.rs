@@ -489,13 +489,10 @@ impl Delegation {
             Some(targets) => {
                 let mut target_canister_ids = BTreeSet::new();
                 for target in targets {
-                    target_canister_ids.insert(
-                        CanisterId::new(
-                            PrincipalId::try_from(target.0.as_slice())
-                                .map_err(|e| format!("Error parsing canister ID: {}", e))?,
-                        )
-                        .map_err(|e| format!("Error parsing canister ID: {}", e))?,
-                    );
+                    target_canister_ids.insert(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(target.0.as_slice())
+                            .map_err(|e| format!("Error parsing canister ID: {}", e))?,
+                    ));
                 }
                 Ok(Some(target_canister_ids))
             }

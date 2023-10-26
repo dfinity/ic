@@ -401,8 +401,7 @@ impl SnsRootCanister {
                 );
             return Ok(());
         }
-        let canister_to_register =
-            CanisterId::new(canister_to_register).map_err(|_| "Canister ID invalid")?;
+        let canister_to_register = CanisterId::unchecked_from_principal(canister_to_register);
 
         // Make sure we are a controller by querying the management canister.
         let canister_status = management_canister_client
@@ -720,15 +719,7 @@ impl SnsRootCanister {
 }
 
 async fn get_swap_status(env: &impl Environment, swap_id: PrincipalId) -> CanisterSummary {
-    let Ok(canister_id) = CanisterId::new(swap_id) else {
-        log!(
-            ERROR,
-            "The recorded Swap principal id, '{}', is not a valid CanisterId.",
-            swap_id
-        );
-        return CanisterSummary::new_with_no_status(swap_id);
-    };
-
+    let canister_id = CanisterId::unchecked_from_principal(swap_id);
     let status = match env
         .call_canister(
             canister_id,

@@ -195,13 +195,7 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
 fn parse_canister_id(canister_id: &str) -> Result<CanisterId, String> {
     use std::str::FromStr;
     match PrincipalId::from_str(canister_id) {
-        Ok(id) => match CanisterId::new(id) {
-            Ok(id) => Ok(id),
-            Err(err) => Err(format!(
-                "Failed to convert {} to canister id with {}",
-                canister_id, err
-            )),
-        },
+        Ok(id) => Ok(CanisterId::unchecked_from_principal(id)),
         Err(err) => Err(format!(
             "Failed to convert {} to principal id with {}",
             canister_id, err

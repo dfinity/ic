@@ -280,7 +280,7 @@ impl ExhaustiveSet for CanisterId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         PrincipalId::exhaustive_set(rng)
             .into_iter()
-            .map(|id| CanisterId::new(id).unwrap())
+            .map(CanisterId::unchecked_from_principal)
             .collect()
     }
 }

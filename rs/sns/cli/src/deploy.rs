@@ -221,9 +221,10 @@ impl SnsWasmSnsDeployer {
         let wallet_canister = args
             .wallet_canister_override
             .as_ref()
-            .map(|id| CanisterId::new(*id))
-            .unwrap_or_else(|| CanisterId::new(get_identity("get-wallet", &args.network)))
-            .expect("Could not convert wallet principal to CanisterId");
+            .map(|id| CanisterId::unchecked_from_principal(*id))
+            .unwrap_or_else(|| {
+                CanisterId::unchecked_from_principal(get_identity("get-wallet", &args.network))
+            });
 
         Self {
             args,

@@ -148,8 +148,8 @@ fn run_upgrade_test_legacy(canister_type: SnsCanisterType) {
         index: _,
     } = response.canisters.unwrap();
 
-    let root = CanisterId::new(root.unwrap()).unwrap();
-    let governance = CanisterId::new(governance.unwrap()).unwrap();
+    let root = CanisterId::unchecked_from_principal(root.unwrap());
+    let governance = CanisterId::unchecked_from_principal(governance.unwrap());
 
     // Validate that upgrading Swap doesn't prevent upgrading other SNS canisters
     let old_version = upgrade_swap(&machine, &wasm_map, governance, &airdrop_sns_neuron_id);
@@ -961,7 +961,7 @@ fn test_custom_upgrade_path_for_sns_legacy() {
 
     let SnsCanisterIds { governance, .. } = response.canisters.unwrap();
 
-    let sns_governance_canister_id = CanisterId::new(governance.unwrap()).unwrap();
+    let sns_governance_canister_id = CanisterId::unchecked_from_principal(governance.unwrap());
 
     let deployed_version = wasm_map_to_version(&wasm_map);
     // After our deploy, we need to add a bunch of wasms so there's an upgrade path

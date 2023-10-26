@@ -4795,8 +4795,8 @@ proptest! {
                     };
 
                     let req = RequestBuilder::default()
-                        .sender(CanisterId::new(PrincipalId::try_from(&[2][..]).unwrap()).unwrap())
-                        .receiver(CanisterId::new(PrincipalId::try_from(&[3][..]).unwrap()).unwrap())
+                        .sender(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[2][..]).unwrap()))
+                        .receiver(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[3][..]).unwrap()))
                         .method_name("test".to_string())
                         .sender_reply_callback(CallbackId::from(999))
                         .build();

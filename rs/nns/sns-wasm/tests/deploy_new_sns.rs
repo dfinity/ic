@@ -198,8 +198,10 @@ fn test_canisters_are_created_and_installed_legacy() {
         let root_canister_principal = canisters_returned.root.unwrap();
         let swap_canister_principal = canisters_returned.swap.unwrap();
 
-        let mut root_canister =
-            Canister::new(&runtime, CanisterId::new(root_canister_principal).unwrap());
+        let mut root_canister = Canister::new(
+            &runtime,
+            CanisterId::unchecked_from_principal(root_canister_principal),
+        );
         root_canister.set_wasm(root_wasm.bytes());
 
         let response: GetSnsCanistersSummaryResponse = root_canister
@@ -277,8 +279,10 @@ fn test_canisters_are_created_and_installed_legacy() {
             index_hash
         );
 
-        let mut swap_canister =
-            Canister::new(&runtime, CanisterId::new(swap_canister_principal).unwrap());
+        let mut swap_canister = Canister::new(
+            &runtime,
+            CanisterId::unchecked_from_principal(swap_canister_principal),
+        );
         swap_canister.set_wasm(swap_wasm.bytes());
 
         // Check Swap status
@@ -540,7 +544,7 @@ fn test_deploy_sns_and_transfer_dapps() {
 
     let response: GetSnsCanistersSummaryResponse = update_with_sender(
         &machine,
-        CanisterId::new(root_canister_principal).unwrap(),
+        CanisterId::unchecked_from_principal(root_canister_principal),
         "get_sns_canisters_summary",
         candid_one,
         GetSnsCanistersSummaryRequest {

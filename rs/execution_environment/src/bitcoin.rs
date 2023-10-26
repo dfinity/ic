@@ -120,8 +120,9 @@ mod tests {
 
     #[test]
     fn clears_state_of_former_bitcoin_canisters() {
-        let bitcoin_canister_id =
-            CanisterId::new(PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap()).unwrap();
+        let bitcoin_canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(),
+        );
 
         let mut test = ExecutionTestBuilder::new()
             // Set the bitcoin canister to be the ID of the canister about to be created.

@@ -1955,12 +1955,6 @@ impl ExecutionEnvironment {
         // TODO EXC-1060: get the right public key.
         _key_id: &EcdsaKeyId,
     ) -> Result<ECDSAPublicKeyResponse, UserError> {
-        let _ = CanisterId::new(principal_id).map_err(|err| {
-            UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!("Not a canister id: {}", err),
-            )
-        })?;
         let path = ExtendedDerivationPath {
             caller: principal_id,
             derivation_path,

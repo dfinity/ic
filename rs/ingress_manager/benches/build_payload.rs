@@ -199,7 +199,9 @@ fn build_payload(criterion: &mut Criterion) {
         // canister ids iterator
         let mut rng = rand::thread_rng();
         let canisters: Vec<CanisterId> = (0..(size / 10))
-            .map(|_| CanisterId::new(PrincipalId::new_user_test_id(rng.next_u64())).unwrap())
+            .map(|_| {
+                CanisterId::unchecked_from_principal(PrincipalId::new_user_test_id(rng.next_u64()))
+            })
             .collect();
 
         run_test(

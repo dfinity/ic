@@ -321,8 +321,12 @@ impl TryFrom<Request> for ic_types::messages::Request {
         .try_into()?;
 
         Ok(Self {
-            receiver: ic_types::CanisterId::new(request.receiver.as_slice().try_into()?)?,
-            sender: ic_types::CanisterId::new(request.sender.as_slice().try_into()?)?,
+            receiver: ic_types::CanisterId::unchecked_from_principal(
+                request.receiver.as_slice().try_into()?,
+            ),
+            sender: ic_types::CanisterId::unchecked_from_principal(
+                request.sender.as_slice().try_into()?,
+            ),
             sender_reply_callback: request.sender_reply_callback.into(),
             payment,
             method_name: request.method_name,
@@ -362,8 +366,12 @@ impl TryFrom<Response> for ic_types::messages::Response {
         .try_into()?;
 
         Ok(Self {
-            originator: ic_types::CanisterId::new(response.originator.as_slice().try_into()?)?,
-            respondent: ic_types::CanisterId::new(response.respondent.as_slice().try_into()?)?,
+            originator: ic_types::CanisterId::unchecked_from_principal(
+                response.originator.as_slice().try_into()?,
+            ),
+            respondent: ic_types::CanisterId::unchecked_from_principal(
+                response.respondent.as_slice().try_into()?,
+            ),
             originator_reply_callback: response.originator_reply_callback.into(),
             refund,
             response_payload: response.response_payload.try_into()?,

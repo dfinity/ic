@@ -329,7 +329,7 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
 
-        if CanisterId::new(caller()) != Ok(governance_canister_id) {
+        if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
             panic!("Only the governance canister can set authorized subnetwork lists.");
         }
 
@@ -384,7 +384,7 @@ fn update_subnet_type_() {
 fn update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
-    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+    if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
         panic!("Only the governance canister can update the available subnet types.");
     }
 
@@ -456,7 +456,7 @@ fn change_subnet_type_assignment(
 ) -> ChangeSubnetTypeAssignmentResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
-    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+    if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
         panic!(
             "Only the governance canister can change the assignment of subnets to subnet types."
         );
@@ -1316,7 +1316,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
-    if CanisterId::new(caller) != Ok(ledger_canister_id) {
+    if CanisterId::unchecked_from_principal(caller) != ledger_canister_id {
         return Err(format!(
             "This canister can only be notified by the ledger canister ({}), not by {}.",
             ledger_canister_id, caller
@@ -2047,10 +2047,9 @@ mod tests {
         }
         blocks_notified.insert(
             60,
-            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::new(
+            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::unchecked_from_principal(
                 PrincipalId::new_user_test_id(4),
-            )
-            .unwrap())),
+            ))),
         );
         state.blocks_notified = Some(blocks_notified);
 

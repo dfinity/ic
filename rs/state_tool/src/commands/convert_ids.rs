@@ -15,8 +15,9 @@ pub fn do_canister_id_from_hex(canister_id: String) -> Result<(), String> {
     let canister = hex::decode(canister_id).map_err(|e| e.to_string())?;
     println!(
         "canister_id: {}",
-        CanisterId::new(PrincipalId::try_from(&canister[..]).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?
+        CanisterId::unchecked_from_principal(
+            PrincipalId::try_from(&canister[..]).map_err(|e| e.to_string())?
+        )
     );
     Ok(())
 }

@@ -320,10 +320,9 @@ fn display_canister_id() {
         "2chl6-4hpzw-vqaaa-aaaaa-c",
         format!(
             "{}",
-            CanisterId::new(
+            CanisterId::unchecked_from_principal(
                 PrincipalId::try_from(&[0xef, 0xcd, 0xab, 0, 0, 0, 0, 0, 1][..]).unwrap()
             )
-            .unwrap()
         )
     );
 }

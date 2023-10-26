@@ -486,8 +486,9 @@ mod tests {
     fn message_id_icf_reference() {
         let expiry_time = expiry_time_from_now();
         let signed_ingress1 = signed_ingress(
-            CanisterId::new(PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap())
-                .unwrap(),
+            CanisterId::unchecked_from_principal(
+                PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap(),
+            ),
             "hello".to_string(),
             b"DIDL\x00\xFD*".to_vec(),
             expiry_time,
@@ -496,8 +497,9 @@ mod tests {
         );
         let message_id1 = signed_ingress1.id();
         let signed_ingress2 = signed_ingress(
-            CanisterId::new(PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap())
-                .unwrap(),
+            CanisterId::unchecked_from_principal(
+                PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap(),
+            ),
             "hello".to_string(),
             b"DIDL\x00\xFD*".to_vec(),
             expiry_time,

@@ -69,7 +69,7 @@ async fn install_code_on_canisters(wasm: WasmModule, canisters: Vec<Principal>) 
             canister_id
         );
         let arg = InitArgs {
-            ledger_id: CanisterId::new(get_ledger_principal()).unwrap(),
+            ledger_id: CanisterId::unchecked_from_principal(get_ledger_principal()),
             rand_seed: Nat::from(next_u64()),
         };
         let arg = &Encode!(&arg).expect("Error while encoding arg");

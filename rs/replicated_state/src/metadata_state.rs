@@ -1863,7 +1863,10 @@ impl IngressHistoryState {
         let should_retain = |status: &IngressStatus| match status {
             IngressStatus::Known {
                 receiver, state, ..
-            } => state.is_terminal() || is_local_receiver(CanisterId::new(*receiver).unwrap()),
+            } => {
+                state.is_terminal()
+                    || is_local_receiver(CanisterId::unchecked_from_principal(*receiver))
+            }
             IngressStatus::Unknown => false,
         };
 

@@ -117,8 +117,12 @@ impl TryFrom<RequestV13> for ic_types::messages::Request {
         .try_into()?;
 
         Ok(Self {
-            receiver: ic_types::CanisterId::new(request.receiver.as_slice().try_into()?)?,
-            sender: ic_types::CanisterId::new(request.sender.as_slice().try_into()?)?,
+            receiver: ic_types::CanisterId::unchecked_from_principal(
+                request.receiver.as_slice().try_into()?,
+            ),
+            sender: ic_types::CanisterId::unchecked_from_principal(
+                request.sender.as_slice().try_into()?,
+            ),
             sender_reply_callback: request.sender_reply_callback.into(),
             payment,
             method_name: request.method_name,
@@ -167,8 +171,12 @@ impl TryFrom<RequestV3> for ic_types::messages::Request {
 
     fn try_from(request: RequestV3) -> Result<Self, Self::Error> {
         Ok(Self {
-            receiver: ic_types::CanisterId::new(request.receiver.as_slice().try_into()?)?,
-            sender: ic_types::CanisterId::new(request.sender.as_slice().try_into()?)?,
+            receiver: ic_types::CanisterId::unchecked_from_principal(
+                request.receiver.as_slice().try_into()?,
+            ),
+            sender: ic_types::CanisterId::unchecked_from_principal(
+                request.sender.as_slice().try_into()?,
+            ),
             sender_reply_callback: request.sender_reply_callback.into(),
             payment: request.payment.cycles.try_into()?,
             method_name: request.method_name,
@@ -214,8 +222,12 @@ impl TryFrom<ResponseV3> for ic_types::messages::Response {
 
     fn try_from(response: ResponseV3) -> Result<Self, Self::Error> {
         Ok(Self {
-            originator: ic_types::CanisterId::new(response.originator.as_slice().try_into()?)?,
-            respondent: ic_types::CanisterId::new(response.respondent.as_slice().try_into()?)?,
+            originator: ic_types::CanisterId::unchecked_from_principal(
+                response.originator.as_slice().try_into()?,
+            ),
+            respondent: ic_types::CanisterId::unchecked_from_principal(
+                response.respondent.as_slice().try_into()?,
+            ),
             originator_reply_callback: response.originator_reply_callback.into(),
             refund: response.refund.cycles.try_into()?,
             response_payload: response.response_payload.try_into()?,
