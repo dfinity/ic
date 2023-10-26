@@ -2779,6 +2779,7 @@ dependencies = [
  "procfs 0.9.1",
  "prometheus",
  "prometheus-http-query",
+ "prometheus-parse",
  "proptest",
  "proptest-derive",
  "prost",
@@ -7389,6 +7390,18 @@ dependencies = [
  "serde_json",
  "time 0.3.26",
  "url",
+]
+
+[[package]]
+name = "prometheus-parse"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c2aa5feb83bf4b2c8919eaf563f51dbab41183de73ba2353c0e03cd7b6bd892"
+dependencies = [
+ "chrono",
+ "itertools 0.10.5",
+ "once_cell",
+ "regex",
 ]
 
 [[package]]

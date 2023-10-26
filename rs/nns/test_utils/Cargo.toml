@@ -10,7 +10,9 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_http = { path = "../../rust_canisters/dfn_http" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = { workspace = true }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-base-types = { path = "../../types/base_types" }
@@ -51,6 +53,7 @@ lifeline = { path = "../handlers/lifeline/impl" }
 maplit = "1.0.2"
 num-traits = "0.2.14"
 on_wire = { path = "../../rust_canisters/on_wire" }
+prometheus-parse = "0.2.4"
 prost = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { version = "1.0", features = ["derive"] }

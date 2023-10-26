@@ -522,6 +522,12 @@ pub fn encode_metrics(
         );
     }
 
+    w.encode_gauge(
+        "governance_stable_memory_neuron_count",
+        governance.neuron_store.stable_neuron_store_len() as f64,
+        "The number of neurons in stable memory.",
+    )?;
+
     Ok(())
 }
 

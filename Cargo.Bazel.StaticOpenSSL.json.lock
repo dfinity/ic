@@ -1,5 +1,5 @@
 {
-  "checksum": "b7c2d25ffd48aaf5e827ea63489006589506418cbbe11a132b5dda9a0bd585a2",
+  "checksum": "b9f0a78f73a60b5695761ea4c2cd034f978de1eacdcdd7f38b30421f15633283",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13851,6 +13851,10 @@
               "target": "prometheus_http_query"
             },
             {
+              "id": "prometheus-parse 0.2.4",
+              "target": "prometheus_parse"
+            },
+            {
               "id": "proptest 1.2.0",
               "target": "proptest"
             },
@@ -27291,27 +27295,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -27345,27 +27334,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.4.3"
@@ -37666,6 +37640,57 @@
         "version": "0.6.6"
       },
       "license": "MIT"
+    },
+    "prometheus-parse 0.2.4": {
+      "name": "prometheus-parse",
+      "version": "0.2.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/prometheus-parse/0.2.4/download",
+          "sha256": "0c2aa5feb83bf4b2c8919eaf563f51dbab41183de73ba2353c0e03cd7b6bd892"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prometheus_parse",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "prometheus_parse",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "chrono 0.4.19",
+              "target": "chrono"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "regex 1.9.1",
+              "target": "regex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.4"
+      },
+      "license": "Apache-2.0"
     },
     "proptest 1.2.0": {
       "name": "proptest",

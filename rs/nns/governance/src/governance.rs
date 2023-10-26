@@ -221,7 +221,10 @@ const COPY_INACTIVE_NEURONS_TO_STABLE_MEMORY_BATCH_LEN: usize = if cfg!(test) {
     // into self-flagilation territory.
     3
 } else {
-    500
+    // Experiments in StateMachine-based tests indicate that the break point is around 10_000. Other
+    // analysis suggests that 5 is the most we can afford to do in a single heartbeat. Please, ask
+    // jason.zhu@dfinity.org for the details of that analysis.
+    5
 };
 
 // Wrapping MakeProposalLock in Option seems to cause #[must_use] to not have
@@ -1657,6 +1660,15 @@ impl Governance {
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
+        println!(
+            "Copying inactive neurons to stable memory is {}.",
+            if is_copy_inactive_neurons_to_stable_memory_enabled() {
+                "ENABLED"
+            } else {
+                "DISABLED"
+            }
+        );
+
         // Step 1: Populate some fields governance_proto if they are blank.
 
         // Step 1.1: genesis_timestamp_seconds. 0 indicates it hasn't been set already.
@@ -2962,7 +2974,7 @@ impl Governance {
             // In case we have some bug, clamp maturity_to_stake by available maturity.
             maturity_to_stake = neuron_maturity_e8s_equivalent;
             println!(
-                "{}Warning: a portion of maturity ({}% * {} = {}) should not be larger than its entirety {}",
+                "{}WARNING: a portion of maturity ({}% * {} = {}) should not be larger than its entirety {}",
                 LOG_PREFIX, percentage_to_stake, neuron_maturity_e8s_equivalent, maturity_to_stake, neuron_maturity_e8s_equivalent
             );
         }
@@ -3687,7 +3699,7 @@ impl Governance {
 
         if genesis_timestamp_seconds > now {
             println!(
-                "{}Warning: genesis is in the future: {} vs. now = {})",
+                "{}WARNING: genesis is in the future: {} vs. now = {})",
                 LOG_PREFIX, genesis_timestamp_seconds, now,
             );
             return 0;
@@ -6693,7 +6705,11 @@ impl Governance {
         // Try to spawn neurons (potentially multiple times per day).
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;
-        } else if is_copy_inactive_neurons_to_stable_memory_enabled()
+        }
+
+        // It might make sense for this to be part of the previous if/else chain, but joining the
+        // chain seems to block us indefinitely.
+        if is_copy_inactive_neurons_to_stable_memory_enabled()
             && self.should_copy_next_batch_of_inactive_neurons_to_stable_memory()
         {
             self.copy_next_batch_of_inactive_neurons_to_stable_memory();
@@ -6755,6 +6771,16 @@ impl Governance {
             })
             .collect::<Vec<_>>();
         let batch_len = batch.len(); // Because batch gets consumed, but we want len later.
+        if !batch.is_empty() {
+            println!(
+                "{}copy_next_batch_of_inactive_neurons_to_stable_memory: Working on Neurons from \
+                 {:?} to {:?} (batch size = {})",
+                LOG_PREFIX,
+                batch[0].0.id.unwrap(),
+                batch[batch.len() - 1].0.id.unwrap(),
+                batch_len,
+            );
+        }
 
         // Execute the batch.
         let add_result = self
@@ -7148,7 +7174,7 @@ impl Governance {
         // 20x, 1x, and 0.01x.
         if total_voting_rights < 0.001 {
             println!(
-                "{}Warning: total_voting_rights == {}, even though considered_proposals \
+                "{}WARNING: total_voting_rights == {}, even though considered_proposals \
                  is nonempty (see earlier log). Therefore, we skip incrementing maturity \
                  to avoid dividing by zero (or super small number).",
                 LOG_PREFIX, total_voting_rights,
@@ -7949,9 +7975,9 @@ impl Governance {
             .is_terminal()
         {
             println!(
-                "{}INFO: settle_community_fund_participation was called for a Sale \
-                    that has already been settled with ProposalId {:?}. Returning without \
-                    doing additional work.",
+                "{}settle_community_fund_participation was called for a Sale \
+                 that has already been settled with ProposalId {:?}. Returning without \
+                 doing additional work.",
                 LOG_PREFIX, proposal_data.id
             );
             return Ok(());
@@ -8547,7 +8573,7 @@ fn draw_funds_from_the_community_fund(
     let diff_e8s =
         (original_withdrawal_amount_e8s as i128) - (captured_withdrawal_amount_e8s as i128);
     println!(
-        "{}INFO: requested vs. captured Community Fund investment amount: {} - {} = {} ({} %)",
+        "{}requested vs. captured Community Fund investment amount: {} - {} = {} ({} %)",
         LOG_PREFIX,
         original_withdrawal_amount_e8s,
         captured_withdrawal_amount_e8s,

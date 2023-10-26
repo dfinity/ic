@@ -736,12 +736,15 @@ impl ValidationTask for NeuronCopyValidator {
                 .range_neurons(next_neuron_id..)
                 .take(self.chunk_size)
                 .flat_map(|neuron| {
-                    // We set the next neuron to the one after this so that if we early return, we start
-                    // in the right place.
-                    self.next_neuron_id = Some(NeuronId {
+                    let next_neuron_id = NeuronId {
                         id: neuron.id.unwrap().id + 1,
-                    });
-                    Self::validate_neuron_matches_in_both_stores(neuron, neuron_store)
+                    };
+
+                    let result = Self::validate_neuron_matches_in_both_stores(neuron, neuron_store);
+
+                    self.next_neuron_id = Some(next_neuron_id);
+
+                    result
                 })
                 .collect()
         })

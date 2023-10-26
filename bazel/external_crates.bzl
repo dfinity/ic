@@ -1,7 +1,8 @@
 """
 This module declares all direct rust dependencies.
 
-Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file to regenerate Cargo Bazel lockfiles.
+Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
+to regenerate Cargo Bazel lockfiles.
 """
 
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
@@ -814,6 +815,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "test-strategy": crate.spec(
                 version = "^0.2",
+            ),
+            "prometheus-parse": crate.spec(
+                version = "^0.2.4",
             ),
             "proptest-derive": crate.spec(
                 version = "^0.3.0",
