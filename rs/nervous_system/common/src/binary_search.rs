@@ -53,32 +53,49 @@ where
 ///   `(None, Some(l))` where `l` is the bottom of the range.
 /// - If the predicate is monotonic and always false, the function will return
 ///   `(Some(r), None)` where `r` is the top of the range.
-pub fn search<T: Mid, G>(predicate: G, mut l: T, mut r: T) -> (Option<T>, Option<T>)
+pub fn search<T: Mid, G>(predicate: G, l: T, r: T) -> (Option<T>, Option<T>)
 where
     G: Fn(&T) -> bool,
 {
-    // Check that f is false for l and true for r
-    if predicate(&l) {
-        return (None, Some(l));
-    }
-    if !predicate(&r) {
-        return (Some(r), None);
-    }
+    let p = move |x: &T| Ok::<bool, ()>(predicate(x));
+    search_with_fallible_predicate(p, l, r).unwrap() // can never fail because p is infallible
+}
 
+/// Like `search`, but takes a predicate that returns a Result. If the predicate
+/// and returns an error while performing the binary search, this function returns
+/// an error.
+pub fn search_with_fallible_predicate<T: Mid, G, E>(
+    predicate: G,
+    mut l: T,
+    mut r: T,
+) -> Result<(Option<T>, Option<T>), E>
+where
+    G: Fn(&T) -> Result<bool, E>,
+{
+    match (predicate(&l)?, predicate(&r)?) {
+        (false, true) => {}
+        // Check if the predicate is "always true" or "always false" and return
+        // early if so.
+        (true, true) => return Ok((None, Some(l))),
+        (false, false) => return Ok((Some(r), None)),
+        // Sanity check that will detect some non-monotonic functions. This is a
+        // precondition violation, so we return (None, None).
+        (true, false) => return Ok((None, None)),
+    }
     loop {
         // Sanity check: f must be false for l and true for r, otherwise
         // the input function was not monotonic
-        if predicate(&l) {
-            return (None, None);
+        if predicate(&l)? {
+            return Ok((None, None));
         }
-        if !predicate(&r) {
-            return (None, None);
+        if !predicate(&r)? {
+            return Ok((None, None));
         }
 
         match l.mid(&r) {
-            None => return (Some(l), Some(r)),
+            None => return Ok((Some(l), Some(r))),
             Some(m) => {
-                if predicate(&m) {
+                if predicate(&m)? {
                     r = m;
                 } else {
                     l = m;
