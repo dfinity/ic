@@ -37,7 +37,7 @@ impl From<&SignedEip1559TransactionRequest> for EthTransaction {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
@@ -123,11 +123,12 @@ pub struct WithdrawalArg {
     pub recipient: String,
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub enum WithdrawalError {
     AmountTooLow { min_withdrawal_amount: Nat },
     InsufficientFunds { balance: Nat },
     InsufficientAllowance { allowance: Nat },
+    RecipientAddressBlocked { address: String },
     TemporarilyUnavailable(String),
 }
 

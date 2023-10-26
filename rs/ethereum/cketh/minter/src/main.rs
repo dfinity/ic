@@ -152,7 +152,9 @@ async fn withdraw_eth(
         .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
 
     if ic_cketh_minter::blocklist::is_blocked(destination) {
-        ic_cdk::trap("attempted to withdraw ETH to a blocked address");
+        return Err(WithdrawalError::RecipientAddressBlocked {
+            address: destination.to_string(),
+        });
     }
 
     let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
