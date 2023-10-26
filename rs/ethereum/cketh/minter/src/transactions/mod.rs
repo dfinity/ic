@@ -2,12 +2,13 @@
 mod tests;
 
 use crate::address::Address;
-use crate::endpoints::{EthTransaction, RetrieveEthStatus};
+use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::MultiKeyMap;
-use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei};
+use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount, TransactionNonce, Wei};
 use crate::tx::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
     TransactionPrice,
@@ -32,6 +33,28 @@ pub struct EthWithdrawalRequest {
     pub from: Principal,
     #[n(4)]
     pub from_subaccount: Option<Subaccount>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+pub struct ReimbursementRequest {
+    #[cbor(n(0), with = "crate::cbor::id")]
+    pub withdrawal_id: LedgerBurnIndex,
+    #[n(1)]
+    pub reimbursed_amount: Wei,
+    #[cbor(n(2), with = "crate::cbor::principal")]
+    pub to: Principal,
+    #[n(3)]
+    pub to_subaccount: Option<Subaccount>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+pub struct Reimbursed {
+    #[cbor(n(0), with = "crate::cbor::id")]
+    pub reimbursed_in_block: LedgerMintIndex,
+    #[cbor(n(1), with = "crate::cbor::id")]
+    pub withdrawal_id: LedgerBurnIndex,
+    #[n(2)]
+    pub reimbursed_amount: Wei,
 }
 
 #[derive(Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
@@ -76,6 +99,8 @@ impl fmt::Debug for EthWithdrawalRequest {
 ///    sent transactions for that nonce and burn index in case of resubmissions.
 /// 5. For a given nonce (and burn index), at most one sent transaction is finalized.
 ///    The others sent transactions for that nonce were never mined and can be discarded.
+/// 6. If a given transaction fails the minter will reimburse the user who requested the
+///    withdrawal with the corresponding amount minus fees.
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 // TODO FI-948: limit number of withdrawal_requests and pending transactions nonces
 pub struct EthTransactions {
@@ -84,6 +109,10 @@ pub struct EthTransactions {
     sent_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedEip1559TransactionRequest>>,
     finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
     next_nonce: TransactionNonce,
+
+    maybe_reimburse: BTreeMap<LedgerBurnIndex, EthWithdrawalRequest>,
+    reimbursement_requests: BTreeMap<LedgerBurnIndex, ReimbursementRequest>,
+    reimbursed: BTreeMap<LedgerBurnIndex, Reimbursed>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -113,6 +142,9 @@ impl EthTransactions {
             sent_tx: MultiKeyMap::default(),
             finalized_tx: MultiKeyMap::default(),
             next_nonce,
+            maybe_reimburse: Default::default(),
+            reimbursement_requests: Default::default(),
+            reimbursed: Default::default(),
         }
     }
 
@@ -122,6 +154,10 @@ impl EthTransactions {
 
     pub fn update_next_transaction_nonce(&mut self, new_nonce: TransactionNonce) {
         self.next_nonce = new_nonce;
+    }
+
+    pub fn get_reimbursement_requests(&self) -> Vec<ReimbursementRequest> {
+        self.reimbursement_requests.values().cloned().collect()
     }
 
     pub fn record_withdrawal_request(&mut self, request: EthWithdrawalRequest) {
@@ -189,6 +225,8 @@ impl EthTransactions {
                 .try_insert(nonce, withdrawal_request.ledger_burn_index, transaction),
             Ok(())
         );
+        self.maybe_reimburse
+            .insert(withdrawal_id, withdrawal_request);
     }
 
     pub fn record_signed_transaction(
@@ -332,19 +370,62 @@ impl EthTransactions {
             .expect("BUG: missing sent transactions")
             .iter()
             .find(|sent_tx| sent_tx.hash() == receipt.transaction_hash)
-            .expect("ERROR: no transaction matching receipt");
+            .expect("ERROR: no transaction matching receipt")
+            .clone();
         let finalized_tx = sent_tx
             .clone()
-            .try_finalize(receipt)
+            .try_finalize(receipt.clone())
             .expect("ERROR: invalid transaction receipt");
 
         let nonce = sent_tx.nonce();
-        self.sent_tx.remove_entry(&nonce);
-        Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
+        {
+            self.sent_tx.remove_entry(&nonce);
+            Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
+        }
         assert_eq!(
             self.finalized_tx
-                .try_insert(nonce, ledger_burn_index, finalized_tx),
+                .try_insert(nonce, ledger_burn_index, finalized_tx.clone()),
             Ok(())
+        );
+
+        let maybe_reimburse = self.maybe_reimburse.remove(&ledger_burn_index).expect(
+            "failed to remove entry from maybe_reimburse map with block index: {ledger_burn_index}",
+        );
+        if receipt.status == TransactionStatus::Failure {
+            self.reimbursement_requests.insert(
+                ledger_burn_index,
+                ReimbursementRequest {
+                    withdrawal_id: ledger_burn_index,
+                    to: maybe_reimburse.from,
+                    to_subaccount: maybe_reimburse.from_subaccount,
+                    reimbursed_amount: maybe_reimburse
+                        .withdrawal_amount
+                        .checked_sub(finalized_tx.effective_transaction_fee())
+                        .expect("the fee paid should never be greater than the withdrawn amount"),
+                },
+            );
+        }
+    }
+
+    pub fn record_finalized_reimbursement(
+        &mut self,
+        withdrawal_id: LedgerBurnIndex,
+        reimbursed_in_block: LedgerMintIndex,
+    ) {
+        let reimbursement_request = self
+            .reimbursement_requests
+            .remove(&withdrawal_id)
+            .expect("failed to remove reimbursement request");
+        assert_eq!(
+            self.reimbursed.insert(
+                withdrawal_id,
+                Reimbursed {
+                    withdrawal_id,
+                    reimbursed_in_block,
+                    reimbursed_amount: reimbursement_request.reimbursed_amount,
+                },
+            ),
+            None
         );
     }
 
@@ -366,9 +447,24 @@ impl EthTransactions {
         }
 
         if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
-            return RetrieveEthStatus::TxConfirmed(EthTransaction {
+            if let Some(reimbursed) = self.reimbursed.get(burn_index) {
+                return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
+                    reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
+                    transaction_hash: tx.transaction_hash().to_string(),
+                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
+                });
+            }
+            if tx.transaction_status() == &TransactionStatus::Failure {
+                return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                    EthTransaction {
+                        transaction_hash: tx.transaction_hash().to_string(),
+                    },
+                ));
+            }
+
+            return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(EthTransaction {
                 transaction_hash: tx.transaction_hash().to_string(),
-            });
+            }));
         }
 
         RetrieveEthStatus::NotFound

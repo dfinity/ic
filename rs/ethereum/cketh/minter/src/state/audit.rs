@@ -1,6 +1,7 @@
 pub use super::event::{Event, EventType};
 use super::State;
 use crate::storage::record_event;
+use crate::transactions::Reimbursed;
 
 /// Updates the state to reflect the given state transition.
 fn apply_state_transition(state: &mut State, payload: &EventType) {
@@ -67,6 +68,15 @@ fn apply_state_transition(state: &mut State, payload: &EventType) {
             state
                 .eth_transactions
                 .record_finalized_transaction(*withdrawal_id, transaction_receipt.clone());
+        }
+        EventType::ReimbursedEthWithdrawal(Reimbursed {
+            withdrawal_id,
+            reimbursed_in_block,
+            reimbursed_amount: _,
+        }) => {
+            state
+                .eth_transactions
+                .record_finalized_reimbursement(*withdrawal_id, *reimbursed_in_block);
         }
     }
 }

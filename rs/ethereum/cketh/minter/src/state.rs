@@ -281,4 +281,5 @@ pub enum TaskType {
     MintCkEth,
     RetrieveEth,
     ScrapEthLogs,
+    Reimbursement,
 }

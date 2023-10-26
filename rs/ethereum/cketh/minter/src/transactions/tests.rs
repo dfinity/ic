@@ -1,6 +1,6 @@
 use crate::address::Address;
 use crate::eth_rpc::Hash;
-use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
 use crate::transactions::{create_transaction, EthTransactions, EthWithdrawalRequest, Subaccount};
@@ -9,10 +9,15 @@ use crate::tx::{
     TransactionPrice,
 };
 
+const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
+const DEFAULT_PRINCIPAL: &str = "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
+const DEFAULT_SUBACCOUNT: [u8; 32] = [0x11; 32];
+const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34";
+
 mod eth_transactions {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
     use crate::transactions::tests::withdrawal_request_with_index;
-    use crate::transactions::EthTransactions;
+    use crate::transactions::{EthTransactions, TransactionStatus};
 
     mod record_withdrawal_request {
         use super::*;
@@ -63,7 +68,10 @@ mod eth_transactions {
                 "duplicate ledger burn index",
             );
 
-            transactions.record_finalized_transaction(index, transaction_receipt(&signed_tx));
+            transactions.record_finalized_transaction(
+                index,
+                transaction_receipt(&signed_tx, TransactionStatus::Success),
+            );
             expect_panic_with_message(
                 || transactions.record_withdrawal_request(withdrawal_request.clone()),
                 "duplicate ledger burn index",
@@ -1138,9 +1146,15 @@ mod eth_transactions {
             create_and_record_signed_transaction, create_and_record_transaction,
             create_and_record_withdrawal_request, dummy_signature, expect_panic_with_message,
             transaction_price, transaction_receipt, withdrawal_request_with_index,
+            DEFAULT_RECIPIENT_ADDRESS, DEFAULT_WITHDRAWAL_AMOUNT,
         };
-        use crate::transactions::EthTransactions;
+        use crate::transactions::Wei;
+        use crate::transactions::{
+            Address, EthTransactions, EthWithdrawalRequest, ReimbursementRequest, Subaccount,
+            TransactionStatus,
+        };
         use crate::tx::SignedEip1559TransactionRequest;
+        use std::str::FromStr;
 
         #[test]
         fn should_fail_when_sent_transaction_not_found() {
@@ -1160,7 +1174,7 @@ mod eth_transactions {
                 || {
                     transactions.record_finalized_transaction(
                         LedgerBurnIndex::new(16),
-                        transaction_receipt(&signed_tx),
+                        transaction_receipt(&signed_tx, TransactionStatus::Success),
                     )
                 },
                 "missing sent transaction",
@@ -1169,10 +1183,10 @@ mod eth_transactions {
             let receipt_with_wrong_hash = {
                 let mut wrong_signature = dummy_signature();
                 wrong_signature.signature_y_parity = true;
-                transaction_receipt(&SignedEip1559TransactionRequest::from((
-                    created_tx,
-                    wrong_signature,
-                )))
+                transaction_receipt(
+                    &SignedEip1559TransactionRequest::from((created_tx, wrong_signature)),
+                    TransactionStatus::Success,
+                )
             };
 
             expect_panic_with_message(
@@ -1181,6 +1195,114 @@ mod eth_transactions {
                         .record_finalized_transaction(ledger_burn_index, receipt_with_wrong_hash)
                 },
                 "no transaction matching receipt",
+            );
+        }
+
+        #[test]
+        fn should_record_finalized_transaction_and_not_reimburse() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            let maybe_reimburse_request = transactions
+                .maybe_reimburse
+                .get(&ledger_burn_index)
+                .expect("maybe reimburse request not found");
+            assert_eq!(
+                maybe_reimburse_request,
+                &EthWithdrawalRequest {
+                    withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
+                    destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
+                    ledger_burn_index,
+                    from: candid::Principal::from_str(
+                        crate::transactions::tests::DEFAULT_PRINCIPAL,
+                    )
+                    .unwrap(),
+                    from_subaccount: Some(Subaccount(
+                        crate::transactions::tests::DEFAULT_SUBACCOUNT
+                    )),
+                }
+            );
+            assert!(!transactions.maybe_reimburse.is_empty());
+
+            let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
+            transactions.record_finalized_transaction(ledger_burn_index, receipt.clone());
+
+            assert!(transactions.maybe_reimburse.is_empty());
+            assert!(transactions.reimbursement_requests.is_empty());
+        }
+
+        #[test]
+        fn should_record_finalized_transaction_and_reimburse() {
+            use crate::transactions::Subaccount;
+            use crate::transactions::Wei;
+
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request =
+                create_and_record_withdrawal_request(&mut transactions, ledger_burn_index);
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            let maybe_reimburse_request = transactions
+                .maybe_reimburse
+                .get(&ledger_burn_index)
+                .expect("maybe reimburse request not found");
+            assert_eq!(
+                maybe_reimburse_request,
+                &EthWithdrawalRequest {
+                    withdrawal_amount: Wei::new(
+                        crate::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
+                    ),
+                    destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
+                    ledger_burn_index,
+                    from: candid::Principal::from_str(
+                        crate::transactions::tests::DEFAULT_PRINCIPAL,
+                    )
+                    .unwrap(),
+                    from_subaccount: Some(Subaccount(
+                        crate::transactions::tests::DEFAULT_SUBACCOUNT
+                    )),
+                }
+            );
+
+            let receipt = transaction_receipt(&signed_tx, TransactionStatus::Failure);
+            transactions.record_finalized_transaction(ledger_burn_index, receipt.clone());
+
+            let finalized_transaction = transactions
+                .finalized_tx
+                .get_alt(&ledger_burn_index)
+                .expect("finalized tx not found");
+
+            let effective_fee_paid = finalized_transaction.effective_transaction_fee();
+
+            assert!(transactions.maybe_reimburse.is_empty());
+            let reimbursement_request = transactions
+                .reimbursement_requests
+                .get(&ledger_burn_index)
+                .expect("reimbursement request not found");
+            assert_eq!(
+                reimbursement_request,
+                &ReimbursementRequest {
+                    withdrawal_id: ledger_burn_index,
+                    to: candid::Principal::from_str(crate::transactions::tests::DEFAULT_PRINCIPAL,)
+                        .unwrap(),
+                    to_subaccount: Some(Subaccount(crate::transactions::tests::DEFAULT_SUBACCOUNT)),
+                    reimbursed_amount: Wei::new(
+                        crate::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT
+                    )
+                    .checked_sub(effective_fee_paid)
+                    .unwrap(),
+                }
             );
         }
 
@@ -1197,7 +1319,7 @@ mod eth_transactions {
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
 
-            let receipt = transaction_receipt(&signed_tx);
+            let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
             transactions.record_finalized_transaction(ledger_burn_index, receipt.clone());
 
             assert_eq!(
@@ -1230,7 +1352,7 @@ mod eth_transactions {
             transactions.record_resubmit_transaction(created_tx.clone());
             assert!(transactions.created_tx.contains_alt(&ledger_burn_index));
 
-            let receipt = transaction_receipt(&signed_tx);
+            let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
             transactions.record_finalized_transaction(ledger_burn_index, receipt.clone());
 
             assert_eq!(
@@ -1247,13 +1369,16 @@ mod eth_transactions {
     }
 
     mod transaction_status {
-        use crate::endpoints::{EthTransaction, RetrieveEthStatus};
+        use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
+        use crate::transactions::tests::DEFAULT_WITHDRAWAL_AMOUNT;
         use crate::transactions::tests::{
             create_and_record_transaction, sign_transaction, transaction_price,
             transaction_receipt, withdrawal_request_with_index,
         };
-        use crate::transactions::EthTransactions;
+        use crate::transactions::LedgerMintIndex;
+        use crate::transactions::Wei;
+        use crate::transactions::{EthTransactions, TransactionStatus};
 
         #[test]
         fn should_withdrawal_flow_succeed_with_correct_status() {
@@ -1291,11 +1416,67 @@ mod eth_transactions {
                 RetrieveEthStatus::TxSent(eth_transaction.clone())
             );
 
-            transactions
-                .record_finalized_transaction(ledger_burn_index, transaction_receipt(&signed_tx));
+            transactions.record_finalized_transaction(
+                ledger_burn_index,
+                transaction_receipt(&signed_tx, TransactionStatus::Success),
+            );
             assert_eq!(
                 transactions.transaction_status(&ledger_burn_index),
-                RetrieveEthStatus::TxConfirmed(eth_transaction)
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(eth_transaction))
+            );
+        }
+
+        #[test]
+        fn should_withdrawal_flow_succeed_with_reimbursed_status() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
+
+            transactions.record_withdrawal_request(withdrawal_request.clone());
+
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request,
+                transaction_price(),
+            );
+
+            let signed_tx = sign_transaction(created_tx);
+            let eth_transaction = EthTransaction {
+                transaction_hash: signed_tx.hash().to_string(),
+            };
+            transactions.record_signed_transaction(signed_tx.clone());
+
+            transactions.record_finalized_transaction(
+                ledger_burn_index,
+                transaction_receipt(&signed_tx, TransactionStatus::Failure),
+            );
+            assert_eq!(
+                transactions.transaction_status(&ledger_burn_index),
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                    eth_transaction.clone()
+                ))
+            );
+
+            transactions
+                .record_finalized_reimbursement(ledger_burn_index, LedgerMintIndex::new(16));
+
+            let finalized_transaction = transactions
+                .finalized_tx
+                .get_alt(&ledger_burn_index)
+                .expect("finalized tx not found");
+
+            let effective_fee_paid = finalized_transaction.effective_transaction_fee();
+
+            assert_eq!(
+                transactions.transaction_status(&ledger_burn_index),
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
+                    reimbursed_in_block: candid::Nat::from(16),
+                    transaction_hash: signed_tx.hash().to_string(),
+                    reimbursed_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT)
+                        .checked_sub(effective_fee_paid)
+                        .unwrap()
+                        .into(),
+                })
             );
         }
     }
@@ -1403,7 +1584,9 @@ mod withdrawal_flow {
         create_and_record_withdrawal_request, sign_transaction, transaction_price,
         transaction_receipt,
     };
-    use crate::transactions::{create_transaction, EthTransactions, EthereumNetwork};
+    use crate::transactions::{
+        create_transaction, EthTransactions, EthereumNetwork, TransactionStatus,
+    };
     use candid::Principal;
     use proptest::proptest;
     use std::cell::RefCell;
@@ -1487,7 +1670,7 @@ mod withdrawal_flow {
         });
         check_encode_decode_state_roundtrip();
 
-        let receipt = transaction_receipt(&signed_tx);
+        let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
         mutate_state(|s| {
             s.eth_transactions
                 .record_finalized_transaction(ledger_burn_index, receipt)
@@ -1675,13 +1858,10 @@ fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithd
     use std::str::FromStr;
     EthWithdrawalRequest {
         ledger_burn_index,
-        destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
-        withdrawal_amount: Wei::new(1_100_000_000_000_000),
-        from: candid::Principal::from_str(
-            "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
-        )
-        .unwrap(),
-        from_subaccount: Some(Subaccount([0x11; 32])),
+        destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
+        withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
+        from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
+        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
     }
 }
 
@@ -1775,8 +1955,10 @@ fn resubmit_transaction_with_bumped_price(
     signed_tx
 }
 
-fn transaction_receipt(signed_tx: &SignedEip1559TransactionRequest) -> TransactionReceipt {
-    use crate::eth_rpc_client::responses::TransactionStatus;
+fn transaction_receipt(
+    signed_tx: &SignedEip1559TransactionRequest,
+    status: TransactionStatus,
+) -> TransactionReceipt {
     use std::str::FromStr;
     TransactionReceipt {
         block_hash: Hash::from_str(
@@ -1786,7 +1968,7 @@ fn transaction_receipt(signed_tx: &SignedEip1559TransactionRequest) -> Transacti
         block_number: BlockNumber::new(4190269),
         effective_gas_price: signed_tx.transaction().max_fee_per_gas,
         gas_used: signed_tx.transaction().gas_limit,
-        status: TransactionStatus::Success,
+        status,
         transaction_hash: signed_tx.hash(),
     }
 }

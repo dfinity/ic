@@ -96,6 +96,22 @@ type Eip1559TransactionPrice = record {
     max_transaction_fee : nat;
 };
 
+type EthTransaction = record { transaction_hash : text };
+
+// Status of a finalized transaction.
+type TxFinalizedStatus = variant {
+    // Transaction was successful.
+    Success : EthTransaction;
+    // Transaction failed, user got reimbursed.
+    Reimbursed : record {
+        transaction_hash : text;
+        reimbursed_amount : nat;
+        reimbursed_in_block : nat;
+    };
+    // Transaction failed and will be reimbursed,
+    PendingReimbursement : EthTransaction;
+};
+
 // Retrieve the status of a withdrawal request.
 type RetrieveEthStatus = variant {
     // Withdrawal request is not found.
@@ -109,13 +125,16 @@ type RetrieveEthStatus = variant {
     TxCreated;
 
     // Ethereum transaction was signed and is sent to the network.
-    TxSent : record {transaction_hash : text};
+    TxSent : EthTransaction;
 
-    // Ethereum transaction is confirmed.
-    TxConfirmed : record {transaction_hash : text};
+    // Ethereum transaction is finalized.
+    TxFinalized : TxFinalizedStatus;
 };
+
 type WithdrawalArg = record { recipient : text; amount : nat };
+
 type RetrieveEthRequest = record { block_index : nat };
+
 type WithdrawalError = variant {
     // The withdrawal amount is too low.
     // The payload contains the minimal withdrawal amount.
@@ -201,6 +220,11 @@ type Event = record {
         FinalizedTransaction : record {
             withdrawal_id : nat;
             transaction_receipt : TransactionReceipt;
+        };
+          ReimbursedEthWithdrawal : record {
+            reimbursed_in_block : nat;
+            reimbursed_amount : nat;
+            withdrawal_id : nat;
         };
     };
 };
