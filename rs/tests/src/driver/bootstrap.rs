@@ -167,6 +167,11 @@ pub fn init_ic(
                 test_env.get_malicious_ic_os_update_img_sha256()?,
                 test_env.get_malicious_ic_os_update_img_url()?,
             )
+        } else if ic.with_mainnet_config {
+            (
+                test_env.get_mainnet_ic_os_update_img_sha256()?,
+                test_env.get_mainnet_ic_os_update_img_url()?,
+            )
         } else {
             (
                 test_env.get_ic_os_update_img_sha256()?,
