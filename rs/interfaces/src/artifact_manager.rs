@@ -19,10 +19,7 @@ pub enum OnArtifactError {
 }
 
 pub enum ArtifactProcessorEvent<Artifact: ArtifactKind> {
-    Advert {
-        advert: Advert<Artifact>,
-        is_relay: bool,
-    },
+    Advert(Advert<Artifact>),
     Purge(Artifact::Id),
 }
 

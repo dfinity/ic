@@ -109,14 +109,12 @@ where
 
         for artifact in artifacts_in_validated_pool {
             let advert = Artifact::message_to_advert(&artifact);
-            self.handle_send_advert(advert, false);
+            self.handle_send_advert(advert);
         }
 
         while let Some(advert) = self.adverts_to_send.recv().await {
             match advert {
-                ArtifactProcessorEvent::Advert { advert, is_relay } => {
-                    self.handle_send_advert(advert, is_relay)
-                }
+                ArtifactProcessorEvent::Advert(advert) => self.handle_send_advert(advert),
                 ArtifactProcessorEvent::Purge(id) => {
                     self.handle_purge_advert(&id);
                 }
@@ -139,7 +137,7 @@ where
         }
     }
 
-    fn handle_send_advert(&mut self, advert: Advert<Artifact>, is_relay: bool) {
+    fn handle_send_advert(&mut self, advert: Advert<Artifact>) {
         let entry = self.active_adverts.entry(advert.id.clone());
 
         if let Entry::Vacant(entry) = entry {
@@ -155,7 +153,6 @@ where
                 self.current_commit_id,
                 slot,
                 advert,
-                is_relay,
                 self.pool_reader.clone(),
             );
 
@@ -178,12 +175,10 @@ where
         commit_id: CommitId,
         slot_number: SlotNumber,
         advert: Advert<Artifact>,
-        is_relay: bool,
         pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     ) {
         // Try to push artifact if size below threshold && the artifact is not a relay.
-        let push_artifact =
-            ENABLE_ARTIFACT_PUSH && !is_relay && advert.size <= ARTIFACT_PUSH_THRESHOLD;
+        let push_artifact = ENABLE_ARTIFACT_PUSH && advert.size <= ARTIFACT_PUSH_THRESHOLD;
 
         let data = if push_artifact {
             let id = advert.id.clone();
