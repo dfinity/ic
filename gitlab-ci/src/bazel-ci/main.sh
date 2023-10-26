@@ -22,8 +22,10 @@ if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 
-if [[ "$CI_COMMIT_REF_NAME" =~ ^hotfix-.+-rc--.+ ]]; then
+if [[ "$CI_COMMIT_REF_NAME" =~ ^hotfix-.+-rc--.+ ]] || [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.+ ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
+    # upload artifacts also to cloudflare r2
+    RC="True"
 fi
 
 # shellcheck disable=SC2086
@@ -35,6 +37,7 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
+    --rc="${RC:-"False"}" \
     ${BAZEL_EXTRA_ARGS} \
     ${BAZEL_TARGETS} \
     2>&1 \

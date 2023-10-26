@@ -1,4 +1,4 @@
-load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,6 +11,11 @@ exports_files(
 string_flag(
     name = "s3_endpoint",
     build_setting_default = "",
+)
+
+bool_flag(
+    name = "rc",
+    build_setting_default = False,
 )
 
 package_group(
