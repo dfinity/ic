@@ -8895,6 +8895,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "phantom_newtype",
+ "prometheus-parse",
  "prost",
  "rand 0.8.5",
  "registry-canister",
@@ -8902,6 +8903,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "strum 0.24.1",
+ "tempfile",
  "tokio",
  "wat",
  "xrc-mock",
@@ -8917,7 +8919,9 @@ dependencies = [
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
+ "dfn_http",
  "dfn_json",
+ "dfn_protobuf",
  "futures",
  "ic-base-types",
  "ic-btc-interface",
@@ -8958,6 +8962,7 @@ dependencies = [
  "maplit",
  "num-traits",
  "on_wire",
+ "prometheus-parse",
  "prost",
  "registry-canister",
  "serde",
@@ -14564,6 +14569,18 @@ dependencies = [
  "serde_json",
  "time 0.3.22",
  "url",
+]
+
+[[package]]
+name = "prometheus-parse"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c2aa5feb83bf4b2c8919eaf563f51dbab41183de73ba2353c0e03cd7b6bd892"
+dependencies = [
+ "chrono",
+ "itertools 0.10.5",
+ "once_cell",
+ "regex",
 ]
 
 [[package]]

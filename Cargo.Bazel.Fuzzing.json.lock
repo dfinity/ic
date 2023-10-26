@@ -1,5 +1,5 @@
 {
-  "checksum": "379d67fe368125c6b0b29335ff91bc2a1e07765cc0521cd41ccccf2ce5096631",
+  "checksum": "ec6f9d54d5c09480d9f208642e249d9a647aac3edf89f09fa15e931805295b5e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14024,6 +14024,10 @@
               "target": "prometheus_http_query"
             },
             {
+              "id": "prometheus-parse 0.2.4",
+              "target": "prometheus_parse"
+            },
+            {
               "id": "proptest 1.3.1",
               "target": "proptest"
             },
@@ -27698,32 +27702,13 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "elf",
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.4.10"
@@ -38154,6 +38139,57 @@
         "version": "0.6.7"
       },
       "license": "MIT"
+    },
+    "prometheus-parse 0.2.4": {
+      "name": "prometheus-parse",
+      "version": "0.2.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/prometheus-parse/0.2.4/download",
+          "sha256": "0c2aa5feb83bf4b2c8919eaf563f51dbab41183de73ba2353c0e03cd7b6bd892"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prometheus_parse",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "prometheus_parse",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "chrono 0.4.19",
+              "target": "chrono"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "regex 1.10.2",
+              "target": "regex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.4"
+      },
+      "license": "Apache-2.0"
     },
     "proptest 1.3.1": {
       "name": "proptest",

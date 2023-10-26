@@ -775,10 +775,12 @@ impl NeuronStore {
         // Send.
         STABLE_NEURON_STORE.with(|stable_neuron_store| {
             let mut stable_neuron_store = stable_neuron_store.borrow_mut();
+            let batch_len = batch.len();
 
             let mut new_last_neuron_id = None; // result/work tracker
 
             // The actual/main work itself.
+            let mut copy_count = 0;
             for (neuron, is_inactive) in batch {
                 // Track the work that is about to be performed.
                 new_last_neuron_id = neuron.id;
@@ -793,6 +795,7 @@ impl NeuronStore {
                     // responsibilities were actually fulfilled.
                     continue;
                 }
+                copy_count += 1;
 
                 // TODO(NNS1-2493): If neuron is already in stable_neuron_store, then it should be
                 // equivalent to the one we have here. If it isn't, that's a bug, because any
@@ -813,6 +816,12 @@ impl NeuronStore {
                         governance_err.to_string()
                     })?;
             }
+            // TODO(NNS1-2493): Don't just log this: increment a metric (or maybe do that from
+            // within the loop instead of after?).
+            println!(
+                "{} out of {} Neruons in batch were inactive/copied",
+                copy_count, batch_len
+            );
 
             Ok(new_last_neuron_id)
         })
@@ -936,6 +945,12 @@ impl NeuronStore {
     // Returns whether the known neuron name already exists.
     pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
         self.known_neuron_name_set.contains(known_neuron_name)
+    }
+
+    // Census
+
+    pub fn stable_neuron_store_len(&self) -> u64 {
+        STABLE_NEURON_STORE.with(|stable_neuron_store| stable_neuron_store.borrow().len())
     }
 
     pub fn stable_indexes_lens(&self) -> NeuronIndexesLens {

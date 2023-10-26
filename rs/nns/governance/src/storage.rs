@@ -16,23 +16,11 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const AUDIT_EVENTS_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
 const AUDIT_EVENTS_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 
-/* TODO(NNS1-2443): Re-enable clippy. */
-#[allow(dead_code)]
 const MAIN_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(3);
-/* TODO(NNS1-2443): Re-enable clippy. */
-#[allow(dead_code)]
 const HOT_KEYS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(4);
-/* TODO(NNS1-2443): Re-enable clippy. */
-#[allow(dead_code)]
 const FOLLOWEES_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(5);
-/* TODO(NNS1-2443): Re-enable clippy. */
-#[allow(dead_code)]
 const RECENT_BALLOTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(6);
-/* TODO(NNS1-2443): Re-enable clippy. */
-#[allow(dead_code)]
 const KNOWN_NEURON_DATA_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(7);
-/* TODO(NNS1-2443): Re-enable clippy. */
-#[allow(dead_code)]
 const TRANSFER_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(8);
 
 const NEURON_SUBACCOUNT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(9);

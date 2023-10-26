@@ -344,7 +344,15 @@ fn test_single_neuron_proposal_new() {
                                             progress: None,
                                         },
                                     ),
-                                    copy_inactive_neurons_to_stable_memory_migration: None,
+                                    copy_inactive_neurons_to_stable_memory_migration: Some(
+                                        MigrationDesc {
+                                            status: Some(
+                                                2,
+                                            ),
+                                            failure_reason: None,
+                                            progress: None,
+                                        },
+                                    ),
                                 },
                             ),
                         ),

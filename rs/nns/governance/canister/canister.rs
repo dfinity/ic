@@ -42,7 +42,7 @@ use ic_nns_governance::{
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-        governance::GovernanceCachedMetrics,
+        governance::{GovernanceCachedMetrics, Migrations},
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
@@ -928,6 +928,24 @@ fn get_neuron_data_validation_summary() {
     over(candid, |()| -> NeuronDataValidationSummary {
         governance().neuron_data_validation_summary()
     })
+}
+
+#[export_name = "canister_query get_migrations"]
+fn get_migrations() {
+    over(candid, |()| get_migrations_());
+}
+
+// Normally, we would do #[candid_method(query, rename = "get_migrations")] here, but we want to
+// take this method away later. Therefore, this is done in order to avoid corresponding changes
+// being made to our .did file. By doing things this way, we can "have our cake and eat it
+// too". That is, we can have the functionality, but without promising to support it in the long
+// term.
+fn get_migrations_() -> Migrations {
+    governance()
+        .heap_data
+        .migrations
+        .clone()
+        .unwrap_or_default()
 }
 
 #[export_name = "canister_query http_request"]

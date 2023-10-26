@@ -62,6 +62,7 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 mockall = "0.11.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
+pretty_assertions = "1.0"
 prost = { workspace = true }
 rust_decimal = { version = "1.25" }
 rust_decimal_macros = "1.25"
@@ -94,7 +95,6 @@ ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
 tokio = { workspace = true }

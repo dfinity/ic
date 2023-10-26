@@ -3,6 +3,15 @@ use crate::{
     pb::v1::governance::{migration::MigrationStatus, Migration, Migrations},
 };
 
+impl MigrationStatus {
+    pub fn is_terminal(self) -> bool {
+        match self {
+            Self::Unspecified | Self::InProgress => false,
+            Self::Succeeded | Self::Failed => true,
+        }
+    }
+}
+
 impl Migration {
     pub fn migration_status(&self) -> MigrationStatus {
         self.status
