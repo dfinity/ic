@@ -1,9 +1,13 @@
+use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use crate::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
+use crate::canister_agent::CanisterAgent;
 use crate::driver::farm::HostFeature;
 use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
-use crate::util::block_on;
+use crate::generic_workload_engine::engine::Engine;
+use crate::generic_workload_engine::metrics::LoadTestMetrics;
+use crate::util::{block_on, create_agent_mapping};
 use crate::{
     canister_api::{CallMode, GenericRequest},
     driver::{
@@ -20,6 +24,7 @@ use crate::{
     util::spawn_round_robin_workload_engine,
 };
 use anyhow::Context;
+use candid::Principal;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -27,12 +32,15 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use prost::Message;
 use slog::info;
+use tokio::runtime::{Builder, Runtime};
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 // Size of the payload sent to the counter canister in update("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Parameters related to workload creation.
-const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(15);
+const MAX_RUNTIME_THREADS: usize = 64;
+const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     let logger = env.logger();
@@ -263,3 +271,81 @@ pub fn query_calls_test(env: TestEnv) {
         assert_eq!(metrics.failure_calls(), 0);
     }
 }
+
+pub fn mainnet_query_calls_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
+    const DOMAIN_URL: &str = "https://testic0.app";
+    // id of the counter-canister on the application subnet in mainnet
+    const MAINNET_COUNTER_CANISTER_ID: &str = "3muos-6yaaa-aaaaa-qaaua-cai";
+    let rps_min = 50;
+    let rps_max = 150;
+    let rps_step = 50;
+    let workload_per_step_duration = Duration::from_secs(60);
+
+    // Reuse this runtime for all async executions.
+    let rt: Runtime = Builder::new_multi_thread()
+        .worker_threads(MAX_RUNTIME_THREADS)
+        .max_blocking_threads(MAX_RUNTIME_BLOCKING_THREADS)
+        .enable_all()
+        .build()
+        .unwrap();
+    let log: slog::Logger = env.logger();
+    let canister_app = Principal::from_text(MAINNET_COUNTER_CANISTER_ID).unwrap();
+    let bn_agent = block_on(async { create_agent_mapping(DOMAIN_URL, bn_ipv6.into()).await })
+        .expect("failed to create an agent");
+    let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
+    for rps in (rps_min..=rps_max).step_by(rps_step) {
+        let agents = vec![bn_agent.clone()];
+        info!(
+            &log,
+            "Starting workload with rps={rps} for {} sec",
+            workload_per_step_duration.as_secs()
+        );
+        let requests = vec![GenericRequest::new(
+            canister_app,
+            "read".to_string(),
+            payload.clone(),
+            CallMode::Query,
+        )];
+        let agents: Vec<CanisterAgent> = agents.into_iter().map(CanisterAgent::from).collect();
+        let generator = move |idx: usize| {
+            // Round Robin distribution over both requests and agents.
+            let request = requests[idx % requests.len()].clone();
+            let agent = agents[idx % agents.len()].clone();
+            async move {
+                agent
+                    .call(&request)
+                    .await
+                    .map(|_| ()) // drop non-error responses
+                    .into_test_outcome()
+            }
+        };
+        // Don't log intermediate metrics during workload execution.
+        let log_null = slog::Logger::root(slog::Discard, slog::o!());
+        let aggregator = LoadTestMetrics::new(log_null);
+        let engine = Engine::new(
+            log.clone(),
+            generator,
+            rps as f64,
+            workload_per_step_duration,
+        )
+        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+        let metrics_result =
+            rt.block_on(engine.execute(aggregator, LoadTestMetrics::aggregator_fn));
+        match metrics_result {
+            Ok(metrics) => {
+                info!(&log, "Workload metrics for rps={rps}: {metrics}");
+                info!(
+                    &log,
+                    "Failed/successful requests count {}/{}",
+                    metrics.failure_calls(),
+                    metrics.success_calls()
+                );
+            }
+            Err(err) => {
+                info!(&log, "Workload execution failed with err={:?}", err);
+            }
+        }
+    }
+}
+
+pub fn empty_setup(_: TestEnv) {}
