@@ -159,10 +159,12 @@ pub(crate) struct RewardRate {
 pub(crate) struct Swap {
     minimum_participants: u64,
 
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    minimum_icp: nervous_system_pb::Tokens,
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    maximum_icp: nervous_system_pb::Tokens,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    minimum_icp: Option<nervous_system_pb::Tokens>,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    maximum_icp: Option<nervous_system_pb::Tokens>,
 
     #[serde(default)]
     #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
@@ -761,13 +763,13 @@ impl Swap {
 
         let minimum_participants = Some(*minimum_participants);
 
-        let minimum_direct_participation_icp = minimum_direct_participation_icp
-            .or_else(|| minimum_icp.checked_sub(neurons_fund_investment_icp));
-        let maximum_direct_participation_icp = maximum_direct_participation_icp
-            .or_else(|| maximum_icp.checked_sub(neurons_fund_investment_icp));
+        let minimum_icp = *minimum_icp;
+        let maximum_icp = *maximum_icp;
 
-        let minimum_icp = Some(*minimum_icp);
-        let maximum_icp = Some(*maximum_icp);
+        let minimum_direct_participation_icp = minimum_direct_participation_icp
+            .or_else(|| minimum_icp?.checked_sub(neurons_fund_investment_icp));
+        let maximum_direct_participation_icp = maximum_direct_participation_icp
+            .or_else(|| maximum_icp?.checked_sub(neurons_fund_investment_icp));
 
         let maximum_participant_icp = Some(*maximum_participant_icp);
         let minimum_participant_icp = Some(*minimum_participant_icp);
