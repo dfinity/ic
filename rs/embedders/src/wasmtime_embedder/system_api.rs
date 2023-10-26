@@ -1242,3 +1242,37 @@ pub(crate) fn syscalls(
         })
         .unwrap();
 }
+
+#[test]
+fn handle_overflow_when_calculating_overhead() {
+    let mut fee = Overhead {
+        system_api_overhead: NumInstructions::from(1000),
+        cpu_complexity: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
+    };
+
+    assert!(fee.add_charge(NumInstructions::from(500)).is_ok());
+    assert!(fee.add_charge(NumInstructions::from(u64::MAX - 5)).is_err());
+}
+
+#[test]
+fn overhead_doesnt_overflow_under_practical_limits() {
+    let mut fee = Overhead {
+        system_api_overhead: NumInstructions::from(10000), // bigger than any static overhead
+        cpu_complexity: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
+    };
+
+    let dirty_page_overhead =
+        ic_config::subnet_config::SchedulerConfig::application_subnet().dirty_page_overhead;
+    let dirty_page_limit = ic_config::embedders::STABLE_MEMORY_DIRTY_PAGE_LIMIT;
+
+    let (dirty_page_cost, overflow) = dirty_page_limit.overflowing_mul(dirty_page_overhead.get());
+    assert!(!overflow);
+
+    assert!(fee
+        .add_charge(NumInstructions::from(dirty_page_cost))
+        .is_ok());
+
+    let num_bytes = dirty_page_limit * PAGE_SIZE as u64;
+    let bytes_charge = NumInstructions::from(num_bytes);
+    assert!(fee.add_charge(NumInstructions::from(bytes_charge)).is_ok());
+}
