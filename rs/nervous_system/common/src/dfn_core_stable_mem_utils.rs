@@ -240,18 +240,62 @@ impl Buf for BufferedStableMemReader {
     }
 
     fn advance(&mut self, cnt: usize) {
-        self.buffer_offset += cnt;
-        assert!(self.buffer_offset <= self.buffer.len());
+        let remaining = self.remaining();
+        assert!(
+            cnt <= remaining,
+            "Trying to advance {} bytes while only {} bytes remaining",
+            cnt,
+            remaining
+        );
 
-        if self.buffer_offset == self.buffer.len() {
+        // Why below is correct:
+        //
+        // Definition 1: the absolute address of the cursor is the address of
+        // `self.buffer[self.buffer_offset]` within the entire `Buf`, which can also be expressed as
+        // `self.stable_mem_offset - self.buffer.len() + self.buffer_offset`.
+        //
+        // Definition 2: the absolute address of the buffer start is the address of `self.buffer[0]`
+        // within the entire `Buf`.
+        //
+        // The intended effect of this method is to change the state(`self.buffer`,
+        // `self.buffer_offset`, `self.stable_mem_offset`) so that the absolute address it
+        // represents is `cnt` larger than its current state, while maintaining the invariant that
+        // `self.buffer_offset < self.buffer.len()`.
+        //
+        // Without considering the invariant, we can simply increment `self.buffer_offset` by `cnt`.
+        // However, to maintain the invariant:
+        //
+        // Every `read()` increases the absolute address of the buffer start by `buffer_size` (note
+        // that it does not always increase the buffer end by `buffer_size` because the last
+        // `read()` could read fewer than `buffer_size`). At the same time, if we decrease
+        // `self.buffer_offset` by `buffer_size`, the combined effect is that the absolute address
+        // of the cursor would be unchanged. Therefore, if we do the 2 things any number of times,
+        // we can still keep the absolute address of the cursor unchanged.
+        //
+        // Given the `checked_div_mod` arithmetic, we know that `self.buffer_offset + cnt =
+        // num_buffers_to_advance * buffer_size + new_buffer_offset`.
+        //
+        // Doing the above-mentioned 2 things `num_buffers_to_advance` times will result in: (1)
+        // calling read() `num_buffers_to_advance` times (2) set `self.buffer_offset =
+        // self.buffer_offset + cnt - num_buffers_to_advance * buffer_size = new_buffer_offset`.
+        let (num_buffers_to_advance, new_buffer_offset) = crate::checked_div_mod(
+            self.buffer_offset
+                .checked_add(cnt)
+                .expect("Tried to advance buffer beyond maximum offset"),
+            self.buffer.capacity(),
+        );
+
+        for _ in 0..num_buffers_to_advance {
             self.read();
         }
+        self.buffer_offset = new_buffer_offset;
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use bytes::Buf;
     use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
     use prost::Message;
 
@@ -266,6 +310,28 @@ mod test {
         }
 
         gov
+    }
+
+    #[test]
+    fn test_size_aware_reader_advance_as_buf() {
+        // We should be able to call `Buf::advance(cnt)` as long as `cnt < self.remaining()`. More
+        // specifically, we try to advance past one buffer size (100).
+        let mut reader = BufferedStableMemReader::new_test(100, (0u8..=255).collect());
+
+        // Advancing 36 times will get to byte 252.
+        for i in 1..=36 {
+            // Advance in a way that cannot align with the buffer size 100, and advance() should not panic.
+            reader.advance(7);
+            assert_eq!(reader.remaining(), (256 - 7 * i) as usize);
+            assert_eq!(reader.chunk()[0], (7 * i) as u8);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_size_aware_reader_should_panic_when_advancing_past_end() {
+        let mut reader = BufferedStableMemReader::new_test(100, [1u8; 1000].to_vec());
+        reader.advance(1001);
     }
 
     #[test]
@@ -315,6 +381,40 @@ mod test {
         let decoded = Governance::decode(reader).unwrap();
 
         assert_eq!(decoded, gov);
+    }
+
+    #[derive(::prost::Message)]
+    pub struct TestMessageWithoutSubMessage {
+        #[prost(fixed32, repeated, tag = "1")]
+        pub x: ::prost::alloc::vec::Vec<u32>,
+    }
+    #[derive(::prost::Message)]
+    pub struct TestMessageWithSubMessage {
+        #[prost(fixed32, repeated, tag = "1")]
+        pub x: ::prost::alloc::vec::Vec<u32>,
+        #[prost(message, optional, tag = "2")]
+        pub sub: ::core::option::Option<TestSubMessage>,
+    }
+    #[derive(::prost::Message)]
+    pub struct TestSubMessage {
+        #[prost(fixed32, repeated, tag = "1")]
+        pub y: ::prost::alloc::vec::Vec<u32>,
+    }
+
+    #[test]
+    fn test_encode_and_decode_protobuf_with_missing_field() {
+        // The 'missing field' `sub` needs to be larger than 1KB, and 300 * 4B > 1KB.
+        let m2 = TestMessageWithSubMessage {
+            x: (0..100).collect(),
+            sub: Some(TestSubMessage {
+                y: (0..300).collect(),
+            }),
+        };
+        let mut serialized = Vec::new();
+        m2.encode(&mut serialized).expect("Encoding failed in test");
+
+        let reader = BufferedStableMemReader::new_test(1024, serialized);
+        TestMessageWithoutSubMessage::decode(reader).expect("Decoding failed in test");
     }
 
     const TEST_DATA_SIZE: usize = 1024; // 1KiB
