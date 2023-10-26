@@ -18,10 +18,14 @@ use ic_cketh_minter::numeric::{LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
 use ic_cketh_minter::transactions::EthWithdrawalRequest;
+use ic_cketh_minter::transactions::Reimbursed;
 use ic_cketh_minter::tx::estimate_transaction_price;
-use ic_cketh_minter::withdraw::{eth_fee_history, process_retrieve_eth_requests};
+use ic_cketh_minter::withdraw::{
+    eth_fee_history, process_reimbursement, process_retrieve_eth_requests,
+};
 use ic_cketh_minter::{
-    state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, SCRAPPING_ETH_LOGS_INTERVAL,
+    state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
+    SCRAPPING_ETH_LOGS_INTERVAL,
 };
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
@@ -54,6 +58,9 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
         ic_cdk::spawn(process_retrieve_eth_requests())
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, || {
+        ic_cdk::spawn(process_reimbursement())
     });
 }
 
@@ -394,6 +401,15 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 } => EP::FinalizedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
+                },
+                EventType::ReimbursedEthWithdrawal(Reimbursed {
+                    withdrawal_id,
+                    reimbursed_in_block,
+                    reimbursed_amount,
+                }) => EP::ReimbursedEthWithdrawal {
+                    withdrawal_id: withdrawal_id.get().into(),
+                    reimbursed_in_block: reimbursed_in_block.get().into(),
+                    reimbursed_amount: reimbursed_amount.into(),
                 },
             },
         }

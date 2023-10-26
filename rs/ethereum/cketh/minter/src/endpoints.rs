@@ -77,7 +77,18 @@ pub enum RetrieveEthStatus {
     Pending,
     TxCreated,
     TxSent(EthTransaction),
-    TxConfirmed(EthTransaction),
+    TxFinalized(TxFinalizedStatus),
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub enum TxFinalizedStatus {
+    Success(EthTransaction),
+    PendingReimbursement(EthTransaction),
+    Reimbursed {
+        transaction_hash: String,
+        reimbursed_amount: Nat,
+        reimbursed_in_block: Nat,
+    },
 }
 
 impl Display for RetrieveEthStatus {
@@ -87,7 +98,21 @@ impl Display for RetrieveEthStatus {
             RetrieveEthStatus::Pending => write!(f, "Pending"),
             RetrieveEthStatus::TxCreated => write!(f, "Created"),
             RetrieveEthStatus::TxSent(tx) => write!(f, "Sent({})", tx.transaction_hash),
-            RetrieveEthStatus::TxConfirmed(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+            RetrieveEthStatus::TxFinalized(tx_status) => match tx_status {
+                TxFinalizedStatus::Success(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+                TxFinalizedStatus::PendingReimbursement(tx) => {
+                    write!(f, "PendingReimbursement({})", tx.transaction_hash)
+                }
+                TxFinalizedStatus::Reimbursed {
+                    reimbursed_in_block,
+                    transaction_hash,
+                    reimbursed_amount,
+                } => write!(
+                    f,
+                    "Failure({}, reimbursed: {} Wei in block: {})",
+                    transaction_hash, reimbursed_amount, reimbursed_in_block
+                ),
+            },
         }
     }
 }
@@ -252,6 +277,11 @@ pub mod events {
         FinalizedTransaction {
             withdrawal_id: Nat,
             transaction_receipt: TransactionReceipt,
+        },
+        ReimbursedEthWithdrawal {
+            reimbursed_in_block: Nat,
+            withdrawal_id: Nat,
+            reimbursed_amount: Nat,
         },
     }
 }

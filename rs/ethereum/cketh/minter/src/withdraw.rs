@@ -8,19 +8,99 @@ use crate::eth_rpc_client::MultiCallError;
 use crate::eth_rpc_client::{EthRpcClient, SingleCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
-use crate::numeric::{LedgerBurnIndex, TransactionCount};
+use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount};
 use crate::state::audit::{process_event, EventType};
 use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::transactions::{create_transaction, CreateTransactionError};
+use crate::transactions::{
+    create_transaction, CreateTransactionError, Reimbursed, ReimbursementRequest,
+};
 use crate::tx::{estimate_transaction_price, TransactionPrice};
+use candid::Nat;
 use futures::future::join_all;
 use ic_canister_log::log;
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use num_traits::ToPrimitive;
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::zip;
 
 const WITHDRAWAL_REQUESTS_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
+
+pub async fn process_reimbursement() {
+    let _guard = match TimerGuard::new(TaskType::Reimbursement) {
+        Ok(guard) => guard,
+        Err(e) => {
+            log!(DEBUG, "Failed retrieving reimbursement guard: {e:?}",);
+            return;
+        }
+    };
+
+    let reimbursement_requests: Vec<ReimbursementRequest> =
+        read_state(|s| s.eth_transactions.get_reimbursement_requests());
+    if reimbursement_requests.is_empty() {
+        return;
+    }
+
+    let ledger_canister_id = read_state(|s| s.ledger_id);
+    let client = ICRC1Client {
+        runtime: CdkRuntime,
+        ledger_canister_id,
+    };
+    let mut error_count = 0;
+
+    for reimbursement_request in reimbursement_requests {
+        let args = TransferArg {
+            from_subaccount: None,
+            to: Account {
+                owner: reimbursement_request.to,
+                subaccount: reimbursement_request
+                    .to_subaccount
+                    .map(|subaccount| subaccount.0),
+            },
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(reimbursement_request.reimbursed_amount),
+        };
+        let block_index = match client.transfer(args).await {
+            Ok(Ok(block_index)) => block_index
+                .0
+                .to_u64()
+                .expect("block index should fit into u64"),
+            Ok(Err(err)) => {
+                log!(INFO, "[process_reimbursement] Failed to mint ckETH {err}");
+                error_count += 1;
+                continue;
+            }
+            Err(err) => {
+                log!(
+                    INFO,
+                    "[process_reimbursement] Failed to send a message to the ledger ({ledger_canister_id}): {err:?}"
+                );
+                error_count += 1;
+                continue;
+            }
+        };
+        mutate_state(|s| {
+            process_event(
+                s,
+                EventType::ReimbursedEthWithdrawal(Reimbursed {
+                    withdrawal_id: reimbursement_request.withdrawal_id,
+                    reimbursed_in_block: LedgerMintIndex::new(block_index),
+                    reimbursed_amount: reimbursement_request.reimbursed_amount,
+                }),
+            )
+        });
+    }
+    if error_count > 0 {
+        log!(
+            INFO,
+            "[process_reimbursement] Failed to reimburse {error_count} users, retrying later."
+        );
+    }
+}
 
 pub async fn process_retrieve_eth_requests() {
     let _guard = match TimerGuard::new(TaskType::RetrieveEth) {

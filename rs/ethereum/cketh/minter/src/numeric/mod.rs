@@ -49,7 +49,7 @@ pub type LedgerBurnIndex = Id<BurnIndexTag, u64>;
 pub enum MintIndexTag {}
 pub type LedgerMintIndex = Id<MintIndexTag, u64>;
 
-impl CheckedAmountOf<WeiPerGasUnit> {
+impl WeiPerGas {
     pub fn transaction_cost(self, gas: GasAmount) -> Option<Wei> {
         self.checked_mul(gas.into_inner())
             .map(|value| value.change_units())
