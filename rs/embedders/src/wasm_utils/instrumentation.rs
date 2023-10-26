@@ -29,6 +29,7 @@
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
 //! (import "__" "update_available_memory" (func (;1;) ((param i32 i32 i32) (result i32))))
 //! (import "__" "update_available_memory_64" (func (;1;) ((param i64 i64 i32) (result i64))))
+//! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
 //! ```
@@ -688,8 +689,8 @@ pub(super) enum MemoryMode {
 }
 
 impl MemoryMode {
-    pub fn get(memory_type: &MemoryType) -> MemoryMode {
-        if memory_type.memory64 {
+    pub fn get(module: &Module<'_>) -> MemoryMode {
+        if module.memories.iter().any(|memory| memory.memory64) {
             MemoryMode::Memory64
         } else {
             MemoryMode::Memory32
@@ -712,7 +713,7 @@ pub(super) fn instrument(
     dirty_page_overhead: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let stable_memory_index;
-    let main_memory_mode = MemoryMode::get(&module.memories[0]);
+    let main_memory_mode = MemoryMode::get(&module);
     let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_mode);
     module = export_table(module);
     (module, stable_memory_index) = update_memories(

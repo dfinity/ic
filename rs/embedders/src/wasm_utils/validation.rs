@@ -1103,27 +1103,37 @@ fn validate_export_section(
 // expression. Required because of OP. See also:
 // instrumentation.rs
 fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
-    fn validate_segment(s: &DataSegment, memory64: bool) -> Result<(), WasmValidationError> {
+    fn validate_segment(module: &Module, s: &DataSegment) -> Result<(), WasmValidationError> {
         match &s.kind {
             DataSegmentKind::Passive => Err(WasmValidationError::InvalidDataSection(
                 "Empty offset in data segment.".to_string(),
             )),
             DataSegmentKind::Active {
-                memory_index: _,
+                memory_index,
                 offset_expr,
-            } => match offset_expr {
-                Operator::I32Const { .. } if !memory64 => Ok(()),
-                Operator::I64Const { .. } if memory64 => Ok(()),
-                _ => Err(WasmValidationError::InvalidDataSection(format!(
-                    "Invalid offset expression in data segment: {:?}",
-                    offset_expr
-                ))),
-            },
+            } => {
+                let memory_index = *memory_index as usize;
+                if memory_index >= module.memories.len() {
+                    return Err(WasmValidationError::InvalidDataSection(format!(
+                        "Invalid memory index in data segment: {:?}",
+                        memory_index
+                    )));
+                }
+                let memory64 = module.memories[memory_index].memory64;
+                match offset_expr {
+                    Operator::I32Const { .. } if !memory64 => Ok(()),
+                    Operator::I64Const { .. } if memory64 => Ok(()),
+                    _ => Err(WasmValidationError::InvalidDataSection(format!(
+                        "Invalid offset expression in data segment: {:?}",
+                        offset_expr
+                    ))),
+                }
+            }
         }
     }
 
     for d in &module.data {
-        validate_segment(d, module.memories[0].memory64)?;
+        validate_segment(module, d)?;
     }
     Ok(())
 }
