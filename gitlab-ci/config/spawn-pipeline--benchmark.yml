@@ -1,6 +1,6 @@
 .benchmark-test:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s-legacy
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
       when: manual
@@ -423,7 +423,7 @@ statesync-experiment:
 
 .benchmark-spot-test:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s-legacy
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
       when: manual
@@ -604,29 +604,6 @@ xnet-nightly:
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
-.sns-tests:
-  extends:
-    - .ubuntu-cargo-k8s
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[sns\]/'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"'
-      when: always
-  resource_group: $TESTNET
-  dependencies: []  # don't copy artifacts from other jobs by default
-  variables:
-    SHELL_WRAPPER: "/usr/bin/time"
-    DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
-    cd_target_env: "BENCHMARK_NIGHTLY"
-    CD_ENV: "SNS_CD"
-    PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-  artifacts:
-    when: always
-    paths:
-      - $CI_JOB_STAGE/$CI_JOB_NAME
-  timeout: 1 hour
 
 # BENCHMARK SUITE tecdsa
 tecdsa:

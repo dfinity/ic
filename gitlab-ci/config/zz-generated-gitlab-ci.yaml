@@ -202,7 +202,7 @@
     when: always
   dependencies: []
   extends:
-    - ".ubuntu-cargo-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:8de36394739a3905305fd1f2161b60a788975d147e9efaa46553d068d2b17513
   resource_group: "$TESTNET"
@@ -224,7 +224,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
@@ -237,7 +236,7 @@
     when: always
   dependencies: []
   extends:
-    - ".ubuntu-cargo-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:8de36394739a3905305fd1f2161b60a788975d147e9efaa46553d068d2b17513
   resource_group: "$TESTNET"
@@ -258,7 +257,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 ".build-base-image": |
@@ -552,60 +550,6 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "trigger"
       when: manual
-".sns-tests":
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - "$CI_JOB_STAGE/$CI_JOB_NAME"
-    when: always
-  dependencies: []
-  extends:
-    - ".ubuntu-cargo-k8s"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:8de36394739a3905305fd1f2161b60a788975d147e9efaa46553d068d2b17513
-  resource_group: "$TESTNET"
-  rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[sns\]/
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"
-      when: always
-  tags:
-    - dfinity-ic
-  timeout: 1 hour
-  variables:
-    CD_ENV: SNS_CD
-    CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
-    DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
-    SHELL_WRAPPER: "/usr/bin/time"
-    cd_target_env: BENCHMARK_NIGHTLY
-".ubuntu-cargo-k8s":
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".build-k8s-legacy"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:8de36394739a3905305fd1f2161b60a788975d147e9efaa46553d068d2b17513
-  tags:
-    - dfinity-ic
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
-    SHELL_WRAPPER: "/usr/bin/time"
 after-script-test-ic-build-image:
   artifacts:
     expire_in: 3 days
@@ -1799,7 +1743,6 @@ benchmark-response-payload:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 benchmark-xnet:
@@ -1850,7 +1793,6 @@ benchmark-xnet:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 benchmarks:
@@ -3157,7 +3099,7 @@ cargo-audit:
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-cargo-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:8de36394739a3905305fd1f2161b60a788975d147e9efaa46553d068d2b17513
   rules:
@@ -3171,7 +3113,7 @@ cargo-audit:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=--strip-all"
     SHELL_WRAPPER: "/usr/bin/time"
 cargo-build-release-linux:
   artifacts:
@@ -3424,7 +3366,7 @@ container-autobuild-protected:
       - coredumps/*.gz
     when: always
   extends:
-    - ".ubuntu-cargo-k8s"
+    - ".build-k8s-legacy"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:8de36394739a3905305fd1f2161b60a788975d147e9efaa46553d068d2b17513
   needs: []
@@ -3466,7 +3408,6 @@ container-autobuild-protected:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
 cut-release-candidate:
   artifacts:
@@ -3556,7 +3497,6 @@ delegated-identity-bench:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 dependencies-check:
@@ -3716,7 +3656,6 @@ heavy-memory-update-performance-test-nightly:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
@@ -3829,7 +3768,6 @@ large-response-downloading-nightly:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
@@ -4138,7 +4076,6 @@ maximum-capacity-boundary-nodes-queries:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-canister-http:
@@ -4206,7 +4143,6 @@ maximum-capacity-canister-http:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-large-memory-query:
@@ -4257,7 +4193,6 @@ maximum-capacity-large-memory-query:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-large-memory-update:
@@ -4308,7 +4243,6 @@ maximum-capacity-large-memory-update:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-mixed-counter-memory:
@@ -4362,7 +4296,6 @@ maximum-capacity-mixed-counter-memory:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-mixed-workloads:
@@ -4413,7 +4346,6 @@ maximum-capacity-mixed-workloads:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-multiple-large-memory-update:
@@ -4464,7 +4396,6 @@ maximum-capacity-multiple-large-memory-update:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-qr:
@@ -4515,7 +4446,6 @@ maximum-capacity-qr:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-sha256:
@@ -4566,7 +4496,6 @@ maximum-capacity-sha256:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-system-baseline-query:
@@ -4632,7 +4561,6 @@ maximum-capacity-system-baseline-query:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 maximum-capacity-system-baseline-update:
@@ -4683,7 +4611,6 @@ maximum-capacity-system-baseline-update:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 no-interrupt:
@@ -5099,7 +5026,6 @@ statesync-experiment:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 system-baseline-query-performance-test-nightly:
@@ -5155,7 +5081,6 @@ system-baseline-query-performance-test-nightly:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
@@ -5213,7 +5138,6 @@ system-baseline-update-performance-test-nightly:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
@@ -5266,7 +5190,6 @@ tecdsa:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 test-push-branch:
@@ -5486,7 +5409,6 @@ xnet-nightly:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
     WG_TESTNET: cdrc02

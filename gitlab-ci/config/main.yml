@@ -9,9 +9,12 @@ no-interrupt:
 
 cargo-audit:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s-legacy
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"'
+  variables:
+    # This MUST match the directory used in our `build-ic.sh` script
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=--strip-all"
   script:
     - cd rs; cargo audit
 
