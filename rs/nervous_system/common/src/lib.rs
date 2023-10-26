@@ -785,5 +785,17 @@ pub fn stable_memory_size_bytes() -> u64 {
     0
 }
 
+// Given 2 numbers `dividend`` and `divisor`, break the dividend to `divisor * quotient + remainder`
+// where `remainder < divisor`, using safe arithmetic. Returns `(quotient, remainder)`.
+fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
+    let quotient = dividend
+        .checked_div(divisor)
+        .expect("Failed to calculate quotient");
+    let remainder = dividend
+        .checked_rem(divisor)
+        .expect("Failed to calculate remainder");
+    (quotient, remainder)
+}
+
 #[cfg(test)]
 mod serve_logs_tests;

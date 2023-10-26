@@ -303,16 +303,6 @@ impl<'a, M: Memory> SizeAwareReader<'a, M> {
     }
 }
 
-fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
-    let quotient = dividend
-        .checked_div(divisor)
-        .expect("Failed to calculate quotient");
-    let remainder = dividend
-        .checked_rem(divisor)
-        .expect("Failed to calculate remainder");
-    (quotient, remainder)
-}
-
 impl<'a, M: Memory> Buf for SizeAwareReader<'a, M> {
     fn remaining(&self) -> usize {
         // Our implementation only reads from stable memory up until the size indicated by size bytes
@@ -374,7 +364,7 @@ impl<'a, M: Memory> Buf for SizeAwareReader<'a, M> {
         // Doing the above-mentioned 2 things `num_buffers_to_advance` times will result in: (1)
         // calling read() `num_buffers_to_advance` times (2) set `self.buffer_offset =
         // self.buffer_offset + cnt - num_buffers_to_advance * buffer_size = new_buffer_offset`.
-        let (num_buffers_to_advance, new_buffer_offset) = checked_div_mod(
+        let (num_buffers_to_advance, new_buffer_offset) = crate::checked_div_mod(
             self.buffer_offset
                 .checked_add(cnt)
                 .expect("Tried to advance buffer beyond maximum offset"),
