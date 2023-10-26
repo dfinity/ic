@@ -763,6 +763,17 @@ pub fn total_memory_size_bytes() -> usize {
     0
 }
 
+/// Returns the number of stable memory pages that the calling canister has allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn stable_memory_num_pages() -> u64 {
+    dfn_core::stable::stable64_size()
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn stable_memory_num_pages() -> u64 {
+    0
+}
+
 /// Returns the amount of stable memory that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
 pub fn stable_memory_size_bytes() -> u64 {
