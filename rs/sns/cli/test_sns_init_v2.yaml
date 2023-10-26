@@ -89,9 +89,6 @@ Distribution:
 Swap:
     minimum_participants: 50
 
-    minimum_icp: 123 tokens
-    maximum_icp: 65000 tokens
-
     minimum_direct_participation_icp: 113 tokens
     maximum_direct_participation_icp: 64990 tokens
 
