@@ -1,6 +1,6 @@
 use crate::neuron_store::NeuronStore;
 use crate::neurons_fund::{
-    NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundParticipation, NeuronsFundSnapshot,
+    NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot, PolynomialNeuronsFundParticipation,
     SwapParticipationLimits,
 };
 use crate::{
@@ -7726,7 +7726,7 @@ impl Governance {
             SwapParticipationLimits::try_from_swap_parameters(swap_participation_limits)?;
         let neurons_fund = self.neuron_store.list_active_neurons_fund_neurons();
         let initial_neurons_fund_participation =
-            NeuronsFundParticipation::new(swap_participation_limits, neurons_fund)?;
+            PolynomialNeuronsFundParticipation::new(swap_participation_limits, neurons_fund)?;
         let constraints = initial_neurons_fund_participation.compute_constraints()?;
         let initial_neurons_fund_participation_snapshot =
             initial_neurons_fund_participation.snapshot_cloned();
@@ -7782,7 +7782,7 @@ impl Governance {
     fn record_no_neurons_fund_participation(
         &mut self,
         proposal_id: &ProposalId,
-        effective_nf_participation: NeuronsFundParticipation,
+        effective_nf_participation: PolynomialNeuronsFundParticipation,
     ) -> Result<(), GovernanceError> {
         if !effective_nf_participation.is_empty() {
             return Err(GovernanceError::new_with_message(
@@ -7813,7 +7813,7 @@ impl Governance {
         &mut self,
         proposal_id: &ProposalId,
         committed: &settle_neurons_fund_participation_request::Committed,
-        effective_nf_participation: NeuronsFundParticipation,
+        effective_nf_participation: PolynomialNeuronsFundParticipation,
     ) -> Result<(), GovernanceError> {
         let owner = committed.sns_governance_canister_id.ok_or_else(|| {
             GovernanceError::new_with_message(

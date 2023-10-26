@@ -99,7 +99,9 @@ use ic_nns_governance::{
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{
-    self as sns_swap_pb, LinearScalingCoefficient, NeuronBasketConstructionParameters,
+    self as sns_swap_pb,
+    IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
+    LinearScalingCoefficient, NeuronBasketConstructionParameters,
     NeuronsFundParticipationConstraints, Params,
 };
 use ic_sns_wasm::pb::v1::{
@@ -11744,7 +11746,10 @@ lazy_static! {
                     slope_denominator: Some(1),
                     intercept_icp_e8s: Some(0),
                 }
-            ]
+            ],
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionSwapPb {
+                serialized_representation: SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR.clone(),
+            })
         }
     );
 

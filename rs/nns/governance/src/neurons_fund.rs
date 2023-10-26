@@ -8,7 +8,10 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
+use ic_sns_swap::pb::v1::{
+    IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
+    LinearScalingCoefficient, NeuronsFundParticipationConstraints,
+};
 use rust_decimal::{
     prelude::{FromPrimitive, ToPrimitive},
     Decimal, RoundingStrategy,
@@ -322,10 +325,40 @@ impl From<LinearScalingCoefficientVecValidationError> for Result<(), String> {
     }
 }
 
+// The maximum number of bytes that a serialized representation of an ideal matching function
+// `IdealMatchedParticipationFunction` may have.
+const MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES: usize = 1_000;
+
+#[derive(Debug)]
+pub enum IdealMatchedParticipationFunctionValidationError {
+    TooManyBytes(usize),
+    DeserializationError(String),
+}
+
+impl ToString for IdealMatchedParticipationFunctionValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "IdealMatchedParticipationFunctionValidationError: ";
+        match self {
+            Self::TooManyBytes(num_bytes) => {
+                format!(
+                    "{prefix} serialized representation has {} bytes; the maximum is {} bytes.",
+                    num_bytes, MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
+                )
+            }
+            Self::DeserializationError(error) => {
+                format!("{prefix} cannot deserialize: {}", error)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum NeuronsFundParticipationConstraintsValidationError {
     RelatedFieldUnspecified(String),
     LinearScalingCoefficientVecValidationError(LinearScalingCoefficientVecValidationError),
+    IdealMatchedParticipationFunctionValidationError(
+        IdealMatchedParticipationFunctionValidationError,
+    ),
 }
 
 impl ToString for NeuronsFundParticipationConstraintsValidationError {
@@ -338,6 +371,9 @@ impl ToString for NeuronsFundParticipationConstraintsValidationError {
             Self::LinearScalingCoefficientVecValidationError(error) => {
                 format!("{}{}", prefix, error.to_string())
             }
+            Self::IdealMatchedParticipationFunctionValidationError(error) => {
+                format!("{prefix}{}", error.to_string())
+            }
         }
     }
 }
@@ -348,14 +384,19 @@ impl From<NeuronsFundParticipationConstraintsValidationError> for Result<(), Str
     }
 }
 
-pub struct ValidatedNeuronsFundParticipationConstraints {
+pub struct ValidatedNeuronsFundParticipationConstraints<F> {
     pub min_direct_participation_threshold_icp_e8s: u64,
     pub max_neurons_fund_participation_icp_e8s: u64,
     pub coefficient_intervals: Vec<ValidatedLinearScalingCoefficient>,
+    pub ideal_matched_participation_function: Box<F>,
 }
 
-impl From<ValidatedNeuronsFundParticipationConstraints> for NeuronsFundParticipationConstraints {
-    fn from(value: ValidatedNeuronsFundParticipationConstraints) -> Self {
+impl<F> From<ValidatedNeuronsFundParticipationConstraints<F>>
+    for NeuronsFundParticipationConstraints
+where
+    F: IdealMatchingFunction,
+{
+    fn from(value: ValidatedNeuronsFundParticipationConstraints<F>) -> Self {
         Self {
             min_direct_participation_threshold_icp_e8s: Some(
                 value.min_direct_participation_threshold_icp_e8s,
@@ -368,11 +409,20 @@ impl From<ValidatedNeuronsFundParticipationConstraints> for NeuronsFundParticipa
                 .into_iter()
                 .map(LinearScalingCoefficient::from)
                 .collect(),
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionSwapPb {
+                serialized_representation: Some(
+                    value.ideal_matched_participation_function.serialize(),
+                ),
+            }),
         }
     }
 }
 
-impl TryFrom<NeuronsFundParticipationConstraints> for ValidatedNeuronsFundParticipationConstraints {
+impl<F> TryFrom<NeuronsFundParticipationConstraints>
+    for ValidatedNeuronsFundParticipationConstraints<F>
+where
+    F: IdealMatchingFunction + FromRepr,
+{
     type Error = NeuronsFundParticipationConstraintsValidationError;
 
     fn try_from(value: NeuronsFundParticipationConstraints) -> Result<Self, Self::Error> {
@@ -445,10 +495,43 @@ impl TryFrom<NeuronsFundParticipationConstraints> for ValidatedNeuronsFundPartic
             }
         }
 
+        let matching_function_serialized_representation = value
+            .ideal_matched_participation_function
+            .ok_or_else(|| {
+                Self::Error::RelatedFieldUnspecified(
+                    "ideal_matched_participation_function".to_string(),
+                )
+            })?
+            .serialized_representation
+            .ok_or_else(|| {
+                Self::Error::RelatedFieldUnspecified(
+                    "ideal_matched_participation_function.serialized_representation".to_string(),
+                )
+            })?;
+        if matching_function_serialized_representation.len()
+            > MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES
+        {
+            return Err(
+                Self::Error::IdealMatchedParticipationFunctionValidationError(
+                    IdealMatchedParticipationFunctionValidationError::TooManyBytes(
+                        matching_function_serialized_representation.len(),
+                    ),
+                ),
+            );
+        }
+
+        let ideal_matched_participation_function =
+            F::from_repr(&matching_function_serialized_representation).map_err(|e| {
+                Self::Error::IdealMatchedParticipationFunctionValidationError(
+                    IdealMatchedParticipationFunctionValidationError::DeserializationError(e),
+                )
+            })?;
+
         Ok(Self {
             min_direct_participation_threshold_icp_e8s,
             max_neurons_fund_participation_icp_e8s,
             coefficient_intervals,
+            ideal_matched_participation_function,
         })
     }
 }
@@ -460,6 +543,12 @@ pub struct BinSearchIter {
     x: u64,
     right: u128,
     y: Decimal,
+}
+
+/// Implementations of this trait can be created from a string-based representation. This is used
+/// in conjunction with `IdealMatchingFunction` for typing functions that need to be deserialized.
+trait FromRepr {
+    fn from_repr(repr: &str) -> Result<Box<Self>, String>;
 }
 
 /// An invertible function is a function that has an inverse (a.k.a. monotonically non-decreasing).
@@ -1205,12 +1294,6 @@ impl PolynomialMatchingFunction {
         })
     }
 
-    /// Attempts to create an instance of `Self` from a serialized representation, `repr`.
-    pub fn from_repr(repr: &str) -> Result<Self, String> {
-        let persistent_data = serde_json::from_str(repr).map_err(|e| e.to_string())?;
-        Self::from_persistant_data(persistent_data)
-    }
-
     /// Creates a monotonically non-decreasing polynomial function for Neurons' Fund Matched Funding.
     pub fn new(total_maturity_equivalent_icp_e8s: u64) -> Self {
         // Computations defined in ICP rather than ICP e8s to avoid multiplication overflows for
@@ -1237,6 +1320,14 @@ impl PolynomialMatchingFunction {
         );
         // Unwrapping here is safe due to the FIXME test.
         Self::from_persistant_data(persistent_data).unwrap()
+    }
+}
+
+impl FromRepr for PolynomialMatchingFunction {
+    /// Attempts to create an instance of `Self` from a serialized representation, `repr`.
+    fn from_repr(repr: &str) -> Result<Box<Self>, String> {
+        let persistent_data = serde_json::from_str(repr).map_err(|e| e.to_string())?;
+        Self::from_persistant_data(persistent_data).map(Box::from)
     }
 }
 
@@ -1435,8 +1526,8 @@ pub trait IntervalPartition<I> {
     }
 }
 
-impl IntervalPartition<ValidatedLinearScalingCoefficient>
-    for ValidatedNeuronsFundParticipationConstraints
+impl<F> IntervalPartition<ValidatedLinearScalingCoefficient>
+    for ValidatedNeuronsFundParticipationConstraints<F>
 {
     fn intervals(&self) -> Vec<&ValidatedLinearScalingCoefficient> {
         self.coefficient_intervals.iter().collect()
@@ -1465,36 +1556,32 @@ impl<T> IntervalPartition<NeuronsInterval<T>> for Vec<NeuronsInterval<T>> {
     }
 }
 
-pub struct MatchedParticipationFunction {
-    function: Box<dyn IdealMatchingFunction>,
-    params: ValidatedNeuronsFundParticipationConstraints,
-}
-
-impl MatchedParticipationFunction {
-    pub fn new(
-        function: Box<dyn IdealMatchingFunction>,
-        params: ValidatedNeuronsFundParticipationConstraints,
-    ) -> Result<Self, String> {
-        Ok(Self { function, params })
-    }
+pub trait MatchedParticipationFunction {
+    fn apply(&self, direct_participation_icp_e8s: u64) -> Result<u64, String>;
 
     /// Simply unwraps the result from `self.apply()`.
     fn apply_unchecked(&self, direct_participation_icp_e8s: u64) -> u64 {
         self.apply(direct_participation_icp_e8s).unwrap()
     }
+}
 
+impl<F> MatchedParticipationFunction for ValidatedNeuronsFundParticipationConstraints<F>
+where
+    F: IdealMatchingFunction,
+{
     /// Returns a decimal amount of ICP e8s.
-    pub fn apply(&self, direct_participation_icp_e8s: u64) -> Result<u64, String> {
-        // Normally, this threshold follows from `self.function`, a.k.a. the "ideal" participation
-        // matching function. However, we add an explicit check here in order to make this
-        // threashold more prominantly visible from readong the code. In addition, having this
-        // branch allows us to use functions with a less complicated shape in the tests.
-        if direct_participation_icp_e8s < self.params.min_direct_participation_threshold_icp_e8s {
+    fn apply(&self, direct_participation_icp_e8s: u64) -> Result<u64, String> {
+        // Normally, this threshold follows from `self.ideal_matched_participation_function.function`,
+        // a.k.a. the "ideal" participation matching function. However, we add an explicit check
+        // here in order to make this threashold more prominantly visible from readong the code.
+        // In addition, having this branch allows us to use functions with a less complicated shape
+        // in the tests.
+        if direct_participation_icp_e8s < self.min_direct_participation_threshold_icp_e8s {
             return Ok(0);
         }
 
-        let intervals = &self.params.coefficient_intervals;
-        // This condition is always satisfied, as `self.params` has been validated. We add it here
+        let intervals = &self.coefficient_intervals;
+        // This condition is always satisfied, as `self` has been validated. We add it here
         // again for verbosity.
         if intervals.is_empty() {
             return Err("There must be at least one interval.".to_string());
@@ -1513,7 +1600,7 @@ impl MatchedParticipationFunction {
         if intervals.last().unwrap().to_direct_participation_icp_e8s <= direct_participation_icp_e8s
         {
             return Ok(u64::min(
-                self.params.max_neurons_fund_participation_icp_e8s,
+                self.max_neurons_fund_participation_icp_e8s,
                 MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
             ));
         }
@@ -1524,17 +1611,19 @@ impl MatchedParticipationFunction {
             slope_denominator,
             intercept_icp_e8s,
             ..
-        }) = self.params.find_interval(direct_participation_icp_e8s)
+        }) = self.find_interval(direct_participation_icp_e8s)
         {
             // This value is how much of Neurons' Fund maturity we should "ideally" allocate.
-            let ideal_icp = self.function.apply(direct_participation_icp_e8s)?;
+            let ideal_icp = self
+                .ideal_matched_participation_function
+                .apply(direct_participation_icp_e8s)?;
 
             // Convert to Decimal
             let intercept_icp_e8s = rescale_to_icp(*intercept_icp_e8s);
             let slope_numerator = u64_to_dec(*slope_numerator);
             let slope_denominator = u64_to_dec(*slope_denominator);
 
-            // Normally, `self.params.max_neurons_fund_participation_icp_e8s` should be set to a
+            // Normally, `self.max_neurons_fund_participation_icp_e8s` should be set to a
             // *reasonable* value. Since this value is computed based on the overall amount of
             // maturity in the Neurons' Fund (at the time when the swap is being opened), in theory
             // it could grow indefinitely. To safeguard against overly massive Neurons' Fund
@@ -1543,7 +1632,7 @@ impl MatchedParticipationFunction {
             // of participation also by `MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S`.
             // Here, we apply this threshold again for making it more explicit.
             let hard_cap = u64_to_dec(u64::min(
-                self.params.max_neurons_fund_participation_icp_e8s,
+                self.max_neurons_fund_participation_icp_e8s,
                 MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
             ));
 
@@ -1578,7 +1667,10 @@ impl MatchedParticipationFunction {
 #[cfg(test)]
 mod matched_participation_function_tests {
     use super::test_functions::LinearFunction;
-    use super::{dec_to_u64, u64_to_dec, InvertibleFunction, MatchedParticipationFunction};
+    use super::{
+        dec_to_u64, u64_to_dec, InvertibleFunction, MatchedParticipationFunction,
+        SerializableFunction,
+    };
     use crate::neurons_fund::test_functions::{
         AnalyticallyInvertibleFunction, SimpleLinearFunction,
     };
@@ -1586,7 +1678,10 @@ mod matched_participation_function_tests {
         IdealMatchingFunction, ValidatedNeuronsFundParticipationConstraints,
     };
     use ic_nervous_system_common::E8;
-    use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
+    use ic_sns_swap::pb::v1::{
+        IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
+        LinearScalingCoefficient, NeuronsFundParticipationConstraints,
+    };
     use rust_decimal::{
         prelude::{FromPrimitive, ToPrimitive},
         Decimal,
@@ -1668,31 +1763,39 @@ mod matched_participation_function_tests {
                     intercept_icp_e8s: Some(555),
                 },
             ],
+            ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionSwapPb {
+                serialized_representation: Some((SimpleLinearFunction {}).serialize()),
+            }),
         };
-        let params: ValidatedNeuronsFundParticipationConstraints =
+        let participation: ValidatedNeuronsFundParticipationConstraints<SimpleLinearFunction> =
             ValidatedNeuronsFundParticipationConstraints::try_from(params).unwrap();
-        let f: SimpleLinearFunction = SimpleLinearFunction {};
-        let g = MatchedParticipationFunction::new(Box::from(f), params).unwrap();
+
         // Below min_direct_participation_threshold_icp_e8s
-        assert_eq!(g.apply_unchecked(0), 0);
+        assert_eq!(participation.apply_unchecked(0), 0);
         // Falls into Interval A, thus we expect slope(0.5) * x + intercept_icp_e8s(111)
-        assert_eq!(g.apply_unchecked(90 * E8), 45 * E8 + 111);
+        assert_eq!(participation.apply_unchecked(90 * E8), 45 * E8 + 111);
         // Falls into Interval B, thus we expect slope(0.6) * x + intercept_icp_e8s(222)
-        assert_eq!(g.apply_unchecked(100 * E8), 60 * E8 + 222);
+        assert_eq!(participation.apply_unchecked(100 * E8), 60 * E8 + 222);
         // Falls into Interval C, thus we expect slope(0.7) * x + intercept_icp_e8s(333)
-        assert_eq!(g.apply_unchecked(5_000 * E8), 3_500 * E8 + 333);
+        assert_eq!(participation.apply_unchecked(5_000 * E8), 3_500 * E8 + 333);
         // Falls into Interval D, thus we expect slope(0.8) * x + intercept_icp_e8s(444)
-        assert_eq!(g.apply_unchecked(100_000 * E8 - 1), 80_000 * E8 - 1 + 444);
+        assert_eq!(
+            participation.apply_unchecked(100_000 * E8 - 1),
+            80_000 * E8 - 1 + 444
+        );
         // Falls into Interval E, thus we expect slope(0.9) * x + intercept_icp_e8s(555)
-        assert_eq!(g.apply_unchecked(100_000 * E8), 90_000 * E8 + 555);
+        assert_eq!(
+            participation.apply_unchecked(100_000 * E8),
+            90_000 * E8 + 555
+        );
         // Beyond the last interval
         assert_eq!(
-            g.apply_unchecked(1_000_000 * E8),
+            participation.apply_unchecked(1_000_000 * E8),
             max_neurons_fund_participation_icp_e8s
         );
         // Extremely high value
         assert_eq!(
-            g.apply_unchecked(u64::MAX),
+            participation.apply_unchecked(u64::MAX),
             max_neurons_fund_participation_icp_e8s
         );
     }
@@ -2216,9 +2319,9 @@ impl SwapParticipationLimits {
 
 /// Information for deciding how the Neurons' Fund should participate in an SNS Swap.
 #[derive(Debug)]
-pub struct NeuronsFundParticipation {
+pub struct NeuronsFundParticipation<F> {
     swap_participation_limits: SwapParticipationLimits,
-    ideal_matched_participation_function: Box<dyn IdealMatchingFunction>,
+    ideal_matched_participation_function: Box<F>,
     /// Represents the participation amount per Neurons' Fund neuron.
     neurons_fund_reserves: NeuronsFundSnapshot,
     /// Neurons' Fund participation is computed for this amount of direct participation.
@@ -2247,7 +2350,10 @@ pub struct NeuronsFundParticipation {
     intended_neurons_fund_participation_icp_e8s: u64,
 }
 
-impl NeuronsFundParticipation {
+impl<F> NeuronsFundParticipation<F>
+where
+    F: IdealMatchingFunction,
+{
     /// Returns whether there is some participation at all.
     pub fn is_empty(&self) -> bool {
         self.neurons_fund_reserves.is_empty()
@@ -2272,30 +2378,11 @@ impl NeuronsFundParticipation {
     }
 
     /// Create a new Neurons' Fund participation for the given `swap_participation_limits`.
-    pub fn new(
-        swap_participation_limits: SwapParticipationLimits,
-        neurons_fund: Vec<NeuronsFundNeuron>,
-    ) -> Result<Self, String> {
-        let total_maturity_equivalent_icp_e8s =
-            Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund);
-        let ideal_matched_participation_function = Box::from(PolynomialMatchingFunction::new(
-            total_maturity_equivalent_icp_e8s,
-        ));
-        Self::new_impl(
-            total_maturity_equivalent_icp_e8s,
-            swap_participation_limits.max_direct_participation_icp_e8s, // best case scenario
-            swap_participation_limits,
-            neurons_fund,
-            ideal_matched_participation_function,
-        )
-    }
-
-    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`.
     #[cfg(test)]
     pub fn new_for_test(
         swap_participation_limits: SwapParticipationLimits,
         neurons_fund: Vec<NeuronsFundNeuron>,
-        ideal_matched_participation_function: Box<dyn IdealMatchingFunction>,
+        ideal_matched_participation_function: Box<F>,
     ) -> Result<Self, String> {
         let total_maturity_equivalent_icp_e8s =
             Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund);
@@ -2325,49 +2412,11 @@ impl NeuronsFundParticipation {
 
     /// Create a new Neurons' Fund participation matching given `direct_participation_icp_e8s` with
     /// `ideal_matched_participation_function`.  All other parameters are taken from `self`.
-    pub fn from_initial_participation(
-        &self,
-        direct_participation_icp_e8s: u64,
-    ) -> Result<Self, String> {
-        let neurons_fund = self
-            .snapshot()
-            .neurons()
-            .values()
-            .map(
-                |NeuronsFundNeuronPortion {
-                     id,
-                     maturity_equivalent_icp_e8s,
-                     controller,
-                     ..
-                 }| {
-                    NeuronsFundNeuron {
-                        id: *id,
-                        maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
-                        controller: *controller,
-                    }
-                },
-            )
-            .collect();
-        let ideal_matched_participation_function = Box::from({
-            let repr = (self.ideal_matched_participation_function).serialize();
-            PolynomialMatchingFunction::from_repr(&repr)?
-        });
-        Self::new_impl(
-            self.total_maturity_equivalent_icp_e8s,
-            direct_participation_icp_e8s,
-            self.swap_participation_limits.clone(),
-            neurons_fund,
-            ideal_matched_participation_function,
-        )
-    }
-
-    /// Create a new Neurons' Fund participation matching given `direct_participation_icp_e8s` with
-    /// `ideal_matched_participation_function`.  All other parameters are taken from `self`.
     #[cfg(test)]
     pub fn from_initial_participation_for_test(
         &self,
         direct_participation_icp_e8s: u64,
-        ideal_matched_participation_function: Box<dyn IdealMatchingFunction>,
+        ideal_matched_participation_function: Box<F>,
     ) -> Result<Self, String> {
         let neurons_fund = self
             .snapshot()
@@ -2402,7 +2451,7 @@ impl NeuronsFundParticipation {
         direct_participation_icp_e8s: u64,
         swap_participation_limits: SwapParticipationLimits,
         neurons_fund: Vec<NeuronsFundNeuron>,
-        ideal_matched_participation_function: Box<dyn IdealMatchingFunction>,
+        ideal_matched_participation_function: Box<F>,
     ) -> Result<Self, String> {
         // Take 10% of overall Neurons' Fund maturity.
         let max_neurons_fund_swap_participation_icp_e8s =
@@ -2568,11 +2617,72 @@ impl NeuronsFundParticipation {
         };
         let dummy_interval: LinearScalingCoefficient = dummy_interval.into();
         let coefficient_intervals = vec![dummy_interval];
+        let ideal_matched_participation_function = Some(IdealMatchedParticipationFunctionSwapPb {
+            serialized_representation: Some(self.ideal_matched_participation_function.serialize()),
+        });
         Ok(NeuronsFundParticipationConstraints {
             min_direct_participation_threshold_icp_e8s,
             max_neurons_fund_participation_icp_e8s,
             coefficient_intervals,
+            ideal_matched_participation_function,
         })
+    }
+}
+
+pub type PolynomialNeuronsFundParticipation = NeuronsFundParticipation<PolynomialMatchingFunction>;
+
+impl PolynomialNeuronsFundParticipation {
+    /// Create a new Neurons' Fund participation for the given `swap_participation_limits`.
+    pub fn new(
+        swap_participation_limits: SwapParticipationLimits,
+        neurons_fund: Vec<NeuronsFundNeuron>,
+    ) -> Result<Self, String> {
+        let total_maturity_equivalent_icp_e8s =
+            Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund);
+        let ideal_matched_participation_function = Box::from(PolynomialMatchingFunction::new(
+            total_maturity_equivalent_icp_e8s,
+        ));
+        Self::new_impl(
+            total_maturity_equivalent_icp_e8s,
+            swap_participation_limits.max_direct_participation_icp_e8s, // best case scenario
+            swap_participation_limits,
+            neurons_fund,
+            ideal_matched_participation_function,
+        )
+    }
+
+    /// Create a new Neurons' Fund participation matching given `direct_participation_icp_e8s` with
+    /// `ideal_matched_participation_function`.  All other parameters are taken from `self`.
+    pub fn from_initial_participation(
+        &self,
+        direct_participation_icp_e8s: u64,
+    ) -> Result<Self, String> {
+        let neurons_fund = self
+            .snapshot()
+            .neurons()
+            .values()
+            .map(
+                |NeuronsFundNeuronPortion {
+                     id,
+                     maturity_equivalent_icp_e8s,
+                     controller,
+                     ..
+                 }| {
+                    NeuronsFundNeuron {
+                        id: *id,
+                        maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
+                        controller: *controller,
+                    }
+                },
+            )
+            .collect();
+        Self::new_impl(
+            self.total_maturity_equivalent_icp_e8s,
+            direct_participation_icp_e8s,
+            self.swap_participation_limits.clone(),
+            neurons_fund,
+            self.ideal_matched_participation_function.clone(),
+        )
     }
 }
 
@@ -2610,8 +2720,11 @@ impl ToString for NeuronsFundParticipationValidationError {
     }
 }
 
-impl From<NeuronsFundParticipation> for NeuronsFundParticipationPb {
-    fn from(participation: NeuronsFundParticipation) -> Self {
+impl<F> From<NeuronsFundParticipation<F>> for NeuronsFundParticipationPb
+where
+    F: IdealMatchingFunction,
+{
+    fn from(participation: NeuronsFundParticipation<F>) -> Self {
         let serialized_representation = Some(
             participation
                 .ideal_matched_participation_function
@@ -2681,7 +2794,16 @@ impl NeuronsFundParticipationPb {
     /// NeuronsFundParticipation structure with validated fields.
     pub fn validate(
         &self,
-    ) -> Result<NeuronsFundParticipation, NeuronsFundParticipationValidationError> {
+    ) -> Result<PolynomialNeuronsFundParticipation, NeuronsFundParticipationValidationError> {
+        self.validate_impl()
+    }
+
+    fn validate_impl<F>(
+        &self,
+    ) -> Result<NeuronsFundParticipation<F>, NeuronsFundParticipationValidationError>
+    where
+        F: IdealMatchingFunction + FromRepr,
+    {
         let ideal_match_function_repr = self
             .ideal_matched_participation_function
             .as_ref()
@@ -2697,11 +2819,8 @@ impl NeuronsFundParticipationPb {
                     "ideal_matched_participation_function.serialized_representation".to_string(),
                 )
             })?;
-        let ideal_matched_participation_function: Box<dyn IdealMatchingFunction> = Box::from(
-            PolynomialMatchingFunction::from_repr(ideal_match_function_repr).map_err(
-                NeuronsFundParticipationValidationError::MatchFunctionDeserializationFailed,
-            )?,
-        );
+        let ideal_matched_participation_function = F::from_repr(ideal_match_function_repr)
+            .map_err(NeuronsFundParticipationValidationError::MatchFunctionDeserializationFailed)?;
         let neurons_fund_reserves = self
             .neurons_fund_reserves
             .as_ref()
@@ -2881,7 +3000,7 @@ impl NeuronsFund for NeuronStore {
 #[cfg(test)]
 mod test_functions {
     use super::{
-        dec_to_u64, rescale_to_icp, rescale_to_icp_e8s, u64_to_dec, InvertibleFunction,
+        dec_to_u64, rescale_to_icp, rescale_to_icp_e8s, u64_to_dec, FromRepr, InvertibleFunction,
         SerializableFunction,
     };
     use ic_nervous_system_common::E8;
@@ -2891,11 +3010,11 @@ mod test_functions {
     #[derive(Debug)]
     pub struct SimpleLinearFunction {}
 
-    impl SimpleLinearFunction {
+    impl FromRepr for SimpleLinearFunction {
         /// Attempts to create an instance of `Self` from a serialized representation, `repr`.
-        pub fn new(repr: &String) -> Result<Self, String> {
+        fn from_repr(repr: &str) -> Result<Box<Self>, String> {
             if repr == "<SimpleLinearFunction>" {
-                Ok(Self {})
+                Ok(Box::from(Self {}))
             } else {
                 Err(format!(
                     "Cannot deserialize `{}` as SimpleLinearFunction",

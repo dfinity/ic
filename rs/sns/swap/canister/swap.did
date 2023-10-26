@@ -89,6 +89,9 @@ type GetSaleParametersResponse = record { params : opt Params };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type GovernanceError = record { error_message : text; error_type : int32 };
 type Icrc1Account = record { owner : opt principal; subaccount : opt vec nat8 };
+type IdealMatchedParticipationFunction = record {
+  serialized_representation : opt text;
+};
 type Init = record {
   nns_proposal_id : opt nat64;
   sns_root_canister_id : text;
@@ -163,6 +166,7 @@ type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
   max_neurons_fund_participation_icp_e8s : opt nat64;
   min_direct_participation_threshold_icp_e8s : opt nat64;
+  ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
 };
 type NewSaleTicketRequest = record {
   subaccount : opt vec nat8;

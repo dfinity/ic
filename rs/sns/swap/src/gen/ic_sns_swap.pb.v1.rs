@@ -392,6 +392,31 @@ pub struct NeuronsFundParticipationConstraints {
     /// participation amount.
     #[prost(message, repeated, tag = "3")]
     pub coefficient_intervals: ::prost::alloc::vec::Vec<LinearScalingCoefficient>,
+    /// The function used in the implementation of Matched Funding for mapping amounts of direct
+    /// participation to "ideal" Neurons' Fund participation amounts. The value needs to be adjusted
+    /// to a potentially smaller value due to SNS-specific participation constraints and
+    /// the configuration of the Neurons' Fund at the time of the CreateServiceNervousSystem proposal
+    /// execution.
+    #[prost(message, optional, tag = "4")]
+    pub ideal_matched_participation_function:
+        ::core::option::Option<IdealMatchedParticipationFunction>,
+}
+/// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
+/// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints
+/// while allocating its overall participation amount among its neurons' maturity. In contrast,
+/// The "effective" matched participation function `crate::neurons_fund::MatchedParticipationFunction`
+/// is computed *based* on this one.
+/// TODO(NNS1-1589): Until the Jira ticket gets solved, this definition needs to be synchronized with
+/// that from nns/governance/proto/ic_nns_governance/pb/v1/governance.proto.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IdealMatchedParticipationFunction {
+    /// The encoding of the "ideal" matched participation function is defined in `crate::neurons_fund`.
+    /// In the future, we could change this message to represent full abstract syntactic trees
+    /// comprised of elementary mathematical operators, with literals and variables as tree leaves.
+    #[prost(string, optional, tag = "1")]
+    pub serialized_representation: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Some Neurons' Fund neurons might be too small, and some might be too large to participate in a
 /// given SNS swap. This causes the need to adjust Neurons' Fund participation from an "ideal" amount

@@ -52,6 +52,9 @@ type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
 type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
 type GetWasmRequest = record { hash : vec nat8 };
 type GetWasmResponse = record { wasm : opt SnsWasm };
+type IdealMatchedParticipationFunction = record {
+  serialized_representation : opt text;
+};
 type InitialTokenDistribution = variant {
   FractionalDeveloperVotingPower : FractionalDeveloperVotingPower;
 };
@@ -94,6 +97,7 @@ type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
   max_neurons_fund_participation_icp_e8s : opt nat64;
   min_direct_participation_threshold_icp_e8s : opt nat64;
+  ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
 };
 type PrettySnsVersion = record {
   archive_wasm_hash : text;
