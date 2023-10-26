@@ -180,6 +180,10 @@ impl ToString for MaxNeuronsFundParticipationValidationError {
 // SnsInitPayload.coefficient_intervals structure with obviously too many elements.
 const MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN: usize = 100_000;
 
+// The maximum number of bytes that a serialized representation of an ideal matching function
+// `IdealMatchedParticipationFunction` may have.
+const MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES: usize = 1_000;
+
 enum LinearScalingCoefficientVecValidationError {
     EmptyLinearScalingCoefficients,
     TooManyLinearScalingCoefficients(usize),
@@ -220,12 +224,33 @@ impl From<LinearScalingCoefficientVecValidationError> for Result<(), String> {
     }
 }
 
+enum IdealMatchedParticipationFunctionValidationError {
+    TooManyBytes(usize),
+}
+
+impl ToString for IdealMatchedParticipationFunctionValidationError {
+    fn to_string(&self) -> String {
+        let prefix = "IdealMatchedParticipationFunctionValidationError: ";
+        match self {
+            Self::TooManyBytes(num_bytes) => {
+                format!(
+                    "{prefix} serialized representation has {} bytes; the maximum is {} bytes.",
+                    num_bytes, MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
+                )
+            }
+        }
+    }
+}
+
 enum NeuronsFundParticipationConstraintsValidationError {
     SetBeforeProposalExecution,
     RelatedFieldUnspecified(String),
     MinDirectParticipationThresholdValidationError(MinDirectParticipationThresholdValidationError),
     MaxNeuronsFundParticipationValidationError(MaxNeuronsFundParticipationValidationError),
     LinearScalingCoefficientVecValidationError(LinearScalingCoefficientVecValidationError),
+    IdealMatchedParticipationFunctionValidationError(
+        IdealMatchedParticipationFunctionValidationError,
+    ),
 }
 
 impl ToString for NeuronsFundParticipationConstraintsValidationError {
@@ -248,6 +273,9 @@ impl ToString for NeuronsFundParticipationConstraintsValidationError {
                 format!("{prefix}{}", error.to_string())
             }
             Self::LinearScalingCoefficientVecValidationError(error) => {
+                format!("{prefix}{}", error.to_string())
+            }
+            Self::IdealMatchedParticipationFunctionValidationError(error) => {
                 format!("{prefix}{}", error.to_string())
             }
         }
@@ -2117,6 +2145,33 @@ impl SnsInitPayload {
             }
         }
 
+        let matching_function_serialized_representation = neurons_fund_participation_constraints
+            .ideal_matched_participation_function
+            .as_ref()
+            .ok_or_else(|| {
+                NeuronsFundParticipationConstraintsValidationError::RelatedFieldUnspecified(
+                    "ideal_matched_participation_function".to_string(),
+                )
+                .to_string()
+            })?
+            .serialized_representation
+            .as_ref()
+            .ok_or_else(|| {
+                NeuronsFundParticipationConstraintsValidationError::RelatedFieldUnspecified(
+                    "ideal_matched_participation_function.serialized_representation".to_string(),
+                )
+                .to_string()
+            })?;
+        if matching_function_serialized_representation.len()
+            > MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES
+        {
+            return NeuronsFundParticipationConstraintsValidationError::IdealMatchedParticipationFunctionValidationError(
+                IdealMatchedParticipationFunctionValidationError::TooManyBytes(
+                    matching_function_serialized_representation.len()
+                )
+            ).into();
+        }
+
         Ok(())
     }
 
@@ -2229,8 +2284,8 @@ mod test {
         governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
     };
     use ic_sns_swap::pb::v1::{
-        LinearScalingCoefficient, NeuronBasketConstructionParameters,
-        NeuronsFundParticipationConstraints,
+        IdealMatchedParticipationFunction, LinearScalingCoefficient,
+        NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
     };
     use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
@@ -3564,6 +3619,9 @@ mod test {
                 min_direct_participation_threshold_icp_e8s: Some(1_000),
                 max_neurons_fund_participation_icp_e8s: Some(10_000),
                 coefficient_intervals: vec![],
+                ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+                    serialized_representation: Some("<Test>".to_string()),
+                }),
             }),
             ..SnsInitPayload::with_valid_legacy_values_for_testing()
         };
@@ -3580,6 +3638,9 @@ mod test {
                 min_direct_participation_threshold_icp_e8s: Some(1_000),
                 max_neurons_fund_participation_icp_e8s: Some(10_000),
                 coefficient_intervals: vec![],
+                ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+                    serialized_representation: Some("<Test>".to_string()),
+                }),
             }),
             ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
         };
@@ -3602,6 +3663,9 @@ mod test {
                     slope_denominator: Some(3),
                     intercept_icp_e8s: Some(4),
                 }],
+                ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+                    serialized_representation: Some("<Test>".to_string()),
+                }),
             }),
             ..SnsInitPayload::with_valid_values_for_testing()
         };
