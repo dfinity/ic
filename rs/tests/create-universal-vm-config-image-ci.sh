@@ -74,5 +74,5 @@ size=$(du --bytes -s -L "$INPUT_DIR" | awk '{print $1}')
 size=$((2 * size + 1048576))
 echo "image size: $size"
 truncate -s $size "$tmp"
-mkfs.vfat -n "$LABEL" "$tmp"
+mkfs.vfat -i "0" -n "$LABEL" "$tmp"
 cp $tmp $OUTPUT_FILE
