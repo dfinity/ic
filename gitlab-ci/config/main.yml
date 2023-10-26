@@ -483,7 +483,16 @@ lock-generate:
       if ! DFINITY_OPENSSL_STATIC=1 bazel query @crate_index//:all ; then
         DFINITY_OPENSSL_STATIC=1 CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
         # Verify that it fixed.
-        bazel query @crate_index//:all
+        DFINITY_OPENSSL_STATIC=1 bazel query @crate_index//:all
+        # Ensure pipeline will fail.
+        EXIT_STATUS=1
+      fi
+
+      # And for fuzzing build
+      if ! SANITIZERS_ENABLED=1 bazel query @crate_index//:all ; then
+        SANITIZERS_ENABLED=1 CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+        # Verify that it fixed.
+        SANITIZERS_ENABLED=1 bazel query @crate_index//:all
         # Ensure pipeline will fail.
         EXIT_STATUS=1
       fi
