@@ -2,7 +2,6 @@
 #
 # Utility to download the S3 CDN artifacts, using rclone.
 # It can download artifacts from a given git revision or from latest available merge base master.
-# The tool will prefer the "blessed" artifacts, which can be found on the CDN at "/blessed/<remote-path>"
 #
 # Example usage of the script:
 #
@@ -101,68 +100,60 @@ class RcloneDownload:
                     time.sleep(20)
         return False
 
-    def _rclone(self, git_rev, include, blessed_only) -> bool:
-        if blessed_only:
-            # Only attempt to download from /blessed. The contents of /blessed are immutable.
-            prefixes = ["blessed/ic"]
+    def _rclone(self, git_rev, include) -> bool:
+        cdn_path = f"public-s3:dfinity-download-public/ic/{git_rev}/{self.remote_path}"
+        if not self._rclone_check_if_exists(cdn_path):
+            logging.debug("CDN directory does not exist: %s", cdn_path)
+            return False
+        logging.info("CDN directory exists: %s", cdn_path)
+
+        local_path = pathlib.Path(self.out or f"{self.repo_root}/artifacts/{git_rev}/{self.remote_path}")
+        cmd = [
+            f"{self.repo_root}/gitlab-ci/tools/rclone",
+            f"--verbose={self.verbose}",
+            f"--config={self.config}",
+            "--checksum",
+            "--include",
+            include or "*",
+            "copyto",
+            cdn_path,
+            local_path,
+        ]
+
+        if self.dry_run:
+            logging.info("Dry-running rclone: %s", cmd)
+            cmd.insert(0, "echo")
         else:
-            # If /blessed/ic exists, use it. Otherwise fallback to /ic.
-            prefixes = ["blessed/ic", "ic"]
+            logging.debug("Running rclone: %s", cmd)
 
-        for prefix in prefixes:
-            cdn_path = f"public-s3:dfinity-download-public/{prefix}/{git_rev}/{self.remote_path}"
-            if not self._rclone_check_if_exists(cdn_path):
-                logging.debug("CDN directory does not exist: %s", cdn_path)
-                continue
-            logging.info("CDN directory exists: %s", cdn_path)
-
-            local_path = pathlib.Path(self.out or f"{self.repo_root}/artifacts/{git_rev}/{self.remote_path}")
-            cmd = [
-                f"{self.repo_root}/gitlab-ci/tools/rclone",
-                f"--verbose={self.verbose}",
-                f"--config={self.config}",
-                "--checksum",
-                "--include",
-                include or "*",
-                "copyto",
-                cdn_path,
-                local_path,
-            ]
-
-            if self.dry_run:
-                logging.info("Dry-running rclone: %s", cmd)
-                cmd.insert(0, "echo")
-            else:
-                logging.debug("Running rclone: %s", cmd)
-
-            for i in range(MAX_RCLONE_ATTEMPTS):
-                try:
-                    p = subprocess.run(cmd, timeout=self.timeout, capture_output=True)
-                    logging.info("rclone completed successfully.\nStdout:\n%s\nStderr:\n%s\n", p.stdout, p.stderr)
-                    logging.info("CDN artifacts from %s downloaded to %s", cdn_path, local_path)
-                    self._postprocess_downloads(local_path)
-                    return True
-                except subprocess.TimeoutExpired as e:
-                    logging.warning(
-                        "rclone timeout: %s\n%s\n%s",
-                        e.stdout,
-                        e.stderr,
-                        e,
-                    )
-                    if i + 1 < MAX_RCLONE_ATTEMPTS:
-                        logging.info("Retrying after 10 seconds.")
-                        time.sleep(10)
-                except subprocess.CalledProcessError as e:
-                    logging.warning(
-                        "rclone failed (%d) with exception: %s\n%s\n%s",
-                        e.returncode,
-                        e.stdout,
-                        e.stderr,
-                        e,
-                    )
-                    if i + 1 < MAX_RCLONE_ATTEMPTS:
-                        logging.info("Retrying after 10 seconds.")
-                        time.sleep(10)
+        for i in range(MAX_RCLONE_ATTEMPTS):
+            try:
+                p = subprocess.run(cmd, timeout=self.timeout, capture_output=True)
+                logging.info("rclone completed successfully.\nStdout:\n%s\nStderr:\n%s\n", p.stdout, p.stderr)
+                logging.info("CDN artifacts from %s downloaded to %s", cdn_path, local_path)
+                self._postprocess_downloads(local_path)
+                return True
+            except subprocess.TimeoutExpired as e:
+                logging.warning(
+                    "rclone timeout: %s\n%s\n%s",
+                    e.stdout,
+                    e.stderr,
+                    e,
+                )
+                if i + 1 < MAX_RCLONE_ATTEMPTS:
+                    logging.info("Retrying after 10 seconds.")
+                    time.sleep(10)
+            except subprocess.CalledProcessError as e:
+                logging.warning(
+                    "rclone failed (%d) with exception: %s\n%s\n%s",
+                    e.returncode,
+                    e.stdout,
+                    e.stderr,
+                    e,
+                )
+                if i + 1 < MAX_RCLONE_ATTEMPTS:
+                    logging.info("Retrying after 10 seconds.")
+                    time.sleep(10)
 
         return False
 
@@ -208,10 +199,10 @@ class RcloneDownload:
         if exc:
             raise exc  # raise the last exception if there were too many attempts
 
-    def _fetch_latest_from_git_rev(self, git_rev, include, blessed_only) -> bool:
+    def _fetch_latest_from_git_rev(self, git_rev, include) -> bool:
         for ref in self.local_repo.iter_commits(rev=git_rev, max_count=50):
             logging.info("Trying: %s", ref)
-            if self._rclone(ref, include, blessed_only):
+            if self._rclone(ref, include):
                 return True
 
         logging.error("Could not rclone files after searching a back from git rev %s", git_rev)
@@ -272,12 +263,6 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "--blessed-only",
-        action="store_true",
-        help="Only attempt to download the blessed binaries.",
-    )
-
-    parser.add_argument(
         "--unpack",
         action="store_true",
         help="Unpack the downloaded binaries.",
@@ -318,10 +303,10 @@ def main() -> None:
         git_rev = args.git_rev
 
     if args.latest_to:
-        if not ra._fetch_latest_from_git_rev(git_rev, args.include, args.blessed_only):
+        if not ra._fetch_latest_from_git_rev(git_rev, args.include):
             sys.exit(1)
     else:
-        if not ra._rclone(git_rev, args.include, args.blessed_only):
+        if not ra._rclone(git_rev, args.include):
             logging.error("Could not rclone files from git rev %s", git_rev)
             sys.exit(1)
 
