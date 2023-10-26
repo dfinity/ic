@@ -956,6 +956,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "scopeguard": crate.spec(
                 version = "^1.1.0",
             ),
+            "scraper": crate.spec(
+                version = "^0.17.1",
+            ),
             "semver": crate.spec(
                 version = "^1.0.9",
                 features = [

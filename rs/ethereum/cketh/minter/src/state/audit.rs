@@ -4,7 +4,9 @@ use crate::storage::record_event;
 use crate::transactions::Reimbursed;
 
 /// Updates the state to reflect the given state transition.
-fn apply_state_transition(state: &mut State, payload: &EventType) {
+// public because it's used in tests since process_event
+// requires canister infrastructure to retrieve time
+pub fn apply_state_transition(state: &mut State, payload: &EventType) {
     match &payload {
         EventType::Init(init_arg) => {
             panic!("state re-initialization is not allowed: {init_arg:?}");

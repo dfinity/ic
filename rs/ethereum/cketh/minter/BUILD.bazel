@@ -26,6 +26,7 @@ rust_library(
         exclude = [
             "src/main.rs",
             "src/dashboard.rs",
+            "src/dashboard/tests.rs",
         ],
     ),
     crate_name = "ic_cketh_minter",
@@ -89,11 +90,16 @@ rust_test(
 
 rust_test(
     name = "unit_tests",
+    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_cketh_minter",
     data = [":cketh_minter.did"],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
     },
+    deps = [
+        ":minter",
+        "@crate_index//:scraper",
+    ],
 )
 
 rust_canister(
