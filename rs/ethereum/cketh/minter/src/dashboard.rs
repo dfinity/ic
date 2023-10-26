@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::address::Address;

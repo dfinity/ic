@@ -56,3 +56,4 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 proptest = "1.0"
 rand = "0.8"
+scraper = "0.17.1"
