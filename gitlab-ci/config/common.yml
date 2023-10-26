@@ -110,14 +110,6 @@ after_script:
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:8de36394739a3905305fd1f2161b60a788975d147e9efaa46553d068d2b17513"
 
-.ubuntu-cargo-k8s:
-  extends:
-    - .build-k8s-legacy
-  variables:
-    # This MUST match the directory used in our `build-ic.sh` script
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
-
-
 # Container images used by jobs.
 
 .ic-build-image:
