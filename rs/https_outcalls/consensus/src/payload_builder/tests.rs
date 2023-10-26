@@ -579,13 +579,9 @@ fn registry_unavailable_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Transient(
-            PayloadTransientError::CanisterHttpPayloadValidationError(
-                CanisterHttpTransientValidationError::RegistryUnavailable(
-                    RegistryClientError::VersionNotAvailable { version },
-                ),
-            ),
-        )) if version == RegistryVersion::new(2) => (),
+        Err(ValidationError::Transient(PayloadTransientError::RegistryUnavailable(
+            RegistryClientError::VersionNotAvailable { version },
+        ))) if version == RegistryVersion::new(2) => (),
         x => panic!("Expected RegistryUnavailable, got {:?}", x),
     }
 }
