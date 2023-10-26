@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::util::block_on;
 use slog::{error, info, Logger};
+use std::time::Duration;
 use url::Url;
 
 pub struct NotificationClient {
@@ -20,6 +21,7 @@ impl NotificationClient {
             let client = reqwest::Client::new();
             match client
                 .post(url)
+                .timeout(Duration::from_secs(60))
                 .header(reqwest::header::CONTENT_TYPE, content_type)
                 .body(data_str)
                 .send()
