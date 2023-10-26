@@ -296,7 +296,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 if rate_rps <= self.quiet_rate_rps:
                     recovered = True
 
-            except StatisticsError:
+            except (StatisticsError, json.JSONDecodeError):
                 logging.error(f"Failed to parse prometheus response {r} - {logging.traceback.format_exc()}")
 
             time.sleep(sleep_per_iteration_s)
