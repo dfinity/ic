@@ -5,7 +5,7 @@
 #![allow(unused)]
 
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::E8;
+use ic_nervous_system_common::{binary_search, E8};
 use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_swap::pb::v1::{LinearScalingCoefficient, NeuronsFundParticipationConstraints};
@@ -63,7 +63,7 @@ pub fn take_max_initial_neurons_fund_participation_percentage(x: u64) -> u64 {
     take_percentile_of(x, MAX_NEURONS_FUND_PARTICIPATION_BASIS_POINTS)
 }
 
-/// The implmentation of `Decimal::from_u64` cannot fail.
+/// The implementation of `Decimal::from_u64` cannot fail.
 pub fn u64_to_dec(x: u64) -> Decimal {
     Decimal::from_u64(x).unwrap()
 }
@@ -71,6 +71,12 @@ pub fn u64_to_dec(x: u64) -> Decimal {
 pub fn dec_to_u64(x: Decimal) -> Result<u64, String> {
     if x.is_sign_negative() {
         return Err(format!("Cannot convert negative value {:?} to u64.", x));
+    }
+    if x > u64_to_dec(u64::MAX) {
+        return Err(format!(
+            "cannot convert value {x} to u64 as it is above u64::MAX ({}).",
+            u64::MAX,
+        ));
     }
     // The same could be achieved via `x.round()`, but we opt for verbosity.
     let x = x.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
@@ -491,175 +497,58 @@ pub trait InvertibleFunction {
     /// This method searches an inverse of `y` given the function defined by `apply`.
     ///
     /// An error is returned if the function defined by `apply` is not monotonically increasing.
+    ///
+    /// The default implementation assumes the function is non-descending
     fn invert(&self, target_y: Decimal) -> Result<u64, String> {
-        let (_, result) = self.invert_with_tracing(target_y);
-        result
-    }
-
-    /// Like `invert`, but with extra output that can be used for testing and debugging.
-    fn invert_with_tracing(&self, target_y: Decimal) -> (Vec<BinSearchIter>, Result<u64, String>) {
-        // Used for testing and debugging
-        let mut trace = vec![];
         if target_y.is_sign_negative() {
-            return (
-                trace,
-                Err(format!("Cannot invert negative value {}.", target_y)),
-            );
+            return Err(format!("Cannot invert negative value {}.", target_y));
         }
 
-        let mut left: u128 = 0;
-        let mut right: u128 = match self.max_argument_icp_e8s() {
-            Ok(max_argument_icp_e8s) => max_argument_icp_e8s.into(),
-            Err(err) => {
-                return (trace, Err(err));
-            }
-        };
-        // Declaring `x` and `y` outside of the loop to be able to return the "best effort" result
-        // in case the exact search fails (e.g., due to rounding errors).
-        let mut x = ((left + right) / 2) as u64;
-        let mut y = match self.apply(x) {
-            Ok(y) => y,
-            Err(e) => {
-                return (trace, Err(e));
-            }
-        };
+        let mut left: u64 = 0;
+        let mut right: u64 = self.max_argument_icp_e8s()?;
 
-        // Stores the previously computed coordinates needed for monotonicity checks.
-        let mut prev_coords: Option<(u64, Decimal)> = None;
-
-        // This loop can run at least one and at most 64 iterations.
-        while left <= right {
-            // [Spec] assume loop guard: left <= right
-            // [Spec] assume invariant (I): 0 <= left <= right+1, 0 <= right <= u64::MAX
-            // [Spec] assume invariant (II): let((x0,_))=prev_coords && left < right+1 ==> x0 != ((left + right) / 2)
-
-            x = ((left + right) / 2) as u64;
-            // [Spec] assert(*) left <= x <= right
-
-            y = match self.apply(x) {
-                Ok(y) => y,
-                Err(e) => {
-                    return (trace, Err(e));
-                }
-            };
-
-            trace.push(BinSearchIter { left, x, right, y });
-
-            // Error out if the function is not monotonic between x0 and x.
-            if let Some((x0, y0)) = prev_coords {
-                // The following assertion cannot fail due to invariant (II) in conjunction with
-                // the loop guard.
-                assert!(
-                    x != x0,
-                    "Invariant violated in InvertibleFunction.invert({})",
-                    target_y
-                );
-                if (x > x0 && y < y0) || (x < x0 && y > y0) {
-                    return (
-                        trace,
-                        Err(format!(
-                            "Cannot invert value {} of a function that is not monotonically increasing \
-                            between {:?} and {:?}.",
-                            target_y,
-                            std::cmp::min((x0, y0), (x, y)),
-                            std::cmp::max((x0, y0), (x, y)),
-                        )),
-                    );
+        // Search to find the highest `lower` where `f(lower) < target_y`,
+        // and the lowest `higher` where `f(higher) >= target_y`.
+        // These form the upper and lower bound of the "true" inverse.
+        let search_result = binary_search::search_with_fallible_predicate(
+            |x| Ok::<_, String>(self.apply(*x)? >= target_y),
+            left,
+            right,
+        )?;
+        let error = |x| Ok::<_, String>((self.apply(x)? - target_y).abs());
+        match search_result {
+            // binary_search::search will return the two values inside the range that inclusively "enclose" the exact inverse, if present. Let's return whichever was closer
+            (Some(lower), (Some(upper))) => {
+                if error(lower)? < error(upper)? {
+                    Ok(lower)
+                } else {
+                    Ok(upper)
                 }
             }
-            prev_coords = Some((x, y));
-
-            match y.cmp(&target_y) {
-                Ordering::Equal => {
-                    return (trace, Ok(x));
-                }
-                Ordering::Less => {
-                    // y is too small <==> x is too small.
-                    left = (x as u128) + 1;
-
-                    // [Spec] assert invariant (I): 0 <= left <= right+1, 0 <= right <= u64::MAX
-                    // [Spec] -- `left==x+1`; `right` did not change.
-                    // [Spec] assert invariant (I): 0 <= x+1 <= right+1
-                    // [Spec] -- given `0 <= x` from (*), we know that `0 <= x+1`.
-                    // [Spec] -- `x+1 <= right+1`  <==>  `x <= right`.
-                    // [Spec] -- `x <= right` follows from (*). QED (I)
-                    // ---------------------------------------------------------------------------------
-                    // [Spec] assert invariant (II): let((x0,_))=prev_coords && left < right+1 ==> x0 != ((left + right) / 2)
-                    // [Spec] -- `prev_coords==(x, y)`; `left==x+1`; `right` did not change.
-                    // [Spec] -- Assume left-hand side of `==>`: `let((x,_))=prev_coords && x < right`.
-                    // [Spec] -- To prove: right-hand side of `==>`: `x != (x+1 + right) / 2`.
-                    // [Spec] assert invariant (II): x != (x+1 + right) / 2
-                    // [Spec] assert invariant (II): 2*x != (x+1 + right) + d
-                    // [Spec] -- for some `d`: `0.0 <= d < 1.0`
-                    // [Spec] assert invariant (II): x != right + (d + 1)
-                    // [Spec] -- given `x < right` from left-hand side, we know that `x < right + 1 + d`. QED (II)
-                }
-                Ordering::Greater if x == 0 => {
-                    // This currently cannot happen for a subtle reason (unless `target_y` is an
-                    // invalid value). `x == 0` implies that either (1) `x==left==right==0`,
-                    // or (2) `x==left==0` and `right==1`.
-                    //
-                    // Option (1) would mean that the measured value `y` is `f(x)`, which by
-                    // assumption that the function cannot decrease, implies that `y` is the global
-                    // minimum of `f`; thus, it cannot be that `y > target_y`, unless the caller
-                    // is trying to invert a value that cannot be inverted.
-                    //
-                    // Option (2) would mean that the search has always been taking the `Ordering::Less`
-                    // branch; otherwise, `left` would not still be at `0`. However, by moving `right`
-                    // from its original value `u64::MAX` towards zero, one cannot reach `right==1`.
-                    //
-                    // This strategy can be described as "error-out if invalid inputs are detected;
-                    // otherwise, round to the nearest". For example, for a function `f` s.t.
-                    // `f(0) = 1.0000001` and `target_t = 1.0`, the result is an error (the input
-                    // is deemed invalid as there does not exist an inverse in `1.0`). However, for
-                    // a function `f` s.t. `f(100) = 0.0`, `f(101) = 1.0000001`, and `target_t = 1.0`,
-                    // the result is `Ok(101)`, as we round to the nearest.
-                    return (
-                        trace,
-                        Err(format!("Cannot invert small value {}.", target_y)),
-                    );
-                }
-                Ordering::Greater => {
-                    // `x == 0` is covered by the special case above.
-                    // [Spec] assert x > 0
-
-                    // y is too large <==> x is too large.
-
-                    // [Spec] assert(**) 0 < x
-                    right = (x as u128) - 1;
-
-                    // [Spec] assert invariant (I): 0 <= left <= right+1, 0 <= right <= u64::MAX
-                    // [Spec] -- `left` did not change; `right==x-1`.
-                    // [Spec] assert: 0 <= left <= x-1+1, 0 <= x-1 <= u64::MAX
-                    // [Spec] assert: 0 <= left <= x,     0 <= x-1 <= u64::MAX
-                    // [Spec] -- `left <= x` follows from (*).
-                    // [Spec] -- given `0 < x` from (**), we know that `0 <= x-1`. QED (I)
-                    // ---------------------------------------------------------------------------------
-                    // [Spec] assert invariant (II): let((x0,_))=prev_coords && left < right+1 ==> x0 != ((left + right) / 2)
-                    // [Spec] -- `prev_coords==(x, y)`; `left` did not change; `right==x-1`.
-                    // [Spec] -- Assume left-hand side if `==>`: `let((x,_))=prev_coords && left < x`.
-                    // [Spec] -- To prove: right-hand side of `==>`: `x != (left + x-1) / 2`.
-                    // [Spec] assert: x != (left + x-1) / 2
-                    // [Spec] assert: 2*x != (left + x-1) + d
-                    // [Spec] -- for some `d`: `0.0 <= d < 1.0`
-                    // [Spec] assert: x + (1-d) != left
-                    // [Spec] -- `0.0 < 1-d <= 1.0`.
-                    // [Spec] given `left < x` from assumed left-hand side, we know that `x + (1-d) != left`. QED (II)
+            // Otherwise, it'll return the beginning or end of the range.
+            // This case will be exercised if u64::MAX is less than the true
+            // inverse
+            (Some(lower), None) => {
+                if error(lower)?.is_zero() {
+                    Ok(lower)
+                } else {
+                    Err(format!(
+                        "inverse of function appears to be greater than {lower}"
+                    ))
                 }
             }
-        }
-        // If the search did not find the exact inverse value of `target_y`, we return the best of
-        // the last two values.
-        if let Some((x0, y0)) = prev_coords {
-            if (target_y - y).abs() < (target_y - y0).abs() {
-                (trace, Ok(x))
-            } else {
-                // Pretend that we knew the last iteration of the loop has been redundant.
-                trace.pop();
-                (trace, Ok(x0))
+            // This case will be exercised if 0 is equal to or greater than the
+            // true inverse
+            (None, Some(upper)) => {
+                if error(upper)?.is_zero() {
+                    Ok(upper)
+                } else {
+                    Err(format!(
+                        "inverse of function appears to be lower than {upper}"
+                    ))
+                }
             }
-        } else {
-            unreachable!("Found a bug in InvertibleFunction.invert({:?})", target_y);
+            (None, None) => Err("invertible function must be non-decreasing".to_string()),
         }
     }
 
@@ -1339,19 +1228,16 @@ mod polynomial_matching_function_tests {
                 assert_eq!(y_icp, dec!(260));
                 continue;
             }
-            let (trace, x1_icp_e8s) = f.invert_with_tracing(y_icp);
+            let x1_icp_e8s = f.invert(y_icp);
             let x1_icp_e8s = assert_matches!(
-                x1_icp_e8s, Ok(x1_icp_e8s) => x1_icp_e8s,
-                "binary search trace: {:?}",
-                trace
+                x1_icp_e8s, Ok(x1_icp_e8s) => x1_icp_e8s
             );
             assert!(
                 x1_icp_e8s.abs_diff(x_icp_e8s) <= 1,
                 "Inverted value {} is further away from the expected value {} than the error \
-                tolerance 1_u64. Binary search trace: {:?}",
+                tolerance 1_u64",
                 x1_icp_e8s,
                 x_icp_e8s,
-                trace,
             );
         }
     }
@@ -1727,17 +1613,8 @@ mod matched_participation_function_tests {
             );
             return;
         };
-        let (trace, observed) = match function.invert_with_tracing(target_y) {
-            (_, Err(err)) => {
-                panic!("Expected inverse value, got error: {}", err);
-            }
-            (trace, Ok(observed)) => (trace, observed),
-        };
-        println!(
-            "{}, target_y = {target_y} -- trace(len={}): {trace:?}",
-            std::any::type_name::<F>(),
-            trace.len(),
-        );
+        let observed = function.invert(target_y).unwrap();
+        println!("{}, target_y = {target_y}", std::any::type_name::<F>(),);
 
         // Sometimes exact equality cannot be reached with our search strategy. We tolerate errors
         // up to 1 E8.
@@ -1756,8 +1633,6 @@ mod matched_participation_function_tests {
             run_inverse_function_test(&f, u64_to_dec(i));
         }
     }
-
-    // TODO: Add tests for failing cases.
 
     #[test]
     fn test_inverse_corner_cases_with_slow_linear_function() {
@@ -1819,6 +1694,56 @@ mod matched_participation_function_tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_exactly_max() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(0),
+        };
+        let target_y = u64_to_dec(u64::MAX);
+        let observed = function.invert(target_y).unwrap();
+        assert_eq!(observed, u64::MAX);
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_above_max() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(-1),
+        };
+        let target_y = u64_to_dec(u64::MAX);
+        let error = function.invert(target_y).unwrap_err();
+        assert_eq!(
+            error,
+            format!(
+                "inverse of function appears to be greater than {}",
+                u64::MAX
+            )
+        );
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_exactly_zero() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(0),
+        };
+        let target_y = dec!(0);
+        let observed = function.invert(target_y).unwrap();
+        assert_eq!(observed, 0);
+    }
+
+    #[test]
+    fn test_inverse_corner_cases_with_result_below_zero() {
+        let function = LinearFunction {
+            slope: dec!(1),
+            intercept: dec!(1),
+        };
+        let target_y = dec!(0);
+        let error = function.invert(target_y).unwrap_err();
+        assert_eq!(error, "inverse of function appears to be lower than 0");
     }
 }
 
