@@ -916,7 +916,7 @@ where
             // Set Root as controller of Governance.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
@@ -929,7 +929,7 @@ where
             // Set root as controller of Ledger.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
@@ -937,7 +937,7 @@ where
             // Set root as controller of Index.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
@@ -945,7 +945,7 @@ where
             // Set Governance as controller of Root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     vec![this_canister_id, canisters.governance.unwrap()],
                 )
                 .await
@@ -959,7 +959,7 @@ where
             // Set NNS-Root as controller of Swap
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
                     vec![this_canister_id, ROOT_CANISTER_ID.get()],
                 )
                 .await
@@ -983,7 +983,7 @@ where
             // Removing self, leaving root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
@@ -996,7 +996,7 @@ where
             // Removing self, leaving root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
@@ -1004,7 +1004,7 @@ where
             // Removing self, leaving governance.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     vec![canisters.governance.unwrap()],
                 )
                 .await
@@ -1012,7 +1012,7 @@ where
             // Removing self, leaving NNS-Root
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
                     vec![ROOT_CANISTER_ID.get()],
                 )
                 .await
@@ -1020,7 +1020,7 @@ where
             // Removing self, leaving root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
@@ -1041,27 +1041,27 @@ where
             vec!["Root", "Governance", "Ledger", "Index", "Swap"],
             futures::future::join_all(vec![
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     latest_wasms.root,
                     Encode!(&init_payloads.root).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     latest_wasms.governance,
                     Encode!(&init_payloads.governance).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     latest_wasms.ledger,
                     Encode!(&init_payloads.ledger).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     latest_wasms.index,
                     Encode!(&init_payloads.index).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
                     latest_wasms.swap,
                     Encode!(&init_payloads.swap).unwrap(),
                 ),
@@ -1475,11 +1475,7 @@ where
                 target_canister,
             ))?;
 
-        let target_canister_id = CanisterId::new(target_principal_id)
-            .map_err(|_|
-            // In practice, validation ensures that this is unreachable.
-            format!("Could not get the controllers of {:?} as it is not a CanisterId", target_principal_id)
-        )?;
+        let target_canister_id = CanisterId::unchecked_from_principal(target_principal_id);
 
         let request = CanisterIdRecord {
             canister_id: target_canister_id,
@@ -4272,7 +4268,7 @@ mod test {
                 .into_iter()
                 .map(|principal_id| {
                     SpyNnsRootCanisterClientCall::CanisterStatus(CanisterIdRecord {
-                        canister_id: CanisterId::new(principal_id).unwrap(),
+                        canister_id: CanisterId::unchecked_from_principal(principal_id),
                     })
                 })
                 .collect();

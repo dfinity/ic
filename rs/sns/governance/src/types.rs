@@ -2593,9 +2593,9 @@ pub(crate) mod tests {
         };
 
         static ref DISALLOWED_TARGET_CANISTER_IDS: HashSet<CanisterId> = hashset! {
-            CanisterId::new(*ROOT_CANISTER_ID).unwrap(),
-            CanisterId::new(*GOVERNANCE_CANISTER_ID).unwrap(),
-            CanisterId::new(*LEDGER_CANISTER_ID).unwrap(),
+            CanisterId::unchecked_from_principal(*ROOT_CANISTER_ID),
+            CanisterId::unchecked_from_principal(*GOVERNANCE_CANISTER_ID),
+            CanisterId::unchecked_from_principal(*LEDGER_CANISTER_ID),
         };
     }
 

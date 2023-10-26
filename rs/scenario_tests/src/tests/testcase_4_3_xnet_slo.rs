@@ -422,7 +422,7 @@ fn subnets_to_wallet_canisters(
     let wallet_canister_count = wallet_canisters.len();
     let subnet_wallet_canisters = wallet_canisters
         .into_iter()
-        .map(|s| CanisterId::new(PrincipalId::from_str(&s).unwrap()).unwrap())
+        .map(|s| CanisterId::unchecked_from_principal(PrincipalId::from_str(&s).unwrap()))
         .map(|c| (ic.route(c.get()).unwrap(), c))
         .collect::<BTreeMap<_, _>>();
     assert_eq!(wallet_canister_count, subnet_wallet_canisters.len());
@@ -477,7 +477,7 @@ async fn install(
             .await?;
 
         // Install the Wasm.
-        let canister_id = CanisterId::new(res?.canister_id).map_err(|e| e.to_string())?;
+        let canister_id = CanisterId::unchecked_from_principal(res?.canister_id);
         let mut canister = Canister::new(api, canister_id);
         wasm.install_onto_canister(&mut canister, CanisterInstallMode::Install, None, None)
             .await?;

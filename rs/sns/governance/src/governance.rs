@@ -366,15 +366,17 @@ impl GovernanceProto {
     }
 
     pub fn root_canister_id_or_panic(&self) -> CanisterId {
-        CanisterId::new(self.root_canister_id.expect("No root_canister_id.")).unwrap()
+        CanisterId::unchecked_from_principal(self.root_canister_id.expect("No root_canister_id."))
     }
 
     pub fn ledger_canister_id_or_panic(&self) -> CanisterId {
-        CanisterId::new(self.ledger_canister_id.expect("No ledger_canister_id.")).unwrap()
+        CanisterId::unchecked_from_principal(
+            self.ledger_canister_id.expect("No ledger_canister_id."),
+        )
     }
 
     pub fn swap_canister_id_or_panic(&self) -> CanisterId {
-        CanisterId::new(self.swap_canister_id.expect("No swap_canister_id.")).unwrap()
+        CanisterId::unchecked_from_principal(self.swap_canister_id.expect("No swap_canister_id."))
     }
 
     /// Returns self.mode, but as an enum, not i32.
@@ -2441,13 +2443,7 @@ impl Governance {
         let dapp_canisters: Vec<CanisterId> = sns_canisters
             .dapps
             .iter()
-            .map(|x| {
-                CanisterId::new(*x).unwrap_or_else(|_| {
-                    // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
-                    // check does nothing.
-                    panic!("Could not decode principalId into CanisterId: {}", x)
-                })
-            })
+            .map(|x| CanisterId::unchecked_from_principal(*x))
             .collect();
 
         let target_canister_id = get_canister_id(&upgrade.canister_id)?;

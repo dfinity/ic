@@ -34,17 +34,10 @@ pub fn validate_principal(p: &str) -> Result<(), String> {
 }
 
 pub fn validate_canister_id(p: &str) -> Result<(), String> {
-    let pp = PrincipalId::from_str(p).map_err(|x| {
+    let _pp = PrincipalId::from_str(p).map_err(|x| {
         format!(
             "Couldn't validate CanisterId. String \"{}\" could not be converted to PrincipalId: {}",
             p, x
-        )
-    })?;
-    let _cid = CanisterId::new(pp).map_err(|x| {
-        format!(
-            "Couldn't validate CanisterId. PrincipalId \"{}\" could not be converted to CanisterId: {}",
-            pp,
-            x
         )
     })?;
     Ok(())
@@ -96,8 +89,7 @@ impl ErrorRefundIcpResponse {
 
 fn principal_string_to_canister_id(s: &str) -> Result<CanisterId, String> {
     let principal_id = PrincipalId::from_str(s).map_err(|err| err.to_string())?;
-    let canister_id = CanisterId::new(principal_id).map_err(|err| err.to_string())?;
-    Ok(canister_id)
+    Ok(CanisterId::unchecked_from_principal(principal_id))
 }
 
 /// Represents outcomes of consistency checking two data sources.

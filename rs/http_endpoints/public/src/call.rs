@@ -179,16 +179,7 @@ impl Service<Request<Bytes>> for CallService {
             }
         };
 
-        let effective_canister_id = match CanisterId::new(effective_principal_id) {
-            Ok(canister_id) => canister_id,
-            Err(_) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Invalid canister id: {}", effective_principal_id),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
+        let effective_canister_id = CanisterId::unchecked_from_principal(effective_principal_id);
 
         // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
         // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`

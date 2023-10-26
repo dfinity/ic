@@ -265,12 +265,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
 
     fn try_from(input: (CanisterChangeOrigin, InstallCodeArgsV2)) -> Result<Self, Self::Error> {
         let (origin, args) = input;
-        let canister_id = CanisterId::new(args.canister_id).map_err(|err| {
-            InstallCodeContextError::InvalidCanisterId(format!(
-                "Converting canister id {} failed with {}",
-                args.canister_id, err
-            ))
-        })?;
+        let canister_id = CanisterId::unchecked_from_principal(args.canister_id);
         let compute_allocation = match args.compute_allocation {
             Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
                 || {
@@ -1247,7 +1242,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         specified_id: PrincipalId,
     ) -> Result<CanisterId, CanisterManagerError> {
-        let new_canister_id = CanisterId::new(specified_id).unwrap();
+        let new_canister_id = CanisterId::unchecked_from_principal(specified_id);
 
         if state.canister_states.get(&new_canister_id).is_some() {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));

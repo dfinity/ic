@@ -332,7 +332,7 @@ async fn get_tip(ledger: &Canister<'_>) -> (Certification, BlockIndex) {
 async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Option<&Blob>) {
     let (_acc1, kp, _pk, pid) = make_user_ed25519(1);
 
-    let some_can_id = CanisterId::new(pid).unwrap();
+    let some_can_id = CanisterId::unchecked_from_principal(pid);
     let rosetta_api_bin_path = rosetta_api_bin_path(env);
     let ros = RosettaApiHandle::start(
         env.logger(),

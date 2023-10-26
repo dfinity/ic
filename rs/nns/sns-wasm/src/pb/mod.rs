@@ -133,24 +133,24 @@ impl Display for SnsVersion {
 impl SnsCanisterIds {
     /// Get Root CanisterId
     pub fn root(&self) -> CanisterId {
-        CanisterId::new(self.root.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.root.unwrap())
     }
     /// Get Governance CanisterId
     pub fn governance(&self) -> CanisterId {
-        CanisterId::new(self.governance.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.governance.unwrap())
     }
     /// Get Ledger CanisterId
     pub fn ledger(&self) -> CanisterId {
-        CanisterId::new(self.ledger.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.ledger.unwrap())
     }
     /// Get Swap CanisterId
     pub fn swap(&self) -> CanisterId {
-        CanisterId::new(self.swap.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.swap.unwrap())
     }
 
     /// Get Index CanisterId
     pub fn index(&self) -> CanisterId {
-        CanisterId::new(self.index.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.index.unwrap())
     }
 }
 
@@ -312,7 +312,8 @@ impl SnsCanisterIds {
         ]
         .into_iter()
         .flat_map(|(label, principal_id)| {
-            principal_id.map(|principal_id| (label, CanisterId::new(principal_id).unwrap()))
+            principal_id
+                .map(|principal_id| (label, CanisterId::unchecked_from_principal(principal_id)))
         })
         .collect()
     }

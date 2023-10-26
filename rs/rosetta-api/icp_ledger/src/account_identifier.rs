@@ -266,7 +266,7 @@ impl TryFrom<&Subaccount> for CanisterId {
     type Error = CanisterIdError;
 
     fn try_from(subaccount: &Subaccount) -> Result<Self, Self::Error> {
-        CanisterId::new(subaccount.try_into()?)
+        Ok(CanisterId::unchecked_from_principal(subaccount.try_into()?))
     }
 }
 

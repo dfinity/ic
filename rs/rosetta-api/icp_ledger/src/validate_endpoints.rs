@@ -284,9 +284,9 @@ impl ToProto for BlockRes {
             Some(protobuf::block_response::BlockContent::Block(protobuf::EncodedBlock {
                 block,
             })) => Ok(BlockRes(Some(Ok(EncodedBlock::from(block))))),
-            Some(protobuf::block_response::BlockContent::CanisterId(canister_id)) => {
-                Ok(BlockRes(Some(Err(CanisterId::new(canister_id).unwrap()))))
-            }
+            Some(protobuf::block_response::BlockContent::CanisterId(canister_id)) => Ok(BlockRes(
+                Some(Err(CanisterId::unchecked_from_principal(canister_id))),
+            )),
             None => Ok(BlockRes(None)),
         }
     }

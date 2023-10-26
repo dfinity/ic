@@ -520,7 +520,9 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the local subnet, should be in the local subnet queue.
     fixture
-        .push_input(request_from(CanisterId::new(SUBNET_ID.get()).unwrap()))
+        .push_input(request_from(CanisterId::unchecked_from_principal(
+            SUBNET_ID.get(),
+        )))
         .unwrap();
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }

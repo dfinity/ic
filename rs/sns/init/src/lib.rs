@@ -632,7 +632,7 @@ impl SnsInitPayload {
         &self,
         sns_canister_ids: &SnsCanisterIds,
     ) -> Result<LedgerArgument, String> {
-        let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
+        let root_canister_id = CanisterId::unchecked_from_principal(sns_canister_ids.root);
         let token_symbol = self
             .token_symbol
             .as_ref()
@@ -684,7 +684,7 @@ impl SnsInitPayload {
     /// Construct the params used to initialize a SNS Index canister.
     fn index_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> IndexInitArgs {
         IndexInitArgs {
-            ledger_id: CanisterId::new(sns_canister_ids.ledger).unwrap(),
+            ledger_id: CanisterId::unchecked_from_principal(sns_canister_ids.ledger),
         }
     }
 

@@ -236,8 +236,7 @@ fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
 }
 
 fn get_archive_transaction(env: &StateMachine, archive: Principal, block_index: u64) -> Option<Tx> {
-    let canister_id =
-        CanisterId::new(archive.into()).expect("failed to convert Principal to CanisterId");
+    let canister_id = CanisterId::unchecked_from_principal(archive.into());
     Decode!(
         &env.query(
             canister_id,
@@ -258,8 +257,7 @@ fn get_transactions_as<Response: CandidType + for<'a> candid::Deserialize<'a>>(
     length: usize,
     method_name: String,
 ) -> Response {
-    let canister_id =
-        CanisterId::new(canister.into()).expect("failed to convert Principal to CanisterId");
+    let canister_id = CanisterId::unchecked_from_principal(canister.into());
     Decode!(
         &env.query(
             canister_id,
@@ -1253,8 +1251,7 @@ pub fn test_archiving<T>(
     assert_eq!(0, missing_blocks_reply.archived_transactions.len());
 
     // Upgrade the archive and check that the data is still available.
-    let archive_canister_id = CanisterId::new(archive_principal.into())
-        .expect("failed to convert Principal to CanisterId");
+    let archive_canister_id = CanisterId::unchecked_from_principal(archive_principal.into());
 
     env.upgrade_canister(archive_canister_id, archive_wasm, vec![])
         .expect("failed to upgrade the archive canister");

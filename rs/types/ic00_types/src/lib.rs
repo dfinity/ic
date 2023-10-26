@@ -115,8 +115,7 @@ pub struct CanisterIdRecord {
 
 impl CanisterIdRecord {
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
 
@@ -390,8 +389,7 @@ impl CanisterInfoRequest {
     }
 
     pub fn canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn num_requested_changes(&self) -> Option<u64> {
@@ -628,8 +626,7 @@ impl UninstallCodeArgs {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -1221,8 +1218,7 @@ impl InstallCodeArgs {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -1304,8 +1300,7 @@ impl InstallCodeArgsV2 {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -1352,8 +1347,7 @@ impl UpdateSettingsArgs {
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
-        // Safe as this was converted from CanisterId when Self was constructed.
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -2188,7 +2182,7 @@ impl Payload<'_> for UploadChunkArgs {}
 
 impl UploadChunkArgs {
     pub fn get_canister_id(&self) -> CanisterId {
-        CanisterId::new(self.canister_id).unwrap()
+        CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
 
@@ -2274,10 +2268,11 @@ impl InstallChunkedCodeArgs {
     }
 
     pub fn target_canister_id(&self) -> CanisterId {
-        CanisterId::new(self.target_canister).unwrap()
+        CanisterId::unchecked_from_principal(self.target_canister)
     }
 
     pub fn store_canister_id(&self) -> Option<CanisterId> {
-        self.store_canister.map(|p| CanisterId::new(p).unwrap())
+        self.store_canister
+            .map(|p| CanisterId::unchecked_from_principal(p))
     }
 }

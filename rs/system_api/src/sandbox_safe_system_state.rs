@@ -335,7 +335,7 @@ impl SystemStateChanges {
                             msg.method_payload.as_slice(),
                             own_subnet_id,
                         )
-                        .map(|id| CanisterId::new(id).unwrap())
+                        .map(CanisterId::unchecked_from_principal)
                         {
                             Ok(destination_subnet) => {
                                 msg.receiver = destination_subnet;
@@ -615,7 +615,7 @@ impl SandboxSafeSystemState {
         let mut ic00_aliases: BTreeSet<CanisterId> = network_topology
             .subnets
             .keys()
-            .map(|id| CanisterId::new(id.get()).unwrap())
+            .map(|id| CanisterId::unchecked_from_principal(id.get()))
             .collect();
         ic00_aliases.insert(CanisterId::ic_00());
         let ic00_available_request_slots = ic00_aliases

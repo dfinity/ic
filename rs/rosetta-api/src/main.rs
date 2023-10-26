@@ -98,12 +98,16 @@ async fn main() -> std::io::Result<()> {
         };
 
         let canister_id = match opt.ic_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
         let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
         };
 
@@ -129,12 +133,16 @@ async fn main() -> std::io::Result<()> {
         };
 
         let canister_id = match opt.ic_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
         let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
         };
 
