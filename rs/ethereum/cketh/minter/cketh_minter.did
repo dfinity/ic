@@ -143,6 +143,9 @@ type WithdrawalError = variant {
     InsufficientFunds : record { balance : nat };
     // The allowance given to the minter is too low.
     InsufficientAllowance : record { allowance : nat };
+   // Recipient's address is blocked.
+   // No withdrawal can be made to that address.
+    RecipientAddressBlocked : record { address : text };
     // The minter is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;

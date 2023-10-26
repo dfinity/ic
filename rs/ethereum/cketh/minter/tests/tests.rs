@@ -257,13 +257,21 @@ fn should_block_blocked_addresses() {
     let message_id = cketh.call_minter_withdraw(
         caller,
         Nat::from(EXPECTED_BALANCE),
-        "01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string(),
+        "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string(),
     );
-
-    cketh.env.tick();
-
-    // Withdrawing to a blocked address should fail.
-    assert!(cketh.env.await_ingress(message_id, MAX_TICKS).is_err());
+    let rest = Decode!(&assert_reply(
+        cketh
+            .env
+            .await_ingress(message_id, MAX_TICKS)
+            .expect("failed to resolve message with id: {message_id}"),
+    ), Result<RetrieveEthRequest, WithdrawalError>)
+    .unwrap();
+    assert_eq!(
+        rest,
+        Err(WithdrawalError::RecipientAddressBlocked {
+            address: "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string()
+        })
+    );
 }
 
 #[test]
