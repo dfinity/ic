@@ -222,7 +222,7 @@ pub fn setup_consensus_and_p2p(
                 metrics_registry.clone(),
                 Box::new(client.clone()) as Box<_>,
                 move |req| {
-                    if let ArtifactProcessorEvent::Advert { advert, .. } = req {
+                    if let ArtifactProcessorEvent::Advert(advert) = req {
                         let _ = advert_tx.send(advert.into());
                     }
                 },
@@ -414,7 +414,7 @@ fn start_consensus(
         // Create the consensus client.
         let (client, jh) = create_consensus_handlers(
             move |req| {
-                if let ArtifactProcessorEvent::Advert { advert, .. } = req {
+                if let ArtifactProcessorEvent::Advert(advert) = req {
                     let _ = advert_tx.send(advert.into());
                 }
             },
@@ -454,7 +454,7 @@ fn start_consensus(
         let ingress_prioritizer = IngressPrioritizer::new(time_source.clone());
         let (client, jh) = create_ingress_handlers(
             move |req| {
-                if let ArtifactProcessorEvent::Advert { advert, .. } = req {
+                if let ArtifactProcessorEvent::Advert(advert) = req {
                     let _ = advert_tx.send(advert.into());
                 }
             },
@@ -474,7 +474,7 @@ fn start_consensus(
         // Create the certification client.
         let (client, jh) = create_certification_handlers(
             move |req| {
-                if let ArtifactProcessorEvent::Advert { advert, .. } = req {
+                if let ArtifactProcessorEvent::Advert(advert) = req {
                     let _ = advert_tx.send(advert.into());
                 }
             },
@@ -500,7 +500,7 @@ fn start_consensus(
         // Create the DKG client.
         let (client, jh) = create_dkg_handlers(
             move |req| {
-                if let ArtifactProcessorEvent::Advert { advert, .. } = req {
+                if let ArtifactProcessorEvent::Advert(advert) = req {
                     let _ = advert_tx.send(advert.into());
                 }
             },
@@ -540,7 +540,7 @@ fn start_consensus(
         let advert_tx = advert_tx.clone();
         let (client, jh) = create_ecdsa_handlers(
             move |req| {
-                if let ArtifactProcessorEvent::Advert { advert, .. } = req {
+                if let ArtifactProcessorEvent::Advert(advert) = req {
                     let _ = advert_tx.send(advert.into());
                 }
             },
@@ -572,7 +572,7 @@ fn start_consensus(
         let advert_tx = advert_tx.clone();
         let (client, jh) = create_https_outcalls_handlers(
             move |req| {
-                if let ArtifactProcessorEvent::Advert { advert, .. } = req {
+                if let ArtifactProcessorEvent::Advert(advert) = req {
                     let _ = advert_tx.send(advert.into());
                 }
             },
