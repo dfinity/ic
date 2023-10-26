@@ -1,4 +1,4 @@
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
@@ -9,6 +9,7 @@ use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::HashOf;
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -1671,11 +1672,12 @@ where
     T: CandidType,
 {
     fn value_as_u64(value: icrc_ledger_types::icrc::generic_value::Value) -> u64 {
+        use icrc_ledger_types::icrc::generic_value::Value;
         match value {
-            icrc_ledger_types::icrc::generic_value::Value::Int(n) => {
-                n.0.to_u64().expect("Block index must be a u64")
-            }
-            value => panic!("Expected Value::Int but found {:?}", value),
+            Value::Nat64(n) => n,
+            Value::Nat(n) => n.0.to_u64().expect("block index should fit into u64"),
+            Value::Int(int) => int.0.to_u64().expect("block index should fit into u64"),
+            value => panic!("Expected a numeric value but found {:?}", value),
         }
     }
 
@@ -1898,6 +1900,39 @@ where
     }
 }
 
+/// Checks whether two values are equivalent with respect to numeric conversions.
+fn equivalent_values(lhs: &GenericValue, rhs: &GenericValue) -> bool {
+    match (lhs, rhs) {
+        (GenericValue::Nat64(x), GenericValue::Nat64(y)) => x == y,
+        (GenericValue::Nat(x), GenericValue::Nat(y)) => x == y,
+        (GenericValue::Int(x), GenericValue::Int(y)) => x == y,
+        (GenericValue::Blob(x), GenericValue::Blob(y)) => x == y,
+        (GenericValue::Text(x), GenericValue::Text(y)) => x == y,
+        (GenericValue::Array(xs), GenericValue::Array(ys)) => {
+            xs.len() == ys.len()
+                && xs
+                    .iter()
+                    .zip(ys.iter())
+                    .all(|(x, y)| equivalent_values(x, y))
+        }
+        (GenericValue::Map(xs), GenericValue::Map(ys)) => {
+            xs.len() == ys.len()
+                && xs
+                    .iter()
+                    .zip(ys.iter())
+                    .all(|((k1, x), (k2, y))| k1 == k2 && equivalent_values(x, y))
+        }
+        // Numeric conversions
+        (GenericValue::Nat64(x), GenericValue::Int(y)) => &Int::from(*x) == y,
+        (GenericValue::Int(x), GenericValue::Nat64(y)) => x == &Int::from(*y),
+        (GenericValue::Nat64(x), GenericValue::Nat(y)) => &Nat::from(*x) == y,
+        (GenericValue::Nat(x), GenericValue::Nat64(y)) => x == &Nat::from(*y),
+        (GenericValue::Nat(x), GenericValue::Int(y)) => Some(&x.0) == y.0.to_biguint().as_ref(),
+        (GenericValue::Int(x), GenericValue::Nat(y)) => x.0.to_biguint().as_ref() == Some(&y.0),
+        _ => false,
+    }
+}
+
 pub fn icrc1_test_block_transformation<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
@@ -1954,7 +1989,10 @@ pub fn icrc1_test_block_transformation<T>(
         .into_iter()
         .zip(resp_post_upgrade.blocks.into_iter())
     {
-        assert_eq!(block_pre_upgrade, block_post_upgrade);
+        assert!(
+            equivalent_values(&block_pre_upgrade, &block_post_upgrade),
+            "pre-upgrade block {block_pre_upgrade:?} is not equivalent to {block_post_upgrade:?}"
+        );
         assert_eq!(
             Block::<Tokens>::try_from(block_pre_upgrade.clone()).unwrap(),
             Block::<Tokens>::try_from(block_post_upgrade.clone()).unwrap()

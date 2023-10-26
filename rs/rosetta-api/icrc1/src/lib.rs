@@ -78,12 +78,14 @@ pub enum Operation<Tokens: TokensType> {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+// A [Transaction] but flattened meaning that [Operation]
+// fields are mixed with [Transaction] fields.
+// We have to flatten the structure as a workaround for
+// https://github.com/serde-rs/json/issues/625.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct Transaction<Tokens: TokensType> {
-    #[serde(flatten)]
-    pub operation: Operation<Tokens>,
-
+struct FlattenedTransaction<Tokens: TokensType> {
+    // [Transaction] fields.
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "ts")]
@@ -91,6 +93,147 @@ pub struct Transaction<Tokens: TokensType> {
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub memo: Option<Memo>,
+
+    // [Operation] fields.
+    pub op: String,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    from: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    to: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    spender: Option<Account>,
+
+    #[serde(rename = "amt")]
+    amount: Tokens,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fee: Option<Tokens>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected_allowance: Option<Tokens>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expires_at: Option<u64>,
+}
+
+impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
+    type Error = String;
+
+    fn try_from(value: FlattenedTransaction<Tokens>) -> Result<Self, Self::Error> {
+        let operation = match value.op.as_str() {
+            "burn" => Operation::Burn {
+                from: value
+                    .from
+                    .ok_or("`from` field required for `burn` operation")?,
+                amount: value.amount,
+                spender: value.spender,
+            },
+            "mint" => Operation::Mint {
+                to: value.to.ok_or("`to` field required for `mint` operation")?,
+                amount: value.amount,
+            },
+            "xfer" => Operation::Transfer {
+                from: value
+                    .from
+                    .ok_or("`from` field required for `xfer` operation")?,
+                spender: value.spender,
+                to: value.to.ok_or("`to` field required for `xfer` operation")?,
+                amount: value.amount,
+                fee: value.fee,
+            },
+            "approve" => Operation::Approve {
+                from: value
+                    .from
+                    .ok_or("`from` field required for `approve` operation")?,
+                spender: value
+                    .spender
+                    .ok_or("`spender` field required for `approve` operation")?,
+                amount: value.amount,
+                expected_allowance: value.expected_allowance,
+                expires_at: value.expires_at,
+                fee: value.fee,
+            },
+            unknown_op => return Err(format!("Unknown operation name {}", unknown_op)),
+        };
+        Ok(Transaction {
+            operation,
+            created_at_time: value.created_at_time,
+            memo: value.memo,
+        })
+    }
+}
+
+impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Tokens> {
+    fn from(t: Transaction<Tokens>) -> Self {
+        use Operation::*;
+
+        FlattenedTransaction {
+            created_at_time: t.created_at_time,
+            memo: t.memo,
+            op: match &t.operation {
+                Burn { .. } => "burn",
+                Mint { .. } => "mint",
+                Transfer { .. } => "xfer",
+                Approve { .. } => "approve",
+            }
+            .into(),
+            from: match &t.operation {
+                Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
+                _ => None,
+            },
+            to: match &t.operation {
+                Mint { to, .. } | Transfer { to, .. } => Some(*to),
+                _ => None,
+            },
+            spender: match &t.operation {
+                Transfer { spender, .. } => spender.to_owned(),
+                Approve { spender, .. } => Some(*spender),
+                _ => None,
+            },
+            amount: match &t.operation {
+                Burn { amount, .. }
+                | Mint { amount, .. }
+                | Transfer { amount, .. }
+                | Approve { amount, .. } => *amount,
+            },
+            fee: match &t.operation {
+                Transfer { fee, .. } | Approve { fee, .. } => fee.to_owned(),
+                _ => None,
+            },
+            expected_allowance: match &t.operation {
+                Approve {
+                    expected_allowance, ..
+                } => expected_allowance.to_owned(),
+                _ => None,
+            },
+            expires_at: match &t.operation {
+                Approve { expires_at, .. } => expires_at.to_owned(),
+                _ => None,
+            },
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(bound = "")]
+#[serde(try_from = "FlattenedTransaction<Tokens>")]
+#[serde(into = "FlattenedTransaction<Tokens>")]
+pub struct Transaction<Tokens: TokensType> {
+    pub operation: Operation<Tokens>,
+    pub created_at_time: Option<u64>,
     pub memo: Option<Memo>,
 }
 
