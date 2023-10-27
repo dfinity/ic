@@ -70,9 +70,9 @@ fn get_node_gen() -> Result<HardwareGen> {
 /// Gather CPU info and return CPU metric
 /// Sample output:
 /// """
-/// # HELP node_gen Generation of Node Hardware
-/// # TYPE node_gen gauge
-/// node_gen{gen="Gen1"} 0
+/// # HELP node_hardware_generation Generation of Node Hardware
+/// # TYPE node_hardware_generation gauge
+/// node_hardware_generation{gen="Gen1"} 0
 /// """
 pub fn get_node_gen_metric() -> PrometheusMetric {
     let gen = match get_node_gen() {
@@ -92,7 +92,7 @@ pub fn get_node_gen_metric() -> PrometheusMetric {
     };
 
     PrometheusMetric {
-        name: "node_gen".into(),
+        name: "node_hardware_generation".into(),
         help: "Generation of Node Hardware".into(),
         metric_type: MetricType::Gauge,
         labels: [LabelPair {
