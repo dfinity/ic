@@ -323,6 +323,19 @@ impl ValidationTask for VecDeque<Box<dyn ValidationTask>> {
     }
 }
 
+/// A type of validator against a data set derived from neurons (primary data) where each item is
+/// associated with one and only one neuron (while each neuron can be associated with potentially
+/// multiple items). The overall methodology is that we can check 2 things: (1) the count
+/// (cardinality) of the data set is equal to the item count, and (2) given a particular neuron, all
+/// items that should be in the data set are indeed in the data set. If we have both (1)
+/// count(primary) == count(derived) and (2) for each item in primary => the item is in secondary,
+/// then we know the 2 sets are equal. Note that checking (2) is done in multiple heartbeats, during
+/// which the 2 data sets can change. However, while updating the 2 data sets, it's much easier to
+/// make sure that the neuron and associated items being updated are indeed consistent. The primary
+/// goal of this validation is to make sure that the all items are consistent across 2 data sets
+/// (particularly the ones not updated recently), since the secondary data is stored in stable
+/// storage, and therefore past inconsistencies would be preserved indefinitely until found and
+/// fixed.
 trait CardinalityAndRangeValidator {
     const NEURON_RANGE_CHUNK_SIZE: usize;
 
