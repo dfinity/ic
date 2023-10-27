@@ -7,24 +7,28 @@ use crate::{
         get_open_ticket_response, new_sale_ticket_response, restore_dapp_controllers_response,
         set_dapp_controllers_call_result, set_mode_call_result,
         set_mode_call_result::SetModeResult,
-        settle_community_fund_participation_result,
+        settle_community_fund_participation, settle_community_fund_participation_result,
+        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
-        BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
-        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
+        BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
+        DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
         GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
         GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
         GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
-        GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
-        LinearScalingCoefficient, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
-        RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
-        SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
-        TransferableAmount,
+        GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, GovernanceError,
+        Icrc1Account, Init, Lifecycle, LinearScalingCoefficient,
+        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SaleNeuronId,
+        NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest,
+        OpenResponse, Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
+        SetDappControllersCallResult, SetDappControllersRequest, SetDappControllersResponse,
+        SetModeCallResult, SettleCommunityFundParticipation,
+        SettleCommunityFundParticipationResult, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
+        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
     },
-    types::{ScheduledVestingEvent, TransferResult},
+    types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -61,13 +65,6 @@ use std::{
     },
     str::FromStr,
     time::Duration,
-};
-
-// TODO(NNS1-1589): Get these from the canonical location.
-use crate::pb::v1::{
-    settle_community_fund_participation, GovernanceError, Icrc1Account,
-    NotifyPaymentFailureResponse, SetDappControllersRequest, SetDappControllersResponse,
-    SettleCommunityFundParticipation,
 };
 
 /// The maximum count of participants that can be returned by ListDirectParticipants
@@ -1666,11 +1663,12 @@ impl Swap {
             return finalize_swap_response;
         }
 
-        // Settle the CommunityFund's participation in the Swap (if any).
-        finalize_swap_response.set_settle_community_fund_participation_result(
-            self.settle_community_fund_participation(environment.nns_governance_mut())
-                .await,
-        );
+        // Settle the Neurons' Fund participation in the token swap.
+        self.settle_fund_participation(
+            environment.nns_governance_mut(),
+            &mut finalize_swap_response,
+        )
+        .await;
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
@@ -2496,6 +2494,28 @@ impl Swap {
         sweep_result
     }
 
+    pub async fn settle_fund_participation(
+        &mut self,
+        nns_governance_client: &mut impl NnsGovernanceClient,
+        finalize_swap_response: &mut FinalizeSwapResponse,
+    ) {
+        if let Some(init) = self.init.as_ref() {
+            if init.neurons_fund_participation.is_none() {
+                // Settle the CommunityFund's participation in the Swap (if any).
+                finalize_swap_response.set_settle_community_fund_participation_result(
+                    self.settle_community_fund_participation(nns_governance_client)
+                        .await,
+                );
+            } else {
+                // Settle the Neurons' Fund participation in the Swap (if any).
+                finalize_swap_response.set_settle_neurons_fund_participation_result(
+                    self.settle_neurons_fund_participation(nns_governance_client)
+                        .await,
+                )
+            }
+        }
+    }
+
     /// Requests the NNS Governance canister to settle the CommunityFund
     /// participation in the Sale. If the Swap is committed, ICP will be
     /// minted. If the Swap is aborted, maturity will be refunded to
@@ -2525,7 +2545,9 @@ impl Swap {
             Result::Committed(Committed {
                 sns_governance_canister_id: Some(sns_governance.get()),
                 total_direct_contribution_icp_e8s: Some(self.current_direct_participation_e8s()),
-                total_neurons_fund_contribution_icp_e8s: self.neurons_fund_participation_icp_e8s,
+                total_neurons_fund_contribution_icp_e8s: Some(
+                    self.current_neurons_fund_participation_e8s(),
+                ),
             })
         } else {
             Result::Aborted(Aborted {})
@@ -2538,6 +2560,188 @@ impl Swap {
             })
             .await
             .into()
+    }
+
+    /// Requests the NNS Governance canister to settle the Neurons' Fund
+    /// participation in the Swap. If the Swap is committed, ICP will be
+    /// minted to the Swap canister's ICP account, and the returned NfParticipants
+    /// must have SNS neurons. If the Swap is aborted, maturity will be refunded to
+    /// NNS Neurons.
+    ///
+    /// This method is part of the over-arching finalize_swap API. To be able to reason
+    /// about the interleaving of calls and to prevent reentrancy bugs, finalize has a
+    /// lock that prevents concurrent calls. As such, this method CANNOT panic as this will
+    /// leave the swap canister with a held lock and no means to release it without an
+    /// upgrade.
+    ///
+    /// Conditions for which this method will return an error:
+    ///
+    /// 1. There is missing or invalid state in the swap canister.
+    /// 2. The replica returned a platform error to the Swap canister.
+    /// 3. The NNS Gov canister returns an error to the Swap canister.
+    /// 4. The NNS Gov canister's response is corrupted.
+    /// 5. The NNS Gov canister's response is invalid.
+    pub async fn settle_neurons_fund_participation(
+        &mut self,
+        nns_governance_client: &mut impl NnsGovernanceClient,
+    ) -> SettleNeuronsFundParticipationResult {
+        use settle_neurons_fund_participation_request::{Aborted, Committed};
+
+        // Check if any work needs to be done.
+        if !self.cf_participants.is_empty() {
+            log!(
+                INFO,
+                "settle_neurons_fund_participation has already been called \
+                successfully and cf_participants has been set. Returning successfully."
+            );
+
+            return SettleNeuronsFundParticipationResult::new_ok(
+                self.current_neurons_fund_participation_e8s(),
+                self.cf_participants.len() as u64,
+            );
+        }
+
+        let init = match self.init_and_validate() {
+            Ok(init) => init,
+            Err(error_message) => {
+                return SettleNeuronsFundParticipationResult::new_error(error_message);
+            }
+        };
+        // The following methods are safe to call since we validated Init in the above block
+        let nns_proposal_id = init.nns_proposal_id();
+        let sns_governance_canister_id = init.sns_governance_or_panic();
+
+        // Build the NNS Governance request struct
+        let swap_result = if self.lifecycle() == Lifecycle::Committed {
+            settle_neurons_fund_participation_request::Result::Committed(Committed {
+                sns_governance_canister_id: Some(sns_governance_canister_id.get()),
+                total_direct_participation_icp_e8s: Some(self.current_direct_participation_e8s()),
+                total_neurons_fund_participation_icp_e8s: Some(
+                    self.current_neurons_fund_participation_e8s(),
+                ),
+            })
+        } else {
+            settle_neurons_fund_participation_request::Result::Aborted(Aborted {})
+        };
+        let request = SettleNeuronsFundParticipationRequest {
+            nns_proposal_id: Some(nns_proposal_id),
+            result: Some(swap_result),
+        };
+
+        // Issue the request to nns governance.
+        let response: Result<SettleNeuronsFundParticipationResponse, CanisterCallError> =
+            nns_governance_client
+                .settle_neurons_fund_participation(request)
+                .await;
+
+        // Make sure no interleaved call set cf_participants while this message was waiting
+        // for a response from Governance.
+        if !self.cf_participants.is_empty() {
+            return SettleNeuronsFundParticipationResult::new_error(format!(
+                "Cf_participants is not empty. Abandoning this execution of \
+                settle_neurons_fund_participation. There are currently {} cf_participants",
+                self.cf_participants.len(),
+            ));
+        }
+
+        // Extract the payload or return an error and halt finalization.
+        let neurons_fund_neuron_portions = match response {
+            Ok(settle_response) => {
+                if let Some(settle_neurons_fund_participation_response::Result::Ok(ok)) =
+                    settle_response.result
+                {
+                    ok.neurons_fund_neuron_portions
+                } else if let Some(settle_neurons_fund_participation_response::Result::Err(
+                    governance_error,
+                )) = settle_response.result
+                {
+                    return SettleNeuronsFundParticipationResult::new_error(format!(
+                        "NNS governance returned an error when calling \
+                         settle_neurons_fund_participation. Code: {}. Message: {}",
+                        governance_error.error_type, governance_error.error_message
+                    ));
+                } else {
+                    return SettleNeuronsFundParticipationResult::new_error(
+                        "NNS governance returned a SettleNeuronsFundParticipationResponse with \
+                        no result. Cannot determine if request succeeded or failed."
+                            .to_string(),
+                    );
+                }
+            }
+            Err(canister_call_error) => {
+                return SettleNeuronsFundParticipationResult::new_error(format!(
+                    "Replica returned an error when calling settle_neurons_fund_participation. \
+                     Code: {:?}. Message: {}",
+                    canister_call_error.code, canister_call_error.description
+                ));
+            }
+        };
+
+        // Process the payload.
+        let mut cf_participant_map = btreemap! {};
+        let mut defects = vec![];
+        for np in neurons_fund_neuron_portions {
+            let np = match NeuronsFundNeuron::try_from(np.clone()) {
+                Ok(np) => np,
+                Err(message) => {
+                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. Struct: {:?}, Reason: {}", np, message));
+                    continue;
+                }
+            };
+            let cf_neurons: &mut Vec<CfNeuron> = cf_participant_map
+                .entry(np.hotkey_principal)
+                .or_insert(vec![]);
+
+            let cf_neuron = match CfNeuron::try_new(np.nns_neuron_id, np.amount_icp_e8s) {
+                Ok(cfn) => cfn,
+                Err(message) => {
+                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. It cannot be converted to CfNeuron. Struct: {:?}, Reason: {}", np, message));
+                    continue;
+                }
+            };
+
+            cf_neurons.push(cf_neuron);
+        }
+        // Collect all errors into an error
+        if !defects.is_empty() {
+            return SettleNeuronsFundParticipationResult::new_error(format!(
+                "NNS Governance returned invalid NeuronsFundNeurons. Could not settle_neurons_fund_participation. Defects: {:?}", defects
+            ));
+        }
+
+        // Convert the intermediate format into its final format
+        let cf_participants: Vec<CfParticipant> = cf_participant_map
+            .into_iter()
+            .map(|(hotkey_principal, cf_neurons)| CfParticipant {
+                hotkey_principal: hotkey_principal.to_string(),
+                cf_neurons,
+            })
+            .collect();
+
+        // Persist the processed response to state
+        self.cf_participants = cf_participants;
+        let new_neurons_fund_participation_icp_e8s = Some(
+            self.cf_participants
+                .iter()
+                .map(|x| x.participant_total_icp_e8s())
+                .fold(0_u64, |sum, v| sum.saturating_add(v)),
+        );
+
+        if self.neurons_fund_participation_icp_e8s != new_neurons_fund_participation_icp_e8s {
+            log!(
+                INFO,
+                "Predicted neurons_fund_participation_icp_e8s ({:?}) did not match final \
+                neurons_fund_participation_icp_e8s ({:?}). Setting state to final.",
+                self.neurons_fund_participation_icp_e8s,
+                new_neurons_fund_participation_icp_e8s
+            );
+        }
+        self.neurons_fund_participation_icp_e8s = new_neurons_fund_participation_icp_e8s;
+
+        SettleNeuronsFundParticipationResult::new_ok(
+            self.current_neurons_fund_participation_e8s(),
+            self.cf_participants.len() as u64,
+        )
     }
 
     // PRECONDITIONS:
