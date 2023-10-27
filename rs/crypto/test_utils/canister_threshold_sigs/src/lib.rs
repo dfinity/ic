@@ -33,6 +33,7 @@ use std::sync::Arc;
 pub mod dummy_values;
 
 pub fn create_idkg_params<R: RngCore + CryptoRng>(
+    alg: AlgorithmId,
     dealer_set: &BTreeSet<NodeId>,
     receiver_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,
@@ -43,7 +44,7 @@ pub fn create_idkg_params<R: RngCore + CryptoRng>(
         dealer_set.clone(),
         receiver_set.clone(),
         RegistryVersion::from(0),
-        AlgorithmId::ThresholdEcdsaSecp256k1,
+        alg,
         operation,
     )
     .expect("Should be able to create IDKG params")
@@ -60,6 +61,7 @@ pub fn mock_masked_transcript_type() -> IDkgTranscriptType {
 }
 
 pub fn mock_transcript<R: RngCore + CryptoRng>(
+    alg: AlgorithmId,
     receivers: Option<BTreeSet<NodeId>>,
     transcript_type: IDkgTranscriptType,
     rng: &mut R,
@@ -81,7 +83,7 @@ pub fn mock_transcript<R: RngCore + CryptoRng>(
         registry_version: RegistryVersion::from(314),
         verified_dealings: BTreeMap::new(),
         transcript_type,
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id: alg,
         internal_transcript_raw: vec![],
     }
 }

@@ -148,6 +148,10 @@ mod stability_tests {
                 input: (AlgorithmId::MegaSecp256k1, bytes),
                 expected: "93549663cba48293c1d9a92de585a49581e05af84563aecd47fb7ab5fe9745c3",
             },
+            ParameterizedTest {
+                input: (AlgorithmId::ThresholdEcdsaSecp256r1, bytes),
+                expected: "001b0b2aa06c51280e5267b7c9a5c5aa1691dcec75622eaa5c30d2ed08c5f25a",
+            },
         ];
 
         for test in &tests {

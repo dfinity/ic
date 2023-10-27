@@ -1706,7 +1706,10 @@ mod tests {
         );
         payload.key_transcript.next_in_creation =
             ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
-                Box::new(dummy_initial_idkg_dealing_for_tests(&mut rng)),
+                Box::new(dummy_initial_idkg_dealing_for_tests(
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
+                )),
                 params,
             ));
         let result = update_next_key_transcript(
@@ -2621,7 +2624,10 @@ mod tests {
             };
 
             // Generate initial dealings
-            let initial_dealings = dummy_initial_idkg_dealing_for_tests(&mut rng);
+            let initial_dealings = dummy_initial_idkg_dealing_for_tests(
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                &mut rng,
+            );
             let init_tid = initial_dealings.params().transcript_id();
 
             // Step 1: initial bootstrap payload should be created successfully

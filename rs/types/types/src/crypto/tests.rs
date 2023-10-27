@@ -113,6 +113,17 @@ fn should_not_have_any_algorithm_id_that_does_not_fit_into_u8() {
     }
 }
 
+#[test]
+fn should_have_consistent_logic_for_tecdsa_algorithm_identification() {
+    let tecdsa_algos = AlgorithmId::all_threshold_ecdsa_algorithms();
+
+    for algorithm_id in AlgorithmId::iter() {
+        let is_tecdsa = algorithm_id.is_threshold_ecdsa();
+
+        assert_eq!(is_tecdsa, tecdsa_algos.contains(&algorithm_id));
+    }
+}
+
 #[cfg(test)]
 impl KeyPurpose {
     fn as_str(&self) -> &'static str {

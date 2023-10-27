@@ -1,8 +1,8 @@
 //! Implementations of ThresholdEcdsaSigner
 use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSerializationError,
-    ThresholdEcdsaSigShareInternal,
+    EccCurveType, IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal,
+    ThresholdEcdsaSerializationError, ThresholdEcdsaSigShareInternal,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -29,8 +29,12 @@ fn get_tecdsa_master_public_key_from_internal_transcript(
     idkg_transcript_internal: &IDkgTranscriptInternal,
 ) -> MasterEcdsaPublicKey {
     let pub_key = idkg_transcript_internal.constant_term();
+    let alg = match pub_key.curve_type() {
+        EccCurveType::K256 => AlgorithmId::EcdsaSecp256k1,
+        EccCurveType::P256 => AlgorithmId::EcdsaP256,
+    };
     MasterEcdsaPublicKey {
-        algorithm_id: AlgorithmId::EcdsaSecp256k1,
+        algorithm_id: alg,
         public_key: pub_key.serialize(),
     }
 }
@@ -230,8 +234,8 @@ pub enum MasterPublicKeyExtractionError {
 pub fn get_tecdsa_master_public_key(
     idkg_transcript: &IDkgTranscript,
 ) -> Result<MasterEcdsaPublicKey, MasterPublicKeyExtractionError> {
-    match idkg_transcript.algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => match idkg_transcript.transcript_type {
+    if idkg_transcript.algorithm_id.is_threshold_ecdsa() {
+        match idkg_transcript.transcript_type {
             Unmasked(_) => {
                 let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
                     .map_err(|e| {
@@ -242,10 +246,11 @@ pub fn get_tecdsa_master_public_key(
                 ))
             }
             Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
-        },
-        _ => Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
+        }
+    } else {
+        Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
             format!("{:?}", idkg_transcript.algorithm_id),
-        )),
+        ))
     }
 }
 
