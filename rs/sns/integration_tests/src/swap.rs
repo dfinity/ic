@@ -1788,6 +1788,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
                         })),
                     }
                 ),
+                settle_neurons_fund_participation_result: None,
                 error_message: None,
             }
         );

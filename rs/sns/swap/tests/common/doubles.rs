@@ -13,7 +13,8 @@ use ic_sns_swap::{
     environment::CanisterClients,
     pb::v1::{
         CanisterCallError, GovernanceError, SetDappControllersRequest, SetDappControllersResponse,
-        SettleCommunityFundParticipation,
+        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse,
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -197,11 +198,13 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
 #[derive(Debug, PartialEq)]
 pub enum NnsGovernanceClientCall {
     SettleCommunityFundParticipation(SettleCommunityFundParticipation),
+    SettleNeuronsFundParticipation(SettleNeuronsFundParticipationRequest),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum NnsGovernanceClientReply {
     SettleCommunityFundParticipation(Result<(), GovernanceError>),
+    SettleNeuronsFundParticipation(SettleNeuronsFundParticipationResponse),
     CanisterCallError(CanisterCallError),
 }
 
@@ -248,6 +251,37 @@ impl NnsGovernanceClient for SpyNnsGovernanceClient {
         {
             NnsGovernanceClientReply::SettleCommunityFundParticipation(reply) => Ok(reply),
             NnsGovernanceClientReply::CanisterCallError(err) => Err(err),
+            reply => panic!(
+                "Unexpected reply on the SpyNnsGovernanceClient queue. \
+                Expected (SettleCommunityFundParticipation|CanisterCallError). \
+                Instead have {:?}",
+                reply
+            ),
+        }
+    }
+
+    async fn settle_neurons_fund_participation(
+        &mut self,
+        request: SettleNeuronsFundParticipationRequest,
+    ) -> Result<SettleNeuronsFundParticipationResponse, CanisterCallError> {
+        self.calls
+            .push(NnsGovernanceClientCall::SettleNeuronsFundParticipation(
+                request,
+            ));
+
+        match self
+            .replies
+            .pop()
+            .expect("Expected there to be a reply in the NnsGovernanceClient queue")
+        {
+            NnsGovernanceClientReply::SettleNeuronsFundParticipation(reply) => Ok(reply),
+            NnsGovernanceClientReply::CanisterCallError(err) => Err(err),
+            reply => panic!(
+                "Unexpected reply on the SpyNnsGovernanceClient queue. \
+                Expected (SettleNeuronsFundParticipation|CanisterCallError). \
+                Instead have {:?}",
+                reply
+            ),
         }
     }
 }

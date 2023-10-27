@@ -5,12 +5,13 @@ use crate::{
     pb::v1::{
         error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
         set_mode_call_result::SetModeResult,
-        settle_community_fund_participation_result,
+        settle_community_fund_participation_result, settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
         OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
-        SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+        SettleCommunityFundParticipationResult, SettleNeuronsFundParticipationResult,
+        SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
 };
@@ -237,7 +238,7 @@ impl Init {
     /// `Option<DataConsistencyAnalysisOutcome>`, preserving the `is_none()` and
     /// `is_some()` properties of all the elements. The set is represented via
     /// a table from `SnsInitPayload` field names to set elements (the keys
-    /// facilitate testing and improve error reporting and debuggablility).
+    /// facilitate testing and improve error reporting and debuggability).
     ///
     /// If `open_request` is `Some(r)`, analyzes the consistency of the provided
     /// `OpenRequest` instance `r` w.r.t. the swap opening fields of `self`.
@@ -359,7 +360,7 @@ impl Init {
             "neurons_fund_participants".to_string() => self.neurons_fund_participants.as_ref().map(|x| {
                 open_request
                     .map(|r|
-                    // Ignore the possibility of permutted yet equivalent vector
+                    // Ignore the possibility of permuted yet equivalent vector
                     // fields. This allows not worrying about the efficiency of
                     // this function, e.g., even if the number of participants
                     // is very large.
@@ -1117,6 +1118,18 @@ impl FinalizeSwapResponse {
         self.create_sns_neuron_recipes_result = Some(create_sns_neuron_recipes_result);
     }
 
+    pub fn set_settle_neurons_fund_participation_result(
+        &mut self,
+        settle_neurons_fund_participation_result: SettleNeuronsFundParticipationResult,
+    ) {
+        if !settle_neurons_fund_participation_result.is_successful_settle() {
+            self.set_error_message(
+                "Settling the Neurons' Fund participation did not succeed. Halting swap finalization".to_string());
+        }
+        self.settle_neurons_fund_participation_result =
+            Some(settle_neurons_fund_participation_result);
+    }
+
     pub fn has_error_message(&self) -> bool {
         self.error_message.is_some()
     }
@@ -1205,6 +1218,37 @@ impl From<ClaimedSwapNeuronStatus> for ClaimedStatus {
     }
 }
 
+impl SettleNeuronsFundParticipationResult {
+    fn is_successful_settle(&self) -> bool {
+        use settle_neurons_fund_participation_result::Possibility;
+        matches!(&self.possibility, Some(Possibility::Ok(_)))
+    }
+
+    pub fn new_error(error_message: String) -> Self {
+        use settle_neurons_fund_participation_result::{Error, Possibility};
+
+        SettleNeuronsFundParticipationResult {
+            possibility: Some(Possibility::Err(Error {
+                message: Some(error_message),
+            })),
+        }
+    }
+
+    pub fn new_ok(
+        neurons_fund_participation_icp_e8s: u64,
+        neurons_fund_neurons_count: u64,
+    ) -> Self {
+        use settle_neurons_fund_participation_result::{Ok, Possibility};
+
+        SettleNeuronsFundParticipationResult {
+            possibility: Some(Possibility::Ok(Ok {
+                neurons_fund_participation_icp_e8s: Some(neurons_fund_participation_icp_e8s),
+                neurons_fund_neurons_count: Some(neurons_fund_neurons_count),
+            })),
+        }
+    }
+}
+
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
 impl From<[u8; 32]> for SaleNeuronId {
@@ -1232,6 +1276,90 @@ impl TryInto<NeuronId> for SaleNeuronId {
             Err(err) => Err(format!(
                 "Followee could not be parsed into NeuronId. Err {:?}",
                 err
+            )),
+        }
+    }
+}
+
+/// Internal definition of a NeuronsFundNeuron. This is the simplified version with
+/// all options removed.
+///
+#[derive(Clone, Debug)]
+pub(crate) struct NeuronsFundNeuron {
+    pub(crate) nns_neuron_id: u64,
+    pub(crate) amount_icp_e8s: u64,
+    pub(crate) hotkey_principal: PrincipalId,
+    #[allow(unused)]
+    pub(crate) is_capped: bool,
+}
+
+impl NeuronsFundNeuron {
+    pub fn try_new(
+        nns_neuron_id: u64,
+        amount_icp_e8s: u64,
+        hotkey_principal: String,
+        is_capped: bool,
+    ) -> Result<Self, String> {
+        let hotkey_principal = PrincipalId::from_str(&hotkey_principal)
+            .map_err(|_| format!("Invalid hotkey principal {}", hotkey_principal))?;
+        Self {
+            nns_neuron_id,
+            amount_icp_e8s,
+            hotkey_principal,
+            is_capped,
+        }
+        .validate()
+    }
+
+    fn validate(self) -> Result<Self, String> {
+        if self.nns_neuron_id == 0 {
+            return Err("nns_neuron_id must be specified".to_string());
+        }
+
+        if self.amount_icp_e8s == 0 {
+            return Err("amount_icp_e8s must be specified".to_string());
+        }
+
+        Ok(self)
+    }
+}
+
+impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron>
+    for NeuronsFundNeuron
+{
+    type Error = String;
+
+    fn try_from(
+        value: crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron,
+    ) -> Result<Self, Self::Error> {
+        let crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron {
+            nns_neuron_id,
+            amount_icp_e8s,
+            hotkey_principal,
+            is_capped,
+        } = value;
+
+        match (
+            nns_neuron_id,
+            amount_icp_e8s,
+            hotkey_principal.clone(),
+            is_capped,
+        ) {
+            (
+                Some(nns_neuron_id),
+                Some(amount_icp_e8s),
+                Some(hotkey_principal),
+                Some(is_capped),
+            ) => NeuronsFundNeuron::try_new(
+                nns_neuron_id,
+                amount_icp_e8s,
+                hotkey_principal,
+                is_capped,
+            ),
+            _ => Err(format!(
+                "Expected all fields to be set. nns_neuron_id({:?}), \
+                amount_icp_e8s({:?}), hotkey_principal({:?}), is_capped({:?})",
+                nns_neuron_id, amount_icp_e8s, hotkey_principal, is_capped
             )),
         }
     }
