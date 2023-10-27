@@ -407,6 +407,6 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
-        chip_id: vec![],
+        chip_id: None,
     }
 }

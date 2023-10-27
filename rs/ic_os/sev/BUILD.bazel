@@ -37,5 +37,8 @@ rust_test(
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
-    deps = [":sev"],
+    deps = [
+        ":sev",
+        "@crate_index//:assert_matches",
+    ],
 )

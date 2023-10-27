@@ -20,6 +20,7 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
+ic-icos-sev = { path = "../ic_os/sev"}
 ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

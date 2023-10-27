@@ -115,7 +115,7 @@ pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]
 }
 
 /// Gets the latest value for the given key and decode it, assuming it
-/// represents a serialized T.  
+/// represents a serialized T.
 ///
 /// Panics if there is no T
 pub async fn get_value_or_panic<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> T {
@@ -701,6 +701,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         http_endpoint: format!("128.0.{mutation_id}.1:4321"),
         p2p_flow_endpoints: vec![],
         prometheus_metrics_endpoint: "".to_string(),
+        chip_id: None,
     };
 
     (payload, node_public_keys)

@@ -223,7 +223,7 @@ pub fn get_ic_config() -> IcConfig {
             p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
-            chip_id: vec![],
+            chip_id: None,
         },
     );
 

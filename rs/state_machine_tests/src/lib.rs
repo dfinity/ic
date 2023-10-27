@@ -205,8 +205,8 @@ fn make_nodes_registry(
                 port: 1234,
             }),
             p2p_flow_endpoints: vec![],
-            chip_id: vec![],
             hostos_version_id: None,
+            chip_id: None,
         };
         data_provider
             .add(

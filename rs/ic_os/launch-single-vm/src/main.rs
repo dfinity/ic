@@ -128,7 +128,7 @@ fn main() {
             p2p_addr: SocketAddr::new(ipv6_addr, 4100),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: vec![],
+            chip_id: None,
         },
     )]);
 

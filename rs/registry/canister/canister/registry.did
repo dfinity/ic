@@ -22,6 +22,7 @@ type AddNodePayload = record {
   http_endpoint : text;
   idkg_dealing_encryption_pk : opt vec nat8;
   xnet_endpoint : text;
+  chip_id : opt vec nat8;
   committee_signing_pk : vec nat8;
   node_signing_pk : vec nat8;
   transport_tls_cert : vec nat8;

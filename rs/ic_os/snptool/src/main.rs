@@ -102,7 +102,7 @@ mod linux {
         guest_firmware()?
             .get_ext_report(None, None, Some(0))
             .map_err(|e| anyhow::anyhow!(format!("{:?}", e)))
-            .context("unable to fetch snp report")
+            .context("unable to fetch extended snp report")
     }
 
     fn snp_get_ext_config() -> Result<ExtConfig> {
@@ -120,5 +120,5 @@ fn main() -> anyhow::Result<()> {
 
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    panic!("sevctl works only on Linux");
+    panic!("sev-snp works only on Linux");
 }

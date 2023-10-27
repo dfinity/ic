@@ -41,8 +41,8 @@ pub struct NodeRecord {
     #[prost(bytes = "vec", tag = "15")]
     pub node_operator_id: ::prost::alloc::vec::Vec<u8>,
     /// The SEV-SNP chip_identifier for this node.
-    #[prost(bytes = "vec", tag = "16")]
-    pub chip_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "16")]
+    pub chip_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// ID of the HostOS version to run.
     #[prost(string, optional, tag = "17")]
     pub hostos_version_id: ::core::option::Option<::prost::alloc::string::String>,

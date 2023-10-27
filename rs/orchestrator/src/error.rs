@@ -54,6 +54,9 @@ pub enum OrchestratorError {
 
     /// Generic error while monitoring key changes
     ThresholdKeyMonitoringError(String),
+
+    /// SNP error while registering a SEV-SNP node
+    SnpError(String),
 }
 
 impl OrchestratorError {
@@ -67,6 +70,10 @@ impl OrchestratorError {
 
     pub(crate) fn key_monitoring_error(msg: impl ToString) -> Self {
         OrchestratorError::ThresholdKeyMonitoringError(msg.to_string())
+    }
+
+    pub(crate) fn snp_error(msg: impl ToString) -> Self {
+        OrchestratorError::SnpError(msg.to_string())
     }
 }
 
@@ -122,6 +129,7 @@ impl fmt::Display for OrchestratorError {
                 subnet_id, registry_version,
             ),
             OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
+            OrchestratorError::SnpError(msg) => write!(f, "SEV-SNP Error: {}", msg),
         }
     }
 }

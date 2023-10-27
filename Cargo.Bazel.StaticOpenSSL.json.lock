@@ -1,5 +1,5 @@
 {
-  "checksum": "c76d92d7ad673ee8aadd0c439326793f2143301066e6572adcd5f3643c2e7a44",
+  "checksum": "f5d289e5eff4cd04d46317c2ae6dbc677770d1a6719abcdf29d8b5b5d103ab75",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13955,7 +13955,7 @@
               "target": "serial_test"
             },
             {
-              "id": "sev 1.2.0",
+              "id": "sev 1.2.1",
               "target": "sev"
             },
             {
@@ -45383,13 +45383,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "sev 1.2.0": {
+    "sev 1.2.1": {
       "name": "sev",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/sev/1.2.0/download",
-          "sha256": "9c77eff933413b557ad3af20f6ddb198471d639d611b4738bcb78d32d7941892"
+          "url": "https://crates.io/api/v1/crates/sev/1.2.1/download",
+          "sha256": "7fd749a01c88a51ac718b59fe571177b31e478dfe059267977042477a0531224"
         }
       },
       "targets": [
@@ -45477,7 +45477,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sev 1.2.0",
+              "id": "sev 1.2.1",
               "target": "build_script_build"
             },
             {
@@ -45492,7 +45492,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.2.0"
+        "version": "1.2.1"
       },
       "build_script_attrs": {
         "data_glob": [

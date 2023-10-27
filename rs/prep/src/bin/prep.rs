@@ -502,7 +502,7 @@ mod test_flag_node_parser {
                 p2p_addr: "1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: vec![],
+                chip_id: None,
             },
         };
 

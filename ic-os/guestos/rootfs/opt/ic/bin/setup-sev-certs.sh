@@ -3,6 +3,9 @@
 set -e
 
 if [[ -e "/dev/sev-guest" ]]; then
+    # Set permissions for sev-guest device
+    # TODO: This should move to guest_launch tool
+    chmod 777 /dev/sev-guest
     if [[ -f "/boot/config/vcek.pem" ]]; then
         # For prod we expect that the host will generate the ask and vcek certs and pass in via the config.
         if ! cmp -s "/boot/config/ark.pem" "/opt/ic/share/ark.pem"; then
@@ -18,7 +21,7 @@ if [[ -e "/dev/sev-guest" ]]; then
         # config may be generated on a machine other than the host.
         (
             cd /run/ic-node/config
-            /opt/ic/bin/sevctl get-certs
+            /opt/ic/bin/snptool get-certs
         )
         if [[ -f "/run/ic-node/config/ask.cert" && -f "/run/ic-node/config/vcek.cert" ]]; then
             # Always use our hard coded ask.pem as the root of trust.
