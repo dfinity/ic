@@ -279,6 +279,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             // 1st layer wraps 2nd layer and so on
             ServiceBuilder::new()
                 .layer(middleware::from_fn(routes::validate_request))
+                .layer(middleware::from_fn(routes::postprocess_response))
                 .layer(
                     CompressionLayer::new()
                         .gzip(true)
@@ -298,8 +299,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .layer(middleware::from_fn_with_state(
                     lk.clone(),
                     routes::lookup_node,
-                ))
-                .layer(middleware::from_fn(routes::postprocess_response)),
+                )),
         );
 
         proxy_routes.merge(status_route).merge(health_route)

@@ -10,7 +10,7 @@ use arc_swap::ArcSwapOption;
 use candid::Principal;
 use ethnum::u256;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
-use ic_protobuf::registry::subnet::v1::SubnetType;
+use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::types::ids::node_test_id;
 
 use crate::snapshot::{CanisterRange, Node, Subnet};
@@ -62,6 +62,7 @@ pub fn node(i: u64, subnet_id: Principal) -> Node {
     Node {
         id: node_test_id(1001 + i).get().0,
         subnet_id,
+        subnet_type: SubnetType::Application,
         addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
         port: 8080,
         tls_certificate: valid_tls_certificate_and_validation_time()

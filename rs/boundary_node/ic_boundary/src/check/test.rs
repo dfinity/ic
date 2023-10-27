@@ -6,7 +6,7 @@ use std::{
 
 use arc_swap::ArcSwapOption;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
-use ic_protobuf::registry::subnet::v1::SubnetType;
+use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use mockall::{predicate::*, *};
 
@@ -50,6 +50,7 @@ pub fn generate_custom_registry_snapshot(
             let node = Node {
                 id: node_test_id(NODE_ID_OFFSET + offset + i * 100 + j).get().0,
                 subnet_id,
+                subnet_type: SubnetType::Application,
                 addr: IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
                 port: 8080,
                 tls_certificate: valid_tls_certificate_and_validation_time()

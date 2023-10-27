@@ -16,6 +16,7 @@ use axum::{
     response::{IntoResponse, Response},
     BoxError, Extension,
 };
+use bytes::Bytes;
 use candid::Principal;
 use http::{
     header::{HeaderName, HeaderValue, CONTENT_TYPE},
@@ -63,6 +64,12 @@ const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status")
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
     HeaderName::from_static("x-ic-cache-bypass-reason");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
@@ -575,11 +582,7 @@ pub async fn lookup_node(
 }
 
 // Middleware: postprocess the response
-pub async fn postprocess_response(
-    Extension(canister_id): Extension<CanisterId>,
-    request: Request<Body>,
-    next: Next<Body>,
-) -> impl IntoResponse {
+pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
     let mut response = next.run(request).await;
 
     // Set the correct content-type for all replies if it's not an error
@@ -595,19 +598,35 @@ pub async fn postprocess_response(
     if let Some(v) = cache_status {
         response.headers_mut().insert(
             HEADER_IC_CACHE,
-            HeaderValue::from_str(v.to_string().as_str()).unwrap(),
+            HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
         );
 
         if let CacheStatus::Bypass(v) = v {
             response.headers_mut().insert(
                 HEADER_IC_CACHE_BYPASS_REASON,
-                HeaderValue::from_str(v.to_string().as_str()).unwrap(),
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             );
         }
     }
 
-    // Passthru the canister id for logging
-    response.extensions_mut().insert(canister_id);
+    let node = response.extensions().get::<Node>().cloned();
+    if let Some(v) = node {
+        // Principals and subnet type are always ASCII printable, so unwrap is safe
+        response.headers_mut().insert(
+            HEADER_IC_NODE_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
+        );
+
+        response.headers_mut().insert(
+            HEADER_IC_SUBNET_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.subnet_id.to_string())).unwrap(),
+        );
+
+        response.headers_mut().insert(
+            HEADER_IC_SUBNET_TYPE,
+            HeaderValue::from_str(v.subnet_type.as_ref()).unwrap(),
+        );
+    }
 
     response
 }

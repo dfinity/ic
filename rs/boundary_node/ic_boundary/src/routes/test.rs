@@ -301,7 +301,7 @@ async fn test_status() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn test_calls() -> Result<(), Error> {
+async fn test_all_call_types() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
     let state = Arc::new(ProxyRouter {
@@ -328,6 +328,7 @@ async fn test_calls() -> Result<(), Error> {
         .layer(
             ServiceBuilder::new()
                 .layer(middleware::from_fn(validate_request))
+                .layer(middleware::from_fn(postprocess_response))
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
                 .layer(middleware::from_fn_with_state(
@@ -373,6 +374,34 @@ async fn test_calls() -> Result<(), Error> {
 
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+
+    // Check response headers
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_NODE_ID)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        node.id.to_string()
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_SUBNET_ID)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        node.subnet_id.to_string()
+    );
+
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_SUBNET_TYPE)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        node.subnet_type.as_ref()
+    );
 
     let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();

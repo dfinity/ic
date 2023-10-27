@@ -4943,6 +4943,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-registry-replicator",
  "ic-registry-routing-table",
+ "ic-registry-subnet-type",
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",

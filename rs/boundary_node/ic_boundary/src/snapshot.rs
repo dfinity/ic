@@ -2,7 +2,6 @@ use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
-use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -10,6 +9,7 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_types::RegistryVersion;
 use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
 use tracing::info;
@@ -21,6 +21,7 @@ use crate::core::Run;
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
+    pub subnet_type: SubnetType,
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
@@ -134,6 +135,9 @@ impl Runner {
                     .context("failed to get replica version")? // Result
                     .context("replica version not available")?; // Option
 
+                // If this fails then the libraries are in despair, better to die here
+                let subnet_type = SubnetType::try_from(subnet.subnet_type()).unwrap();
+
                 let nodes = node_ids
                     .into_iter()
                     .map(|node_id| {
@@ -159,6 +163,7 @@ impl Runner {
                         let node_route = Node {
                             id: node_id.as_ref().0,
                             subnet_id: subnet_id.as_ref().0,
+                            subnet_type,
                             addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
@@ -179,7 +184,7 @@ impl Runner {
 
                 let subnet_route = Subnet {
                     id: subnet_id.as_ref().0,
-                    subnet_type: subnet.subnet_type(),
+                    subnet_type,
                     ranges,
                     nodes,
                     replica_version: replica_version.to_string(),
