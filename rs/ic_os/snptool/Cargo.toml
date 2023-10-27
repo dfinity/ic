@@ -1,5 +1,5 @@
 [package]
-name = "sevctl"
+name = "snptool"
 version = "0.1.0"
 authors = ["DFINITY"]
 edition = "2021"
@@ -8,11 +8,11 @@ keywords = ["amd", "sev"]
 exclude = [ ".gitignore", ".github/*" ]
 
 [[bin]]
-name = "sevctl"
+name = "snptool"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.57"
 clap = { version = "3.1.18", features = ["derive", "cargo"] }
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
-sev = { version = "1.2.0", features = ["openssl"] }
+sev = { version = "1.2.1", features = ["openssl"] }

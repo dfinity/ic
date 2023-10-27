@@ -423,8 +423,8 @@ mod tests {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9001,
                 }),
-                chip_id: vec![],
                 hostos_version_id: None,
+                chip_id: None,
             }),
         );
 
@@ -451,8 +451,8 @@ mod tests {
                     ip_addr: "200.1.1.1".to_string(),
                     port: 9001,
                 }),
-                chip_id: vec![],
                 hostos_version_id: None,
+                chip_id: None,
             }),
         );
         // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
@@ -481,8 +481,8 @@ mod tests {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9001,
                 }),
-                chip_id: vec![],
                 hostos_version_id: None,
+                chip_id: None,
             }),
         );
         check_endpoint_invariants(&snapshot, true).unwrap();

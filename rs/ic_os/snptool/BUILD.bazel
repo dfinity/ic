@@ -13,10 +13,10 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_binary(
-    name = "sevctl",
+    name = "snptool",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_name = "sevctl",
+    crate_name = "snptool",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [

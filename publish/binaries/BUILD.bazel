@@ -3,7 +3,7 @@ load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
 LINUX_ONLY = [
-    "sevctl",
+    "snptool",
     "vsock_guest",
     "vsock_host",
     "guestos_tool",
@@ -52,7 +52,7 @@ BINARIES = {
     "orchestrator": "//rs/orchestrator",
     "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
-    "sevctl": "//rs/ic_os/sevctl:sevctl",
+    "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",

@@ -248,8 +248,8 @@ pub struct NodeConfiguration {
     pub secret_key_store: Option<NodeSecretKeyStore>,
 
     /// The SEV-SNP chip_identifier for this node.
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub chip_id: Vec<u8>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub chip_id: Option<Vec<u8>>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -395,7 +395,7 @@ mod node_configuration {
             p2p_addr: SocketAddr::from_str("1.2.3.4:1234").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: vec![],
+            chip_id: None,
         };
 
         let got = pbNodeRecord::try_from(node_configuration).unwrap();
@@ -416,8 +416,8 @@ mod node_configuration {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8080,
             }),
-            chip_id: vec![],
             hostos_version_id: None,
+            chip_id: None,
         };
 
         assert_eq!(got, want);

@@ -7517,6 +7517,7 @@ dependencies = [
 name = "ic-icos-sev"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "ic-base-types",
  "ic-icos-sev-interfaces",
@@ -13607,6 +13608,7 @@ dependencies = [
  "ic-http-endpoints-metrics",
  "ic-http-utils",
  "ic-ic00-types",
+ "ic-icos-sev",
  "ic-image-upgrader",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -16230,15 +16232,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sevctl"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap 3.2.23",
- "sev",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16515,6 +16508,15 @@ name = "smallvec"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
+
+[[package]]
+name = "snptool"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 3.2.23",
+ "sev",
+]
 
 [[package]]
 name = "sns_tests"

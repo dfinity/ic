@@ -1006,7 +1006,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.8.0",
             ),
             "sev": crate.spec(
-                version = "^1.2.0",
+                version = "^1.2.1",
                 features = [
                     "openssl",
                 ],
