@@ -69,5 +69,5 @@ build-info-build = { version = "0.0.26", default-features = false, features = [
 
 [dev-dependencies]
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
-pretty_assertions = "0.6.1"
+pretty_assertions = { workspace = true }
 tokio = { workspace = true }

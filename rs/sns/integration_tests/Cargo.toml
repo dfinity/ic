@@ -72,7 +72,7 @@ ic-types = { path = "../../types/types" }
 itertools = { workspace = true }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-pretty_assertions = "1.0"
+pretty_assertions = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 tokio = { workspace = true }
 wat = "1.0.52"

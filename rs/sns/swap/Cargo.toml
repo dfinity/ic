@@ -53,7 +53,7 @@ build-info-build = { version = "0.0.26", default-features = false, features = [
 
 [dev-dependencies]
 proptest = "1.0"
-pretty_assertions = "1.0"
+pretty_assertions = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }

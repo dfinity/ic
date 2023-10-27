@@ -786,7 +786,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.2.2",
             ),
             "pretty_assertions": crate.spec(
-                version = "^0.6.1",
+                version = "^1.4.0",
             ),
             "priority-queue": crate.spec(
                 version = "^1.3.1",
