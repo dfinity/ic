@@ -164,6 +164,15 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
             log_index,
         };
 
+        if entry.removed {
+            return Err(ReceivedEthEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(
+                    "this event has been removed from the chain".to_string(),
+                ),
+            });
+        }
+
         if entry.topics.len() != 3 {
             return Err(ReceivedEthEventError::InvalidEventSource {
                 source: event_source,
