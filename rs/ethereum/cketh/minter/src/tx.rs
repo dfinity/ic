@@ -116,18 +116,18 @@ impl rlp::Encodable for Eip1559Signature {
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct SignedEip1559TransactionRequest {
     #[n(0)]
-    transaction: Eip1559TransactionRequest,
+    pub transaction: Eip1559TransactionRequest,
     #[n(1)]
-    signature: Eip1559Signature,
+    pub signature: Eip1559Signature,
     // TODO FI-984: transaction hash should be computed only once
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct FinalizedEip1559Transaction {
     #[n(0)]
-    transaction: SignedEip1559TransactionRequest,
+    pub transaction: SignedEip1559TransactionRequest,
     #[n(1)]
-    receipt: TransactionReceipt,
+    pub receipt: TransactionReceipt,
 }
 
 impl FinalizedEip1559Transaction {

@@ -104,15 +104,16 @@ impl fmt::Debug for EthWithdrawalRequest {
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
 // TODO FI-948: limit number of withdrawal_requests and pending transactions nonces
 pub struct EthTransactions {
-    withdrawal_requests: VecDeque<EthWithdrawalRequest>,
-    created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
-    sent_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedEip1559TransactionRequest>>,
-    finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
-    next_nonce: TransactionNonce,
+    pub withdrawal_requests: VecDeque<EthWithdrawalRequest>,
+    pub created_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
+    pub sent_tx:
+        MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedEip1559TransactionRequest>>,
+    pub finalized_tx: MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
+    pub next_nonce: TransactionNonce,
 
-    maybe_reimburse: BTreeMap<LedgerBurnIndex, EthWithdrawalRequest>,
-    reimbursement_requests: BTreeMap<LedgerBurnIndex, ReimbursementRequest>,
-    reimbursed: BTreeMap<LedgerBurnIndex, Reimbursed>,
+    pub maybe_reimburse: BTreeMap<LedgerBurnIndex, EthWithdrawalRequest>,
+    pub reimbursement_requests: BTreeMap<LedgerBurnIndex, ReimbursementRequest>,
+    pub reimbursed: BTreeMap<LedgerBurnIndex, Reimbursed>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -604,6 +605,34 @@ impl EthTransactions {
         if let Some((_nonce, _index, prev_resubmitted_tx)) = created_tx.remove_entry(nonce) {
             log!(INFO, "[cleanup_failed_resubmitted_transactions]: removing previously resubmitted transaction {prev_resubmitted_tx:?} that failed to progress");
         }
+    }
+
+    /// Checks whether two transaction state machines are equivalent.
+    pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
+        use ic_utils_ensure::ensure_eq;
+
+        fn sorted_requests(requests: &VecDeque<EthWithdrawalRequest>) -> Vec<EthWithdrawalRequest> {
+            let mut buf: Vec<_> = requests.iter().cloned().collect();
+            buf.sort_unstable_by_key(|req| req.ledger_burn_index);
+            buf
+        }
+
+        // We can reorder request in `reschedule_withdrawal_request`. The audit log won't
+        // reflect this change, so we must sort the queues before comparing them.
+        ensure_eq!(
+            sorted_requests(&self.withdrawal_requests),
+            sorted_requests(&other.withdrawal_requests)
+        );
+        ensure_eq!(self.created_tx, other.created_tx);
+        ensure_eq!(self.sent_tx, other.sent_tx);
+        ensure_eq!(self.finalized_tx, other.finalized_tx);
+        ensure_eq!(self.next_nonce, other.next_nonce);
+
+        ensure_eq!(self.maybe_reimburse, other.maybe_reimburse);
+        ensure_eq!(self.reimbursement_requests, other.reimbursement_requests);
+        ensure_eq!(self.reimbursed, other.reimbursed);
+
+        Ok(())
     }
 }
 

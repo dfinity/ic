@@ -83,14 +83,17 @@ fn init(arg: MinterArg) {
     setup_timers();
 }
 
-#[pre_upgrade]
-fn pre_upgrade() {
+fn emit_preupgrade_events() {
     read_state(|s| {
-        storage::encode_state(s);
         storage::record_event(EventType::SyncedToBlock {
             block_number: s.last_scraped_block_number,
         });
     });
+}
+
+#[pre_upgrade]
+fn pre_upgrade() {
+    emit_preupgrade_events();
 }
 
 #[post_upgrade]
@@ -559,6 +562,20 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     } else {
         HttpResponseBuilder::not_found().build()
     }
+}
+
+#[cfg(feature = "debug_checks")]
+#[query]
+fn check_audit_log() {
+    use ic_cketh_minter::state::audit::replay_events;
+
+    emit_preupgrade_events();
+
+    read_state(|s| {
+        replay_events()
+            .is_equivalent_to(s)
+            .expect("replaying the audit log should produce an equivalent state")
+    })
 }
 
 fn main() {}

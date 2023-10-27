@@ -2,12 +2,15 @@ use crate::address::Address;
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
-use crate::eth_rpc::Hash;
+use crate::eth_rpc::{BlockTag, Hash};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::wei_from_milli_ether;
+use crate::numeric::{
+    wei_from_milli_ether, BlockNumber, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
+    TransactionNonce, Wei, WeiPerGas,
+};
 use crate::state::event::{Event, EventType};
 use crate::state::State;
 use crate::tx::{
@@ -534,4 +537,407 @@ proptest! {
         let bytes = event.to_bytes();
         prop_assert_eq!(&event, &Event::from_bytes(bytes.clone()), "failed to decode bytes {}", hex::encode(bytes));
     }
+}
+
+#[test]
+fn state_equivalence() {
+    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::map::MultiKeyMap;
+    use crate::state::MintedEvent;
+    use crate::transactions::{
+        EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
+    };
+    use crate::tx::{Eip1559Signature, Eip1559TransactionRequest, FinalizedEip1559Transaction};
+    use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
+    use maplit::btreemap;
+
+    fn source(txhash: &str, index: u64) -> EventSource {
+        EventSource {
+            transaction_hash: txhash.parse().unwrap(),
+            log_index: LogIndex::from(index),
+        }
+    }
+
+    fn singleton_map<T: std::fmt::Debug>(
+        nonce: u128,
+        burn_index: u64,
+        value: T,
+    ) -> MultiKeyMap<TransactionNonce, LedgerBurnIndex, T> {
+        let mut map = MultiKeyMap::new();
+        map.try_insert(
+            TransactionNonce::new(nonce),
+            LedgerBurnIndex::new(burn_index),
+            value,
+        )
+        .unwrap();
+        map
+    }
+
+    let withdrawal_request1 = EthWithdrawalRequest {
+        withdrawal_amount: Wei::new(10_999_968_499_999_664_000),
+        destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
+            .parse()
+            .unwrap(),
+        ledger_burn_index: LedgerBurnIndex::new(10),
+        from: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
+        from_subaccount: None,
+    };
+    let withdrawal_request2 = EthWithdrawalRequest {
+        ledger_burn_index: LedgerBurnIndex::new(20),
+        ..withdrawal_request1.clone()
+    };
+    let eth_transactions = EthTransactions {
+        withdrawal_requests: vec![withdrawal_request1.clone(), withdrawal_request2.clone()]
+            .into_iter()
+            .collect(),
+        created_tx: singleton_map(
+            2,
+            4,
+            Eip1559TransactionRequest {
+                chain_id: 1,
+                nonce: TransactionNonce::new(2),
+                max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
+                max_fee_per_gas: WeiPerGas::new(100_000_000),
+                gas_limit: GasAmount::new(21_000),
+                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
+                    .parse()
+                    .unwrap(),
+                amount: Wei::new(1_000_000_000_000),
+                data: vec![],
+                access_list: Default::default(),
+            },
+        ),
+        sent_tx: singleton_map(
+            1,
+            3,
+            vec![SignedEip1559TransactionRequest {
+                transaction: Eip1559TransactionRequest {
+                    chain_id: 1,
+                    nonce: TransactionNonce::new(1),
+                    max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
+                    max_fee_per_gas: WeiPerGas::new(100_000_000),
+                    gas_limit: GasAmount::new(21_000),
+                    destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
+                        .parse()
+                        .unwrap(),
+                    amount: Wei::new(1_000_000_000_000),
+                    data: vec![],
+                    access_list: Default::default(),
+                },
+                signature: Eip1559Signature {
+                    signature_y_parity: true,
+                    r: Default::default(),
+                    s: Default::default(),
+                },
+            }],
+        ),
+        finalized_tx: singleton_map(
+            0,
+            2,
+            FinalizedEip1559Transaction {
+                transaction: SignedEip1559TransactionRequest {
+                    transaction: Eip1559TransactionRequest {
+                        chain_id: 1,
+                        nonce: TransactionNonce::new(0),
+                        max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
+                        max_fee_per_gas: WeiPerGas::new(100_000_000),
+                        gas_limit: GasAmount::new(21_000),
+                        destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
+                            .parse()
+                            .unwrap(),
+                        amount: Wei::new(1_000_000_000_000),
+                        data: vec![],
+                        access_list: Default::default(),
+                    },
+                    signature: Eip1559Signature {
+                        signature_y_parity: true,
+                        r: Default::default(),
+                        s: Default::default(),
+                    },
+                },
+                receipt: TransactionReceipt {
+                    block_hash:
+                        "0x9e1e2124a453e7b5afaabe42fb66fffb12d4b1053403d2f487d250007f3cb550"
+                            .parse()
+                            .unwrap(),
+                    block_number: BlockNumber::new(400_000),
+                    effective_gas_price: WeiPerGas::new(100_000_000),
+                    gas_used: GasAmount::new(21_000),
+                    status: TransactionStatus::Success,
+                    transaction_hash:
+                        "0xf0c4f26bedc5d42f492a38c23d2d8f090aba0a3264af1a1edde5e6d089d08825"
+                            .parse()
+                            .unwrap(),
+                },
+            },
+        ),
+        next_nonce: TransactionNonce::new(3),
+        maybe_reimburse: btreemap! {
+            LedgerBurnIndex::new(4) => EthWithdrawalRequest {
+                withdrawal_amount: Wei::new(1_000_000_000_000),
+                ledger_burn_index: LedgerBurnIndex::new(4),
+                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52".parse().unwrap(),
+                from: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae"
+                    .parse()
+                    .unwrap(),
+                from_subaccount: None,
+            }
+        },
+        reimbursement_requests: btreemap! {
+            LedgerBurnIndex::new(3) => ReimbursementRequest {
+                withdrawal_id: LedgerBurnIndex::new(3),
+                reimbursed_amount: Wei::new(100_000_000_000),
+                to: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae".parse().unwrap(),
+                to_subaccount: None,
+            }
+        },
+        reimbursed: btreemap! {
+            LedgerBurnIndex::new(6) => Reimbursed {
+                reimbursed_in_block: LedgerMintIndex::new(150),
+                reimbursed_amount: Wei::new(10_000_000_000_000),
+                withdrawal_id: LedgerBurnIndex::new(6),
+            },
+        },
+    };
+    let state = State {
+        ethereum_network: EthereumNetwork::Mainnet,
+        ecdsa_key_name: "test_key".to_string(),
+        ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
+        ethereum_contract_address: Some(
+            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+        ),
+        ecdsa_public_key: Some(EcdsaPublicKeyResponse {
+            public_key: vec![1; 32],
+            chain_code: vec![2; 32],
+        }),
+        minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
+        ethereum_block_height: BlockTag::Finalized,
+        last_scraped_block_number: BlockNumber::new(1_000_000),
+        last_observed_block_number: Some(BlockNumber::new(2_000_000)),
+        events_to_mint: btreemap! {
+            source("0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467", 100) => ReceivedEthEvent {
+                transaction_hash: "0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467".parse().unwrap(),
+                block_number: BlockNumber::new(500_000),
+                log_index: LogIndex::new(100),
+                from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
+                value: Wei::new(500_000_000_000_000_000),
+                principal: "lsywz-sl5vm-m6tct-7fhwt-6gdrw-4uzsg-ibknl-44d6d-a2oyt-c2cxu-7ae".parse().unwrap(),
+            }
+        },
+        minted_events: btreemap! {
+            source("0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3", 1) => MintedEvent {
+                deposit_event: ReceivedEthEvent {
+                    transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3".parse().unwrap(),
+                    block_number: BlockNumber::new(450_000),
+                    log_index: LogIndex::new(1),
+                    from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
+                    value: Wei::new(10_000_000_000_000_000),
+                    principal: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
+                },
+                mint_block_index: LedgerMintIndex::new(1),
+            }
+        },
+        invalid_events: btreemap! {
+            source("0x05c6ec45699c9a6a4b1a4ea2058b0cee852ea2f19b18fb8313c04bf8156efde4", 11) => "failed to decode principal from bytes 0x00333c125dc9f41abaf2b8b85d49fdc7ff75b2a4000000000000000000000000".to_string(),
+        },
+        eth_transactions: eth_transactions.clone(),
+        retrieve_eth_principals: Default::default(),
+        active_tasks: Default::default(),
+        http_request_counter: 100,
+    };
+
+    assert_eq!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            ecdsa_public_key: None,
+            last_observed_block_number: None,
+            http_request_counter: 0,
+            ..state.clone()
+        }),
+        "changing only computed/transient fields should result in an equivalent state",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            last_scraped_block_number: BlockNumber::new(100_000_000_000),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            ecdsa_key_name: "".to_string(),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            ethereum_contract_address: None,
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            minimum_withdrawal_amount: Wei::new(1),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            ethereum_block_height: BlockTag::Latest,
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            events_to_mint: Default::default(),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            minted_events: Default::default(),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            invalid_events: Default::default(),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_eq!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                withdrawal_requests: vec![withdrawal_request2.clone(), withdrawal_request1.clone()]
+                    .into_iter()
+                    .collect(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        },),
+        "changing the order of withdrawal requests should result in an equivalent state",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                withdrawal_requests: vec![withdrawal_request1].into_iter().collect(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the withdrawal requests should break equivalence"
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                sent_tx: Default::default(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the transactions should break equivalence"
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                created_tx: Default::default(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the transactions should break equivalence"
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                finalized_tx: Default::default(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the transactions should break equivalence"
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                maybe_reimburse: Default::default(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the reimbursement data should break equivalence"
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                reimbursement_requests: Default::default(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the reimbursement data should break equivalence"
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                reimbursed: Default::default(),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the reimbursement data should break equivalence"
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            eth_transactions: EthTransactions {
+                next_nonce: TransactionNonce::new(1000),
+                ..eth_transactions.clone()
+            },
+            ..state.clone()
+        }),
+        "changing the next nonce should break equivalence"
+    );
 }
