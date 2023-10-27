@@ -478,10 +478,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.18.11",
             ),
             "icrc1-test-env": crate.spec(
-                version = "^0.1.1",
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = "6eda22d0dc882b347a945647902f2d844a404c7f",
             ),
             "icrc1-test-suite": crate.spec(
-                version = "^0.1.1",
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = "6eda22d0dc882b347a945647902f2d844a404c7f",
             ),
             "ic-agent": crate.spec(
                 version = "^0.27.0",
@@ -970,7 +972,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 ],
             ),
             "serde": crate.spec(
-                version = "=1.0.171",
+                version = "^1.0.184",
                 features = [
                     "derive",
                 ],
