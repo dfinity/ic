@@ -14,7 +14,11 @@ if [[ $mr_title == *"[override-didc-check]"* ]]; then
     exit 0
 fi
 
-readonly merge_base=${{CI_MERGE_REQUEST_DIFF_BASE_SHA:-HEAD}}
+# https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
+# The HEAD SHA of the target branch of the merge request. The variable is empty in merge request pipelines. 
+# The SHA is present only in merged results pipelines.
+readonly merge_base=${{CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-HEAD}}
+
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
 
@@ -50,7 +54,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["CI_MERGE_REQUEST_DIFF_BASE_SHA", "CI_MERGE_REQUEST_TITLE"]),
+        RunEnvironmentInfo(inherited_environment = ["CI_MERGE_REQUEST_TARGET_BRANCH_SHA", "CI_MERGE_REQUEST_TITLE"]),
     ]
 
 CHECK_DID = attr.label(
