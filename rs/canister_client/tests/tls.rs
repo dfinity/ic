@@ -45,7 +45,7 @@ async fn should_fail_handshake_if_no_shared_sig_algorithms() {
         server.run()
     );
 
-    assert!(result.err().unwrap().contains("handshake failure"));
+    assert!(result.err().unwrap().contains("HandshakeFailure"));
 }
 
 fn agent_for(server: &CustomServer) -> Agent {
