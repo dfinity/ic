@@ -69,7 +69,7 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
-itertools = "0.10.3"
+itertools = { workspace = true }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = "1.0"

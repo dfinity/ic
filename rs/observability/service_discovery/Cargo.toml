@@ -37,4 +37,4 @@ futures = { workspace = true }
 regex = "1.7.0"
 
 [dev-dependencies]
-itertools = "0.10.0"
+itertools = { workspace = true }

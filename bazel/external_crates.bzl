@@ -569,7 +569,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "0.3.2",
             ),
             "itertools": crate.spec(
-                version = "^0.10.0",
+                version = "^0.10.5",
             ),
             "jemalloc-ctl": crate.spec(
                 version = "^0.3.3",

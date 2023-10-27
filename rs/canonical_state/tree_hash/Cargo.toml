@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-itertools = "0.10.3"
+itertools = { workspace = true }
 leb128 = "0.2.1"
 scoped_threadpool = "0.1.*"
 thiserror = "1.0"
