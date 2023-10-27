@@ -144,6 +144,42 @@ mod eth_get_logs {
     }
 
     #[test]
+    fn should_not_parse_removed_event() {
+        use crate::eth_logs::{EventSource, EventSourceError, ReceivedEthEventError};
+        let event = r#"{
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
+            ],
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "blockNumber": "0x3ca487",
+            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            "transactionIndex": "0x22",
+            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
+            "logIndex": "0x27",
+            "removed": true
+        }"#;
+
+        let parsed_event =
+            ReceivedEthEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap());
+        let expected_error = Err(ReceivedEthEventError::InvalidEventSource {
+            source: EventSource {
+                transaction_hash:
+                    "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
+                        .parse()
+                        .unwrap(),
+                log_index: LogIndex::from(39_u8),
+            },
+            error: EventSourceError::InvalidEvent(
+                "this event has been removed from the chain".to_string(),
+            ),
+        });
+        assert_eq!(parsed_event, expected_error);
+    }
+
+    #[test]
     fn should_deserialize_address_from_32_bytes_hex_string() {
         let address_hex = FixedSizeData::from_str(
             "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
