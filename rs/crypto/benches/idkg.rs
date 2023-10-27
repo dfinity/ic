@@ -20,6 +20,22 @@ use std::fmt::{Display, Formatter};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
+#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+enum VaultType {
+    Local,
+    #[default]
+    Remote,
+}
+
+impl std::fmt::Debug for VaultType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VaultType::Remote => write!(f, "remote_vault"),
+            VaultType::Local => write!(f, "local_vault"),
+        }
+    }
+}
+
 criterion_main!(benches);
 criterion_group!(benches, crypto_idkg_benchmarks);
 
@@ -49,24 +65,41 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
 
     let rng = &mut ReproducibleRng::new();
     for test_case in test_cases {
-        let group = &mut criterion.benchmark_group(test_case.name());
-        group
-            .sample_size(test_case.sample_size)
-            .sampling_mode(test_case.sampling_mode);
+        for vault_type in VaultType::iter() {
+            let group =
+                &mut criterion.benchmark_group(format!("{}_{vault_type:?}", test_case.name()));
+            group
+                .sample_size(test_case.sample_size)
+                .sampling_mode(test_case.sampling_mode);
 
-        IDkgMode::iter().for_each(|mode| bench_create_dealing(group, &test_case, &mode, rng));
-        IDkgMode::iter()
-            .for_each(|mode| bench_verify_dealing_public(group, &test_case, &mode, rng));
-        IDkgMode::iter()
-            .for_each(|mode| bench_verify_dealing_private(group, &test_case, &mode, rng));
+            IDkgMode::iter()
+                .for_each(|mode| bench_create_dealing(group, &test_case, &mode, vault_type, rng));
 
-        bench_verify_initial_dealings(group, &test_case, rng);
+            IDkgMode::iter().for_each(|mode| {
+                bench_verify_dealing_private(group, &test_case, &mode, vault_type, rng)
+            });
 
-        IDkgMode::iter().for_each(|mode| bench_create_transcript(group, &test_case, &mode, rng));
-        IDkgMode::iter().for_each(|mode| bench_verify_transcript(group, &test_case, &mode, rng));
-        IDkgMode::iter().for_each(|mode| bench_load_transcript(group, &test_case, &mode, rng));
+            IDkgMode::iter()
+                .for_each(|mode| bench_load_transcript(group, &test_case, &mode, vault_type, rng));
 
-        bench_retain_active_transcripts(group, &test_case, 1, rng);
+            bench_retain_active_transcripts(group, &test_case, 1, vault_type, rng);
+
+            // The following benchmarks are not affected by the choice of the
+            // vault, wo benchmark them only once with the default vault type.
+            if vault_type == VaultType::default() {
+                IDkgMode::iter().for_each(|mode| {
+                    bench_verify_dealing_public(group, &test_case, &mode, vault_type, rng)
+                });
+
+                bench_verify_initial_dealings(group, &test_case, vault_type, rng);
+                IDkgMode::iter().for_each(|mode| {
+                    bench_create_transcript(group, &test_case, &mode, vault_type, rng)
+                });
+                IDkgMode::iter().for_each(|mode| {
+                    bench_verify_transcript(group, &test_case, &mode, vault_type, rng)
+                });
+            }
+        }
     }
 }
 
@@ -74,9 +107,10 @@ fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: &IDkgMode,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = mode.setup_params(&env, &dealers, &receivers, rng);
@@ -94,9 +128,10 @@ fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: &IDkgMode,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = mode.setup_params(&env, &dealers, &receivers, rng);
@@ -119,9 +154,10 @@ fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: &IDkgMode,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = mode.setup_params(&env, &dealers, &receivers, rng);
@@ -143,9 +179,10 @@ fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let dealers_env = test_case.new_test_environment(rng);
+    let dealers_env = test_case.new_test_environment(vault_type, rng);
     let receivers_env = CanisterThresholdSigTestEnvironment::new_with_existing_registry(
         &dealers_env,
         test_case.num_of_nodes,
@@ -217,9 +254,10 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: &IDkgMode,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = mode.setup_params(&env, &dealers, &receivers, rng);
@@ -244,9 +282,10 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: &IDkgMode,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = mode.setup_params(&env, &dealers, &receivers, rng);
@@ -279,9 +318,10 @@ fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     mode: &IDkgMode,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = mode.setup_params(&env, &dealers, &receivers, rng);
@@ -314,9 +354,10 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     num_pre_sig_quadruples: i32,
+    vault_type: VaultType,
     rng: &mut R,
 ) {
-    let env = test_case.new_test_environment(rng);
+    let env = test_case.new_test_environment(vault_type, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let key_transcript = generate_key_transcript(&env, &dealers, &receivers, rng);
@@ -731,9 +772,15 @@ impl Default for TestCase {
 impl TestCase {
     fn new_test_environment<R: RngCore + CryptoRng>(
         &self,
+        vault_type: VaultType,
         rng: &mut R,
     ) -> CanisterThresholdSigTestEnvironment {
-        CanisterThresholdSigTestEnvironment::new(self.num_of_nodes, rng)
+        match vault_type {
+            VaultType::Local => CanisterThresholdSigTestEnvironment::new(self.num_of_nodes, rng),
+            VaultType::Remote => {
+                CanisterThresholdSigTestEnvironment::new_with_remote_vault(self.num_of_nodes, rng)
+            }
+        }
     }
 
     fn name(&self) -> String {
