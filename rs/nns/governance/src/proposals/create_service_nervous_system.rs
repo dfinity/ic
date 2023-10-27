@@ -352,6 +352,12 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             min_icp_e8s,
             max_icp_e8s,
         ) {
+            // If matched funding is enabled, we don't need to populate the old fields
+            // TODO NNS1-2687: Once this ticket is being worked on, this branch
+            // will always be taken, making the entire `match` expression a no-op,
+            // so let's just remove it entirely.
+            min_max_icp_bounds if IS_MATCHED_FUNDING_ENABLED => min_max_icp_bounds,
+            // Otherwise, let's "reconstruct" the missing fields.
             (
                 Some(min_direct_participation_icp_e8s),
                 Some(max_direct_participation_icp_e8s),

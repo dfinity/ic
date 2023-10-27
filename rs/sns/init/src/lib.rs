@@ -540,8 +540,8 @@ impl SnsInitPayload {
                 }],
             }),
             min_participants: Some(5),
-            min_icp_e8s: Some(12_300_000_000),
-            max_icp_e8s: Some(65_000_000_000),
+            min_icp_e8s: None,
+            max_icp_e8s: None,
             min_direct_participation_icp_e8s: Some(12_300_000_000),
             max_direct_participation_icp_e8s: Some(65_000_000_000),
             min_participant_icp_e8s: Some(6_500_000_000),
@@ -966,6 +966,8 @@ impl SnsInitPayload {
             self.validate_min_participants(),
             self.validate_min_direct_participation_icp_e8s(),
             self.validate_max_direct_participation_icp_e8s(),
+            self.validate_min_icp_e8s(),
+            self.validate_max_icp_e8s(),
             self.validate_min_participant_icp_e8s(),
             self.validate_max_participant_icp_e8s(),
             // Ensure that the values that can only be known after the execution
@@ -1705,8 +1707,19 @@ impl SnsInitPayload {
     }
 
     fn validate_max_icp_e8s(&self) -> Result<(), String> {
-        if self.max_direct_participation_icp_e8s.is_some() {
-            return Ok(());
+        // TODO NNS1-2687: Once matched funding is released,
+        // self.neurons_fund_participation.is_some() should now always be
+        // `true` (or the validation for that field would fail), so the body
+        // of the `if` can be inlined
+        if self.neurons_fund_participation.is_some() {
+            return if self.max_icp_e8s.is_none() {
+                Ok(())
+            } else {
+                Err(
+                    "Error: max_icp_e8s cannot be specified now that Matched Funding is enabled"
+                        .to_string(),
+                )
+            };
         }
 
         let max_icp_e8s = self
@@ -1743,8 +1756,19 @@ impl SnsInitPayload {
     }
 
     fn validate_min_icp_e8s(&self) -> Result<(), String> {
-        if self.min_direct_participation_icp_e8s.is_some() {
-            return Ok(());
+        // TODO NNS1-2687: Once matched funding is released,
+        // self.neurons_fund_participation.is_some() should now always be
+        // `true` (or the validation for that field would fail), so the body of
+        // the if can be inlined
+        if self.neurons_fund_participation.is_some() {
+            return if self.min_icp_e8s.is_none() {
+                Ok(())
+            } else {
+                Err(
+                    "Error: min_icp_e8s cannot be specified now that Matched Funding is enabled"
+                        .to_string(),
+                )
+            };
         }
 
         let min_icp_e8s = self
@@ -2212,10 +2236,36 @@ impl SnsInitPayload {
         if self.min_participants.is_none() {
             missing_one_proposal_fields.push("min_participants")
         }
-        if self.min_icp_e8s.is_none() && self.min_direct_participation_icp_e8s.is_none() {
+        // TODO NNS1-2687: Once matched funding is released,
+        // self.neurons_fund_participation.is_none() should now always be
+        // `false` (or the validation for that field would fail), so this check
+        // can be removed
+        if self.neurons_fund_participation.is_none() && self.min_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("min_icp_e8s")
+        }
+        // TODO NNS1-2687: Once matched funding is released,
+        // self.neurons_fund_participation.is_none() should now always be
+        // `false` (or the validation for that field would fail), so this check
+        // can be removed
+        if self.neurons_fund_participation.is_none() && self.max_icp_e8s.is_none() {
+            missing_one_proposal_fields.push("max_icp_e8s")
+        }
+        // TODO NNS1-2687: Once matched funding is released,
+        // self.neurons_fund_participation.is_some() should now always be
+        // `true` (or the validation for that field would fail), so that part of
+        // the condition can be removed
+        if self.neurons_fund_participation.is_some()
+            && self.min_direct_participation_icp_e8s.is_none()
+        {
             missing_one_proposal_fields.push("min_direct_participation_icp_e8s")
         }
-        if self.max_icp_e8s.is_none() && self.max_direct_participation_icp_e8s.is_none() {
+        // TODO NNS1-2687: Once matched funding is released,
+        // self.neurons_fund_participation.is_some() should now always be
+        // `true` (or the validation for that field would fail), so that part of
+        // the condition can be removed
+        if self.neurons_fund_participation.is_some()
+            && self.max_direct_participation_icp_e8s.is_none()
+        {
             missing_one_proposal_fields.push("max_direct_participation_icp_e8s")
         }
         if self.min_participant_icp_e8s.is_none() {

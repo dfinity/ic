@@ -421,8 +421,25 @@ impl Init {
             // Deprecated fields
             // These have to be kept in the struct for backwards compatibility,
             // but aren't used in any of the swap's logic.
-            min_icp_e8s: self.min_icp_e8s.unwrap(),
-            max_icp_e8s: self.max_icp_e8s.unwrap(),
+            min_icp_e8s: self
+                .min_icp_e8s
+                .unwrap_or_else(|| self.min_direct_participation_icp_e8s.unwrap()),
+
+            max_icp_e8s: self.max_icp_e8s.unwrap_or_else(
+                // Only happens after Matched Funding is enabled
+                // In that case The NF will never contribute more than twice the
+                // direct contribution.
+                || {
+                    self.max_direct_participation_icp_e8s
+                        .unwrap()
+                        .saturating_add(
+                            self.neurons_fund_participation_constraints
+                                .as_ref()
+                                .and_then(|x| x.max_neurons_fund_participation_icp_e8s)
+                                .unwrap_or(0),
+                        )
+                },
+            ),
         };
         OpenRequest {
             params: Some(params),
