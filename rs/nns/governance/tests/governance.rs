@@ -12580,7 +12580,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
     // Step 3: Inspect results.
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
     // Assert that the proposal is executed and the lifecycle has been set
-    assert!(proposal.executed_timestamp_seconds > 0);
+    assert!(proposal.executed_timestamp_seconds > 0, "{:?}", proposal);
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Open as i32)

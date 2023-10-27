@@ -124,12 +124,12 @@ lazy_static! {
 
             minimum_participants: Some(50),
 
-            minimum_icp: Some(pb::Tokens {
+            minimum_icp: if IS_MATCHED_FUNDING_ENABLED { None } else { Some(pb::Tokens {
                 e8s: Some(12_300_000_000),
-            }),
-            maximum_icp: Some(pb::Tokens {
+            })},
+            maximum_icp: if IS_MATCHED_FUNDING_ENABLED { None } else { Some(pb::Tokens {
                 e8s: Some(25_000_000_000),
-            }),
+            })},
             minimum_direct_participation_icp: Some(pb::Tokens {
                 e8s: Some(12_300_000_000-6_100_000_000), // Subtract neurons_fund_investment_icp
             }),

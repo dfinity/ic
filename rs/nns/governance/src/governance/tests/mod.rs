@@ -1150,14 +1150,17 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
     }
 
+    #[track_caller]
     fn unwrap_duration_seconds(original: &Option<pb::Duration>) -> Option<u64> {
         Some(original.as_ref().unwrap().seconds.unwrap())
     }
 
+    #[track_caller]
     fn unwrap_tokens_e8s(original: &Option<pb::Tokens>) -> Option<u64> {
         Some(original.as_ref().unwrap().e8s.unwrap())
     }
 
+    #[track_caller]
     fn unwrap_percentage_basis_points(original: &Option<pb::Percentage>) -> Option<u64> {
         Some(original.as_ref().unwrap().basis_points.unwrap())
     }
@@ -1270,8 +1273,16 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
-                min_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.minimum_icp),
-                max_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.maximum_icp),
+                min_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
+                    None
+                } else {
+                    unwrap_tokens_e8s(&original_swap_parameters.minimum_icp)
+                },
+                max_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
+                    None
+                } else {
+                    unwrap_tokens_e8s(&original_swap_parameters.maximum_icp)
+                },
                 min_direct_participation_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_direct_participation_icp
                 ),
@@ -1426,12 +1437,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests {
+    use crate::pb::v1::create_service_nervous_system::SwapParameters;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
     use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
     use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2};
-
-    use crate::pb::v1::create_service_nervous_system::SwapParameters;
 
     use super::*;
 
@@ -1443,14 +1453,17 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
     }
 
+    #[track_caller]
     fn unwrap_duration_seconds(original: &Option<pb::Duration>) -> Option<u64> {
         Some(original.as_ref().unwrap().seconds.unwrap())
     }
 
+    #[track_caller]
     fn unwrap_tokens_e8s(original: &Option<pb::Tokens>) -> Option<u64> {
         Some(original.as_ref().unwrap().e8s.unwrap())
     }
 
+    #[track_caller]
     fn unwrap_percentage_basis_points(original: &Option<pb::Percentage>) -> Option<u64> {
         Some(original.as_ref().unwrap().basis_points.unwrap())
     }
@@ -1589,8 +1602,16 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
-                min_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.minimum_icp),
-                max_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.maximum_icp),
+                min_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
+                    None
+                } else {
+                    unwrap_tokens_e8s(&original_swap_parameters.minimum_icp)
+                },
+                max_icp_e8s: if IS_MATCHED_FUNDING_ENABLED {
+                    None
+                } else {
+                    unwrap_tokens_e8s(&original_swap_parameters.maximum_icp)
+                },
                 min_direct_participation_icp_e8s: unwrap_tokens_e8s(
                     &original_swap_parameters.minimum_direct_participation_icp
                 ),
@@ -1742,6 +1763,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
     // the missing fields.
     #[test]
+    #[cfg(not(feature = "test"))]
     fn test_convert_from_valid_swap_parameters_with_missing_max_direct_icp() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
@@ -1785,6 +1807,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     // TryFrom<CreateServiceNervousSystem> for SnsInitPayload will "reconstruct"
     // the missing fields.
     #[test]
+    #[cfg(not(feature = "test"))]
     fn test_convert_from_valid_swap_parameters_with_missing_max_icp() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
