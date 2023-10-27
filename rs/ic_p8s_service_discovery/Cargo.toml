@@ -51,7 +51,7 @@ ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der"
 
 [dev-dependencies]
 ic-test-utilities = { path = "../test_utilities" }
-itertools = "0.10.0"
+itertools = { workspace = true }
 
 
 [[bin]]

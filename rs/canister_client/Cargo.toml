@@ -18,7 +18,7 @@ async-trait = "0.1.36"
 futures-util = "0.3.21"
 hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
 hyper-tls = "0.5.0"
-itertools = "0.10.3"
+itertools = { workspace = true }
 native-tls = { version = "0.2.7", features = ["alpn"] }
 prost = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }

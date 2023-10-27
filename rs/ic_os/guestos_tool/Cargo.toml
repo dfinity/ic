@@ -10,6 +10,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow = {version = "^1"} 
 clap = {version = "^4", features = ["derive"]}
-itertools = {version = "^0.10.0"}
+itertools = { workspace = true }
 regex = {version = "^1.3"}
 

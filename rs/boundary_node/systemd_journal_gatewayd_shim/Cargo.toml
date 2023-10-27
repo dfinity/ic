@@ -9,7 +9,7 @@ async-trait = "0.1.73"
 axum = "0.6.20"
 clap = { version = "4.4.0", features = ["derive"] }
 http = "0.2.9"
-itertools = "0.11.0"
+itertools = { workspace = true }
 reqwest = { version = "0.11.20", features = ["stream"] }
 thiserror = "1.0.47"
 tokio = { workspace = true }

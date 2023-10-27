@@ -33,5 +33,5 @@ ic-interfaces = { path = "../interfaces" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
-itertools = "0.10.0"
+itertools = { workspace = true }
 proptest = "1.0"

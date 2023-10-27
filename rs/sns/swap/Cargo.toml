@@ -39,7 +39,7 @@ ic-sns-governance = { path = "../governance" }
 # ic-sns-root = { path = "../root" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-itertools = "0.10.5"
+itertools = { workspace = true }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 prost = { workspace = true }

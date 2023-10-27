@@ -29,7 +29,7 @@ checksum = "939d59666dd9a7964a3a5312b9d24c9c107630752ee64f2dd5038189a23fe331"
 dependencies = [
  "abnf",
  "indexmap 1.9.2",
- "itertools 0.10.5",
+ "itertools",
  "pretty 0.11.3",
 ]
 
@@ -1669,7 +1669,7 @@ dependencies = [
  "crossterm",
  "displaydoc",
  "hexf-parse",
- "itertools 0.10.5",
+ "itertools",
  "lexical-core",
  "log",
  "pest_meta",
@@ -2344,7 +2344,7 @@ dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
  "cranelift-frontend",
- "itertools 0.10.5",
+ "itertools",
  "log",
  "smallvec",
  "wasmparser 0.107.0",
@@ -2373,7 +2373,7 @@ dependencies = [
  "criterion-plot",
  "futures",
  "is-terminal",
- "itertools 0.10.5",
+ "itertools",
  "num-traits",
  "once_cell",
  "oorandom",
@@ -2395,7 +2395,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
- "itertools 0.10.5",
+ "itertools",
 ]
 
 [[package]]
@@ -4055,7 +4055,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.4.5",
- "itertools 0.10.5",
+ "itertools",
  "regex",
 ]
 
@@ -4641,7 +4641,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-sns-wasm",
  "ic-types",
- "itertools 0.10.5",
+ "itertools",
  "maplit",
  "on_wire",
  "pretty_assertions 0.6.1",
@@ -5150,7 +5150,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types",
  "ic-validator",
- "itertools 0.10.5",
+ "itertools",
  "native-tls",
  "prost",
  "rand 0.8.5",
@@ -5346,7 +5346,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.8.0",
  "ic-wasm-types",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "leb128",
  "maplit",
@@ -5371,7 +5371,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-crypto-tree-hash-test-utils",
- "itertools 0.10.5",
+ "itertools",
  "leb128",
  "proptest",
  "rand 0.8.5",
@@ -6181,7 +6181,7 @@ dependencies = [
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-test-utils-reproducible-rng",
  "ic_bls12_381",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "pairing",
  "paste 1.0.12",
@@ -7428,7 +7428,7 @@ dependencies = [
  "ic-https-outcalls-service",
  "ic-logger",
  "ic-metrics",
- "itertools 0.10.5",
+ "itertools",
  "once_cell",
  "prometheus",
  "prost",
@@ -8632,7 +8632,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "icp-ledger",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "maplit",
  "mockall 0.11.4",
@@ -9094,7 +9094,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types",
  "ic-utils 0.8.0",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "parse_int",
  "prometheus",
@@ -10214,7 +10214,7 @@ dependencies = [
  "ic-universal-canister",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "maplit",
  "on_wire",
@@ -10300,7 +10300,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "icp-ledger",
  "icrc-ledger-types",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "maplit",
  "pretty_assertions 1.3.0",
@@ -10483,7 +10483,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.8.0",
  "ic-wasm-types",
- "itertools 0.10.5",
+ "itertools",
  "libc",
  "prometheus",
  "proptest",
@@ -11328,7 +11328,7 @@ dependencies = [
  "ic-test-identity",
  "ic-types",
  "indicatif",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "prometheus",
  "rand 0.8.5",
@@ -11611,7 +11611,7 @@ dependencies = [
  "ic-agent",
  "ic-response-verification",
  "ic-utils 0.27.0",
- "itertools 0.10.5",
+ "itertools",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
  "prometheus",
@@ -11923,15 +11923,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12099,7 +12090,7 @@ dependencies = [
  "diff",
  "ena",
  "is-terminal",
- "itertools 0.10.5",
+ "itertools",
  "lalrpop-util",
  "petgraph",
  "pico-args",
@@ -14205,7 +14196,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "ic-utils 0.8.0",
- "itertools 0.11.0",
+ "itertools",
  "pocket-ic",
  "rand 0.8.5",
  "reqwest",
@@ -14312,7 +14303,7 @@ checksum = "59230a63c37f3e18569bdb90e4a89cbf5bf8b06fea0b84e65ea10cc4df47addd"
 dependencies = [
  "difflib",
  "float-cmp 0.9.0",
- "itertools 0.10.5",
+ "itertools",
  "normalize-line-endings",
  "predicates-core",
  "regex",
@@ -14578,7 +14569,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2aa5feb83bf4b2c8919eaf563f51dbab41183de73ba2353c0e03cd7b6bd892"
 dependencies = [
  "chrono",
- "itertools 0.10.5",
+ "itertools",
  "once_cell",
  "regex",
 ]
@@ -14662,7 +14653,7 @@ checksum = "119533552c9a7ffacc21e099c24a0ac8bb19c2a2a3f363de84cd9b844feab270"
 dependencies = [
  "bytes",
  "heck 0.4.1",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "log",
  "multimap",
@@ -14683,7 +14674,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5d2d8d10f3c6ded6da8b05b5fb3b8a5082514344d56c9f871412d29b4e075b4"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools",
  "proc-macro2 1.0.66",
  "quote 1.0.31",
  "syn 1.0.109",
@@ -15293,7 +15284,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "ipnet",
- "itertools 0.10.5",
+ "itertools",
  "lazy_static",
  "leb128",
  "maplit",
@@ -16220,7 +16211,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-types",
  "ic-utils 0.8.0",
- "itertools 0.10.5",
+ "itertools",
  "prometheus",
  "regex",
  "registry-canister",
@@ -16949,7 +16940,7 @@ dependencies = [
  "axum",
  "clap 4.4.5",
  "http",
- "itertools 0.11.0",
+ "itertools",
  "reqwest",
  "thiserror",
  "tokio",
@@ -17241,7 +17232,7 @@ dependencies = [
  "icrc-ledger-agent",
  "icrc-ledger-types",
  "indoc 1.0.9",
- "itertools 0.10.5",
+ "itertools",
  "json5",
  "k256",
  "lazy_static",
