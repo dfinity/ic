@@ -451,7 +451,10 @@ mod tests {
     #[test]
     fn test_inspect_ecdsa_initializations_one_key() {
         let mut rng = reproducible_rng();
-        let initial_dealings = dummy_initial_idkg_dealing_for_tests(&mut rng);
+        let initial_dealings = dummy_initial_idkg_dealing_for_tests(
+            ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let ecdsa_init = EcdsaInitialization {
             key_id: Some((&key_id).into()),
@@ -467,7 +470,10 @@ mod tests {
     #[test]
     fn test_inspect_ecdsa_initializations_multiple_keys() {
         let mut rng = reproducible_rng();
-        let initial_dealings = dummy_initial_idkg_dealing_for_tests(&mut rng);
+        let initial_dealings = dummy_initial_idkg_dealing_for_tests(
+            ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let key_id_2 = EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap();
         let ecdsa_init = EcdsaInitialization {

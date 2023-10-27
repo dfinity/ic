@@ -302,8 +302,10 @@ pub struct IDkgTranscriptParams {
     dealers: IDkgDealers,
     receivers: IDkgReceivers,
     registry_version: RegistryVersion,
-    /// Identifies the cryptographic signature scheme used in the protocol.
-    /// Currently only [`AlgorithmId::ThresholdEcdsaSecp256k1`] is supported.
+    /// Identifies the cryptographic signature scheme used in the
+    /// protocol.  Currently only
+    /// [`AlgorithmId::ThresholdEcdsaSecp256k1`] and
+    /// [`AlgorithmId::ThresholdEcdsaSecp256r1`] are supported.
     algorithm_id: AlgorithmId,
     /// Mode of operation for this current execution of the protocol.
     operation_type: IDkgTranscriptOperation,
@@ -498,6 +500,7 @@ impl IDkgTranscriptParams {
     fn ensure_algorithm_id_supported(&self) -> Result<(), IDkgParamsValidationError> {
         match self.algorithm_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(()),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Ok(()),
             _ => Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
                 algorithm_id: self.algorithm_id,
             }),

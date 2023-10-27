@@ -148,6 +148,16 @@ pub enum AlgorithmId {
     ThresholdEcdsaSecp256r1 = 17,
 }
 
+impl AlgorithmId {
+    pub const fn all_threshold_ecdsa_algorithms() -> [AlgorithmId; 2] {
+        [Self::ThresholdEcdsaSecp256r1, Self::ThresholdEcdsaSecp256k1]
+    }
+
+    pub fn is_threshold_ecdsa(&self) -> bool {
+        Self::all_threshold_ecdsa_algorithms().contains(self)
+    }
+}
+
 impl From<AlgorithmId> for u8 {
     fn from(value: AlgorithmId) -> Self {
         u8::try_from(value as isize).expect("could not convert AlgorithmId to u8")
