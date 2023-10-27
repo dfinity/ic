@@ -57,7 +57,7 @@ ic-sns-swap = { path = "../../sns/swap" }
 itertools = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
-pretty_assertions = "0.6.1"
+pretty_assertions = { workspace = true }
 prost = { workspace = true }
 registry-canister = { path = "../canister" }
 serde = { version = "1.0", features = ["derive"] }

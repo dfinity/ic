@@ -62,7 +62,7 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 mockall = "0.11.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
-pretty_assertions = "1.0"
+pretty_assertions = { workspace = true }
 prost = { workspace = true }
 rust_decimal = { version = "1.25" }
 rust_decimal_macros = "1.25"
