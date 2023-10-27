@@ -570,6 +570,12 @@ wait_for_proposal_to_execute() {
             print_green "NNS proposal ${PROPOSAL_ID} executed successfully"
             return 0
         fi
+        # Early exit if we know it failed, what are we waiting around for again?
+        FAILED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].failed_timestamp_seconds')
+        if [[ "${FAILED}" != 0 ]]; then
+            print_red "NNS proposal ${PROPOSAL_ID} failed to execute"
+            return 1
+        fi
         sleep 10
     done
 
@@ -586,8 +592,8 @@ wait_for_sns_governance_to_be_in_normal_mode() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    for i in {1..20}; do
-        echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/20)"
+    for i in {1..40}; do
+        echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/40)"
         EXECUTED=$(__dfx canister --network "$SUBNET_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
         if [[ "${EXECUTED}" -eq 1 ]]; then
             print_green "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode"
