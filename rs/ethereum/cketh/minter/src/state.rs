@@ -10,7 +10,6 @@ use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
-use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use strum_macros::EnumIter;
@@ -25,7 +24,7 @@ thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MintedEvent {
     pub deposit_event: ReceivedEthEvent,
     pub mint_block_index: LedgerMintIndex,
@@ -37,7 +36,7 @@ impl MintedEvent {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
@@ -54,16 +53,13 @@ pub struct State {
     pub eth_transactions: EthTransactions,
 
     /// Per-principal lock for pending_retrieve_eth_requests
-    #[serde(skip)]
     pub retrieve_eth_principals: BTreeSet<Principal>,
 
     /// Locks preventing concurrent execution timer tasks
-    #[serde(skip)]
     pub active_tasks: HashSet<TaskType>,
 
     /// Number of HTTP outcalls since the last upgrade.
     /// Used to correlate request and response in logs.
-    #[serde(skip)]
     pub http_request_counter: u64,
 }
 
@@ -214,6 +210,41 @@ impl State {
         }
         self.validate_config()
     }
+
+    /// Checks whether two states are equivalent.
+    pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
+        // We define the equivalence using the upgrade procedure.
+        // Replaying the event log won't produce exactly the same state we had before the upgrade,
+        // but a state that equivalent for all practical purposes.
+        //
+        // For example, we don't compare:
+        // 1. Computed fields and caches, such as `ecdsa_public_key`.
+        // 2. Transient fields, such as `active_tasks`.
+        use ic_utils_ensure::ensure_eq;
+
+        ensure_eq!(self.ethereum_network, other.ethereum_network);
+        ensure_eq!(self.ledger_id, other.ledger_id);
+        ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
+        ensure_eq!(
+            self.ethereum_contract_address,
+            other.ethereum_contract_address
+        );
+        ensure_eq!(
+            self.minimum_withdrawal_amount,
+            other.minimum_withdrawal_amount
+        );
+        ensure_eq!(
+            self.last_scraped_block_number,
+            other.last_scraped_block_number
+        );
+        ensure_eq!(self.ethereum_block_height, other.ethereum_block_height);
+        ensure_eq!(self.events_to_mint, other.events_to_mint);
+        ensure_eq!(self.minted_events, other.minted_events);
+        ensure_eq!(self.invalid_events, other.invalid_events);
+
+        self.eth_transactions
+            .is_equivalent_to(&other.eth_transactions)
+    }
 }
 
 pub fn read_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -276,7 +307,7 @@ pub async fn minter_address() -> Address {
     Address::from_pubkey(&lazy_call_ecdsa_public_key().await)
 }
 
-#[derive(Serialize, Deserialize, Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]
+#[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]
 pub enum TaskType {
     MintCkEth,
     RetrieveEth,

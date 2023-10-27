@@ -1575,19 +1575,9 @@ mod withdrawal_flow {
     use super::arbitrary::{
         arb_checked_amount_of, arb_non_overflowing_transaction_price, arb_withdrawal_request,
     };
-    use crate::lifecycle::init::InitArg;
-    use crate::numeric::{wei_from_milli_ether, LedgerBurnIndex, TransactionNonce};
-    use crate::state::{mutate_state, read_state, State, STATE};
-    use crate::storage::{decode_state, encode_state};
-    use crate::transactions::tests::{
-        create_and_record_signed_transaction, create_and_record_transaction,
-        create_and_record_withdrawal_request, sign_transaction, transaction_price,
-        transaction_receipt,
-    };
-    use crate::transactions::{
-        create_transaction, EthTransactions, EthereumNetwork, TransactionStatus,
-    };
-    use candid::Principal;
+    use crate::numeric::TransactionNonce;
+    use crate::transactions::tests::sign_transaction;
+    use crate::transactions::{create_transaction, EthTransactions, EthereumNetwork};
     use proptest::proptest;
     use std::cell::RefCell;
 
@@ -1627,68 +1617,6 @@ mod withdrawal_flow {
                 wrapped_txs.borrow_mut().record_signed_transaction(sign_transaction(created_tx));
             }
         });
-    }
-
-    #[test]
-    fn should_encode_decode_state() {
-        use crate::state::STATE;
-        STATE.with(|s| {
-            *s.borrow_mut() = Some(
-                State::try_from(InitArg {
-                    ethereum_network: Default::default(),
-                    ecdsa_key_name: "test_key_1".to_string(),
-                    ethereum_contract_address: None,
-                    ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
-                        .expect("BUG: invalid principal"),
-                    ethereum_block_height: Default::default(),
-                    minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
-                    next_transaction_nonce: Default::default(),
-                })
-                .expect("init args should be valid"),
-            );
-        });
-
-        check_encode_decode_state_roundtrip();
-
-        let ledger_burn_index = LedgerBurnIndex::new(15);
-        let withdrawal_request = mutate_state(|s| {
-            create_and_record_withdrawal_request(&mut s.eth_transactions, ledger_burn_index)
-        });
-        check_encode_decode_state_roundtrip();
-
-        let created_tx = mutate_state(|s| {
-            create_and_record_transaction(
-                &mut s.eth_transactions,
-                withdrawal_request,
-                transaction_price(),
-            )
-        });
-        check_encode_decode_state_roundtrip();
-
-        let signed_tx = mutate_state(|s| {
-            create_and_record_signed_transaction(&mut s.eth_transactions, created_tx)
-        });
-        check_encode_decode_state_roundtrip();
-
-        let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
-        mutate_state(|s| {
-            s.eth_transactions
-                .record_finalized_transaction(ledger_burn_index, receipt)
-        });
-        println!("Encode/Decode finalized TX");
-        check_encode_decode_state_roundtrip();
-    }
-
-    fn check_encode_decode_state_roundtrip() {
-        let before_state = read_state(|s| s.clone());
-
-        read_state(|s| encode_state(s));
-        STATE.with(|cell| {
-            *cell.borrow_mut() = Some(decode_state());
-        });
-
-        let after_state = read_state(|s| s.clone());
-        assert_eq!(before_state, after_state);
     }
 }
 

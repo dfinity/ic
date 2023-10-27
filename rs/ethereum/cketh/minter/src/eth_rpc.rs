@@ -427,12 +427,17 @@ pub enum JsonRpcResult<T> {
 /// Describes a payload transformation to execute before passing the HTTP response to consensus.
 /// The purpose of these transformations is to ensure that the response encoding is deterministic
 /// (the field order is the same).
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 pub enum ResponseTransform {
+    #[n(0)]
     Block,
+    #[n(1)]
     LogEntries,
+    #[n(2)]
     TransactionReceipt,
+    #[n(3)]
     FeeHistory,
+    #[n(4)]
     SendRawTransaction,
 }
 
@@ -492,8 +497,7 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     );
     let status_ok = args.response.status >= 200u16 && args.response.status < 300u16;
     if status_ok && !args.context.is_empty() {
-        let maybe_transform: Result<ResponseTransform, _> =
-            ciborium::de::from_reader(&args.context[..]);
+        let maybe_transform: Result<ResponseTransform, _> = minicbor::decode(&args.context[..]);
         if let Ok(transform) = maybe_transform {
             transform.apply(&mut args.response.body);
         }
@@ -607,7 +611,7 @@ where
             .as_ref()
             .map(|t| {
                 let mut buf = vec![];
-                ciborium::ser::into_writer(t, &mut buf).unwrap();
+                minicbor::encode(t, &mut buf).unwrap();
                 buf
             })
             .unwrap_or_default();

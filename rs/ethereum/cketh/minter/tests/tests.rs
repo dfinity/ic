@@ -118,6 +118,8 @@ fn should_deposit_and_withdraw() {
             raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
         },
     );
+
+    let txhash = "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
     assert_contains_unique_event(
         &events,
         EventPayload::FinalizedTransaction {
@@ -128,10 +130,18 @@ fn should_deposit_and_withdraw() {
                 effective_gas_price: Nat::from(4277923390u64),
                 gas_used: Nat::from(21_000),
                 status: TransactionStatus::Success,
-                transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                transaction_hash: txhash.clone(),
             },
         },
+    );
+
+    cketh.check_audit_log();
+    cketh.upgrade_minter();
+    assert_eq!(
+        cketh.retrieve_eth_status(block_index_u64),
+        RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(EthTransaction {
+            transaction_hash: txhash
+        }))
     );
 }
 
@@ -771,6 +781,8 @@ impl CkEthSetup {
         let balance = self.balance_of(recipient);
         assert_eq!(balance, Nat::from(EXPECTED_BALANCE));
 
+        self.check_audit_log();
+
         let events = self.get_all_events();
         assert_contains_unique_event(
             &events,
@@ -1121,5 +1133,27 @@ impl CkEthSetup {
             }
         }
         panic!("couldn't find any eth_getLogs request");
+    }
+
+    fn check_audit_log(&self) {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(self.minter_id, "check_audit_log", Encode!().unwrap())
+                    .unwrap(),
+            ),
+            ()
+        )
+        .unwrap()
+    }
+
+    fn upgrade_minter(&self) {
+        self.env
+            .upgrade_canister(
+                self.minter_id,
+                minter_wasm(),
+                Encode!(&MinterArg::UpgradeArg(Default::default())).unwrap(),
+            )
+            .unwrap();
     }
 }

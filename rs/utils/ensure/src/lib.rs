@@ -20,5 +20,12 @@ macro_rules! ensure_eq {
                                std::stringify!($rhs), $rhs,
                                format!($msg $(,$args)*)));
         }
+    };
+    ($lhs:expr, $rhs:expr $(,)*) => {
+        if $lhs != $rhs {
+            return Err(format!("{} ({:?}) != {} ({:?})",
+                               std::stringify!($lhs), $lhs,
+                               std::stringify!($rhs), $rhs));
+        }
     }
 }
