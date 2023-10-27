@@ -78,8 +78,8 @@ Swap:
     maximum_participant_icp: 3000000000000 e8s
 
     VestingSchedule:
-        events: 3
-        interval: 100 seconds
+        events: 30000
+        interval: 2 seconds
 
     duration: 7 days
 
