@@ -5,7 +5,6 @@ use ic_types::{
     artifact::{Advert, ArtifactKind, PriorityFn},
     NodeId, Time,
 };
-use serde::{Deserialize, Serialize};
 
 /// Produces mutations to be applied on the artifact pool.
 pub trait ChangeSetProducer<Pool>: Send {
@@ -109,21 +108,6 @@ pub struct UnvalidatedArtifact<T> {
     pub message: T,
     pub peer_id: NodeId,
     pub timestamp: Time,
-}
-
-/// Validated artifact
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ValidatedArtifact<T> {
-    pub msg: T,
-    pub timestamp: Time,
-}
-
-// Traits for accessing data for (un)validated artifacts follow.
-
-impl<T> AsRef<T> for ValidatedArtifact<T> {
-    fn as_ref(&self) -> &T {
-        &self.msg
-    }
 }
 
 impl<T> AsRef<T> for UnvalidatedArtifact<T> {

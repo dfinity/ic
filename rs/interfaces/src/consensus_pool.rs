@@ -1,6 +1,6 @@
 //! The consensus pool public interface.
 
-use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
+use crate::artifact_pool::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -21,6 +21,19 @@ use std::sync::Arc;
 
 /// The height, at which we consider a replica to be behind
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
+
+/// Validated artifact
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValidatedArtifact<T> {
+    pub msg: T,
+    pub timestamp: Time,
+}
+
+impl<T> AsRef<T> for ValidatedArtifact<T> {
+    fn as_ref(&self) -> &T {
+        &self.msg
+    }
+}
 
 pub type ChangeSet = Vec<ChangeAction>;
 
