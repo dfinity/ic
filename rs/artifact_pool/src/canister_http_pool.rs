@@ -129,7 +129,6 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
                 }
                 CanisterHttpChangeAction::MoveToValidated(share) => {
                     if self.unvalidated.remove(&share).is_some() {
-                        adverts.push(CanisterHttpArtifact::message_to_advert(&share));
                         self.validated.insert(share, ());
                     }
                 }
@@ -308,7 +307,6 @@ mod tests {
 
         assert!(pool.contains(&id1));
         assert!(!pool.contains(&id2));
-        assert_eq!(result.adverts[0].id, id1);
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
