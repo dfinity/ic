@@ -21,7 +21,7 @@ mod rocksdb_iterator;
 #[cfg(feature = "rocksdb_backend")]
 mod rocksdb_pool;
 
-use ic_interfaces::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
+use ic_interfaces::{artifact_pool::UnvalidatedArtifact, consensus_pool::ValidatedArtifact};
 use ic_types::{ReplicaVersion, Time};
 use std::convert::TryFrom;
 use std::fs;

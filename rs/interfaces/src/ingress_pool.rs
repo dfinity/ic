@@ -1,5 +1,5 @@
 //! The ingress pool public interface.
-use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
+use crate::{artifact_pool::UnvalidatedArtifact, consensus_pool::ValidatedArtifact};
 use ic_types::{
     artifact::IngressMessageId,
     crypto::CryptoHash,
