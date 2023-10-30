@@ -11,8 +11,8 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-ckbtc-minter = { path = "../ckbtc/minter" }
 rand = "0.8.5"
-serde = "1.0.130"
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
 bitcoin = "0.28.1"

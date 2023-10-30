@@ -42,8 +42,8 @@ prometheus = { workspace = true }
 rand = "0.8"
 prost = { workspace = true }
 registry-canister = { path = "../registry/canister" }
-serde = { version = "1.0.99", features = ["derive"] }
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

@@ -8,8 +8,6 @@ edition = "2021"
 [dependencies]
 tiny_http = "0.7"
 atomic-counter = "1.0.1"
-# Same versions as ic-workload-generator
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_cbor = "0.10"
-# Same versions as ic-types
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_bytes = { workspace = true }

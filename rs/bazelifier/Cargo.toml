@@ -11,5 +11,5 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 pathdiff = "0.2.1"
 semver = { version = "1.0.9", features = ["serde"] }
-serde = { version = "1.0.137", features = ["derive"] }
+serde = { workspace = true }
 toml = "0.5.9"

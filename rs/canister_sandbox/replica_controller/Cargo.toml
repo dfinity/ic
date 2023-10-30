@@ -17,7 +17,7 @@ ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 lazy_static = "1.4.0"
-serde_json = "1.0.54"
+serde_json = { workspace = true }
 libc = "0.2.119"
 nix = { workspace = true }
 once_cell = "1.8"

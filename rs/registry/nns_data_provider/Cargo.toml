@@ -14,7 +14,7 @@ ic-types = { path = "../../types/types" }
 chrono = "0.4.19"
 prost = { workspace = true }
 rand = "0.8"
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
 url = { version = "2.1.1", features = ["serde"] }
 

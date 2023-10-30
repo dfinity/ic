@@ -12,4 +12,4 @@ repository = "https://github.com/dfinity/ic"
 include = ["src", "Cargo.toml", "LICENSE", "README.md", "CHANGELOG.md"]
 
 [dependencies]
-serde = { version = "1.0.136", features = ["derive"] }
+serde = { workspace = true }

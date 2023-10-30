@@ -9,4 +9,4 @@ edition = "2021"
 candid = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 ic-ic00-types = { path = "../../types/ic00_types" }
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }

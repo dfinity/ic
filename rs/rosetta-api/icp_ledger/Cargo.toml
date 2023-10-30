@@ -24,9 +24,9 @@ num-traits = "0.2.12"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 prost-derive = "0.11"
-serde = "1.0"
-serde_bytes = "0.11"
-serde_cbor = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 

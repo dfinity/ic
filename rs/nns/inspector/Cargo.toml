@@ -15,6 +15,6 @@ ic-nns-gtc = { path = "../gtc" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 ledger-canister = { path = "../../rosetta-api/icp_ledger/ledger" }
 prost = { workspace = true }
-serde = "1.0"
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 stable_reader = { path = "../../rust_canisters/stable_reader" }

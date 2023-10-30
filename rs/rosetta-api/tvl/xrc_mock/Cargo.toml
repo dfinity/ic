@@ -8,4 +8,4 @@ candid = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk = { workspace = true }
 ic-xrc-types = "1.1.0"
-serde = "1.0"
+serde = { workspace = true }

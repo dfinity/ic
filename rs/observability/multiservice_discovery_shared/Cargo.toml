@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 service-discovery = { path = "../service_discovery" }
-serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_json = { workspace = true }
 ic-types ={ path = "../../types/types" }
 erased-serde = "0.3.23"
 regex = "1.7.0"

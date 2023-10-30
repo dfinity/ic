@@ -8,7 +8,7 @@ humantime = "2.1.0"
 ic-nervous-system-proto = { path = "../proto" }
 lazy_static = "1.4.0"
 regex = "1.3.0"
-serde = "1.0.99"
+serde = { workspace = true }
 
 [dev-dependencies]
-serde_yaml = "0.8.24"
+serde_yaml = { workspace = true }

@@ -9,8 +9,8 @@ candid = { workspace = true }
 rand = "^0.8.5"
 itertools = { workspace = true }
 tokio = { workspace = true }
-serde = { version = "1", features = ["derive"] }
-serde_json = "^1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-ic00-types = { path = "../types/ic00_types" }

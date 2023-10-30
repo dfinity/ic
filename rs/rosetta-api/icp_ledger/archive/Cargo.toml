@@ -19,4 +19,4 @@ ic-metrics-encoder = "1"
 ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../" }
 lazy_static = "1.4.0"
-serde = "1.0"
+serde = { workspace = true }

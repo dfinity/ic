@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 leb128 = "0.2.4"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 
 [dev-dependencies]
 maplit = "1.0.2"

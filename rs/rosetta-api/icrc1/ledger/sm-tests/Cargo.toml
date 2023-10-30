@@ -25,7 +25,7 @@ num-traits = "0.2.14"
 proptest = "1.0"
 cddl = "0.9.0-beta.1"
 hex = "0.4.2"
-serde = "1.0.99"
+serde = { workspace = true }
 futures = { workspace = true }
 icrc1-test-env = { git = "https://github.com/dfinity/ICRC-1", rev = "bdcf39e32a12185fbcec33897001d93c901d6689" }
 icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "bdcf39e32a12185fbcec33897001d93c901d6689" }

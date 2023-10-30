@@ -23,7 +23,7 @@ ic-metrics-encoder = "1.1"
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"
 scopeguard = "1.1.0"
-serde = "1.0.139"
+serde = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
@@ -35,7 +35,7 @@ ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 num-traits = "0.2.14"
 proptest = "1.0"
-serde_json = "1.0.54"
+serde_json = { workspace = true }
 
 [[bin]]
 name = "ic-icrc1-index"

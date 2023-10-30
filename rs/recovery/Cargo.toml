@@ -40,9 +40,9 @@ reqwest = { version = "0.11.1", features = [
     "multipart",
     "native-tls",
 ] }
-serde = { version = "1.0.115", features = ["derive"] }
-serde_cbor = "0.11.1"
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { version = "2.5.2", features = ["release_max_level_trace"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"

@@ -9,7 +9,7 @@ edition = "2021"
 candid = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 ic-base-types = { path = "../../types/base_types" }
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.3.0"

@@ -9,7 +9,7 @@ ic-crypto-secrets-containers = { path = "../../../secrets_containers" }
 ic-types = { path = "../../../../types/types" }
 rand = "0.8"
 rcgen = { version = "0.11.1", features = ["zeroize"] }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 time = "0.3.20"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
@@ -19,6 +19,6 @@ ic-crypto-node-key-validation = { path = "../../../node_key_validation" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
 ic-protobuf = { path = "../../../../protobuf" }
 rand_chacha = "0.3"
-serde_cbor = "0.11.1"
+serde_cbor = { workspace = true }
 hex = "0.4"
 x509-parser = { version = "0.15.1" }

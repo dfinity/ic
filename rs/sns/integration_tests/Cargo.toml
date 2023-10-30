@@ -44,7 +44,7 @@ pretty-bytes = "0.2.2"
 proptest = "1.0"
 prost = { workspace = true }
 rand = "0.8.4"
-serde_yaml = "0.8.24"
+serde_yaml = { workspace = true }
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

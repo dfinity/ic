@@ -35,8 +35,8 @@ ic-certified-map = "0.3.1"
 ic-xrc-types = "1.0.0"
 prost = { workspace = true }
 rand = "0.8"
-serde = "1.0"
-serde_cbor = "0.11.2"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 sha2 = "0.9.1"
 yansi = "0.5.0"
 

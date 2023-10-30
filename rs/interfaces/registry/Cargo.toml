@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 ic-types = { path = "../..//types/types" }
 prost = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }

@@ -16,7 +16,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-stable-structures = { workspace = true }
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 
@@ -26,7 +26,7 @@ ic-base-types-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 proptest = "1.0"
 proptest-derive = "0.3.0"
-serde_cbor = "0.11.1"
+serde_cbor = { workspace = true }
 tempfile = "3.1.0"
 
 [features]

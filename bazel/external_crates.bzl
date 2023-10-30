@@ -972,7 +972,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 ],
             ),
             "serde": crate.spec(
-                version = "^1.0.184",
+                version = "^1.0",
                 features = [
                     "derive",
                 ],
@@ -991,7 +991,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^1.0",
             ),
             "serde_json": crate.spec(
-                version = "^1.0.40",
+                version = "^1.0.107",
             ),
             "serde_millis": crate.spec(
                 version = "^0.1",

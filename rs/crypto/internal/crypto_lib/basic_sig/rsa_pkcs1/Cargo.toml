@@ -11,13 +11,13 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 num-traits = { version= "0.2.9", default-features = false, features = ["libm"] }
 pkcs8 = "0.10.2"
 sha2 = "0.10.2"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 simple_asn1 = { workspace = true }
 num-bigint = "~0.4.3"
 ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 
 [dev-dependencies]
 hex = "0.4.2"
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_json = { workspace = true }
 wycheproof = "0.5"
