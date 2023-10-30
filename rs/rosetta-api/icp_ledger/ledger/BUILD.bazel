@@ -49,6 +49,9 @@ rust_test(
         "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
     ],
     crate = ":ledger",
+    data = [
+        "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
+    ],
     rustc_env = {
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz)",
     },
