@@ -158,9 +158,7 @@ lazy_static! {
             neurons_fund_investment_icp: Some(pb::Tokens {
                 e8s: Some(6_100_000_000),
             }),
-
-            // Disabled until IS_MATCHED_FUNDING_ENABLED == True
-            neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED { Some(true) } else { None },
+            neurons_fund_participation: None,
         })
     };
 
@@ -187,6 +185,7 @@ lazy_static! {
                 minimum_icp: None,
                 maximum_icp: None,
                 neurons_fund_investment_icp: None,
+                neurons_fund_participation: Some(true),
                 ..swap_parameters
             }),
             ..CREATE_SERVICE_NERVOUS_SYSTEM.clone()

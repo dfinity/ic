@@ -3037,12 +3037,29 @@ impl Swap {
 
     /// The minimum number of participants have been achieved.
     pub fn min_participation_reached(&self) -> bool {
-        if let Some(params) = &self.params {
-            return self.cf_participants.len().saturating_add(self.buyers.len())
-                >= (params.min_participants as usize);
+        if let (Some(params), Some(init)) = (&self.params, &self.init) {
+            if init.neurons_fund_participation.is_some() {
+                // Only count direct participants for determining swap's success.
+                // Note that a valid Swap Init should either have `neurons_fund_participation` or
+                // `cf_participants`, but not both at the same time; here, we defensively perform
+                // the check again anyway.
+                if !self.cf_participants.is_empty() {
+                    log!(
+                        ERROR,
+                        "Inconsistent Swap Init: cf_participants has {} elements (starting with \
+                        with {:?}) while neurons_fund_participation is set.",
+                        self.cf_participants.len(),
+                        self.cf_participants[0],
+                    );
+                }
+                (self.buyers.len() as u32) >= params.min_participants
+            } else {
+                (self.cf_participants.len().saturating_add(self.buyers.len()) as u32)
+                    >= params.min_participants
+            }
+        } else {
+            false
         }
-
-        false
     }
 
     pub fn min_direct_participation_icp_e8s_reached(&self) -> bool {
@@ -3053,7 +3070,6 @@ impl Swap {
             };
             return self.current_direct_participation_e8s() >= min_direct_participation_icp_e8s;
         }
-
         false
     }
 
