@@ -12,6 +12,7 @@ use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use serde_bytes::ByteBuf;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
@@ -941,6 +942,12 @@ impl IDkgTranscript {
     /// Checks if the specified `NodeId` is a receiver of the transcript.
     pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
         self.receivers.position(receiver_id).is_some()
+    }
+
+    /// Returns a copy of the raw internal transcript as `serde_bytes::ByteBuf`.
+    #[inline]
+    pub fn transcript_as_bytebuf(&self) -> ByteBuf {
+        ByteBuf::from(self.internal_transcript_raw.clone())
     }
 }
 

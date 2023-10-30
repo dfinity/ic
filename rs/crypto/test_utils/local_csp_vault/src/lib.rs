@@ -26,7 +26,7 @@ use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -148,7 +148,7 @@ mock! {
             context_data: &[u8],
             receiver_index: NodeIndex,
             key_id: &KeyId,
-            transcript: &IDkgTranscriptInternal,
+            transcript: IDkgTranscriptInternalBytes,
         ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
         fn idkg_load_transcript_with_openings(
@@ -158,7 +158,7 @@ mock! {
             context_data: &[u8],
             receiver_index: NodeIndex,
             key_id: &KeyId,
-            transcript: &IDkgTranscriptInternal,
+            transcript: IDkgTranscriptInternalBytes,
         ) -> Result<(), IDkgLoadTranscriptError>;
 
         fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
@@ -185,11 +185,11 @@ mock! {
             derivation_path: &ExtendedDerivationPath,
             hashed_message: &[u8],
             nonce: &Randomness,
-            key: &IDkgTranscriptInternal,
-            kappa_unmasked: &IDkgTranscriptInternal,
-            lambda_masked: &IDkgTranscriptInternal,
-            kappa_times_lambda: &IDkgTranscriptInternal,
-            key_times_lambda: &IDkgTranscriptInternal,
+            key_raw: IDkgTranscriptInternalBytes,
+            kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+            lambda_masked_raw: IDkgTranscriptInternalBytes,
+            kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+            key_times_lambda_raw: IDkgTranscriptInternalBytes,
             algorithm_id: AlgorithmId,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
     }

@@ -4,7 +4,6 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSerializationError, ThresholdEcdsaSigShareInternal,
 };
-use ic_logger::{info, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
@@ -43,46 +42,10 @@ pub fn sign_share<C: CspThresholdEcdsaSigner>(
     csp_client: &C,
     self_node_id: &NodeId,
     inputs: &ThresholdEcdsaSigInputs,
-    logger: &ReplicaLogger,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-    fn conv_error(e: ThresholdEcdsaSerializationError) -> ThresholdEcdsaSignShareError {
-        ThresholdEcdsaSignShareError::SerializationError {
-            internal_error: e.0,
-        }
-    }
-
     ensure_self_was_receiver(self_node_id, inputs.receivers().get())?;
 
-    let kappa_unmasked =
-        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_unmasked())
-            .map_err(conv_error)?;
-    let lambda_masked = IDkgTranscriptInternal::try_from(inputs.presig_quadruple().lambda_masked())
-        .map_err(conv_error)?;
-    let kappa_times_lambda =
-        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_times_lambda())
-            .map_err(conv_error)?;
-    let key_times_lambda =
-        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().key_times_lambda())
-            .map_err(conv_error)?;
-    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
-    let master_key = get_tecdsa_master_public_key_from_internal_transcript(&key);
-    info!(
-        logger,
-        "MASTER tECDSA PUBLIC KEY: '{}'",
-        hex::encode(master_key.public_key)
-    );
-
-    let internal_sig_share = csp_client.ecdsa_sign_share(
-        inputs.derivation_path(),
-        inputs.hashed_message(),
-        inputs.nonce(),
-        &key,
-        &kappa_unmasked,
-        &lambda_masked,
-        &kappa_times_lambda,
-        &key_times_lambda,
-        inputs.algorithm_id(),
-    )?;
+    let internal_sig_share = csp_client.ecdsa_sign_share(inputs)?;
 
     let sig_share_raw = internal_sig_share.serialize().map_err(|e| {
         ThresholdEcdsaSignShareError::SerializationError {

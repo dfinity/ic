@@ -23,8 +23,8 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal,
+    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
@@ -39,7 +39,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -319,7 +319,7 @@ mock! {
             context_data: &[u8],
             receiver_index: NodeIndex,
             public_key: &MEGaPublicKey,
-            transcript: &IDkgTranscriptInternal,
+            transcript: IDkgTranscriptInternalBytes,
         ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
         fn idkg_load_transcript_with_openings(
@@ -329,7 +329,7 @@ mock! {
             context_data: &[u8],
             receiver_index: NodeIndex,
             public_key: &MEGaPublicKey,
-            transcript: &IDkgTranscriptInternal,
+            transcript: IDkgTranscriptInternalBytes,
         ) -> Result<(), IDkgLoadTranscriptError>;
 
         fn idkg_retain_active_keys(
@@ -375,15 +375,7 @@ mock! {
     pub trait CspThresholdEcdsaSigner {
         fn ecdsa_sign_share(
             &self,
-            derivation_path: &ExtendedDerivationPath,
-            hashed_message: &[u8],
-            nonce: &Randomness,
-            key: &IDkgTranscriptInternal,
-            kappa_unmasked: &IDkgTranscriptInternal,
-            lambda_masked: &IDkgTranscriptInternal,
-            kappa_times_lambda: &IDkgTranscriptInternal,
-            key_times_lambda: &IDkgTranscriptInternal,
-            algorithm_id: AlgorithmId,
+            inputs: &ThresholdEcdsaSigInputs,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
     }
 

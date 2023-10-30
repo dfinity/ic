@@ -42,6 +42,7 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-types = { path = "../types/types" }
 parking_lot = "0.12.1"
 serde = { version = "1.0.99", features = ["derive"] }
+serde_bytes = "0.11"
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

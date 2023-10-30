@@ -7,7 +7,7 @@ use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
-    ThresholdEcdsaSigShareInternal,
+    IDkgTranscriptInternalBytes, ThresholdEcdsaSigShareInternal,
 };
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
@@ -27,23 +27,40 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         derivation_path: &ExtendedDerivationPath,
         hashed_message: &[u8],
         nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        lambda_masked: &IDkgTranscriptInternal,
-        kappa_times_lambda: &IDkgTranscriptInternal,
-        key_times_lambda: &IDkgTranscriptInternal,
+        key_raw: IDkgTranscriptInternalBytes,
+        kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+        lambda_masked_raw: IDkgTranscriptInternalBytes,
+        kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+        key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+        fn deserialize_transcript(
+            bytes: &[u8],
+        ) -> Result<IDkgTranscriptInternal, ThresholdEcdsaSignShareError> {
+            IDkgTranscriptInternal::deserialize(bytes).map_err(|e| {
+                ThresholdEcdsaSignShareError::SerializationError {
+                    internal_error: e.0,
+                }
+            })
+        }
+
+        let key = deserialize_transcript(key_raw.as_ref())?;
+
+        let kappa_unmasked = deserialize_transcript(kappa_unmasked_raw.as_ref())?;
+        let lambda_masked = deserialize_transcript(lambda_masked_raw.as_ref())?;
+        let kappa_times_lambda = deserialize_transcript(kappa_times_lambda_raw.as_ref())?;
+        let key_times_lambda = deserialize_transcript(key_times_lambda_raw.as_ref())?;
+
         let start_time = self.metrics.now();
         let result = self.ecdsa_sign_share_internal(
             derivation_path,
             hashed_message,
             nonce,
-            key,
-            kappa_unmasked,
-            lambda_masked,
-            kappa_times_lambda,
-            key_times_lambda,
+            &key,
+            &kappa_unmasked,
+            &lambda_masked,
+            &kappa_times_lambda,
+            &key_times_lambda,
             algorithm_id,
         );
         self.metrics.observe_duration_seconds(
