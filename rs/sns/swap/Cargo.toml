@@ -44,7 +44,7 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 prost = { workspace = true }
 rust_decimal = "1.25"
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!

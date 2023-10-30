@@ -11,5 +11,5 @@ axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 clap = { version = "4.0", features = ["derive"] }
 rustls = "0.21.1"
 rustls-pemfile = "1.0.2"
-serde_json = { version = "1.0" }
+serde_json = { workspace = true }
 tokio = { workspace = true }

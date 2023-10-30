@@ -13,8 +13,8 @@ ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 prometheus = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11.5"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

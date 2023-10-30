@@ -34,8 +34,8 @@ prost = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
 scoped_threadpool = "0.1.*"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",

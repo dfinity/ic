@@ -13,9 +13,9 @@ ic-crypto-utils-threshold-sig-der = { path = "../../../rs/crypto/utils/threshold
 ic-types = { path = "../../../rs/types/types" }
 ic-base-types = { path = "../../../rs/types/base_types" }
 
-serde = { version = "1.0", features = ['derive'] }
-serde_cbor = "0.11"
-serde_json = "1.0.86"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 hex = "0.4"
 ic-certified-map = "0.3.1"
 rand = "0.8"

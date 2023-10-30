@@ -10,7 +10,7 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-stable-structures = { workspace = true }
-serde = "1.0.136"
+serde = { workspace = true }
 
 [[bin]]
 name = "stable_structures"

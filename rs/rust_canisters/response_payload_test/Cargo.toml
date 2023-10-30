@@ -11,6 +11,6 @@ path = "src/main.rs"
 dfn_core = { path = "../dfn_core" }
 dfn_json = { path = "../dfn_json" }
 dfn_macro = { path = "../dfn_macro" }
-serde = "1.0"
+serde = { workspace = true }
 
 

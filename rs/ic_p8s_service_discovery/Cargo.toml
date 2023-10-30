@@ -35,8 +35,8 @@ ic-utils = { path = "../utils/" }
 lazy_static = "1.4.0"
 parse_int = "0.4.0"
 prometheus = { workspace = true }
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_json = { workspace = true }
 tempfile = "3.1.0"
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }

@@ -33,9 +33,9 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = { workspace = true }
 regex = "1.5.6"
-serde_json = { version = "1.0.79", features = ["std"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.8.24"
+serde_json = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
 json-patch = "0.2.6"
 tempfile = "3.1.0"
 url = "2.2.0"

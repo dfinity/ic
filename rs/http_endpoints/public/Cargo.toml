@@ -38,8 +38,8 @@ phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.3"
-serde = "1.0.99"
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { version = "2.5.2", features = [
   "nested-values",
   "release_max_level_debug",
@@ -73,7 +73,7 @@ mockall = "0.11.4"
 maplit = "1.0.2"
 pretty_assertions = { workspace = true }
 proptest = "1.0.0"
-serde_bytes = "0.11"
+serde_bytes = { workspace = true }
 tower-test = "0.4.0"
 
 [features]

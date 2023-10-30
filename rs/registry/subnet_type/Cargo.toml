@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 candid = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

@@ -10,7 +10,7 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-ic00-types = { path = "../../types/ic00_types" }
-serde = "1.0.136"
+serde = { workspace = true }
 
 [[bin]]
 name = "proxy_canister"

@@ -32,7 +32,7 @@ icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 libsecp256k1 = "0.5.0"
 prost = { workspace = true }
 rand = "0.8"
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 sha3 = "0.9.1"
 simple_asn1 = { workspace = true }
 

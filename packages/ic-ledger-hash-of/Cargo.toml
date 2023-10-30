@@ -13,4 +13,4 @@ repository = "https://github.com/dfinity/ic"
 [dependencies]
 candid = { workspace = true }
 hex = "0.4.2"
-serde = "1.0"
+serde = { workspace = true }

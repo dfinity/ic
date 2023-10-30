@@ -34,5 +34,5 @@ rand = { version = "0.8.5", features = ["small_rng"]}
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
 ring = { version = "0.16.11", features = ["std"] }
-serde = "1.0"
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }

@@ -14,7 +14,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 prometheus = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
 [dev-dependencies]

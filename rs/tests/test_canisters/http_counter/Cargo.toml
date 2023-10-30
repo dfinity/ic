@@ -13,4 +13,4 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-certified-map = "0.3.1"
-serde = "1"
+serde = { workspace = true }

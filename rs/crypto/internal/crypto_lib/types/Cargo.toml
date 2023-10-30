@@ -8,8 +8,8 @@ arrayvec = "0.5.1"
 hex = "0.4.2"
 ic-protobuf = { path = "../../../../protobuf" }
 phantom_newtype = { path = "../../../../phantom_newtype" }
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = "1.0"

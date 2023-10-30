@@ -11,4 +11,4 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 dfn_candid = {path = "../../../rust_canisters/dfn_candid"}
 dfn_core = {path = "../../../rust_canisters/dfn_core"}
-serde = "1"
+serde = { workspace = true }

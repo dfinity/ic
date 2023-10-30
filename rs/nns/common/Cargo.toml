@@ -23,7 +23,7 @@ lazy_static = "1.4.0"
 num-traits = "0.2.12"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 sha2 = "0.9.1"
 comparable = { version = "0.5", features = ["derive"] }
 

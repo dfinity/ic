@@ -8,8 +8,8 @@ ic-types = { path = "../../../../../types/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../rsa_pkcs1" }
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_cbor = "0.11.1"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 simple_asn1 = { workspace = true }
 
 [dev-dependencies]

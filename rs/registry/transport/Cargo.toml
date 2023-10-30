@@ -9,7 +9,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }
 bytes = { workspace = true }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }
 
 [dev-dependencies]
 ic-registry-transport-protobuf-generator = { path = "./protobuf_generator" }

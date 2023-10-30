@@ -16,7 +16,7 @@ ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
@@ -27,6 +27,6 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reprodu
 num-bigint = "0.4.3"
 proptest = "1.0"
 proptest-derive = "0.3.0"
-serde_cbor = "0.11.1"
+serde_cbor = { workspace = true }
 strum = { workspace = true }
 wycheproof = "0.5"

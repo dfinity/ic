@@ -61,9 +61,9 @@ reqwest = { version = "0.11.18", features = [
     "stream",
 ] }
 rustls = { version = "^0.21.0", features = ["dangerous_configuration"] }
-serde = "1.0.163"
-serde_cbor = "0.11.2"
-serde_json = "1.0.96"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = "2.5.2"
 stretto = { version = "^0.8", features = ["full"] }
 tempfile = "3.6.0"

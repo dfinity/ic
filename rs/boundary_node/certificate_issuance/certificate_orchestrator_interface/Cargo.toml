@@ -7,6 +7,6 @@ edition = "2021"
 addr = { version = "0.15.6", default-features = false, features = ["idna"] }
 candid = { workspace = true }
 ic-stable-structures = { workspace = true }
-serde = "1.0.148"
-serde_bytes = "0.11.7"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 thiserror = "1.0.37"

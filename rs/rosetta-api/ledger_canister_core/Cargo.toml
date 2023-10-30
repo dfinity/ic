@@ -15,4 +15,4 @@ ic-ledger-core = { path = "../ledger_core" }
 ic-utils = { path = "../../utils" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 num-traits = "0.2.12"
-serde = "1.0"
+serde = { workspace = true }

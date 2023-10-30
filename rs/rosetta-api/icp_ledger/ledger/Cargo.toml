@@ -27,9 +27,9 @@ icp-ledger = { path = "../" }
 intmap = { version = "1.1.0", features = ["serde"] }
 lazy_static = "1.4.0"
 on_wire = { path = "../../../rust_canisters/on_wire" }
-serde = "1.0"
-serde_bytes = "0.11.5"
-serde_cbor = "0.11.2"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
 ic-icrc1 = { path = "../../icrc1" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = {version = "0.2.15"}
