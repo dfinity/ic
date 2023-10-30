@@ -1354,7 +1354,6 @@ fn test_principal_subaccounts() {
     assert_ledger_index_parity(env, ledger_id, index_id);
 
     let subaccounts = list_subaccounts(env, index_id, PrincipalId(account(1, 0).owner), None);
-    println!("Subaccounts: {:?}", subaccounts);
     // There should exist a subaccount for the principal of account (1,0)
     assert_eq!(subaccounts.len(), 1);
 
@@ -1363,7 +1362,6 @@ fn test_principal_subaccounts() {
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     let subaccounts = list_subaccounts(env, index_id, PrincipalId(account(1, 0).owner), None);
-    println!("Subaccounts: {:?}", subaccounts);
 
     // There should exist two subaccounts now for the principal of account (1,0)
     assert_eq!(subaccounts.len(), 2);
@@ -1382,4 +1380,18 @@ fn test_principal_subaccounts() {
     assert_eq!(subaccounts.len(), 3);
     assert!(subaccounts.contains(&account(1, 1).subaccount.unwrap()));
     assert!(subaccounts.contains(&account(1, 2).subaccount.unwrap()));
+
+    // Make an approve transaction with the spender being a completly new account
+    approve(env, ledger_id, account(1, 0), account(2, 1), 100);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // The balance of the new account should be 0. Approve transactions do not change the balance of the spender
+    assert_eq!(icrc1_balance_of(env, ledger_id, account(2, 1)), 0);
+
+    let subaccounts = list_subaccounts(env, index_id, PrincipalId(account(2, 0).owner), None);
+
+    // There should exist one subaccount for the principal of account (2,0)
+    assert_eq!(subaccounts.len(), 1);
+    // The subaccount 1 should show up in a `list_subaccount` query although it has only been involved in an Approve transaction
+    assert!(subaccounts.contains(&account(2, 1).subaccount.unwrap()));
 }
