@@ -24,6 +24,11 @@ use std::convert::TryFrom;
 use crate::wasmtime_embedder::system_api_complexity::system_api;
 use ic_system_api::SystemApiImpl;
 
+/// The amount of instructions required to process a single byte in a payload.
+/// This includes the cost of memory as well as time passing the payload
+/// from wasm sandbox to the replica execution environment.
+const INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR: u32 = 50;
+
 fn unexpected_err(s: String) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(s))
 }
@@ -506,7 +511,7 @@ pub(crate) fn syscalls(
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead!(MSG_REPLY_DATA_APPEND, metering_type),
-                    size as u64,
+                    (INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR * size) as u64,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src, size, memory)
@@ -539,7 +544,7 @@ pub(crate) fn syscalls(
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead!(MSG_REJECT, metering_type),
-                    size as u64,
+                    (INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR * size) as u64,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src, size, memory)
@@ -691,7 +696,7 @@ pub(crate) fn syscalls(
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead!(CALL_DATA_APPEND, metering_type),
-                    size as u64,
+                    (INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR * size) as u64,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src, size, memory)
