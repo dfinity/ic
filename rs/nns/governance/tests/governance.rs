@@ -100,7 +100,7 @@ use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{
     self as sns_swap_pb,
-    IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
+    IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb, Lifecycle,
     LinearScalingCoefficient, NeuronBasketConstructionParameters,
     NeuronsFundParticipationConstraints, Params,
 };
@@ -8604,11 +8604,11 @@ fn test_proposal_gc() {
                     proposal: Some(Proposal {
                         title: Some("A Reasonable Title".to_string()),
                         action: Some(if x % 2 == 0 {
-                            proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                            Action::ManageNeuron(Box::new(ManageNeuron {
                                 ..Default::default()
                             }))
                         } else {
-                            proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+                            Action::ExecuteNnsFunction(ExecuteNnsFunction {
                                 ..Default::default()
                             })
                         }),
@@ -8669,6 +8669,56 @@ fn test_proposal_gc() {
     driver.advance_time_by(60);
     // No GC should be induced.
     assert!(!gov.maybe_gc());
+}
+
+#[test]
+fn test_gc_ignores_exempt_proposals() {
+    let props =
+        (1..1000)
+            .collect::<Vec<u64>>()
+            .iter()
+            .map(|x| {
+                (
+                    *x,
+                    ProposalData {
+                        id: Some(ProposalId { id: *x }),
+                        decided_timestamp_seconds: 60,
+                        reward_event_round: 1,
+                        sns_token_swap_lifecycle: Some(Lifecycle::Committed as i32),
+                        proposal: Some(Proposal {
+                            title: Some("A Reasonable Title".to_string()),
+                            action: Some(if x % 2 == 0 {
+                                Action::OpenSnsTokenSwap(OpenSnsTokenSwap::default())
+                            } else {
+                                Action::CreateServiceNervousSystem(
+                                    CreateServiceNervousSystem::default(),
+                                )
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect::<BTreeMap<u64, ProposalData>>();
+    let proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        proposals: props.clone(),
+        ..Default::default()
+    };
+    // Set timestamp to 30 days
+    let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
+    let mut gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+    assert_eq!(999, gov.heap_data.proposals.len());
+    gov.latest_gc_timestamp_seconds = driver.now() - 60;
+    // Garbage collection should run, but not remove any of the exempt proposals
+    assert!(gov.maybe_gc());
+    assert_eq!(999, gov.heap_data.proposals.len());
 }
 
 #[tokio::test]

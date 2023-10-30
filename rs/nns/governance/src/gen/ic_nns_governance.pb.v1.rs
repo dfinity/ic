@@ -1744,8 +1744,8 @@ pub struct NetworkEconomics {
     /// The transaction fee that must be paid for each ledger transaction.
     #[prost(uint64, tag = "9")]
     pub transaction_fee_e8s: u64,
-    /// The maximum number of proposals to keep, per topic. When the
-    /// total number of proposals for a given topic is greater than this
+    /// The maximum number of proposals to keep, per topic for eligible topics.
+    /// When the total number of proposals for a given topic is greater than this
     /// number, the oldest proposals that have reached a "final" state
     /// may be deleted.
     ///

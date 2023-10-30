@@ -25,18 +25,16 @@ use std::{
     num::NonZeroU64,
 };
 
-use crate::pb::v1::{
-    neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
-    NeuronsFundParticipation as NeuronsFundParticipationPb,
-    NeuronsFundSnapshot as NeuronsFundSnapshotPb,
-    SwapParticipationLimits as SwapParticipationLimitsPb,
-};
 use crate::{
     governance,
     neuron_store::{NeuronStore, NeuronsFundNeuron},
     pb::v1::{
-        create_service_nervous_system::SwapParameters, governance_error, GovernanceError,
-        IdealMatchedParticipationFunction, Neuron,
+        create_service_nervous_system::SwapParameters, governance_error,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
+        GovernanceError, IdealMatchedParticipationFunction, Neuron,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb,
+        SwapParticipationLimits as SwapParticipationLimitsPb,
     },
 };
 
@@ -1552,15 +1550,12 @@ where
 
 #[cfg(test)]
 mod matched_participation_function_tests {
-    use super::test_functions::LinearFunction;
     use super::{
-        dec_to_u64, u64_to_dec, InvertibleFunction, MatchedParticipationFunction,
-        SerializableFunction,
-    };
-    use crate::neurons_fund::test_functions::{
-        AnalyticallyInvertibleFunction, SimpleLinearFunction,
+        dec_to_u64, test_functions::LinearFunction, u64_to_dec, InvertibleFunction,
+        MatchedParticipationFunction, SerializableFunction,
     };
     use crate::neurons_fund::{
+        test_functions::{AnalyticallyInvertibleFunction, SimpleLinearFunction},
         IdealMatchingFunction, ValidatedNeuronsFundParticipationConstraints,
     };
     use ic_nervous_system_common::E8;

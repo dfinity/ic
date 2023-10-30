@@ -123,6 +123,7 @@
 use mockall::automock;
 
 mod audit_event;
+mod garbage_collection;
 /// The 'governance' module contains the canister (smart contract)
 /// that manages neurons, proposals, voting, voter following, voting
 /// rewards, and the code necessary to execute accepted proposals.
