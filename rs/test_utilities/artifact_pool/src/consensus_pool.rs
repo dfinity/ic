@@ -159,6 +159,7 @@ impl TestConsensusPool {
     /// Creates a new test pool. `registry_version_for_genesis` is used to
     /// create the genesis block with data from the provided registry.
     pub fn new(
+        node_id: NodeId,
         subnet_id: SubnetId,
         pool_config: ArtifactPoolConfig,
         time_source: Arc<dyn TimeSource>,
@@ -183,6 +184,7 @@ impl TestConsensusPool {
         ));
         let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
         let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            node_id,
             subnet_id,
             ic_test_utilities::consensus::make_genesis(summary),
             pool_config,

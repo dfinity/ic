@@ -83,11 +83,9 @@ fn consensus_produces_expected_batches() {
         *router.next_batch_height.write().unwrap() = Height::from(1); // skip genesis block
 
         let router = Arc::new(router);
+        let node_id = node_test_id(0);
         let subnet_id = subnet_test_id(0);
-        let replica_config = ReplicaConfig {
-            node_id: node_test_id(0),
-            subnet_id,
-        };
+        let replica_config = ReplicaConfig { node_id, subnet_id };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
@@ -109,6 +107,7 @@ fn consensus_produces_expected_batches() {
         let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
         let consensus_pool = Arc::new(RwLock::new(
             consensus_pool::ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_id,
                 subnet_id,
                 make_genesis(summary),
                 pool_config.clone(),

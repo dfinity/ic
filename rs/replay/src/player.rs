@@ -172,6 +172,7 @@ impl Player {
             backup::read_cup_file(&cup_file).expect("CUP of the starting block should be valid");
         // This would create a new pool with just the genesis CUP.
         let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+            NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
             initial_cup,
             artifact_pool_config,
@@ -206,6 +207,7 @@ impl Player {
             // recovery.
             artifact_pool_config.persistent_pool_read_only = true;
             let consensus_pool = ConsensusPoolImpl::from_uncached(
+                NodeId::from(PrincipalId::new_anonymous()),
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
                 MetricsRegistry::new(),
                 log.clone(),
@@ -310,6 +312,7 @@ impl Player {
         ));
         let certification_pool = consensus_pool.as_ref().map(|_| {
             CertificationPoolImpl::new(
+                NodeId::from(PrincipalId::new_anonymous()),
                 ArtifactPoolConfig::from(cfg.artifact_pool.clone()),
                 log.clone(),
                 metrics_registry.clone(),
@@ -1344,6 +1347,7 @@ mod tests {
     fn test_get_share_certified_hashes() {
         let tmp = tempfile::tempdir().expect("Could not create a temp dir");
         let pool = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(tmp.path().to_path_buf()),
             no_op_logger(),
             MetricsRegistry::new(),
