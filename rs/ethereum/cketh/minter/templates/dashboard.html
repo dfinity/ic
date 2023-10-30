@@ -246,7 +246,7 @@
             {% endif %}
 
             {% if !withdrawal_requests.is_empty() %}
-            <h3>Withdrawal Requests ckETH → ETH</h3>
+            <h3 id="withdrawal-requests">Withdrawal Requests ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>
@@ -268,7 +268,7 @@
             {% endif %}
 
             {% if !pending_transactions.is_empty() %}
-            <h3>Pending Transactions ckETH → ETH</h3>
+            <h3 id="pending-transactions">Pending Transactions ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>
@@ -292,7 +292,7 @@
             {% endif %}
 
             {% if !finalized_transactions.is_empty() %}
-            <h3>Finalized Transactions ckETH → ETH</h3>
+            <h3 id="finalized-transactions">Finalized Transactions ckETH → ETH</h3>
             <table>
                 <thead>
                 <tr>

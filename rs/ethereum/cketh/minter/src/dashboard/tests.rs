@@ -1,11 +1,20 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
 use candid::Principal;
+use ic_cketh_minter::address::Address;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
+use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
-use ic_cketh_minter::numeric::{BlockNumber, LedgerMintIndex, LogIndex, TransactionNonce};
+use ic_cketh_minter::numeric::{
+    BlockNumber, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex, TransactionNonce, Wei,
+    WeiPerGas,
+};
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
 use ic_cketh_minter::state::State;
+use ic_cketh_minter::transactions::{EthWithdrawalRequest, Subaccount};
+use ic_cketh_minter::tx::{
+    Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
+};
 
 #[test]
 fn should_display_metadata() {
@@ -213,6 +222,188 @@ fn should_display_rejected_deposits() {
 }
 
 #[test]
+fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
+    DashboardAssert::assert_that(initial_dashboard())
+        .has_no_elements_matching("#withdrawal-requests");
+
+    let dashboard = {
+        let mut state = initial_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedEthWithdrawalRequest(withdrawal_request_with_index(
+                LedgerBurnIndex::new(15),
+            )),
+        );
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedEthWithdrawalRequest(withdrawal_request_with_index(
+                LedgerBurnIndex::new(16),
+            )),
+        );
+        DashboardTemplate::from_state(&state)
+    };
+
+    DashboardAssert::assert_that(dashboard)
+        .has_withdrawal_requests(
+            1,
+            &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_100_000_000_000_000",
+            ],
+        )
+        .has_withdrawal_requests(
+            2,
+            &vec![
+                "15",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_100_000_000_000_000",
+            ],
+        );
+}
+
+#[test]
+fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() {
+    DashboardAssert::assert_that(initial_dashboard())
+        .has_no_elements_matching("#pending-transactions");
+
+    let dashboard = {
+        let mut state = initial_state();
+        let id_1 = LedgerBurnIndex::new(15);
+        let (req_1, tx_1, _signed_tx_1, _receipt_1) = withdrawal_flow(
+            id_1,
+            TransactionNonce::from(0_u8),
+            TransactionStatus::Success,
+        );
+        apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req_1));
+        apply_state_transition(
+            &mut state,
+            &EventType::CreatedTransaction {
+                withdrawal_id: id_1,
+                transaction: tx_1,
+            },
+        );
+
+        let id_2 = LedgerBurnIndex::new(16);
+        let (req_2, tx_2, signed_tx_2, _receipt_2) = withdrawal_flow(
+            id_2,
+            TransactionNonce::from(1_u8),
+            TransactionStatus::Success,
+        );
+        apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req_2));
+        apply_state_transition(
+            &mut state,
+            &EventType::CreatedTransaction {
+                withdrawal_id: id_2,
+                transaction: tx_2,
+            },
+        );
+        apply_state_transition(
+            &mut state,
+            &EventType::SignedTransaction {
+                withdrawal_id: id_2,
+                transaction: signed_tx_2,
+            },
+        );
+        DashboardTemplate::from_state(&state)
+    };
+
+    DashboardAssert::assert_that(dashboard)
+        .has_pending_transactions(
+            1,
+            &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_099_999_999_979_000",
+                "Sent(0xbc13db18c10a03d92e187580a6c93478f22c76cf79b35fca492f9720ab7710ec)",
+            ],
+        )
+        .has_pending_transactions(
+            2,
+            &vec![
+                "15",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_099_999_999_979_000",
+                "Created",
+            ],
+        );
+}
+
+#[test]
+fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index() {
+    DashboardAssert::assert_that(initial_dashboard())
+        .has_no_elements_matching("#finalized-transactions");
+
+    let dashboard = {
+        let mut state = initial_state();
+        for (req, tx, signed_tx, receipt) in vec![
+            withdrawal_flow(
+                LedgerBurnIndex::new(15),
+                TransactionNonce::from(0_u8),
+                TransactionStatus::Success,
+            ),
+            withdrawal_flow(
+                LedgerBurnIndex::new(16),
+                TransactionNonce::from(1_u8),
+                TransactionStatus::Failure,
+            ),
+        ] {
+            let id = req.ledger_burn_index;
+            apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req));
+            apply_state_transition(
+                &mut state,
+                &EventType::CreatedTransaction {
+                    withdrawal_id: id,
+                    transaction: tx,
+                },
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::SignedTransaction {
+                    withdrawal_id: id,
+                    transaction: signed_tx,
+                },
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::FinalizedTransaction {
+                    withdrawal_id: id,
+                    transaction_receipt: receipt,
+                },
+            );
+        }
+
+        DashboardTemplate::from_state(&state)
+    };
+
+    DashboardAssert::assert_that(dashboard)
+        .has_finalized_transactions(
+            1,
+            &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_099_999_999_979_000",
+                "21_000",
+                "4190269",
+                "0xbc13db18c10a03d92e187580a6c93478f22c76cf79b35fca492f9720ab7710ec",
+                "Failure",
+            ],
+        )
+        .has_finalized_transactions(
+            2,
+            &vec![
+                "15",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_099_999_999_979_000",
+                "21_000",
+                "4190269",
+                "0x0a691dc3335c49c443a2e503f4ae903855873f279a0d14357ba3bf2c3e4d15b7",
+                "Success",
+            ],
+        );
+}
+
+#[test]
 fn should_display_etherscan_links_according_to_chosen_network() {
     let sepolia_dashboard = DashboardTemplate {
         ethereum_network: EthereumNetwork::Sepolia,
@@ -233,13 +424,14 @@ fn should_display_etherscan_links_according_to_chosen_network() {
     );
 }
 
+//TODO FI-1025: add tests for reimbursed transactions
+
 fn initial_dashboard() -> DashboardTemplate {
     DashboardTemplate::from_state(&initial_state())
 }
 
 fn initial_state() -> State {
     use ic_cketh_minter::lifecycle::init::InitArg;
-    use ic_cketh_minter::numeric::Wei;
     State::try_from(InitArg {
         ethereum_network: Default::default(),
         ecdsa_key_name: "test_key_1".to_string(),
@@ -254,7 +446,6 @@ fn initial_state() -> State {
 }
 
 fn received_eth_event() -> ReceivedEthEvent {
-    use ic_cketh_minter::numeric::Wei;
     ReceivedEthEvent {
         transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
             .parse()
@@ -269,6 +460,72 @@ fn received_eth_event() -> ReceivedEthEvent {
             .parse()
             .unwrap(),
     }
+}
+
+fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
+    use std::str::FromStr;
+    const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
+    const DEFAULT_PRINCIPAL: &str =
+        "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
+    const DEFAULT_SUBACCOUNT: [u8; 32] = [0x11; 32];
+    const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34";
+    EthWithdrawalRequest {
+        ledger_burn_index,
+        destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
+        withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
+        from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
+        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+    }
+}
+
+fn withdrawal_flow(
+    ledger_burn_index: LedgerBurnIndex,
+    nonce: TransactionNonce,
+    tx_status: TransactionStatus,
+) -> (
+    EthWithdrawalRequest,
+    Eip1559TransactionRequest,
+    SignedEip1559TransactionRequest,
+    TransactionReceipt,
+) {
+    let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
+    let fee = TransactionPrice {
+        max_priority_fee_per_gas: WeiPerGas::ONE,
+        max_fee_per_gas: WeiPerGas::ONE,
+        gas_limit: GasAmount::from(21_000_u32),
+    };
+    let max_fee = fee.max_transaction_fee();
+    let transaction = Eip1559TransactionRequest {
+        chain_id: EthereumNetwork::Sepolia.chain_id(),
+        nonce,
+        max_priority_fee_per_gas: fee.max_priority_fee_per_gas,
+        max_fee_per_gas: fee.max_fee_per_gas,
+        gas_limit: fee.gas_limit,
+        destination: withdrawal_request.destination,
+        amount: withdrawal_request
+            .withdrawal_amount
+            .checked_sub(max_fee)
+            .unwrap(),
+        data: vec![],
+        access_list: Default::default(),
+    };
+    let dummy_signature = Eip1559Signature {
+        signature_y_parity: false,
+        r: Default::default(),
+        s: Default::default(),
+    };
+    let signed_tx = SignedEip1559TransactionRequest::from((transaction.clone(), dummy_signature));
+    let tx_receipt = TransactionReceipt {
+        block_hash: "0xce67a85c9fb8bc50213815c32814c159fd75160acf7cb8631e8e7b7cf7f1d472"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(4190269),
+        effective_gas_price: signed_tx.transaction().max_fee_per_gas,
+        gas_used: signed_tx.transaction().gas_limit,
+        status: tx_status,
+        transaction_hash: signed_tx.hash(),
+    };
+    (withdrawal_request, transaction, signed_tx, tx_receipt)
 }
 
 mod assertions {
@@ -405,6 +662,34 @@ mod assertions {
                 &format!("#rejected-deposits + table > tbody > tr:nth-child({row_index})"),
                 expected_value,
                 "rejected-deposits",
+            )
+        }
+
+        pub fn has_withdrawal_requests(&self, row_index: u8, expected_value: &Vec<&str>) -> &Self {
+            self.has_table_row_string_value(
+                &format!("#withdrawal-requests + table > tbody > tr:nth-child({row_index})"),
+                expected_value,
+                "withdrawal-requests",
+            )
+        }
+
+        pub fn has_pending_transactions(&self, row_index: u8, expected_value: &Vec<&str>) -> &Self {
+            self.has_table_row_string_value(
+                &format!("#pending-transactions + table > tbody > tr:nth-child({row_index})"),
+                expected_value,
+                "pending-transactions",
+            )
+        }
+
+        pub fn has_finalized_transactions(
+            &self,
+            row_index: u8,
+            expected_value: &Vec<&str>,
+        ) -> &Self {
+            self.has_table_row_string_value(
+                &format!("#finalized-transactions + table > tbody > tr:nth-child({row_index})"),
+                expected_value,
+                "finalized-transactions",
             )
         }
 
