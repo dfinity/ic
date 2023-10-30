@@ -502,7 +502,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(30_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1041,9 +1041,10 @@ fn dts_long_running_install_and_update() {
         return;
     }
 
+    let slice_instruction_limit = 15_000_000;
     let env = dts_env(
         NumInstructions::from(100_000_000),
-        NumInstructions::from(1_000_000),
+        NumInstructions::from(slice_instruction_limit),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -1121,7 +1122,7 @@ fn dts_long_running_install_and_update() {
 
     for i in 0..30 {
         let work = wasm()
-            .instruction_counter_is_at_least(1_000_000)
+            .instruction_counter_is_at_least(slice_instruction_limit)
             .message_payload()
             .append_and_reply()
             .build();

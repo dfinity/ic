@@ -2255,7 +2255,7 @@ fn query_stats_are_collected() {
         // instructions and payload sizes differ. All child canisters have the same cost though.
         assert_eq!(
             canister_query_stats.num_instructions,
-            if idx == 0 { 69984 } else { 13635 }
+            if idx == 0 { 72532 } else { 13929 }
         );
         assert_eq!(
             canister_query_stats.ingress_payload_size,
