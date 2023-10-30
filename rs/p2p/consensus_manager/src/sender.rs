@@ -121,19 +121,17 @@ where
             }
 
             self.current_commit_id.inc_assign();
-
-            self.metrics
-                .active_advert_transmits
-                .set(self.active_adverts.len() as i64);
         }
     }
 
     fn handle_purge_advert(&mut self, id: &Artifact::Id) {
         // TODO: Add a warning if we get purge requests for unseen advert.
         if let Some((send_task, free_slot)) = self.active_adverts.remove(id) {
-            self.metrics.adverts_to_purge_total.inc();
+            self.metrics.send_view_consensus_purge_active_total.inc();
             send_task.abort();
             self.slot_manager.give_slot(free_slot);
+        } else {
+            self.metrics.send_view_consensus_dup_purge_total.inc();
         }
     }
 
@@ -141,7 +139,7 @@ where
         let entry = self.active_adverts.entry(advert.id.clone());
 
         if let Entry::Vacant(entry) = entry {
-            self.metrics.adverts_to_send_total.inc();
+            self.metrics.send_view_consensus_new_adverts_total.inc();
 
             let slot = self.slot_manager.take_free_slot();
 
@@ -157,6 +155,8 @@ where
             );
 
             entry.insert((self.rt_handle.spawn(send_future), slot));
+        } else {
+            self.metrics.send_view_consensus_dup_adverts_total.inc();
         }
     }
 
@@ -190,10 +190,7 @@ where
             .expect("Should not be cancelled");
 
             match artifact {
-                Some(artifact) => {
-                    metrics.artifacts_pushed_total.inc();
-                    Data::Artifact(artifact)
-                }
+                Some(artifact) => Data::Artifact(artifact),
                 None => {
                     warn!(log, "Attempted to push Artifact, but the Artifact was not found in the pool. Sending an advert instead.");
                     Data::Advert(advert)
@@ -228,6 +225,7 @@ where
                         let is_completed = completed_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
 
                         if !is_completed {
+                            metrics.send_view_send_to_peer_total.inc();
                             let task = send_advert_to_peer(transport.clone(), connection_id, body.clone(), peer, Artifact::TAG.into());
                             in_progress_transmissions.spawn_on(peer, task, &rt_handle);
                         }
@@ -236,6 +234,7 @@ where
                 Some(result) = in_progress_transmissions.join_next() => {
                     match result {
                         Ok((connection_id, peer)) => {
+                            metrics.send_view_send_to_peer_delivered_total.inc();
                             completed_transmissions.insert(peer, connection_id);
                         },
                         Err(err) => {
@@ -253,14 +252,6 @@ where
 
 /// Sends a serialized advert or artifact message to a peer.
 /// If the peer is not reachable, it will retry with an exponential backoff.
-/// Memory Consumption:
-///  - Backoffpolicy: ±128B
-///  - body: ±250B
-///  - peer: 32B
-///  - connId: 8B
-/// For 10k tasks and 40 peers ~100Mb
-/// Note: If we start pushing adverts we probably want to just try pushing once
-/// and revert back to the advert if the inital push fails.
 async fn send_advert_to_peer(
     transport: Arc<dyn Transport>,
     connection_id: ConnId,
@@ -304,15 +295,13 @@ impl SlotManager {
 
     fn give_slot(&mut self, slot: SlotNumber) {
         self.free_slots.push(slot);
-        self.metrics.free_slots.set(self.free_slots.len() as i64);
+        self.metrics.slot_manager_used_slots.dec();
     }
 
     fn take_free_slot(&mut self) -> SlotNumber {
+        self.metrics.slot_manager_used_slots.inc();
         match self.free_slots.pop() {
-            Some(slot) => {
-                self.metrics.free_slots.dec();
-                slot
-            }
+            Some(slot) => slot,
             None => {
                 if self.next_free_slot.get() > SLOT_TABLE_THRESHOLD {
                     warn!(
@@ -324,7 +313,7 @@ impl SlotManager {
                 let new_slot = self.next_free_slot;
                 self.next_free_slot.inc_assign();
 
-                self.metrics.maximum_slots_total.inc();
+                self.metrics.slot_manager_maximum_slots_total.inc();
 
                 new_slot
             }
