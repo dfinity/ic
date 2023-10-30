@@ -20,6 +20,7 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
+use ic_types::NodeId;
 use ic_types::{
     artifact::ArtifactKind, artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
     artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
@@ -248,6 +249,7 @@ impl PoolMetrics {
 }
 
 pub struct ConsensusPoolImpl {
+    node_id: NodeId,
     validated: Box<dyn InitializablePoolSection + Send + Sync>,
     unvalidated: Box<dyn MutablePoolSection<UnvalidatedConsensusArtifact> + Send + Sync>,
     validated_metrics: PoolMetrics,
@@ -362,6 +364,7 @@ impl ConsensusPoolImpl {
     /// the validated pool, the one that is greater (with respect to
     /// height and registry version) will be used.
     pub fn new(
+        node_id: NodeId,
         subnet_id: SubnetId,
         cup_proto: pb::CatchUpPackage,
         config: ArtifactPoolConfig,
@@ -370,7 +373,7 @@ impl ConsensusPoolImpl {
     ) -> ConsensusPoolImpl {
         let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
         Self::init_genesis(cup_proto, pool.validated.as_mut());
-        let mut pool = Self::from_uncached(pool, registry.clone(), log.clone());
+        let mut pool = Self::from_uncached(node_id, pool, registry.clone(), log.clone());
         // If the back up directory is set, instantiate the backup component
         // and create a subdirectory with the subnet id as directory name.
         pool.backup = config.backup_config.map(|config| {
@@ -419,12 +422,14 @@ impl ConsensusPoolImpl {
 
     /// Can be used to instantiate an empty pool without a CUP.
     pub fn from_uncached(
+        node_id: NodeId,
         uncached: UncachedConsensusPoolImpl,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
     ) -> ConsensusPoolImpl {
         let cache = Arc::new(ConsensusCacheImpl::new(&uncached));
         ConsensusPoolImpl {
+            node_id,
             validated: uncached.validated,
             unvalidated: uncached.unvalidated,
             invalidated_artifacts: registry.int_counter(
@@ -440,13 +445,21 @@ impl ConsensusPoolImpl {
     }
 
     pub fn new_from_cup_without_bytes(
+        node_id: NodeId,
         subnet_id: SubnetId,
         catch_up_package: CatchUpPackage,
         config: ArtifactPoolConfig,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
     ) -> ConsensusPoolImpl {
-        Self::new(subnet_id, (&catch_up_package).into(), config, registry, log)
+        Self::new(
+            node_id,
+            subnet_id,
+            (&catch_up_package).into(),
+            config,
+            registry,
+            log,
+        )
     }
 
     /// Get a copy of ConsensusPoolCache.
@@ -715,12 +728,13 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
         self.validated.get(id)
     }
 
-    // Return an iterator of all artifacts that is required to make progress
+    // Return an iterator of all artifacts that are required to make progress
     // above the given height filter.
     fn get_all_validated_by_filter(
         &self,
         filter: &ConsensusMessageFilter,
     ) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+        let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
             .catch_up_package()
@@ -730,7 +744,14 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
         // Since random beacon of previous height is required, min_random_beacon_height
         // should be one less than the normal min height.
         let min_random_beacon_height = max_catch_up_height.max(filter.height);
-        let min = min_random_beacon_height.increment();
+        // In case we received a filter of u64::MAX, don't overflow.
+        let Some(min) = min_random_beacon_height
+            .get()
+            .checked_add(1)
+            .map(Height::from)
+        else {
+            return Box::new(std::iter::empty());
+        };
         let max_finalized_height = self
             .validated
             .finalization()
@@ -802,23 +823,19 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
             ..=max_random_tape_height
                 .max(max_random_tape_share_height)
                 .get();
-        let random_tapes = tape_range
-            .clone()
-            .map(move |h| self.validated.random_tape().get_by_height(Height::from(h)));
-        let random_tape_shares = tape_range.map(move |h| {
-            self.validated
-                .random_tape_share()
-                .get_by_height(Height::from(h))
+        let random_tape_iterator = tape_range.map(Height::from).flat_map(move |h| {
+            let mut tapes = self.validated.random_tape().get_by_height(h);
+            if let Some(tape) = tapes.next() {
+                vec![tape.into_message()]
+            } else {
+                self.validated
+                    .random_tape_share()
+                    .get_by_height(h)
+                    .filter(|x| x.signature.signer == node_id)
+                    .map(|x| x.into_message())
+                    .collect()
+            }
         });
-        let random_tape_iterator =
-            random_tapes
-                .zip(random_tape_shares)
-                .flat_map(|(mut tape, shares)| {
-                    tape.next().map_or_else(
-                        || shares.map(|x| x.into_message()).collect::<Vec<_>>(),
-                        |x| vec![x.into_message()],
-                    )
-                });
 
         Box::new(
             self.validated
@@ -844,6 +861,7 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
                             min: min_finalized_share_height,
                             max: max_finalized_share_height,
                         })
+                        .filter(move |x| x.signature.signer == node_id)
                         .map(|x| x.into_message()),
                 )
                 .chain(
@@ -862,6 +880,7 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
                             min: min_notarization_share_height,
                             max: max_notarization_share_height,
                         })
+                        .filter(move |x| x.signature.signer == node_id)
                         .map(|x| x.into_message()),
                 )
                 .chain(
@@ -880,6 +899,7 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
                             min: min_random_beacon_share_height,
                             max: max_random_beacon_share_height,
                         })
+                        .filter(move |x| x.signature.signer == node_id)
                         .map(|x| x.into_message()),
                 )
                 .chain(
@@ -928,8 +948,8 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},
-        crypto::{CryptoHash, CryptoHashOf},
-        RegistryVersion,
+        crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+        RegistryVersion, ReplicaVersion,
     };
     use prost::Message;
     use std::{collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock};
@@ -940,6 +960,7 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let time_0 = time_source.get_relative_time();
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
@@ -997,6 +1018,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
@@ -1073,6 +1095,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
@@ -1137,6 +1160,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
@@ -1163,10 +1187,191 @@ mod tests {
     }
 
     #[test]
+    fn test_get_all_validated_by_filter() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let node = node_test_id(3);
+            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node,
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            let height_offset = 5_000_000_000;
+            let filter = ConsensusMessageFilter {
+                height: Height::from(height_offset + 10),
+            };
+
+            let fake_block = |height: Height| {
+                Block::new(
+                    CryptoHashOf::from(CryptoHash(vec![])),
+                    Payload::new(
+                        ic_types::crypto::crypto_hash,
+                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    ),
+                    Height::from(height),
+                    Rank(0),
+                    ValidationContext {
+                        registry_version: RegistryVersion::from(99),
+                        certified_height: Height::from(42),
+                        time: mock_time(),
+                    },
+                )
+            };
+
+            let fake_proposal = |height: Height, node_id: NodeId| {
+                BlockProposal::fake(fake_block(height), node_id)
+                    .into_message()
+                    .into_message()
+            };
+
+            let fake_finalization = |height: Height| {
+                Finalization::fake(FinalizationContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                    block: crypto_hash(&fake_block(height)),
+                })
+                .into_message()
+            };
+
+            let fake_finalization_share = |height: Height, node_id: NodeId| {
+                FinalizationShare::fake(&fake_block(height), node_id).into_message()
+            };
+
+            let fake_notarization = |height: Height| {
+                Notarization::fake(NotarizationContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                    block: crypto_hash(&fake_block(height)),
+                })
+                .into_message()
+            };
+
+            let fake_notarization_share = |height: Height, node_id: NodeId| {
+                NotarizationShare::fake(&fake_block(height), node_id).into_message()
+            };
+
+            let fake_beacon = |height: Height| {
+                RandomBeacon::fake(RandomBeaconContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                    parent: CryptoHashOf::from(CryptoHash(vec![])),
+                })
+                .into_message()
+            };
+
+            let fake_beacon_share = |height: Height, node_id: NodeId| {
+                RandomBeaconShare::fake(
+                    &fake_beacon(height.decrement()).try_into().unwrap(),
+                    node_id,
+                )
+                .into_message()
+            };
+
+            let fake_tape = |height: Height| {
+                RandomTape::fake(RandomTapeContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                })
+                .into_message()
+            };
+
+            let fake_tape_share = |height: Height, node_id: NodeId| {
+                RandomTapeShare::fake(height, node_id).into_message()
+            };
+
+            // Create shares from 5 nodes for 20 heights, only add aggregates below height 15.
+            let mut messages = Vec::new();
+            for h in 1..=20 {
+                let height = Height::from(height_offset + h);
+                for i in 1..=5 {
+                    let node_id = node_test_id(i);
+                    messages.extend([
+                        fake_proposal(height, node_id),
+                        fake_finalization_share(height, node_id),
+                        fake_notarization_share(height, node_id),
+                        fake_beacon_share(height, node_id),
+                        fake_tape_share(height, node_id),
+                    ]);
+                }
+                if h <= 15 {
+                    messages.extend([
+                        fake_finalization(height),
+                        fake_notarization(height),
+                        fake_beacon(height),
+                        fake_tape(height),
+                    ]);
+                }
+            }
+            messages.push(
+                CatchUpPackage::fake(CatchUpContent::new(
+                    HashedBlock::new(crypto_hash, fake_block(Height::from(height_offset))),
+                    HashedRandomBeacon::new(
+                        crypto_hash,
+                        RandomBeacon::fake(RandomBeaconContent {
+                            version: ReplicaVersion::default(),
+                            height: Height::from(height_offset),
+                            parent: CryptoHashOf::from(CryptoHash(vec![])),
+                        }),
+                    ),
+                    CryptoHashOf::from(CryptoHash(vec![])),
+                ))
+                .into_message(),
+            );
+
+            pool.apply_changes(
+                time_source.as_ref(),
+                messages
+                    .into_iter()
+                    .map(|m| ChangeAction::AddToValidated(m))
+                    .collect(),
+            );
+
+            let get_signer = |m: &ConsensusMessage| match m {
+                ConsensusMessage::RandomBeaconShare(x) => x.signature.signer,
+                ConsensusMessage::RandomTapeShare(x) => x.signature.signer,
+                ConsensusMessage::NotarizationShare(x) => x.signature.signer,
+                ConsensusMessage::FinalizationShare(x) => x.signature.signer,
+                ConsensusMessage::CatchUpPackageShare(x) => x.signature.signer,
+                _ => panic!("No signer for aggregate artifacts"),
+            };
+
+            pool.get_all_validated_by_filter(&filter).for_each(|m| {
+                assert!(m.height() >= filter.height);
+                if m.height().get() <= height_offset + 15 {
+                    assert!(!m.is_share());
+                }
+                if m.is_share() {
+                    assert_eq!(get_signer(&m), node);
+                }
+            });
+
+            let min_filter = ConsensusMessageFilter {
+                height: Height::from(u64::MIN),
+            };
+
+            assert_eq!(
+                pool.get_all_validated_by_filter(&min_filter).count(),
+                // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
+                1 + 15 * 4 + 5 * 4 + 20 * 5
+            );
+
+            let max_filter = ConsensusMessageFilter {
+                height: Height::from(u64::MAX),
+            };
+            assert_eq!(pool.get_all_validated_by_filter(&max_filter).count(), 0);
+        });
+    }
+
+    #[test]
     fn test_metrics() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_test_id(0),
                 subnet_test_id(0),
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
@@ -1316,6 +1521,7 @@ mod tests {
                 .join(subnet_id.to_string())
                 .join(ic_types::ReplicaVersion::default().to_string());
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_test_id(0),
                 subnet_id,
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
@@ -1664,6 +1870,7 @@ mod tests {
             let subnet_id = subnet_test_id(0);
             let path = backup_dir.path().join(format!("{:?}", subnet_id));
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                node_test_id(0),
                 subnet_id,
                 make_genesis(ic_types::consensus::dkg::Summary::fake()),
                 pool_config,
@@ -1859,6 +2066,7 @@ mod tests {
             let state_manager = FakeStateManager::new();
             let state_manager = Arc::new(state_manager);
             let mut pool = TestConsensusPool::new(
+                node_test_id(0),
                 subnet_id,
                 pool_config,
                 time_source,

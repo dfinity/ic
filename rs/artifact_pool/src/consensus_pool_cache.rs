@@ -512,6 +512,7 @@ mod test {
             let state_manager = FakeStateManager::new();
             let state_manager = Arc::new(state_manager);
             let mut pool = TestConsensusPool::new(
+                node_test_id(0),
                 subnet_id,
                 pool_config,
                 time_source,
@@ -592,6 +593,7 @@ mod test {
             )];
 
             let mut pool = TestConsensusPool::new(
+                node_test_id(0),
                 subnet_test_id(1),
                 pool_config,
                 FastForwardTimeSource::new(),
