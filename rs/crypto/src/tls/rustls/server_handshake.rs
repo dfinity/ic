@@ -6,7 +6,7 @@ use crate::tls::tls_cert_from_registry;
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, TlsConfigError, TlsPublicKeyCert, TlsServerHandshakeError,
+    AuthenticatedPeer, SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert, TlsServerHandshakeError,
     TlsStream,
 };
 use ic_crypto_utils_tls::{
@@ -31,7 +31,7 @@ pub fn server_config<P: CspTlsHandshakeSignerProvider>(
     signer_provider: &P,
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
-    allowed_clients: AllowedClients,
+    allowed_clients: SomeOrAllNodes,
     registry_version: RegistryVersion,
 ) -> Result<ServerConfig, TlsConfigError> {
     let self_tls_cert =
@@ -42,7 +42,7 @@ pub fn server_config<P: CspTlsHandshakeSignerProvider>(
         }
     })?;
     let client_cert_verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-        allowed_clients.nodes().clone(),
+        allowed_clients.clone(),
         registry_client,
         registry_version,
     );
@@ -84,7 +84,7 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     tcp_stream: TcpStream,
-    allowed_clients: AllowedClients,
+    allowed_clients: SomeOrAllNodes,
     registry_version: RegistryVersion,
 ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
     let config = server_config(

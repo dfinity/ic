@@ -42,8 +42,7 @@ use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{
-    AllowedClients, MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
-    TlsStream,
+    MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError, TlsStream,
 };
 use ic_crypto_utils_tls::{
     node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
@@ -216,9 +215,7 @@ pub(crate) fn start_connection_manager(
     let endpoint_config = EndpointConfig::default();
     let rustls_server_config = tls_config
         .server_config(
-            AllowedClients::new(ic_crypto_tls_interfaces::SomeOrAllNodes::Some(
-                BTreeSet::new(),
-            )),
+            SomeOrAllNodes::Some(BTreeSet::new()),
             registry_client.get_latest_version(),
         )
         .unwrap();
@@ -419,10 +416,10 @@ impl ConnectionManager {
         let subnet_nodes = SomeOrAllNodes::Some(subnet_node_set);
 
         // Set new server config to only accept connections from the current set.
-        match self.tls_config.server_config(
-            AllowedClients::new(subnet_nodes),
-            self.topology.latest_registry_version(),
-        ) {
+        match self
+            .tls_config
+            .server_config(subnet_nodes, self.topology.latest_registry_version())
+        {
             Ok(rustls_server_config) => {
                 let mut server_config =
                     quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));

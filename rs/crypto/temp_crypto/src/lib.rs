@@ -39,7 +39,7 @@ pub mod internal {
         RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
     };
     use ic_crypto_tls_interfaces::{
-        AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsConfig, TlsConfigError,
+        AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
         TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
     };
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
@@ -684,7 +684,7 @@ pub mod internal {
         async fn perform_tls_server_handshake(
             &self,
             tcp_stream: TcpStream,
-            allowed_clients: AllowedClients,
+            allowed_clients: SomeOrAllNodes,
             registry_version: RegistryVersion,
         ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
             self.crypto_component
@@ -719,7 +719,7 @@ pub mod internal {
     {
         fn server_config(
             &self,
-            allowed_clients: AllowedClients,
+            allowed_clients: SomeOrAllNodes,
             registry_version: RegistryVersion,
         ) -> Result<ServerConfig, TlsConfigError> {
             self.crypto_component

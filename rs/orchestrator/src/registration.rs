@@ -718,8 +718,8 @@ mod tests {
         use super::*;
         use async_trait::async_trait;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
-        use ic_crypto_tls_interfaces::AllowedClients;
         use ic_crypto_tls_interfaces::AuthenticatedPeer;
+        use ic_crypto_tls_interfaces::SomeOrAllNodes;
         use ic_crypto_tls_interfaces::TlsClientHandshakeError;
         use ic_crypto_tls_interfaces::TlsHandshake;
         use ic_crypto_tls_interfaces::TlsServerHandshakeError;
@@ -799,7 +799,7 @@ mod tests {
                 async fn perform_tls_server_handshake(
                     &self,
                     tcp_stream: TcpStream,
-                    allowed_clients: AllowedClients,
+                    allowed_clients: SomeOrAllNodes,
                     registry_version: RegistryVersion,
                 ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
 

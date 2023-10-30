@@ -1,6 +1,6 @@
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{
-    AllowedClients, TlsClientHandshakeError, TlsHandshake, TlsServerHandshakeError,
+    SomeOrAllNodes, TlsClientHandshakeError, TlsHandshake, TlsServerHandshakeError,
 };
 use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
 use ic_interfaces_transport::TransportEvent;
@@ -181,7 +181,7 @@ fn test_single_transient_failure_of_tls_server_handshake_impl(use_h2: bool) {
                     .times(1)
                     .returning({
                         move |_tcp_stream: TcpStream,
-                              _allowed_clients: AllowedClients,
+                              _allowed_clients: SomeOrAllNodes,
                               _registry_version: RegistryVersion| {
                             Err(TlsServerHandshakeError::HandshakeError {
                                 internal_error: "transient".to_string(),
@@ -194,7 +194,7 @@ fn test_single_transient_failure_of_tls_server_handshake_impl(use_h2: bool) {
                     .times(1)
                     .returning(
                         move |tcp_stream: TcpStream,
-                              allowed_clients: AllowedClients,
+                              allowed_clients: SomeOrAllNodes,
                               registry_version: RegistryVersion| {
                             let rt_handle = rt_handle.clone();
                             let crypto = crypto.clone();

@@ -296,7 +296,7 @@ pub trait TlsHandshake {
     async fn perform_tls_server_handshake(
         &self,
         tcp_stream: TcpStream,
-        allowed_clients: AllowedClients,
+        allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
 
@@ -426,7 +426,7 @@ pub trait TlsConfig {
     ///   is an error in the setup of the node and registry.
     fn server_config(
         &self,
-        allowed_clients: AllowedClients,
+        allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<ServerConfig, TlsConfigError>;
 
@@ -547,31 +547,8 @@ impl From<TlsConfigError> for TlsServerHandshakeError {
     }
 }
 
-#[derive(Clone, Debug)]
-/// A list of allowed TLS peers, which can be `All` to allow any node to connect.
-pub struct AllowedClients {
-    nodes: SomeOrAllNodes,
-}
-
-impl AllowedClients {
-    pub fn new(nodes: SomeOrAllNodes) -> Self {
-        Self { nodes }
-    }
-
-    /// Create an `AllowedClients` with a set of nodes.
-    pub fn new_with_nodes(node_ids: BTreeSet<NodeId>) -> Self {
-        Self::new(SomeOrAllNodes::Some(node_ids))
-    }
-
-    /// Access the allowed nodes.
-    pub fn nodes(&self) -> &SomeOrAllNodes {
-        &self.nodes
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// A list of node IDs, or "all nodes"
-// TODO: NET-1533
+/// A list of node IDs or all nodes present in the registry.
 pub enum SomeOrAllNodes {
     Some(BTreeSet<NodeId>),
     All,

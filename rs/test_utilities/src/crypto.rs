@@ -1,7 +1,7 @@
 pub mod fake_tls_handshake;
 
 pub use ic_crypto_test_utils::files as temp_dir;
-use ic_crypto_tls_interfaces::{AllowedClients, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use tokio_rustls::rustls::{ClientConfig, PrivateKey, RootCertStore, ServerConfig};
 
 use crate::types::ids::node_test_id;
@@ -492,7 +492,7 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
 impl TlsConfig for CryptoReturningOk {
     fn server_config(
         &self,
-        _allowed_clients: AllowedClients,
+        _allowed_clients: SomeOrAllNodes,
         _registry_version: RegistryVersion,
     ) -> Result<ServerConfig, TlsConfigError> {
         Ok(ServerConfig::builder()
