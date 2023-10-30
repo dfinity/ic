@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
+    AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsHandshake,
     TlsServerHandshakeError, TlsStream,
 };
 use mockall::*;
@@ -15,7 +15,7 @@ mock! {
         async fn perform_tls_server_handshake(
             &self,
             tcp_stream: TcpStream,
-            allowed_clients: AllowedClients,
+            allowed_clients: SomeOrAllNodes,
             registry_version: RegistryVersion,
         ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
 

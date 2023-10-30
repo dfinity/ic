@@ -14,7 +14,7 @@ use crate::{
 };
 use ic_async_utils::start_tcp_listener;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
+use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsStream};
 use ic_interfaces_transport::{TransportChannelId, TransportEvent, TransportEventHandler};
 use ic_logger::{error, warn};
 use std::{net::SocketAddr, time::Duration};
@@ -434,7 +434,7 @@ impl TransportImpl {
     ) -> Result<(NodeId, Box<dyn TlsStream>), TransportTlsHandshakeError> {
         let latest_registry_version = *self.latest_registry_version.read().await;
         let current_allowed_clients = self.allowed_clients.read().await.clone();
-        let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients);
+        let allowed_clients = SomeOrAllNodes::Some(current_allowed_clients);
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto.perform_tls_server_handshake(

@@ -137,28 +137,10 @@ mod tls_public_key_cert {
 }
 
 mod allowed_clients {
-    use crate::{AllowedClients, SomeOrAllNodes};
+    use crate::SomeOrAllNodes;
     use assert_matches::assert_matches;
     use ic_types::{NodeId, PrincipalId};
     use maplit::btreeset;
-
-    #[test]
-    fn should_correctly_construct_with_new() {
-        let nodes = SomeOrAllNodes::Some(btreeset! {node_id(1)});
-
-        let allowed_clients = AllowedClients::new(nodes.clone());
-
-        assert_eq!(allowed_clients.nodes(), &nodes);
-    }
-
-    #[test]
-    fn should_correctly_construct_with_new_with_nodes() {
-        let nodes = btreeset! {node_id(1)};
-
-        let allowed_clients = AllowedClients::new_with_nodes(nodes.clone());
-
-        assert_eq!(allowed_clients.nodes(), &SomeOrAllNodes::Some(nodes));
-    }
 
     #[test]
     fn should_contain_any_node_in_all_nodes() {
