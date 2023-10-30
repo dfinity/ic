@@ -30,11 +30,11 @@ use maplit::hashmap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
