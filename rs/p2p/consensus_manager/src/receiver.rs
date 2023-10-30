@@ -5,7 +5,13 @@ use std::{
     time::Duration,
 };
 
-use crate::{metrics::ConsensusManagerMetrics, AdvertUpdate, CommitId, Data, SlotNumber};
+use crate::{
+    metrics::{
+        ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
+        DOWNLOAD_TASK_RESULT_COMPLETED, DOWNLOAD_TASK_RESULT_DROP,
+    },
+    AdvertUpdate, CommitId, Data, SlotNumber,
+};
 use axum::{
     extract::State,
     http::{Request, StatusCode},
@@ -205,17 +211,17 @@ where
                     pfn_interval.reset();
                 }
                 Some((advert_update, peer_id, conn_id)) = self.adverts_received.recv() => {
-                    self.metrics.adverts_received_total.inc();
+                    self.metrics.slot_table_updates_total.inc();
                     self.handle_advert_receive(advert_update, peer_id, conn_id);
                 }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
-                    let (peer_rx,id,attr) = result.expect("Should not be cancelled or panic");
+                    let (peer_rx,id, attr) = result.expect("Should not be cancelled or panic");
+                    self.metrics.download_task_finished_total.inc();
 
                     // peer advertised after task finished.
                     if !peer_rx.borrow().is_empty() {
-
-                        self.metrics.peer_advertising_after_deletion_total.inc();
-
+                        self.metrics.download_task_restart_after_join_total.inc();
+                        self.metrics.download_task_started_total.inc();
                         self.artifact_processor_tasks.spawn_on(
                             Self::process_advert(
                                 id,
@@ -232,7 +238,6 @@ where
                         );
 
                     } else {
-                        self.metrics.active_download_removals_total.inc();
                         self.active_downloads.remove(&id);
                     }
                 }
@@ -240,9 +245,6 @@ where
                     self.handle_topology_update();
                 }
             }
-            self.metrics
-                .active_downloads
-                .set(self.active_downloads.len() as i64);
         }
     }
 
@@ -258,7 +260,10 @@ where
             data,
         } = advert_update;
         let (advert, artifact) = match data {
-            Data::Artifact(artifact) => (Artifact::message_to_advert(&artifact), Some(artifact)),
+            Data::Artifact(artifact) => {
+                self.metrics.slot_table_updates_with_artifact_total.inc();
+                (Artifact::message_to_advert(&artifact), Some(artifact))
+            }
             Data::Advert(advert) => (advert, None),
         };
         let Advert { id, attribute, .. } = advert;
@@ -273,34 +278,37 @@ where
             .entry(peer_id)
             .or_default()
             .entry(slot_number)
-            // .get_mut(&slot_number)
         {
             Entry::Occupied(mut slot_entry_mut) => {
                 // TODO: What if same advert update is sent twice? (Seen this in a test)
                 if slot_entry_mut.get().should_be_replaced(&new_slot_entry) {
-                    self.metrics.receive_used_slot_to_overwrite_total.inc();
+                    self.metrics.slot_table_overwrite_total.inc();
                     let to_remove = slot_entry_mut.insert(new_slot_entry).id;
                     (true, Some(to_remove))
                 } else {
-                    self.metrics.receive_used_slot_stale_total.inc();
-
+                    self.metrics.slot_table_stale_total.inc();
                     (false, None)
                 }
             }
             Entry::Vacant(empty_slot) => {
                 empty_slot.insert(new_slot_entry);
-                self.metrics.slots_in_use_per_peer.with_label_values(&[peer_id.to_string().as_str()]).inc();
-                (true, None)},
+                self.metrics
+                    .slot_table_new_entry_total
+                    .with_label_values(&[peer_id.to_string().as_str()])
+                    .inc();
+                (true, None)
+            }
         };
 
         if to_add {
             match self.active_downloads.get(&id) {
                 Some(sender) => {
-                    self.metrics.receive_seen_adverts_total.inc();
+                    self.metrics.slot_table_seen_id_total.inc();
                     sender.send_if_modified(|h| h.insert(peer_id));
                 }
                 None => {
-                    self.metrics.receive_new_adverts_total.inc();
+                    self.metrics.download_task_started_total.inc();
+
                     let (tx, rx) = watch::channel(HashSet::new());
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_downloads.insert(id.clone(), tx);
@@ -325,7 +333,7 @@ where
             // TODO: this should always be a Some.
             // Sender should not be dropped before all peers have overwritten/removed the slot.
             if let Some(sender) = self.active_downloads.get_mut(&to_remove) {
-                self.metrics.receive_slot_table_removals_total.inc();
+                self.metrics.slot_table_removals_total.inc();
                 sender.send_if_modified(|h| {
                     if !h.remove(&peer_id) {
                         panic!("Removed node should always be present")
@@ -359,7 +367,7 @@ where
         // Clear the artifact from memory if it was pushed.
         if let Priority::Stash = priority {
             artifact.take();
-            metrics.adverts_stashed_total.inc();
+            metrics.download_task_stashed_total.inc();
         }
 
         while let Priority::Stash = priority {
@@ -386,15 +394,15 @@ where
             // Fetch artifact
             None => {
                 let mut result = DownloadResult::AllPeersDeletedTheArtifact;
-                let mut download_attempts = 0;
 
+                let timer = metrics
+                    .download_task_artifact_download_duration
+                    .start_timer();
                 let mut rng = SmallRng::from_entropy();
                 while let Some(peer) = {
                     let peer = peer_rx.borrow().iter().choose(&mut rng).copied();
                     peer
                 } {
-                    download_attempts += 1;
-
                     let request = build_rpc_handler_request(Artifact::TAG.into(), &id);
 
                     let peer_deleted_the_artifact = async {
@@ -432,14 +440,15 @@ where
                                     }
                                 }
                             }
+                            metrics.download_task_artifact_download_errors_total.inc();
                         }
                     }
                 }
 
-                // TODO: Add labels based on if it was dropped or not?
-                metrics
-                    .advert_download_attempts
-                    .observe(download_attempts as f64);
+                // Only record artifacts that were actually downloaded.
+                if !matches!(result, DownloadResult::Completed(_, _)) {
+                    timer.stop_and_discard();
+                }
 
                 result
             }
@@ -466,6 +475,7 @@ where
         Artifact::Id,
         Artifact::Attribute,
     ) {
+        let _timer = metrics.download_task_duration.start_timer();
         let download_result = Self::download_artifact(
             &id,
             &attr,
@@ -498,17 +508,28 @@ where
                 sender
                     .send(UnvalidatedArtifactEvent::Remove(id.clone()))
                     .expect("Channel should not be closed");
+                metrics
+                    .download_task_result_total
+                    .with_label_values(&[DOWNLOAD_TASK_RESULT_COMPLETED])
+                    .inc();
             }
             DownloadResult::PriorityIsDrop => {
-                metrics.adverts_dropped_total.inc();
-
                 // wait for deletion from peers
                 peer_rx
                     .wait_for(|p| p.is_empty())
                     .await
                     .expect("Channel should not be closed");
+                metrics
+                    .download_task_result_total
+                    .with_label_values(&[DOWNLOAD_TASK_RESULT_DROP])
+                    .inc();
             }
-            DownloadResult::AllPeersDeletedTheArtifact => {}
+            DownloadResult::AllPeersDeletedTheArtifact => {
+                metrics
+                    .download_task_result_total
+                    .with_label_values(&[DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED])
+                    .inc();
+            }
         }
 
         (peer_rx, id, attr)
@@ -516,6 +537,7 @@ where
 
     /// Notifies all running tasks about the topology update.
     fn handle_topology_update(&mut self) {
+        self.metrics.topology_updates_total.inc();
         let new_topology = self.topology_watcher.borrow().clone();
         let mut nodes_leaving_topology: HashSet<NodeId> = HashSet::new();
 
@@ -523,7 +545,7 @@ where
             if !new_topology.is_member(node_id) {
                 nodes_leaving_topology.insert(*node_id);
                 self.metrics
-                    .slots_in_use_per_peer
+                    .slot_table_new_entry_total
                     .remove_label_values(&[node_id.to_string().as_str()]);
                 false
             } else {
