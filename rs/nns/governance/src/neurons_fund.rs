@@ -1364,51 +1364,38 @@ pub trait IntervalPartition<I> {
         I: Interval,
     {
         let intervals = &self.intervals();
+
         if intervals.is_empty() {
             return None;
         }
         let mut i = 0_usize;
         // Cannot underflow as intervals.len() >= 1.
         let mut j = intervals.len() - 1;
-        while i <= j {
-            // [Spec] assume loop guard: i <= j
-            // [Spec] assume invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
-
-            // Without `as u32`, an overflow would occur if e.g. `i==j==usize::MAX-1`
-            // Converting back to usize is safe, as the average is npt greater than `j: usize`.
-            let m = (((i as u32) + (j as u32)) / 2) as usize;
-            // [Spec] assert(*) i <= m <= j  -- from math.
-            if intervals[m].to() <= x {
-                // If x == intervals[m].to, then x \in intervals[m+1]; move rightwards.
-                // ... [intervals[m].from, intervals[m].to) ... x ...
-                i = m + 1;
-                // [Spec] assert invariant: 0 <= i   <= j+1, 0 <= j < intervals.len()
-                // [Spec] -- `i==m+1`; `j` did not change.
-                // [Spec] assert: 0 <= m+1 <= j+1
-                // [Spec] -- given `0 <= m` from (*), we know that `0 <= m+1`.
-                // [Spec] -- `m+1 <= j+1`  <==>  `m <= j`.
-                // [Spec] -- `m <= j` follows from (*). QED
-            } else if x < intervals[m].from() {
-                // exclusive, since x==intervals[m].from ==> x \in intervals[m]; move leftwards.
-                // ... x ... [intervals[m].from, intervals[m].to) ...
-                if m == 0 {
-                    // The leftmost interval starts from a value greated than `x`.
-                    return None;
+        let search_result = binary_search::search(|m| x < intervals[*m].from(), i, j);
+        match search_result {
+            (Some(m), Some(_)) => {
+                let interval = intervals[m];
+                // `m` will be the greatest index such that `!(x < intervals[*m].from())`.
+                // Can only fail if there is a "gap" with no intervals containing `x`.
+                debug_assert!(interval.contains(x));
+                Some(interval)
+            }
+            (Some(m), None) | (None, Some(m)) => {
+                let interval = intervals[m];
+                if interval.contains(x) {
+                    Some(interval)
+                } else {
+                    None // There's no interval that contains `x``
                 }
-                // [Spec] assert(**) 0 < m
-                j = m - 1;
-                // [Spec] assert invariant: 0 <= i <= j+1, 0 <= j < intervals.len()
-                // [Spec] -- `i` did not change; `j==m-1`.
-                // [Spec] assert: 0 <= i <= m-1+1, 0 <= m-1 < intervals.len()
-                // [Spec] assert: 0 <= i <= m,     0 <= m-1 < intervals.len()
-                // [Spec] -- `i <= m` follows from (*).
-                // [Spec] -- given `0 < m` from (**), we know that `0 <= m-1`. QED
-            } else {
-                // x \in intervals[m]
-                return Some(intervals[m]);
+            }
+            (None, None) => {
+                println!(
+                    "{}ERROR: cannot perform find_interval as the intervals aren't sorted",
+                    governance::LOG_PREFIX
+                );
+                None
             }
         }
-        None
     }
 }
 
