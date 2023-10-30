@@ -29,6 +29,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::{BatchSignedIDkgDealing, IDkgDealingBytes};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -74,7 +75,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: &IDkgDealingInternal,
+        dealing: IDkgDealingBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
@@ -82,9 +83,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
         let start_time = self.metrics.now();
+        let internal_dealing = IDkgDealingInternal::deserialize(dealing.as_ref()).map_err(|e| {
+            IDkgVerifyDealingPrivateError::InvalidArgument(format!(
+                "failed to deserialize internal dealing: {:?}",
+                e
+            ))
+        })?;
         let result = self.idkg_verify_dealing_private_internal(
             algorithm_id,
-            dealing,
+            &internal_dealing,
             dealer_index,
             receiver_index,
             receiver_key_id,
@@ -102,19 +109,25 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: &[u8],
         receiver_index: NodeIndex,
         key_id: &KeyId,
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_dealings =
+            idkg_internal_dealings_from_verified_dealings(dealings).map_err(|e| {
+                IDkgLoadTranscriptError::SerializationError {
+                    internal_error: format!("failed to deserialize internal dealing: {:?}", e),
+                }
+            })?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
                 internal_error: e.0,
             })?;
         let result = self.idkg_load_transcript_internal(
-            dealings,
+            &internal_dealings,
             context_data,
             receiver_index,
             key_id,
@@ -132,7 +145,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: &[u8],
         receiver_index: NodeIndex,
@@ -140,12 +153,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_dealings = idkg_internal_dealings_from_verified_dealings(dealings)?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
                 internal_error: e.0,
             })?;
         let result = self.idkg_load_transcript_with_openings_internal(
-            dealings,
+            &internal_dealings,
             openings,
             context_data,
             receiver_index,
@@ -801,4 +815,20 @@ fn would_idkg_retain_modify_public_key_store<P: PublicKeyStore>(
                 }
             }
         })
+}
+
+fn idkg_internal_dealings_from_verified_dealings(
+    verified_dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+) -> Result<BTreeMap<NodeIndex, IDkgDealingInternal>, IDkgLoadTranscriptError> {
+    verified_dealings
+        .iter()
+        .map(|(index, signed_dealing)| {
+            let dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
+                IDkgLoadTranscriptError::SerializationError {
+                    internal_error: format!("failed to deserialize internal dealing: {:?}", e),
+                }
+            })?;
+            Ok((*index, dealing))
+        })
+        .collect()
 }

@@ -33,7 +33,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
+use ic_types::crypto::canister_threshold_sig::{
+    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    ExtendedDerivationPath, ThresholdEcdsaSigInputs,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness, RegistryVersion};
 
@@ -70,7 +73,7 @@ impl CspIDkgProtocol for Csp {
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: &IDkgDealingInternal,
+        dealing: IDkgDealingBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_public_key: &MEGaPublicKey,
@@ -157,7 +160,7 @@ impl CspIDkgProtocol for Csp {
 
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: &[u8],
         receiver_index: NodeIndex,
         public_key: &MEGaPublicKey,
@@ -178,7 +181,7 @@ impl CspIDkgProtocol for Csp {
 
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: &[u8],
         receiver_index: NodeIndex,

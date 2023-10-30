@@ -12,7 +12,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
+use ic_types::crypto::canister_threshold_sig::{
+    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    ExtendedDerivationPath, ThresholdEcdsaSigInputs,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,7 +41,7 @@ pub trait CspIDkgProtocol {
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: &IDkgDealingInternal,
+        dealing: IDkgDealingBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_public_key: &MEGaPublicKey,
@@ -79,7 +82,7 @@ pub trait CspIDkgProtocol {
     /// if necessary.
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: &[u8],
         receiver_index: NodeIndex,
         public_key: &MEGaPublicKey,
@@ -90,7 +93,7 @@ pub trait CspIDkgProtocol {
     /// in the canister secret key store.
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: &[u8],
         receiver_index: NodeIndex,

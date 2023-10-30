@@ -41,7 +41,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use ic_types::crypto::canister_threshold_sig::{
+    idkg::{BatchSignedIDkgDealing, IDkgDealingBytes},
+    ExtendedDerivationPath,
+};
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::mock;
@@ -135,7 +138,7 @@ mock! {
         fn idkg_verify_dealing_private(
             &self,
             algorithm_id: AlgorithmId,
-            dealing: &IDkgDealingInternal,
+            dealing: IDkgDealingBytes,
             dealer_index: NodeIndex,
             receiver_index: NodeIndex,
             receiver_key_id: KeyId,
@@ -144,7 +147,7 @@ mock! {
 
         fn idkg_load_transcript(
             &self,
-            dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+            dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             context_data: &[u8],
             receiver_index: NodeIndex,
             key_id: &KeyId,
@@ -153,7 +156,7 @@ mock! {
 
         fn idkg_load_transcript_with_openings(
             &self,
-            dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+            dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
             context_data: &[u8],
             receiver_index: NodeIndex,
