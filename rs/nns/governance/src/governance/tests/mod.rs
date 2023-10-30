@@ -15,10 +15,13 @@ use candid::{Decode, Encode};
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+#[cfg(not(feature = "test"))]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_init::pb::v1::{self as sns_init_pb, SnsInitPayload};
+use ic_sns_init::pb::v1::SnsInitPayload;
+#[cfg(not(feature = "test"))]
+use ic_sns_init::pb::v1::{self as sns_init_pb};
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
     v1::{NeuronBasketConstructionParameters, Swap},
@@ -1135,6 +1138,7 @@ mod settle_neurons_fund_participation_request_tests {
     }
 } // end mod settle_neurons_fund_participation_request_tests
 
+#[cfg(not(feature = "test"))]
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
@@ -1437,13 +1441,17 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests {
-    use crate::pb::v1::create_service_nervous_system::SwapParameters;
-    use ic_nervous_system_proto::pb::v1 as pb;
-    use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
-    use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
-    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2};
-
     use super::*;
+    use crate::pb::v1::create_service_nervous_system::SwapParameters;
+    #[cfg(not(feature = "test"))]
+    use ic_nervous_system_proto::pb::v1 as pb;
+    #[cfg(not(feature = "test"))]
+    use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
+    #[cfg(not(feature = "test"))]
+    use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
+    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
+    #[cfg(not(feature = "test"))]
+    use test_data::{IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
     //
@@ -1453,21 +1461,25 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
     }
 
+    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_duration_seconds(original: &Option<pb::Duration>) -> Option<u64> {
         Some(original.as_ref().unwrap().seconds.unwrap())
     }
 
+    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_tokens_e8s(original: &Option<pb::Tokens>) -> Option<u64> {
         Some(original.as_ref().unwrap().e8s.unwrap())
     }
 
+    #[cfg(not(feature = "test"))]
     #[track_caller]
     fn unwrap_percentage_basis_points(original: &Option<pb::Percentage>) -> Option<u64> {
         Some(original.as_ref().unwrap().basis_points.unwrap())
     }
 
+    #[cfg(not(feature = "test"))]
     #[test]
     fn test_convert_from_valid() {
         // Step 1: Prepare the world. (In this case, trivial.)

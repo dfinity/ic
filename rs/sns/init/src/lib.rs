@@ -25,7 +25,10 @@ use ic_sns_governance::{
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::{
-    pb::v1::{Init as SwapInit, LinearScalingCoefficient, NeuronBasketConstructionParameters},
+    pb::v1::{
+        IdealMatchedParticipationFunction, Init as SwapInit, LinearScalingCoefficient,
+        NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
+    },
     swap::LinearScalingCoefficientValidationError,
 };
 use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
@@ -506,6 +509,7 @@ impl SnsInitPayload {
             neurons_fund_participants: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
+            neurons_fund_participation_constraints: None,
             ..Self::with_valid_values_for_testing()
         }
     }
@@ -557,6 +561,20 @@ impl SnsInitPayload {
                 participants: vec![],
             }),
             neurons_fund_participation: Some(true),
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(12_300_000_000),
+                max_neurons_fund_participation_icp_e8s: Some(65_000_000_000),
+                coefficient_intervals: vec![LinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: Some(0),
+                    to_direct_participation_icp_e8s: Some(u64::MAX),
+                    slope_numerator: Some(1),
+                    slope_denominator: Some(1),
+                    intercept_icp_e8s: Some(0),
+                }],
+                ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+                    serialized_representation: Some("<Test>".to_string()),
+                }),
+            }),
             ..SnsInitPayload::with_default_values()
         }
     }
@@ -773,8 +791,7 @@ impl SnsInitPayload {
             neurons_fund_participation_constraints: self
                 .neurons_fund_participation_constraints
                 .clone(),
-            // TODO[NNS1-2569]: populate with `self.neurons_fund_participation`
-            neurons_fund_participation: None,
+            neurons_fund_participation: self.neurons_fund_participation,
         })
     }
 
@@ -2039,9 +2056,14 @@ impl SnsInitPayload {
                 .into();
         }
 
-        // This is an optional field
         if self.neurons_fund_participation_constraints.is_none() {
-            // TODO[NNS1-2569]: Check that this coincides with `!self.neurons_fund_participation`
+            if self.neurons_fund_participation == Some(true) && !is_pre_execution {
+                return NeuronsFundParticipationConstraintsValidationError::RelatedFieldUnspecified(
+                    "neurons_fund_participation requires neurons_fund_participation_constraints"
+                    .to_string(),
+                )
+                .into();
+            }
             return Ok(());
         }
 
@@ -2309,6 +2331,7 @@ impl SnsInitPayload {
             dapp_canisters: None,
             token_logo: None,
             neurons_fund_participation: None,
+            neurons_fund_participation_constraints: None,
             ..self
         }
     }
@@ -3567,13 +3590,15 @@ mod test {
             .unwrap();
         sns_init_payload.validate_legacy_init().unwrap_err();
 
-        // If we remove the pre-execution values, the payload is valid "pre-execution"
-        let sns_init_payload = SnsInitPayload {
-            nns_proposal_id: None,
-            neurons_fund_participants: None,
-            swap_start_timestamp_seconds: None,
-            swap_due_timestamp_seconds: None,
-            ..SnsInitPayload::with_valid_values_for_testing()
+        // If we remove the post-execution values, the payload is valid "pre-execution"
+        let sns_init_payload = {
+            let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+            sns_init_payload.nns_proposal_id = None;
+            sns_init_payload.neurons_fund_participants = None;
+            sns_init_payload.swap_start_timestamp_seconds = None;
+            sns_init_payload.swap_due_timestamp_seconds = None;
+            sns_init_payload.neurons_fund_participation_constraints = None;
+            sns_init_payload
         };
         sns_init_payload.validate_pre_execution().unwrap();
         sns_init_payload.validate_post_execution().unwrap_err();
@@ -3664,21 +3689,23 @@ mod test {
     fn test_neurons_fund_participation_constraints_validation_for_legacy_flow() {
         // The concrete values are irrelevant, as we just want to make sure that the validation
         // fails.
-        let sns_init_payload = SnsInitPayload {
-            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+        let mut sns_init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
+        sns_init_payload.neurons_fund_participation_constraints =
+            Some(NeuronsFundParticipationConstraints {
                 min_direct_participation_threshold_icp_e8s: Some(1_000),
                 max_neurons_fund_participation_icp_e8s: Some(10_000),
                 coefficient_intervals: vec![],
                 ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
                     serialized_representation: Some("<Test>".to_string()),
                 }),
-            }),
-            ..SnsInitPayload::with_valid_legacy_values_for_testing()
-        };
-        assert_eq!(
-            sns_init_payload.validate_legacy_init().map(|_| ()),
-            NeuronsFundParticipationConstraintsValidationError::SetBeforeProposalExecution.into(),
-        );
+            });
+        assert!(sns_init_payload
+            .validate_legacy_init()
+            .unwrap_err()
+            .contains(
+                &NeuronsFundParticipationConstraintsValidationError::SetBeforeProposalExecution
+                    .to_string(),
+            ));
     }
 
     #[test]
