@@ -247,7 +247,7 @@ impl SerializationObserver<Response<TarpcCspVaultResponse>> for CspVaultObserver
             );
             self.metrics.observe_vault_message_serialization(
                 ServiceType::Server,
-                MessageType::Request,
+                MessageType::Response,
                 domain,
                 method_name,
                 number_of_bytes,
