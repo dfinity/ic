@@ -1129,11 +1129,15 @@ fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | BrIf { .. }
             | BrTable { .. }
             | Call { .. }
-            | CallIndirect { .. } => 50,
+            | CallIndirect { .. }
+            // `MemoryGrow` and `TableGrow` add `Call` instructions after
+            // instrumentation.
+            | MemoryGrow { .. }
+            | TableGrow { .. } => 50,
             TableGet { .. } => 14,
             RefFunc { .. } => 8,
             TableSet { .. } => 7,
-            TableGrow { .. } | RefIsNull => 6,
+            RefIsNull => 6,
             TableFill { .. }
             | I32TruncF32S
             | I32TruncF32U
@@ -1160,8 +1164,7 @@ fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | F64Abs
             | TableCopy { .. }
             | TableInit { .. }
-            | MemoryCopy { .. }
-            | MemoryGrow { .. } => 4,
+            | MemoryCopy { .. } => 4,
             F32Copysign
             | F64Copysign
             | F64Eq
