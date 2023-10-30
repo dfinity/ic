@@ -159,7 +159,7 @@ impl fmt::Display for ExecutionComplexity {
 /// Note that there are situations where execution available memory is smaller than
 /// the wasm custom sections memory, i.e. when the memory is consumed by something
 /// other than wasm custom sections.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub struct SubnetAvailableMemory {
     /// The execution memory available on the subnet, i.e. the canister memory
     /// (Wasm binary, Wasm memory, stable memory) without message memory.

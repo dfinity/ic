@@ -89,12 +89,20 @@ impl WasmChunkStore {
             })
     }
 
-    pub fn insert_chunk(&mut self, chunk: &[u8]) -> Result<[u8; 32], String> {
+    /// Check all conditions for inserting this chunk are satisfied.  Invariant:
+    /// If this returns [`Ok`], then [`Self::insert_chunk`] is guaranteed to
+    /// succeed.
+    pub fn can_insert_chunk(&self, chunk: &[u8]) -> Result<(), String> {
         if chunk.len() > CHUNK_SIZE as usize {
             return Err(
                 format! {"Wasm chunk size {} exceeds the maximum chunk size of {}", chunk.len(), CHUNK_SIZE},
             );
         }
+        Ok(())
+    }
+
+    pub fn insert_chunk(&mut self, chunk: &[u8]) -> Result<[u8; 32], String> {
+        self.can_insert_chunk(chunk)?;
 
         let hash = ic_crypto_sha2::Sha256::hash(chunk);
 
@@ -201,6 +209,7 @@ impl TryFrom<pb::WasmChunkStoreMetadata> for WasmChunkStoreMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
 
     fn get_chunk_as_vec(store: &WasmChunkStore, hash: WasmChunkHash) -> Vec<u8> {
         store
@@ -233,12 +242,20 @@ mod tests {
     #[test]
     fn error_when_chunk_exceeds_size_limit() {
         let mut store = WasmChunkStore::new_for_testing();
-        let contents = vec![0xab; 1024 * 1024 + 1];
+        let contents = vec![0xab; chunk_size().get() as usize + 1];
         let result = store.insert_chunk(&contents);
         assert_eq!(
             result,
             Err("Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576".to_string())
         );
+    }
+
+    #[test]
+    fn can_insert_chunk_up_to_max_size() {
+        let mut store = WasmChunkStore::new_for_testing();
+        let contents = vec![0xab; chunk_size().get() as usize];
+        let result = store.insert_chunk(&contents);
+        assert_matches!(result, Ok(_));
     }
 
     #[test]
@@ -254,5 +271,30 @@ mod tests {
 
         let round_trip_contents2 = get_chunk_as_vec(&store, hash2);
         assert_eq!(contents2, round_trip_contents2);
+    }
+
+    mod proptest_tests {
+        use super::*;
+        use proptest::collection::vec as prop_vec;
+        use proptest::prelude::*;
+
+        const MB: usize = 1024 * 1024;
+
+        proptest! {
+            #[test]
+            fn insert_result_matches_can_insert(vecs in prop_vec((any::<u8>(), 0..2 * MB), 100)) {
+                let mut store = WasmChunkStore::new_for_testing();
+                for (byte, length) in vecs {
+                    let chunk = vec![byte; length];
+                    let check = store.can_insert_chunk(&chunk);
+                    let hash = store.insert_chunk(&chunk);
+                    if hash.is_ok() {
+                        assert_eq!(check, Ok(()));
+                    } else {
+                        assert_eq!(check.unwrap_err(), hash.unwrap_err());
+                    }
+                }
+            }
+        }
     }
 }

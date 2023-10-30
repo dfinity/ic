@@ -1437,16 +1437,27 @@ impl CanisterManager {
         canister: &mut CanisterState,
         chunk: &[u8],
         subnet_available_memory: &mut SubnetAvailableMemory,
+        subnet_size: usize,
     ) -> Result<UploadChunkReply, CanisterManagerError> {
         if self.config.wasm_chunk_store == FlagStatus::Disabled {
             return Err(CanisterManagerError::WasmChunkStoreError {
                 message: "Wasm chunk store not enabled".to_string(),
             });
         }
+
         validate_controller(canister, &sender)?;
+
+        canister
+            .system_state
+            .wasm_chunk_store
+            .can_insert_chunk(chunk)
+            .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
+
+        let new_memory_usage = canister.memory_usage() + wasm_chunk_store::chunk_size();
+
         match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => {
-                if bytes < canister.memory_usage() + wasm_chunk_store::chunk_size() {
+                if bytes < new_memory_usage {
                     return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         memory_allocation_given: canister.memory_allocation(),
                         memory_usage_needed: canister.memory_usage()
@@ -1455,6 +1466,26 @@ impl CanisterManager {
                 }
             }
             MemoryAllocation::BestEffort => {
+                // Memory usage will increase by the chunk size, so we need to
+                // check that it doesn't bump us over the freezing threshold.
+                let threshold = self.cycles_account_manager.freeze_threshold_cycles(
+                    canister.system_state.freeze_threshold,
+                    canister.memory_allocation(),
+                    new_memory_usage,
+                    canister.message_memory_usage(),
+                    canister.compute_allocation(),
+                    subnet_size,
+                    canister.system_state.reserved_balance(),
+                );
+                if threshold > canister.system_state.balance() {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!(
+                            "Cannot upload chunk. At least {} additional cycles are required.",
+                            threshold - canister.system_state.balance()
+                        ),
+                    });
+                }
+
                 subnet_available_memory
                     .try_decrement(
                         wasm_chunk_store::chunk_size(),
@@ -1471,11 +1502,14 @@ impl CanisterManager {
                     )?;
             }
         }
+
+        // We initially checked that this chunk can be inserted, so the unwarp
+        // here is guaranteed to succeed.
         let hash = canister
             .system_state
             .wasm_chunk_store
             .insert_chunk(chunk)
-            .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
+            .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
         Ok(UploadChunkReply {
             hash: hash.to_vec(),
         })
