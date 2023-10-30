@@ -6936,6 +6936,7 @@ fn upload_chunk_fails_when_allocation_exceeded() {
     };
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
+    let initial_subnet_available_memory = test.subnet_available_memory();
 
     // Second chunk upload fails
     let chunk = vec![4, 4];
@@ -6946,6 +6947,11 @@ fn upload_chunk_fails_when_allocation_exceeded() {
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     let error_code = result.unwrap_err().code();
     assert_eq!(error_code, ErrorCode::InsufficientMemoryAllocation);
+
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
 }
 
 #[test]
@@ -6972,6 +6978,7 @@ fn upload_chunk_fails_when_subnet_memory_exceeded() {
     };
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     assert!(result.is_ok());
+    let initial_subnet_available_memory = test.subnet_available_memory();
 
     // Second chunk upload fails
     let chunk = vec![4, 4];
@@ -6982,6 +6989,11 @@ fn upload_chunk_fails_when_subnet_memory_exceeded() {
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     let error_code = result.unwrap_err().code();
     assert_eq!(error_code, ErrorCode::SubnetOversubscribed);
+
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
 }
 
 #[test]
@@ -7040,8 +7052,8 @@ fn upload_chunk_fails_with_feature_disabled() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new().build();
-
     let canister_id = test.create_canister(CYCLES);
+    let initial_subnet_available_memory = test.subnet_available_memory();
 
     let chunk = vec![1, 2, 3, 4, 5];
 
@@ -7053,6 +7065,11 @@ fn upload_chunk_fails_with_feature_disabled() {
     let result = test.subnet_message("upload_chunk", upload_args.encode());
     let error_code = result.unwrap_err().code();
     assert_eq!(error_code, ErrorCode::CanisterContractViolation);
+
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
 }
 
 #[test]
@@ -7060,7 +7077,6 @@ fn uninstall_clears_wasm_chunk_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
-
     let canister_id = test.create_canister(CYCLES);
 
     // Upload a chunk
@@ -7084,5 +7100,73 @@ fn uninstall_clears_wasm_chunk_store() {
             .wasm_chunk_store
             .memory_usage(),
         NumBytes::from(0)
+    );
+}
+
+#[test]
+fn upload_chunk_fails_when_freeze_threshold_triggered() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let canister_id = test.create_canister(CYCLES);
+    let initial_subnet_available_memory = test.subnet_available_memory();
+
+    // Make balance just a bit higher than freezing threshold so upload_chunk
+    // fails.
+    let threshold = test.freezing_threshold(canister_id);
+    let new_balance = threshold + Cycles::from(1_000_u128);
+    let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(to_remove, CyclesUseCase::BurnedCycles);
+
+    // Upload a chunk
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    };
+    let error = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert!(error
+        .description()
+        .contains("additional cycles are required"));
+
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
+}
+
+#[test]
+fn upload_chunk_fails_when_it_exceeds_chunk_size() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let canister_id = test.create_canister(CYCLES);
+    let initial_subnet_available_memory = test.subnet_available_memory();
+
+    let max_chunk_size = wasm_chunk_store::chunk_size().get() as usize;
+
+    // Upload a chunk that is too large
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; max_chunk_size + 1],
+    };
+    let error = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(
+        error .description(),
+        "Error from Wasm chunk store: Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576"
+    );
+
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
     );
 }

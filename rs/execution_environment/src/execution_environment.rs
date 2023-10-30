@@ -1038,6 +1038,7 @@ impl ExecutionEnvironment {
                         &mut state,
                         request,
                         &mut round_limits.subnet_available_memory,
+                        registry_settings.subnet_size,
                     ),
                 };
                 Some((res, msg.take_cycles()))
@@ -1531,10 +1532,17 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: UploadChunkArgs,
         subnet_available_memory: &mut SubnetAvailableMemory,
+        subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister_mut(args.get_canister_id(), state)?;
         self.canister_manager
-            .upload_chunk(sender, canister, &args.chunk, subnet_available_memory)
+            .upload_chunk(
+                sender,
+                canister,
+                &args.chunk,
+                subnet_available_memory,
+                subnet_size,
+            )
             .map(|reply| reply.encode())
             .map_err(|err| err.into())
     }
