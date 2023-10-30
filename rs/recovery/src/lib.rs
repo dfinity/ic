@@ -718,7 +718,7 @@ impl Recovery {
             }
 
             info!(logger, "Recovery CUP not yet present, retrying...");
-            thread::sleep(time::Duration::from_secs(10));
+            thread::sleep(time::Duration::from_secs(15));
         }
 
         if !cup_present {
