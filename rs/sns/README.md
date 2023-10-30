@@ -21,8 +21,8 @@ An SNS consists of the following canisters:
 * the _governance canister_ which enables decentralized decision making,
 * the _root canister_ which is responsible for upgrading the other SNS canisters
   and the dapp canisters that the SNS controls,
-* the _decentralisation sale canister_ which facilitates an initial token
-sale,
+* the _decentralisation swap canister_ (a.k.a. SNS Swap) which facilitates an initial token
+swap,
 * the _ledger canister_ which determines the balances and transactions
     for a SNS-specific governance token, and
 * the _index canister_ which provides a map from ledger accounts to relevant
@@ -33,10 +33,10 @@ the ledger canister and index canister.
 <!--  TODO: add links --> 
 
 ## How to deploy and set up your SNS
-Please follow the instructions on [this page](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns-production)
+Please follow the instructions on [this page](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/tokenomics/sns-checklist)
 regarding how you can get an SNS.
 We recommend also consulting
-[this page](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns-intro)
+[this page](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/testing/testing-before-launch)
 to learn how to prepare for this step and to learn how an SNS can be tested.
 
 <!--  Outdated: After a successful deployment, your SNS consists of the governance,
@@ -52,7 +52,7 @@ from the output of the sns-cli tool.
 ## How to manage an SNS and interact with it
 One the SNS is launched, it has to be managed by the SNS community.
 For a guide on some important considerations in SNS management, we refer
-to [this page](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/managing-sns).
+to [this page](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/managing/manage-sns-intro).
 
 For interacting with the SNS, users can use a frontend integration or the
 command line tool sns-quill.
