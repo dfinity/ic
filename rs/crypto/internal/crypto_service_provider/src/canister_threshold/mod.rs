@@ -20,9 +20,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     verify_threshold_signature as tecdsa_verify_combined_signature,
     verify_transcript as tecdsa_verify_transcript, CommitmentOpening, DerivationPath,
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal, ThresholdEcdsaVerifySigShareInternalError,
-    ThresholdEcdsaVerifySignatureInternalError,
+    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+    ThresholdEcdsaVerifySigShareInternalError, ThresholdEcdsaVerifySignatureInternalError,
 };
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
@@ -33,7 +33,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness, RegistryVersion};
 
@@ -161,7 +161,7 @@ impl CspIDkgProtocol for Csp {
         context_data: &[u8],
         receiver_index: NodeIndex,
         public_key: &MEGaPublicKey,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_load_transcript");
 
@@ -183,7 +183,7 @@ impl CspIDkgProtocol for Csp {
         context_data: &[u8],
         receiver_index: NodeIndex,
         public_key: &MEGaPublicKey,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         debug!(self.logger; crypto.method_name => "idkg_load_transcript_with_openings");
 
@@ -295,28 +295,28 @@ impl CspIDkgProtocol for Csp {
 impl CspThresholdEcdsaSigner for Csp {
     fn ecdsa_sign_share(
         &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        lambda_masked: &IDkgTranscriptInternal,
-        kappa_times_lambda: &IDkgTranscriptInternal,
-        key_times_lambda: &IDkgTranscriptInternal,
-        algorithm_id: AlgorithmId,
+        inputs: &ThresholdEcdsaSigInputs,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         debug!(self.logger; crypto.method_name => "ecdsa_sign_share");
 
+        let key = inputs.key_transcript().transcript_as_bytebuf();
+
+        let q = inputs.presig_quadruple();
+        let kappa_unmasked = q.kappa_unmasked().transcript_as_bytebuf();
+        let lambda_masked = q.lambda_masked().transcript_as_bytebuf();
+        let kappa_times_lambda = q.kappa_times_lambda().transcript_as_bytebuf();
+        let key_times_lambda = q.key_times_lambda().transcript_as_bytebuf();
+
         self.csp_vault.ecdsa_sign_share(
-            derivation_path,
-            hashed_message,
-            nonce,
+            inputs.derivation_path(),
+            inputs.hashed_message(),
+            inputs.nonce(),
             key,
             kappa_unmasked,
             lambda_masked,
             kappa_times_lambda,
             key_times_lambda,
-            algorithm_id,
+            inputs.algorithm_id(),
         )
     }
 }

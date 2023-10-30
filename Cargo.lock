@@ -5905,6 +5905,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rsa",
  "serde",
+ "serde_bytes",
  "sha2 0.10.6",
  "simple_asn1",
  "slog",
@@ -6251,6 +6252,7 @@ dependencies = [
  "rcgen 0.10.0",
  "rsa",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "simple_asn1",
  "slog",
@@ -6794,6 +6796,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-types",
  "mockall 0.7.2",
+ "serde_bytes",
 ]
 
 [[package]]

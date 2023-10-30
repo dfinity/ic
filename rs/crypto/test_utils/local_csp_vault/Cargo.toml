@@ -14,3 +14,4 @@ ic-crypto-node-key-validation = {path = "../../node_key_validation" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-types = { path = "../../../types/types" }
 mockall = "0.7.2"
+serde_bytes = "0.11"

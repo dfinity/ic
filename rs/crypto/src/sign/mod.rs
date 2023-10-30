@@ -715,12 +715,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
             crypto.signature_inputs => format!("{:?}", inputs),
         );
         let start_time = self.metrics.now();
-        let result = canister_threshold_sig::ecdsa::sign_share(
-            &self.csp,
-            &self.node_id,
-            inputs,
-            &self.logger,
-        );
+        let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,

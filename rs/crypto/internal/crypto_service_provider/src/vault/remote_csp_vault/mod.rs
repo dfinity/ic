@@ -8,7 +8,7 @@ use crate::vault::api::{
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -181,7 +181,7 @@ pub trait TarpcCspVault {
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
-        transcript: IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript_with_openings`
@@ -192,7 +192,7 @@ pub trait TarpcCspVault {
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
-        transcript: IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_retain_active_keys`
@@ -219,11 +219,11 @@ pub trait TarpcCspVault {
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
         nonce: Randomness,
-        key: IDkgTranscriptInternal,
-        kappa_unmasked: IDkgTranscriptInternal,
-        lambda_masked: IDkgTranscriptInternal,
-        kappa_times_lambda: IDkgTranscriptInternal,
-        key_times_lambda: IDkgTranscriptInternal,
+        key_raw: IDkgTranscriptInternalBytes,
+        kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+        lambda_masked_raw: IDkgTranscriptInternalBytes,
+        kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+        key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 

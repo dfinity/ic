@@ -23,7 +23,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -617,7 +617,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         context_data: &[u8],
         receiver_index: NodeIndex,
         key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript(
             context_with_timeout(self.rpc_timeout),
@@ -641,7 +641,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         context_data: &[u8],
         receiver_index: NodeIndex,
         key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
             context_with_timeout(self.rpc_timeout),
@@ -713,16 +713,17 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 }
 
 impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
+    #[inline]
     fn ecdsa_sign_share(
         &self,
         derivation_path: &ExtendedDerivationPath,
         hashed_message: &[u8],
         nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        lambda_masked: &IDkgTranscriptInternal,
-        kappa_times_lambda: &IDkgTranscriptInternal,
-        key_times_lambda: &IDkgTranscriptInternal,
+        key_raw: IDkgTranscriptInternalBytes,
+        kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+        lambda_masked_raw: IDkgTranscriptInternalBytes,
+        kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+        key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         self.tokio_block_on(self.tarpc_csp_client.ecdsa_sign_share(
@@ -730,11 +731,11 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
             derivation_path.clone(),
             hashed_message.to_vec(),
             *nonce,
-            key.clone(),
-            kappa_unmasked.clone(),
-            lambda_masked.clone(),
-            kappa_times_lambda.clone(),
-            key_times_lambda.clone(),
+            key_raw,
+            kappa_unmasked_raw,
+            lambda_masked_raw,
+            kappa_times_lambda_raw,
+            key_times_lambda_raw,
             algorithm_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {

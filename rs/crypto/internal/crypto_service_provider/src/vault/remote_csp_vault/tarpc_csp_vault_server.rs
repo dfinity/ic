@@ -18,7 +18,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternalBytes,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -379,7 +379,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
-        transcript: IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -388,7 +388,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &context_data,
                 receiver_index,
                 &key_id,
-                &transcript,
+                transcript,
             )
         };
         execute_on_thread_pool(self.thread_pool_handle, job).await
@@ -402,7 +402,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
-        transcript: IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -412,7 +412,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &context_data,
                 receiver_index,
                 &key_id,
-                &transcript,
+                transcript,
             )
         };
         execute_on_thread_pool(self.thread_pool_handle, job).await
@@ -467,11 +467,11 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
         nonce: Randomness,
-        key: IDkgTranscriptInternal,
-        kappa_unmasked: IDkgTranscriptInternal,
-        lambda_masked: IDkgTranscriptInternal,
-        kappa_times_lambda: IDkgTranscriptInternal,
-        key_times_lambda: IDkgTranscriptInternal,
+        key_raw: IDkgTranscriptInternalBytes,
+        kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+        lambda_masked_raw: IDkgTranscriptInternalBytes,
+        kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+        key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
         let vault = self.local_csp_vault;
@@ -480,11 +480,11 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 &derivation_path,
                 &hashed_message,
                 &nonce,
-                &key,
-                &kappa_unmasked,
-                &lambda_masked,
-                &kappa_times_lambda,
-                &key_times_lambda,
+                key_raw,
+                kappa_unmasked_raw,
+                lambda_masked_raw,
+                kappa_times_lambda_raw,
+                key_times_lambda_raw,
                 algorithm_id,
             )
         };

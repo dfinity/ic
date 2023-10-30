@@ -17,9 +17,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
     privately_verify_dealing, CommitmentOpening, CommitmentOpeningBytes, EccCurveType,
     IDkgComplaintInternal, IDkgComputeSecretSharesInternalError, IDkgDealingInternal,
-    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey,
-    MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
-    SecretShares, Seed,
+    IDkgTranscriptInternal, IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternal,
+    MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKey,
+    MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
 };
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
@@ -106,15 +106,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         context_data: &[u8],
         receiver_index: NodeIndex,
         key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
+            .map_err(|e| IDkgLoadTranscriptError::SerializationError {
+                internal_error: e.0,
+            })?;
         let result = self.idkg_load_transcript_internal(
             dealings,
             context_data,
             receiver_index,
             key_id,
-            transcript,
+            &internal_transcript,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
@@ -133,16 +137,20 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         context_data: &[u8],
         receiver_index: NodeIndex,
         key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
+        let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
+            .map_err(|e| IDkgLoadTranscriptError::SerializationError {
+                internal_error: e.0,
+            })?;
         let result = self.idkg_load_transcript_with_openings_internal(
             dealings,
             openings,
             context_data,
             receiver_index,
             key_id,
-            transcript,
+            &internal_transcript,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
