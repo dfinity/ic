@@ -111,14 +111,6 @@ pub fn verify_dealing_private<C: CspIDkgProtocol>(
             params.transcript_id(),
         )));
     }
-    let internal_dealing =
-        IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
-            .map_err(|e| {
-                IDkgVerifyDealingPrivateError::InvalidArgument(format!(
-                    "failed to deserialize internal dealing: {:?}",
-                    e
-                ))
-            })?;
     let dealer_index = params
         .dealer_index(signed_dealing.dealer_id())
         .ok_or_else(|| {
@@ -135,7 +127,7 @@ pub fn verify_dealing_private<C: CspIDkgProtocol>(
 
     csp_client.idkg_verify_dealing_private(
         params.algorithm_id(),
-        &internal_dealing,
+        signed_dealing.idkg_dealing().dealing_as_bytebuf(),
         dealer_index,
         self_receiver_index,
         &self_mega_pubkey,

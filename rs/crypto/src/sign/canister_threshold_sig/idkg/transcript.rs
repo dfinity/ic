@@ -159,12 +159,8 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         transcript.registry_version,
     )?;
 
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
     let internal_complaints = csp_client.idkg_load_transcript(
-        &internal_dealings,
+        &transcript.verified_dealings,
         &transcript.context_data(),
         self_index,
         &self_mega_pubkey,
@@ -197,11 +193,6 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         transcript.registry_version,
     )?;
 
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
-
     let mut internal_openings = BTreeMap::new();
     for (complaint, openings_by_opener_id) in openings {
         let mut internal_openings_by_opener_index = BTreeMap::new();
@@ -233,7 +224,7 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     }
 
     csp_client.idkg_load_transcript_with_openings(
-        &internal_dealings,
+        &transcript.verified_dealings,
         &internal_openings,
         &transcript.context_data(),
         self_index,

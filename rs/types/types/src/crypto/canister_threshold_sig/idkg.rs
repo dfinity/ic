@@ -984,6 +984,14 @@ pub struct IDkgDealing {
     pub internal_dealing_raw: Vec<u8>,
 }
 
+impl IDkgDealing {
+    /// Returns a copy of the internal dealing as `serde_bytes::ByteBuf`.
+    #[inline]
+    pub fn dealing_as_bytebuf(&self) -> IDkgDealingBytes {
+        IDkgDealingBytes::from(self.internal_dealing_raw.clone())
+    }
+}
+
 impl Debug for IDkgDealing {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "IDkgDealing {{ transcript_id: {}", self.transcript_id)?;
@@ -1008,6 +1016,8 @@ impl SignedBytesWithoutDomainSeparator for IDkgDealing {
         serde_cbor::to_vec(&self).unwrap()
     }
 }
+
+pub type IDkgDealingBytes = serde_bytes::ByteBuf;
 
 /// The signed dealing sent by dealers
 ///
