@@ -105,11 +105,11 @@ pub struct HealthChecksConfig {
 #[derive(Args)]
 pub struct FirewallConfig {
     /// The path to the nftables replica ruleset file to update
-    #[clap(long, default_value = "system_replicas.ruleset")]
-    pub nftables_system_replicas_path: PathBuf,
+    #[clap(long)]
+    pub nftables_system_replicas_path: Option<PathBuf>,
 
     /// The name of the nftables variable to export
-    #[clap(long, default_value = "system_replica_ips")]
+    #[clap(long, default_value = "ipv6_system_replica_ips")]
     pub nftables_system_replicas_var: String,
 }
 

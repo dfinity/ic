@@ -15,7 +15,10 @@ use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
 use tracing::info;
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
-use crate::core::Run;
+use crate::{
+    core::Run,
+    firewall::{FirewallGenerator, SystemdReloader},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
@@ -55,6 +58,26 @@ impl fmt::Display for Subnet {
     }
 }
 
+// TODO remove after decentralization and clean up all loose ends
+pub struct SnapshotPersister {
+    generator: FirewallGenerator,
+    reloader: SystemdReloader,
+}
+
+impl SnapshotPersister {
+    pub fn new(generator: FirewallGenerator, reloader: SystemdReloader) -> Self {
+        Self {
+            generator,
+            reloader,
+        }
+    }
+
+    pub async fn persist(&self, s: RegistrySnapshot) -> Result<(), Error> {
+        self.generator.generate(s)?;
+        self.reloader.reload().await
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RegistrySnapshot {
     pub registry_version: u64,
@@ -67,6 +90,7 @@ pub struct Runner {
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     registry_client: Arc<dyn RegistryClient>,
     registry_version: Option<RegistryVersion>,
+    persister: Option<SnapshotPersister>,
 }
 
 impl Runner {
@@ -78,7 +102,12 @@ impl Runner {
             published_registry_snapshot,
             registry_client,
             registry_version: None,
+            persister: None,
         }
+    }
+
+    pub fn set_persister(&mut self, persister: SnapshotPersister) {
+        self.persister = Some(persister);
     }
 
     // Creates a snapshot of the registry for given version
@@ -217,14 +246,22 @@ impl Run for Runner {
 
         // Otherwise create a snapshot & publish it
         let rt = self.get_snapshot(version)?;
-        self.published_registry_snapshot.store(Some(Arc::new(rt)));
+
+        self.published_registry_snapshot
+            .store(Some(Arc::new(rt.clone())));
+
+        self.registry_version = Some(version);
+
         info!(
             version_old = self.registry_version.map(|x| x.get()),
             version_new = version.get(),
             "New registry snapshot published",
         );
 
-        self.registry_version = Some(version);
+        // Persist the firewall rules if configured
+        if let Some(v) = &self.persister {
+            v.persist(rt).await?;
+        }
 
         Ok(())
     }

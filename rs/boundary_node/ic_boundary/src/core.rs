@@ -42,6 +42,7 @@ use crate::{
         WithDeduplication,
     },
     dns::DnsResolver,
+    firewall::{FirewallGenerator, SystemdReloader},
     http::ReqwestClient,
     management,
     metrics::{
@@ -53,7 +54,7 @@ use crate::{
     persist,
     rate_limiting::RateLimit,
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
-    snapshot::Runner as SnapshotRunner,
+    snapshot::{Runner as SnapshotRunner, SnapshotPersister},
     tls_verify::TlsVerifier,
 };
 
@@ -69,6 +70,7 @@ use crate::{
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
+const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
 const SECOND: Duration = Duration::from_secs(1);
 #[cfg(feature = "tls")]
@@ -358,7 +360,18 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     // Snapshots
-    let snapshot_runner = SnapshotRunner::new(Arc::clone(&registry_snapshot), registry_client);
+    let mut snapshot_runner = SnapshotRunner::new(Arc::clone(&registry_snapshot), registry_client);
+
+    if let Some(v) = &cli.firewall.nftables_system_replicas_path {
+        let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
+
+        let fw_generator =
+            FirewallGenerator::new(v.clone(), cli.firewall.nftables_system_replicas_var.clone());
+
+        let persister = SnapshotPersister::new(fw_generator, fw_reloader);
+        snapshot_runner.set_persister(persister);
+    }
+
     let snapshot_runner = WithMetrics(
         snapshot_runner,
         MetricParams::new(&registry, "run_snapshot"),
