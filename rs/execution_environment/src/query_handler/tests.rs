@@ -14,7 +14,7 @@ use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilde
 use ic_types::{
     ingress::WasmResult,
     messages::{CanisterTask, UserQuery},
-    time, CountBytes, Cycles, NumInstructions, QueryStatsEpoch,
+    time, CountBytes, Cycles, NumInstructions,
 };
 use std::{sync::Arc, time::Duration};
 
@@ -2225,9 +2225,6 @@ fn query_stats_are_collected() {
             ),
     );
 
-    // Set epoch, so that query stats can be recorded.
-    test.query_stats_set_epoch_for_testing(QueryStatsEpoch::from(0));
-
     // Run query
     let _ = test.query(
         UserQuery {
@@ -2244,6 +2241,7 @@ fn query_stats_are_collected() {
 
     // The following numbers might change, e.g. if instruction costs are updated.
     // In that case, the easist is probably to print the values and update the test.
+    // If the test fails, the output should also indicate what the new values are.
 
     for (idx, c) in canisters.iter().enumerate() {
         let canister_query_stats = test.query_stats_for_testing(c).unwrap();

@@ -628,11 +628,9 @@ impl LocalTestRuntime {
             ingress_expiry: 0,
             nonce: None,
         };
-        let result = self.query_handler.query(
-            query,
-            self.state_reader.get_latest_state().take(),
-            Vec::new(),
-        );
+        let result =
+            self.query_handler
+                .query(query, self.state_reader.get_latest_state(), Vec::new());
         if let Ok(WasmResult::Reply(result)) = result.clone() {
             info!(
                 "Response{}: {}",

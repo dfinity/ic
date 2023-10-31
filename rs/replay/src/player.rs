@@ -790,7 +790,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {
@@ -825,7 +825,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {
@@ -861,7 +861,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {
@@ -891,7 +891,7 @@ impl Player {
         };
         match self.http_query_handler.query(
             query,
-            self.state_manager.get_latest_state().take(),
+            self.state_manager.get_latest_state(),
             Vec::new(),
         ) {
             Ok(wasm_result) => match wasm_result {

@@ -23,7 +23,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionResponse, QueryExecutionService, QueryHandler,
 };
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -67,7 +67,7 @@ fn get_latest_certified_state_and_data_certificate(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     certificate_delegation: Option<CertificateDelegation>,
     canister_id: CanisterId,
-) -> Option<(Arc<ReplicatedState>, Vec<u8>)> {
+) -> Option<(Labeled<Arc<ReplicatedState>>, Vec<u8>)> {
     // The path to fetch the data certificate for the canister.
     let path = SubTree(flatmap! {
         label("canister") => SubTree(
@@ -84,7 +84,7 @@ fn get_latest_certified_state_and_data_certificate(
         .read_certified_state(&path)
         .map(|(state, tree, cert)| {
             (
-                state,
+                Labeled::new(cert.height, state),
                 into_cbor(&Certificate {
                     tree,
                     signature: Blob(cert.signed.signature.signature.get().0),
@@ -196,7 +196,7 @@ impl QueryHandler for InternalHttpQueryHandler {
     fn query(
         &self,
         mut query: UserQuery,
-        state: Arc<ReplicatedState>,
+        state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
@@ -221,7 +221,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             };
 
             query.receiver =
-                route_bitcoin_message(network, &state.as_ref().metadata.network_topology)?;
+                route_bitcoin_message(network, &state.get_ref().metadata.network_topology)?;
         }
 
         // Check the query cache first (if the query caching is enabled).
@@ -230,7 +230,7 @@ impl QueryHandler for InternalHttpQueryHandler {
         let (cache_entry_key, cache_entry_env) = if self.config.query_caching == FlagStatus::Enabled
         {
             let key = query_cache::EntryKey::from(&query);
-            let env = query_cache::EntryEnv::try_from((&key, state.as_ref()))?;
+            let env = query_cache::EntryEnv::try_from((&key, state.get_ref().as_ref()))?;
 
             if let Some(result) = self.query_cache.get_valid_result(&key, &env) {
                 return result;
@@ -306,7 +306,7 @@ impl QueryHandler for HttpQueryHandler {
     fn query(
         &self,
         query: UserQuery,
-        state: Arc<Self::State>,
+        state: Labeled<Arc<Self::State>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         self.internal.query(query, state, data_certificate)
@@ -347,7 +347,7 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                     query.receiver,
                 ) {
                     Some((state, cert)) => {
-                        let time = state.metadata.batch_time;
+                        let time = state.get_ref().metadata.batch_time;
                         let result = internal.query(query, state, cert);
 
                         let response = match result {

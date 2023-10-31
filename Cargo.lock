@@ -10910,6 +10910,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
  "ic-registry-provisional-whitelist",

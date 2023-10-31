@@ -29,6 +29,7 @@ use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
     RegistryExecutionSettings, SubnetAvailableMemory,
 };
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1452,7 +1453,17 @@ impl ExecutionTest {
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.query_handler.query(query, state, data_certificate)
+        // We always pass 0 as the height to the query handler, because we don't run consensus
+        // in these tests and therefore there isn't any height.
+        //
+        // Currently, this height is only used for query stats collection and it doesn't matter which one we pass in here.
+        // Even if consensus was running, it could be that all queries are actually runnning at height 0. The state passed in to
+        // the query handler shouldn't have the height encoded, so there shouldn't be a missmatch between the two.
+        self.query_handler.query(
+            query,
+            Labeled::new(Height::from(0), state),
+            data_certificate,
+        )
     }
 
     /// Returns a reference to the query handler of this test.

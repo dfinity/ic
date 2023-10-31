@@ -27,7 +27,9 @@ use ic_interfaces::{
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
+use ic_interfaces_state_manager::{
+    CertificationScope, Labeled, StateHashError, StateManager, StateReader,
+};
 use ic_logger::ReplicaLogger;
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -1456,7 +1458,7 @@ impl StateMachine {
                 ingress_expiry: 0,
                 nonce: None,
             },
-            state,
+            Labeled::new(certification.height, state),
             data_certificate,
         )
     }
