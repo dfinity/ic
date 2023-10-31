@@ -19,7 +19,6 @@ pub(crate) struct HostosUpgrader {
 }
 
 impl HostosUpgrader {
-    #[allow(dead_code)] // NODE-1152
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         hostos_version: HostosVersion,

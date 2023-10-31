@@ -20,7 +20,6 @@ use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-#[allow(unused_imports)] // NODE-1152
 use ic_types::hostos_version::HostosVersion;
 use ic_types::{ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
@@ -225,10 +224,6 @@ impl Orchestrator {
             .await,
         );
 
-        // NODE-1152
-        // Completely disable the HostOS upgrade loop, until testing is
-        // complete and we are ready to roll out this feature.
-        /*
         let hostos_version = UtilityCommand::request_hostos_version().and_then(|v| {
             HostosVersion::try_from(v)
                 .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
@@ -252,9 +247,6 @@ impl Orchestrator {
                 .await,
             ),
         };
-        */
-        let hostos_version = None;
-        let hostos_upgrade = None;
 
         let firewall = Firewall::new(
             node_id,
@@ -278,7 +270,7 @@ impl Orchestrator {
             replica_process,
             Arc::clone(&subnet_id),
             replica_version,
-            hostos_version,
+            hostos_version.ok(),
             cup_provider,
             logger.clone(),
         ));
