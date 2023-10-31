@@ -4287,7 +4287,7 @@ fn test_derived_state() {
         neurons_fund_participation_icp_e8s: Some(700_000_000),
     };
     let actual_derived_state4 = swap.derived_state();
-    assert_eq!(expected_derived_state4, actual_derived_state4);
+    assert_eq!(actual_derived_state4, expected_derived_state4);
 
     swap.direct_participation_icp_e8s = Some(500_000_000);
     swap.neurons_fund_participation_icp_e8s = Some(400_000_000);

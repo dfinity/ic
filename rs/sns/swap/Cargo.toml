@@ -33,6 +33,7 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-stable-structures = { workspace = true }
 ic-sns-governance = { path = "../governance" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.

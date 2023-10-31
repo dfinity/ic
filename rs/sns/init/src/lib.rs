@@ -25,11 +25,11 @@ use ic_sns_governance::{
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::{
+    neurons_fund::LinearScalingCoefficientValidationError,
     pb::v1::{
         IdealMatchedParticipationFunction, Init as SwapInit, LinearScalingCoefficient,
         NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
     },
-    swap::LinearScalingCoefficientValidationError,
 };
 use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
 use isocountry::CountryCode;
