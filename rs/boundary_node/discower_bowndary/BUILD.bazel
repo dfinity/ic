@@ -1,0 +1,36 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/registry/client",
+    "//rs/registry/nns_data_provider_wrappers",
+    "@crate_index//:ic-agent",
+    "@crate_index//:futures-util",
+    "@crate_index//:prost",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+VERSION = "0.1.0"
+
+rust_library(
+    name = "discower-bowndary-lib",
+    srcs = ["src/lib.rs"] + ["src/api_nodes_discovery.rs"] + ["src/route_provider.rs"],
+    aliases = {},
+    proc_macro_deps = ["@crate_index//:async-trait"],
+    version = VERSION,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "discower-bowndary-lib-test",
+    aliases = {},
+    crate = ":discower-bowndary-lib",
+    proc_macro_deps = [],
+    deps = DEPENDENCIES,
+)
