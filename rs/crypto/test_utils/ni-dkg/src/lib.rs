@@ -674,23 +674,52 @@ pub struct NiDkgTestEnvironment {
     pub crypto_components: BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     pub registry_data: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
+    use_remote_vault: bool,
 }
 
 impl NiDkgTestEnvironment {
     /// Creates a new empty test environment.
+    /// The crypto components are initialized with local vaults.
     pub fn new() -> Self {
+        Self::new_impl(false)
+    }
+
+    pub fn new_with_remote_vault() -> Self {
+        Self::new_impl(true)
+    }
+
+    fn new_impl(use_remote_vault: bool) -> Self {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
         Self {
             crypto_components: BTreeMap::new(),
             registry_data,
             registry,
+            use_remote_vault,
         }
     }
 
     /// Creates a new test environment appropriate for the given config.
+    /// The crypto components are initialized with local vaults.
     pub fn new_for_config<R: Rng + CryptoRng>(config: &NiDkgConfig, rng: &mut R) -> Self {
-        let mut env = Self::new();
+        Self::new_for_config_impl(config, false, rng)
+    }
+
+    /// Creates a new test environment appropriate for the given config.
+    /// The crypto components are initialized with remote vaults.
+    pub fn new_for_config_with_remote_vault<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_for_config_impl(config, true, rng)
+    }
+
+    fn new_for_config_impl<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        use_remote_vault: bool,
+        rng: &mut R,
+    ) -> Self {
+        let mut env = Self::new_impl(use_remote_vault);
         env.update_for_config(config, rng);
         env
     }
@@ -709,7 +738,12 @@ impl NiDkgTestEnvironment {
     ) {
         let new_node_ids = self.added_nodes(ni_dkg_config);
         for node_id in new_node_ids {
-            self.add_crypto_component_and_registry_entry(ni_dkg_config, node_id, rng);
+            self.add_crypto_component_and_registry_entry(
+                ni_dkg_config,
+                node_id,
+                self.use_remote_vault,
+                rng,
+            );
         }
         self.registry.update_to_latest_version();
         self.cleanup_unused_nodes(ni_dkg_config);
@@ -729,10 +763,31 @@ impl NiDkgTestEnvironment {
     }
 
     /// Deserializes a new `NiDkgTestEnvironment` from disk.
+    /// The crypto components are initialized with local vaults.
     ///
     /// Note that this only works if the environment was originally serialized
     /// using `save_to_dir`.
     pub fn new_from_dir<R: Rng + CryptoRng>(toplevel_path: &Path, rng: &mut R) -> Self {
+        Self::new_from_dir_impl(toplevel_path, false, rng)
+    }
+
+    /// Deserializes a new `NiDkgTestEnvironment` from disk.
+    /// The crypto components are initialized with remote vaults.
+    ///
+    /// Note that this only works if the environment was originally serialized
+    /// using `save_to_dir`.
+    pub fn new_from_dir_with_remote_vault<R: Rng + CryptoRng>(
+        toplevel_path: &Path,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_from_dir_impl(toplevel_path, true, rng)
+    }
+
+    fn new_from_dir_impl<R: Rng + CryptoRng>(
+        toplevel_path: &Path,
+        use_remote_vault: bool,
+        rng: &mut R,
+    ) -> Self {
         fn node_ids_from_dir_names(toplevel_path: &Path) -> BTreeMap<NodeId, PathBuf> {
             std::fs::read_dir(toplevel_path)
                 .expect("crypto_root directory doesn't exist")
@@ -759,14 +814,20 @@ impl NiDkgTestEnvironment {
             crypto_components: BTreeMap::new(),
             registry_data,
             registry,
+            use_remote_vault,
         };
         for (node_id, crypto_root) in node_ids_from_dir_names(toplevel_path) {
-            let crypto_component = TempCryptoComponent::builder()
+            let crypto_component_builder = TempCryptoComponent::builder()
                 .with_temp_dir_source(crypto_root)
                 .with_registry(Arc::clone(&ret.registry) as Arc<_>)
                 .with_node_id(node_id)
-                .with_rng(ChaCha20Rng::from_seed(rng.gen()))
-                .build();
+                .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+            let crypto_component_builder = if use_remote_vault {
+                crypto_component_builder.with_remote_vault()
+            } else {
+                crypto_component_builder
+            };
+            let crypto_component = crypto_component_builder.build();
             ret.crypto_components.insert(node_id, crypto_component);
         }
 
@@ -788,15 +849,21 @@ impl NiDkgTestEnvironment {
         &mut self,
         ni_dkg_config: &NiDkgConfig,
         node_id: NodeId,
+        use_remote_vault: bool,
         rng: &mut R,
     ) {
         // Insert TempCryptoComponent
-        let temp_crypto = TempCryptoComponent::builder()
+        let temp_crypto_builder = TempCryptoComponent::builder()
             .with_registry(Arc::clone(&self.registry) as Arc<_>)
             .with_node_id(node_id)
             .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
-            .build();
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+        let temp_crypto_builder = if use_remote_vault {
+            temp_crypto_builder.with_remote_vault()
+        } else {
+            temp_crypto_builder
+        };
+        let temp_crypto = temp_crypto_builder.build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys")
