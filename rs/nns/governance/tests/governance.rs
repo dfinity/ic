@@ -1723,6 +1723,70 @@ async fn test_follow_negative() {
     );
 }
 
+/// Test the mechanism of rejecting ManageNeuron::Follow requests if
+/// the topic is deprecated but not yet deleted.
+#[tokio::test]
+async fn test_follow_fails_on_deprecated_topics() {
+    // Setup the world
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_following(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Test that following still works with a non-deprecated
+    // topic and that all authorization works as intended.
+    let result = fake::follow(
+        &mut gov,
+        principal(1),
+        NeuronId { id: 1 },
+        Topic::Governance,
+        NeuronId { id: 2 },
+    );
+    // Assert the response is correct
+    assert_matches!(
+        result.command,
+        Some(manage_neuron_response::Command::Follow(_))
+    );
+
+    // Assert that the Neuron's followees were updated
+    let actual_followees = gov
+        .neuron_store
+        .with_neuron_mut(&NeuronId { id: 1 }, |n| n.followees.clone())
+        .expect("Neuron not found");
+    assert_eq!(
+        actual_followees,
+        hashmap! {Topic::Governance as i32 => Followees { followees: vec![NeuronId {id : 2}]}}
+    );
+
+    // Test that following on a deprecated topic produces and invalid
+    // command response
+    let result = fake::follow(
+        &mut gov,
+        principal(1),
+        NeuronId { id: 1 },
+        Topic::SnsDecentralizationSale,
+        NeuronId { id: 2 },
+    );
+    assert_matches!(
+        result.command,
+        Some(manage_neuron_response::Command::Error(err))
+            if err.error_type == ErrorType::InvalidCommand as i32
+    );
+
+    // Assert that the Neuron's followees were not updated
+    let actual_followees = gov
+        .neuron_store
+        .with_neuron_mut(&NeuronId { id: 1 }, |n| n.followees.clone())
+        .expect("Neuron not found");
+    assert_eq!(
+        actual_followees,
+        hashmap! {Topic::Governance as i32 => Followees { followees: vec![NeuronId {id : 2}]}}
+    );
+}
+
 /// Here we test that following doesn't apply to the Governance topic.
 ///
 /// Neuron 1 makes a proposal.
