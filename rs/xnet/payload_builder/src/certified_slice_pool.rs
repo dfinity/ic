@@ -1088,7 +1088,7 @@ impl CertifiedSlicePool {
 
     /// Takes a sub-slice of the stream from `subnet_id` starting at `begin`,
     /// respecting the given message count and byte limits; or, if the provided
-    /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`).
+    /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
     ///
     /// If all messages are taken, the slice is removed from the pool.
     ///

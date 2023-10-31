@@ -11,14 +11,11 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex},
     CountBytes, SubnetId,
 };
-use ic_xnet_payload_builder::{
-    certified_slice_pool::{
-        certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool,
-        InvalidAppend, InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE,
-        STATUS_SUCCESS,
-    },
-    ExpectedIndices,
+use ic_xnet_payload_builder::certified_slice_pool::{
+    certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
+    InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
+use ic_xnet_payload_builder::ExpectedIndices;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryFrom;
