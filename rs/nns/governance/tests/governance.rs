@@ -30,6 +30,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image};
+use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -51,7 +52,6 @@ use ic_nns_governance::{
         WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
-    neurons_fund::{PolynomialMatchingFunction, SerializableFunction},
     pb::v1::{
         add_or_remove_node_provider::Change,
         governance::{

@@ -13,10 +13,10 @@ use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
 use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_nervous_system_common::{ledger::IcpLedger, E8};
+use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance, ONE_YEAR_SECONDS},
-    neurons_fund::{PolynomialMatchingFunction, SerializableFunction},
     pb::v1::{
         manage_neuron::Disburse, neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
         settle_community_fund_participation, settle_community_fund_participation::Committed,

@@ -16,12 +16,12 @@ use crate::{
         GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
         GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
         GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, GovernanceError,
-        Icrc1Account, Init, Lifecycle, LinearScalingCoefficient,
-        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
-        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SaleNeuronId,
-        NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest,
-        OpenResponse, Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
+        Icrc1Account, Init, Lifecycle, ListCommunityFundParticipantsRequest,
+        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
+        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
+        NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
+        NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
+        Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
         SetDappControllersCallResult, SetDappControllersRequest, SetDappControllersResponse,
         SetModeCallResult, SettleCommunityFundParticipation,
         SettleCommunityFundParticipationResult, SettleNeuronsFundParticipationRequest,
@@ -141,105 +141,6 @@ impl From<Result<SetDappControllersResponse, CanisterCallError>>
         });
 
         Self { possibility }
-    }
-}
-
-pub enum LinearScalingCoefficientValidationError {
-    // All fields are mandatory.
-    UnspecifiedField(String),
-    EmptyInterval {
-        from_direct_participation_icp_e8s: u64,
-        to_direct_participation_icp_e8s: u64,
-    },
-    DenominatorIsZero,
-    // The slope should be between 0.0 and 1.0.
-    NumeratorGreaterThanDenominator {
-        slope_numerator: u64,
-        slope_denominator: u64,
-    },
-}
-
-impl ToString for LinearScalingCoefficientValidationError {
-    fn to_string(&self) -> String {
-        let prefix = "LinearScalingCoefficientValidationError: ";
-        match self {
-            Self::UnspecifiedField(field_name) => {
-                format!("{prefix}Field `{}` must be specified.", field_name)
-            }
-            Self::EmptyInterval {
-                from_direct_participation_icp_e8s,
-                to_direct_participation_icp_e8s,
-            } => {
-                format!(
-                    "{prefix}from_direct_participation_icp_e8s ({}) must be strictly less that \
-                    to_direct_participation_icp_e8s ({})).",
-                    from_direct_participation_icp_e8s, to_direct_participation_icp_e8s,
-                )
-            }
-            Self::DenominatorIsZero => {
-                format!("{prefix}slope_denominator must not equal zero.")
-            }
-            Self::NumeratorGreaterThanDenominator {
-                slope_numerator,
-                slope_denominator,
-            } => {
-                format!(
-                    "{prefix}slope_numerator ({}) must be less than or equal \
-                    slope_denominator ({})",
-                    slope_numerator, slope_denominator,
-                )
-            }
-        }
-    }
-}
-
-impl LinearScalingCoefficient {
-    pub fn validate(&self) -> Result<(), LinearScalingCoefficientValidationError> {
-        let from_direct_participation_icp_e8s =
-            self.from_direct_participation_icp_e8s.ok_or_else(|| {
-                LinearScalingCoefficientValidationError::UnspecifiedField(
-                    "from_direct_participation_icp_e8s".to_string(),
-                )
-            })?;
-        let to_direct_participation_icp_e8s =
-            self.to_direct_participation_icp_e8s.ok_or_else(|| {
-                LinearScalingCoefficientValidationError::UnspecifiedField(
-                    "to_direct_participation_icp_e8s".to_string(),
-                )
-            })?;
-        let slope_numerator = self.slope_numerator.ok_or_else(|| {
-            LinearScalingCoefficientValidationError::UnspecifiedField("slope_numerator".to_string())
-        })?;
-        let slope_denominator = self.slope_denominator.ok_or_else(|| {
-            LinearScalingCoefficientValidationError::UnspecifiedField(
-                "slope_denominator".to_string(),
-            )
-        })?;
-        // Currently we only check that `intercept_icp_e8s` is specified, so the actual field value
-        // is unused.
-        let _intercept_icp_e8s = self.intercept_icp_e8s.ok_or_else(|| {
-            LinearScalingCoefficientValidationError::UnspecifiedField(
-                "intercept_icp_e8s".to_string(),
-            )
-        })?;
-        if to_direct_participation_icp_e8s <= from_direct_participation_icp_e8s {
-            return Err(LinearScalingCoefficientValidationError::EmptyInterval {
-                from_direct_participation_icp_e8s,
-                to_direct_participation_icp_e8s,
-            });
-        }
-        if slope_denominator == 0 {
-            return Err(LinearScalingCoefficientValidationError::DenominatorIsZero);
-        }
-        if slope_numerator > slope_denominator {
-            return Err(
-                LinearScalingCoefficientValidationError::NumeratorGreaterThanDenominator {
-                    slope_numerator,
-                    slope_denominator,
-                },
-            );
-        }
-        Ok(())
     }
 }
 

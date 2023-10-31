@@ -8637,6 +8637,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-neurons-fund"
+version = "0.0.1"
+dependencies = [
+ "assert_matches",
+ "ic-nervous-system-common",
+ "lazy_static",
+ "proptest",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+]
+
+[[package]]
 name = "ic-nns-common"
 version = "0.8.0"
 dependencies = [
@@ -8714,6 +8729,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-protobuf-generator",
@@ -10388,6 +10404,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-proto",
  "ic-nervous-system-runtime",
+ "ic-neurons-fund",
  "ic-sns-governance",
  "ic-sns-swap-protobuf-generator",
  "ic-stable-structures",
