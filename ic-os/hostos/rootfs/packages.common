@@ -71,4 +71,30 @@ python3-requests
 xxd
 
 # QEMU required dependencies for version 6.2
+ipxe-qemu
+ipxe-qemu-256k-compat-efi-roms
+libaio1
+libatomic1
+libc6
+libfdt1
+libfuse3-3
+libgcc-s1
+libglib2.0-0
+libgnutls30
+libibverbs1
+libjpeg8
+# libnettle8    - Not available in Ubuntu 20.04
+libnuma1
 libpixman-1-0
+libpmem1
+libpng16-16
+librdmacm1
+libsasl2-2
+libseccomp2
+libslirp0
+libstdc++6
+libudev1
+# liburing2     - Not available in Ubuntu 20.04
+libzstd1
+seabios
+zlib1g
