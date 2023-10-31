@@ -25,8 +25,7 @@ use ic_recovery::nns_recovery_failover_nodes::{
 use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_wasm::pb::v1::{
-    GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateAllowedPrincipalsRequest,
-    UpdateSnsSubnetListRequest,
+    GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateSnsSubnetListRequest,
 };
 use ic_tests::driver::boundary_node::BoundaryNodeVm;
 use ic_tests::driver::constants::SSH_USERNAME;
@@ -1212,7 +1211,7 @@ fn configure_sns_wasms(
     neuron_id: NeuronId,
     recovered_nns_node: IcNodeSnapshot,
     new_subnet_id: SubnetId,
-    wallet_canister_id: CanisterId,
+    _wallet_canister_id: CanisterId,
 ) {
     let logger = env.logger();
     let recovered_nns_node_url = recovered_nns_node.get_public_url();
@@ -1248,22 +1247,6 @@ fn configure_sns_wasms(
             sns_subnet_ids_to_remove: current_subnets,
         },
         "Add SNS Subnet IDs to SNS-WASM".to_string(),
-    );
-
-    info!(
-        logger,
-        "Proposing to allow the wallet canister {wallet_canister_id:?} to deploy an SNS ..."
-    );
-    submit_execute_await_proposal(
-        env,
-        recovered_nns_node,
-        neuron_id,
-        NnsFunction::UpdateAllowedPrincipals,
-        UpdateAllowedPrincipalsRequest {
-            added_principals: vec![wallet_canister_id.get()],
-            removed_principals: vec![],
-        },
-        "Update the list of Principals allowed to deploy an SNS".to_string(),
     );
 }
 
