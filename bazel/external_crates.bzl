@@ -1299,19 +1299,18 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^11.0.2",
+                version = "^13.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
                     "parallel-compilation",
-                    "posix-signals-on-macos",
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^11.0.2",
+                version = "^13.0.1",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^11.0.2",
+                version = "^13.0.1",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",
