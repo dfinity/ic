@@ -2,6 +2,7 @@ use crate::error::LayoutError;
 use crate::utils::do_copy;
 
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
@@ -316,6 +317,7 @@ impl TipHandler {
         &mut self,
         state_layout: &StateLayout,
         cp: &CheckpointLayout<ReadOnly>,
+        lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let tip = self.tip_path();
@@ -331,13 +333,17 @@ impl TipHandler {
 
         let file_copy_instruction = |path: &Path| {
             if path.extension() == Some(OsStr::new("pbuf")) {
-                // Do not copy protobufs
+                // Do not copy protobufs.
                 CopyInstruction::Skip
-            } else if path.extension() == Some(OsStr::new("bin")) {
-                // PageMap files need to be modified in the tip
+            } else if path.extension() == Some(OsStr::new("bin"))
+                && lsmt_storage == FlagStatus::Disabled
+            {
+                // PageMap files need to be modified in the tip,
+                // but only with non-LSMT storage layer that modifies these files.
+                // With LSMT we always write additional overlay files instead.
                 CopyInstruction::ReadWrite
             } else {
-                // Everything else should be readonly
+                // Everything else should be readonly.
                 CopyInstruction::ReadOnly
             }
         };

@@ -746,6 +746,7 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
+    lsmt_storage: FlagStatus,
 }
 
 #[cfg(debug_assertions)]
@@ -1025,6 +1026,39 @@ impl PageMapType {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
+        }
+    }
+
+    /// The path of an overlay file written during round `height`
+    fn overlay<Access>(
+        &self,
+        layout: &CheckpointLayout<Access>,
+        height: Height,
+    ) -> Result<PathBuf, LayoutError>
+    where
+        Access: AccessPolicy,
+    {
+        match &self {
+            PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0_overlay(height)),
+            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_overlay(height)),
+            PageMapType::WasmChunkStore(id) => {
+                Ok(layout.canister(id)?.wasm_chunk_store_overlay(height))
+            }
+        }
+    }
+
+    /// List all existing overlay files of a this PageMapType inside `layout`
+    fn overlays<Access>(
+        &self,
+        layout: &CheckpointLayout<Access>,
+    ) -> Result<Vec<PathBuf>, LayoutError>
+    where
+        Access: AccessPolicy,
+    {
+        match &self {
+            PageMapType::WasmMemory(id) => layout.canister(id)?.vmemory_0_overlays(),
+            PageMapType::StableMemory(id) => layout.canister(id)?.stable_memory_overlays(),
+            PageMapType::WasmChunkStore(id) => layout.canister(id)?.wasm_chunk_store_overlays(),
         }
     }
 
@@ -1365,6 +1399,7 @@ impl StateManagerImpl {
             log.clone(),
             state_layout.capture_tip_handler(),
             state_layout.clone(),
+            config.lsmt_storage,
             metrics.clone(),
             malicious_flags.clone(),
         );
@@ -1588,6 +1623,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            lsmt_storage: config.lsmt_storage,
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -3008,7 +3044,10 @@ impl StateManager for StateManagerImpl {
                 checkpointed_state
             }
             CertificationScope::Metadata => {
-                if self.tip_channel.is_empty() {
+                if self.lsmt_storage == FlagStatus::Enabled {
+                    // TODO (IC-1306): Implement LSMT strategy for when to flush page maps
+                    unimplemented!();
+                } else if self.tip_channel.is_empty() {
                     self.flush_page_maps(&mut state, height);
                 } else {
                     self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
