@@ -52,6 +52,10 @@ pub struct RegistryConfig {
     /// The registry local store path to be populated
     #[clap(long)]
     pub local_store_path: PathBuf,
+
+    /// Whether to disable internal registry replicator
+    #[clap(long, default_value = "false")]
+    pub disable_registry_replicator: bool,
 }
 
 #[derive(Args)]

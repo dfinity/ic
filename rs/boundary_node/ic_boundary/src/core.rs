@@ -148,22 +148,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&cli.registry.nns_pub_key_pem)
             .context("failed to parse nns public key")?;
 
-    // Registry Replicator
-    let registry_replicator = {
-        // Notice no-op logger
-        let logger = ic_logger::new_replica_logger(
-            slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
-            &ic_config::logger::Config::default(),                          // config
-        );
-
-        RegistryReplicator::new_with_clients(
-            logger,
-            local_store,
-            registry_client.clone(), // registry_client
-            Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
-        )
-    };
-
     #[cfg(feature = "tls")]
     let (tls_configurator, tls_acceptor, token) = prepare_tls(&cli, &registry)
         .await
@@ -290,7 +274,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                         .deflate(true),
                 )
                 .set_x_request_id(MakeRequestUuid)
-                .propagate_x_request_id()
                 .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
                 .layer(middleware::from_fn_with_state(
                     HttpMetricParams::new(&registry, "http_request_in"),
@@ -360,7 +343,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     // Snapshots
-    let mut snapshot_runner = SnapshotRunner::new(Arc::clone(&registry_snapshot), registry_client);
+    let mut snapshot_runner =
+        SnapshotRunner::new(Arc::clone(&registry_snapshot), registry_client.clone());
 
     if let Some(v) = &cli.firewall.nftables_system_replicas_path {
         let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
@@ -420,16 +404,34 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 .map_err(|err| anyhow!("server failed: {:?}", err)),
         );
 
-        s.spawn(async move {
-            registry_replicator
-                .start_polling(cli.registry.nns_urls, Some(nns_pub_key))
-                .await
-                .context("failed to start registry replicator")?
-                .await
-                .context("registry replicator failed")?;
+        if !cli.registry.disable_registry_replicator {
+            // Registry Replicator
+            let registry_replicator = {
+                // Notice no-op logger
+                let logger = ic_logger::new_replica_logger(
+                    slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
+                    &ic_config::logger::Config::default(),                          // config
+                );
 
-            Ok::<(), Error>(())
-        });
+                RegistryReplicator::new_with_clients(
+                    logger,
+                    local_store,
+                    registry_client,
+                    Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
+                )
+            };
+
+            s.spawn(async move {
+                registry_replicator
+                    .start_polling(cli.registry.nns_urls, Some(nns_pub_key))
+                    .await
+                    .context("failed to start registry replicator")?
+                    .await
+                    .context("registry replicator failed")?;
+
+                Ok::<(), Error>(())
+            });
+        }
 
         // Servers
         srvs_http.for_each(|srv| {
