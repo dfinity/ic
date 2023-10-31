@@ -6,7 +6,7 @@ use crate::{
 };
 
 use ic_base_types::CanisterId;
-use ic_config::state_manager::Config;
+use ic_config::{flag_status::FlagStatus, state_manager::Config};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
@@ -178,15 +178,18 @@ fn write_checkpoint(
     log: ReplicaLogger,
 ) -> Result<(), String> {
     let old_height = old_cp.height();
+    // As we do not write any new data, it does not matter if we use the LSMT storage layer or not
+    let lsmt_storage = FlagStatus::Disabled;
 
     let mut tip_handler = state_layout.capture_tip_handler();
     tip_handler
-        .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
+        .reset_tip_to(&state_layout, old_cp, lsmt_storage, Some(thread_pool))
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
         state_layout,
+        lsmt_storage,
         metrics.clone(),
         MaliciousFlags::default(),
     );

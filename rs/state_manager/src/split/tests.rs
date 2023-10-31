@@ -5,6 +5,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
+use ic_config::state_manager::lsmt_storage_default;
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -327,6 +328,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         log,
         tip_handler,
         layout.clone(),
+        lsmt_storage_default(),
         state_manager_metrics.clone(),
         MaliciousFlags::default(),
     );

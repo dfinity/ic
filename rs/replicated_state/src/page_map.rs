@@ -4,6 +4,7 @@ mod page_allocator;
 mod storage;
 
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
+use ic_config::flag_status::FlagStatus;
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
@@ -234,6 +235,22 @@ pub enum MemoryMapOrData<'a> {
     Data(&'a [u8]),
 }
 
+/// For write operations, whether the delta should be written to a base file or an overlay file
+pub enum PersistDestination {
+    BaseFile(PathBuf),
+    OverlayFile(PathBuf),
+}
+
+impl PersistDestination {
+    /// Helper function to simplify the typical match statement to construct this enum
+    pub fn new(base_file: PathBuf, overlay_file: PathBuf, lsmt_storage: FlagStatus) -> Self {
+        match lsmt_storage {
+            FlagStatus::Enabled => PersistDestination::OverlayFile(overlay_file),
+            FlagStatus::Disabled => PersistDestination::BaseFile(base_file),
+        }
+    }
+}
+
 /// PageMap is a data structure that represents an image of a canister virtual
 /// memory.  The memory is viewed as a collection of _pages_. `PageMap` uses
 /// 4KiB host OS pages to track the heap contents, not 64KiB Wasm pages.
@@ -396,14 +413,26 @@ impl PageMap {
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination.
-    pub fn persist_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file(&self.page_delta, dst)
+    pub fn persist_delta(&self, dst: PersistDestination) -> Result<(), PersistenceError> {
+        match dst {
+            PersistDestination::BaseFile(dst) => self.persist_to_file(&self.page_delta, &dst),
+            PersistDestination::OverlayFile(_dst) => {
+                //TODO (IC-1306)
+                unimplemented!();
+            }
+        }
     }
 
     /// Persists the unflushed delta contained in this page map to the specified
     /// destination.
-    pub fn persist_unflushed_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file(&self.unflushed_delta, dst)
+    pub fn persist_unflushed_delta(&self, dst: PersistDestination) -> Result<(), PersistenceError> {
+        match dst {
+            PersistDestination::BaseFile(dst) => self.persist_to_file(&self.unflushed_delta, &dst),
+            PersistDestination::OverlayFile(_dst) => {
+                //TODO (IC-1306)
+                unimplemented!();
+            }
+        }
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.

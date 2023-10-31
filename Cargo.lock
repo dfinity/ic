@@ -10456,6 +10456,7 @@ version = "0.8.0"
 dependencies = [
  "hex",
  "ic-base-types",
+ "ic-config",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",
