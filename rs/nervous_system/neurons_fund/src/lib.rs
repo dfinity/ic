@@ -128,6 +128,16 @@ pub trait NonDecreasingFunction {
             })
             .collect::<Result<Vec<(Decimal, Decimal)>, String>>()
     }
+
+    fn dbg_plot(&self) -> String {
+        format!(
+            "{}: {}",
+            std::any::type_name::<Self>(),
+            self.plot(NonZeroU64::try_from(30).unwrap())
+                .map(|plot| format!("{:?}", plot))
+                .unwrap_or_else(|e| e),
+        )
+    }
 }
 
 /// An invertible function is a function that has an inverse (a.k.a. monotonically non-decreasing).
@@ -206,6 +216,18 @@ pub struct ValidatedLinearScalingCoefficient {
     pub slope_numerator: u64,
     pub slope_denominator: u64,
     pub intercept_icp_e8s: u64,
+}
+
+impl Default for ValidatedLinearScalingCoefficient {
+    fn default() -> Self {
+        Self {
+            from_direct_participation_icp_e8s: 0,
+            to_direct_participation_icp_e8s: u64::MAX,
+            slope_numerator: 1,
+            slope_denominator: 1,
+            intercept_icp_e8s: 0,
+        }
+    }
 }
 
 pub struct ValidatedNeuronsFundParticipationConstraints<F> {

@@ -475,6 +475,12 @@ impl TryFrom<LinearScalingCoefficientPb> for ValidatedLinearScalingCoefficient {
     }
 }
 
+impl LinearScalingCoefficientPb {
+    pub fn trivial() -> Self {
+        ValidatedLinearScalingCoefficient::default().into()
+    }
+}
+
 impl<F> From<ValidatedNeuronsFundParticipationConstraints<F>>
     for NeuronsFundParticipationConstraintsPb
 where
