@@ -166,6 +166,8 @@ struct WasmMemoryInfo {
 fn disable_unused_features(config: &mut wasmtime::Config) {
     config.wasm_function_references(false);
     config.wasm_relaxed_simd(false);
+    // The signal handler uses Posix signals, not Mach ports on MacOS.
+    config.macos_use_mach_ports(false);
 }
 
 pub struct WasmtimeEmbedder {
