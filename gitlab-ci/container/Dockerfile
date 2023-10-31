@@ -24,7 +24,16 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
     curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
     echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends docker-ce-cli podman buildah
+    apt -yqq install --no-install-recommends docker-ce-cli podman buildah zip
+
+# install afl & gsutils deps for bazel-fuzzers
+RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
+    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
+    apt -yq update && \
+    apt -yqq install --no-install-recommends lld-15 llvm-15 llvm-15-dev clang-15 google-cloud-cli \
+        gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
 
 ARG sdk_version=0.12.0
 ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
@@ -73,6 +82,18 @@ ARG COCOGITTO_OUT="cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.
 RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "/usr/local/bin" && \
     rm "/usr/local/bin/LICENSE" && \
     echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
+
+# Install AFLplusplus
+ARG AFL_RELEASE_VERSION=v4.08c
+RUN mkdir -p /afl && \
+    chown -R ubuntu:ubuntu /afl && \
+    cd /afl && \
+    git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
+    cd AFLplusplus && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make install && \
+    mv afl-fuzz afl-showmap  /afl && \
+    cd .. && rm -rf AFLplusplus
 
 USER ubuntu
 
