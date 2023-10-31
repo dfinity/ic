@@ -42,6 +42,7 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
+use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -116,7 +117,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        msg: Vec<u8>,
+        msg: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
@@ -138,7 +139,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let vault = self.local_csp_vault;
@@ -160,7 +161,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let vault = self.local_csp_vault;
@@ -318,7 +319,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn tls_sign(
         self,
         _: context::Context,
-        message: Vec<u8>,
+        message: ByteBuf,
         key_id: KeyId,
     ) -> Result<CspSignature, CspTlsSignError> {
         let vault = self.local_csp_vault;
@@ -331,7 +332,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         algorithm_id: AlgorithmId,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<MEGaPublicKey>,
@@ -359,7 +360,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         receiver_key_id: KeyId,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         let vault = self.local_csp_vault;
         let job = move || {
@@ -379,7 +380,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
@@ -402,7 +403,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,
         transcript: IDkgTranscriptInternalBytes,
@@ -446,7 +447,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         dealing: IDkgDealingInternal,
         dealer_index: NodeIndex,
-        context_data: Vec<u8>,
+        context_data: ByteBuf,
         opener_index: NodeIndex,
         opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
@@ -468,7 +469,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         self,
         _: context::Context,
         derivation_path: ExtendedDerivationPath,
-        hashed_message: Vec<u8>,
+        hashed_message: ByteBuf,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         kappa_unmasked_raw: IDkgTranscriptInternalBytes,
