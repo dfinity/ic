@@ -5901,6 +5901,12 @@ impl Governance {
         caller: &PrincipalId,
         follow_request: &manage_neuron::Follow,
     ) -> Result<(), GovernanceError> {
+        // Constant set of deprecated but not yet deleted topics. These topics should
+        // not be allowed to be followed on. They are represented in a local constant
+        // for clarity, and represented as a constant array instead of a static HashSet
+        // for brevity, and because search time is equivalent on small arrays.
+        const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
+
         // The implementation of this method is complicated by the
         // fact that we have to maintain a reverse index of all follow
         // relationships, i.e., the `topic_followee_index`.
@@ -5944,12 +5950,22 @@ impl Governance {
         }
 
         // Validate topic exists
-        Topic::from_i32(follow_request.topic).ok_or_else(|| {
+        let topic = Topic::from_i32(follow_request.topic).ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
             )
         })?;
+
+        if DEPRECATED_TOPICS.iter().any(|t| t == &topic) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!(
+                    "Topic {:?}({}) is deprecated and cannot be followed on",
+                    topic, follow_request.topic
+                ),
+            ));
+        }
 
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {

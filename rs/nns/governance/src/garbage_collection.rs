@@ -1,6 +1,7 @@
-use crate::governance::{Governance, LOG_PREFIX};
-use crate::pb::v1::proposal::Action;
-use crate::pb::v1::{ProposalData, ProposalStatus, Topic};
+use crate::{
+    governance::{Governance, LOG_PREFIX},
+    pb::v1::{proposal::Action, ProposalData, ProposalStatus, Topic},
+};
 use ic_sns_swap::pb::v1::Lifecycle;
 use lazy_static::lazy_static;
 use maplit::hashset;
