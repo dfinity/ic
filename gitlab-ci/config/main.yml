@@ -107,14 +107,9 @@ after-script-test-ic-build-image:
   extends:
     - .after-script-test
 
-.bazel-build-legacy-image:
-  extends:
-    - .bazel-test-all
-  image: !reference [.build-k8s-legacy, image]
-
 bazel-build-fuzzers:
   extends:
-    - .bazel-build-legacy-image
+    - .bazel-test-all
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing --build_tag_filters=libfuzzer"
     BAZEL_COMMAND: "build"
@@ -122,15 +117,16 @@ bazel-build-fuzzers:
 
 bazel-build-fuzzers-afl:
   extends:
-    - .bazel-build-legacy-image
+    - .bazel-test-all
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=afl"
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/..."
 
+# check if this one works
 bazel-build-fuzzers-weekly:
   extends:
-    - .bazel-build-legacy-image
+    - .bazel-test-all
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-fuzzers-to-clusterfuzz"'
   needs: []  # don't wait on other jobs
@@ -146,7 +142,7 @@ bazel-build-fuzzers-weekly:
 
 bazel-build-fuzzers-archives:
   extends:
-    - .bazel-build-legacy-image
+    - .bazel-test-all
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
