@@ -33,6 +33,7 @@ use ic_nervous_system_common_test_utils::{
     SpyLedger,
 };
 use ic_nervous_system_proto::pb::v1::Countries;
+use ic_neurons_fund::{NonDecreasingFunction, PolynomialMatchingFunction, SerializableFunction};
 use ic_sns_governance::{
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
@@ -4208,102 +4209,94 @@ async fn test_restore_dapp_controllers_handles_internal_root_failures() {
 
 #[test]
 fn test_derived_state() {
-    let mut swap = Swap::default();
-
-    let expected_derived_state1 = DerivedState {
-        buyer_total_icp_e8s: 0,
-        sns_tokens_per_icp: 0f32,
-        direct_participant_count: Some(0),
-        cf_participant_count: Some(0),
-        cf_neuron_count: Some(0),
-        direct_participation_icp_e8s: Some(0),
-        neurons_fund_participation_icp_e8s: Some(0),
-    };
-    let actual_derived_state1 = swap.derived_state();
-    assert_eq!(expected_derived_state1, actual_derived_state1);
-
-    let params = Params {
-        sns_token_e8s: 1_000_000_000,
-        ..Default::default()
-    };
-    swap.params = Some(params);
-
-    let expected_derived_state2 = DerivedState {
-        buyer_total_icp_e8s: 0,
-        sns_tokens_per_icp: 0f32,
-        direct_participant_count: Some(0),
-        cf_participant_count: Some(0),
-        cf_neuron_count: Some(0),
-        direct_participation_icp_e8s: Some(0),
-        neurons_fund_participation_icp_e8s: Some(0),
-    };
-    let actual_derived_state2 = swap.derived_state();
-    assert_eq!(expected_derived_state2, actual_derived_state2);
-
-    let buyer_state: BuyerState = BuyerState {
-        icp: Some(TransferableAmount {
-            amount_e8s: 100_000_000,
-            transfer_start_timestamp_seconds: 10,
-            transfer_success_timestamp_seconds: 12,
-            ..Default::default()
+    let total_nf_maturity = 1_000_000 * E8;
+    let nf_matching_fn = PolynomialMatchingFunction::new(total_nf_maturity);
+    println!("{}", nf_matching_fn.dbg_plot());
+    let mut swap = Swap {
+        init: Some(Init {
+            neurons_fund_participation: Some(true),
+            neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
+                min_direct_participation_threshold_icp_e8s: Some(25_000 * E8),
+                max_neurons_fund_participation_icp_e8s: Some(total_nf_maturity / 10),
+                coefficient_intervals: vec![LinearScalingCoefficient::trivial()],
+                ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+                    serialized_representation: Some(nf_matching_fn.serialize()),
+                }),
+            }),
+            ..Init::default()
         }),
-        has_created_neuron_recipes: Some(false),
+        ..Swap::default()
     };
-    let buyers = btreemap! {
-        "".to_string() => buyer_state,
-    };
-
-    swap.buyers = buyers;
-    swap.update_derived_fields();
-
-    let expected_derived_state3 = DerivedState {
-        buyer_total_icp_e8s: 100_000_000,
-        sns_tokens_per_icp: 10f32,
-        direct_participant_count: Some(1),
-        cf_participant_count: Some(0),
-        cf_neuron_count: Some(0),
-        direct_participation_icp_e8s: Some(100_000_000),
+    // Validate initial Swap configuration
+    let mut expected = DerivedState {
+        buyer_total_icp_e8s: 0,
+        sns_tokens_per_icp: 0f32,
+        direct_participant_count: Some(0),
+        direct_participation_icp_e8s: Some(0),
         neurons_fund_participation_icp_e8s: Some(0),
+        cf_participant_count: Some(0), // initialized with zero and unchanged until the swap ends.
+        cf_neuron_count: Some(0),      // initialized with zero and unchanged until the swap ends.
     };
-    let actual_derived_state3 = swap.derived_state();
-    assert_eq!(expected_derived_state3, actual_derived_state3);
+    assert_eq!(swap.derived_state(), expected);
 
-    swap.cf_participants = vec![CfParticipant {
-        hotkey_principal: "".to_string(),
-        cf_neurons: vec![
-            CfNeuron::try_new(1, 300_000_000).unwrap(),
-            CfNeuron::try_new(2, 400_000_000).unwrap(),
-        ],
-    }];
+    // Set swap.params.sns_token_e8s; this should not directly affect the derived state.
+    swap.params = Some(Params {
+        sns_token_e8s: 100_000 * E8,
+        ..Default::default()
+    });
     swap.update_derived_fields();
+    assert_eq!(swap.derived_state(), expected);
 
-    let expected_derived_state4 = DerivedState {
-        buyer_total_icp_e8s: 800_000_000,
-        sns_tokens_per_icp: 1.25f32,
-        direct_participant_count: Some(1),
-        cf_participant_count: Some(1),
-        cf_neuron_count: Some(2),
-        direct_participation_icp_e8s: Some(100_000_000),
-        neurons_fund_participation_icp_e8s: Some(700_000_000),
-    };
-    let actual_derived_state4 = swap.derived_state();
-    assert_eq!(actual_derived_state4, expected_derived_state4);
-
-    swap.direct_participation_icp_e8s = Some(500_000_000);
-    swap.neurons_fund_participation_icp_e8s = Some(400_000_000);
-    let expected_derived_state5 = DerivedState {
-        buyer_total_icp_e8s: 800_000_000,
-        sns_tokens_per_icp: 1.25f32,
-        direct_participant_count: Some(1),
-        cf_participant_count: Some(1),
-        cf_neuron_count: Some(2),
-        direct_participation_icp_e8s: Some(100_000_000),
-        neurons_fund_participation_icp_e8s: Some(700_000_000),
+    // Set direct amount of direct buyers to a value below the minumum for the Neurons' Fund
+    // to participate.
+    swap.buyers = btreemap! {
+        "".to_string() => BuyerState {
+            icp: Some(TransferableAmount {
+                amount_e8s: 25_000 * E8,
+                transfer_start_timestamp_seconds: 10,
+                transfer_success_timestamp_seconds: 12,
+                ..Default::default()
+            }),
+            has_created_neuron_recipes: Some(false),
+        },
     };
     swap.update_derived_fields();
+    expected = DerivedState {
+        buyer_total_icp_e8s: 25_000 * E8,
+        sns_tokens_per_icp: 4f32,
+        direct_participant_count: Some(1),
+        direct_participation_icp_e8s: Some(25_000 * E8),
+        ..expected
+    };
+    assert_eq!(swap.derived_state(), expected);
 
-    let actual_derived_state5 = swap.derived_state();
-    assert_eq!(expected_derived_state5, actual_derived_state5);
+    // Set direct amount of direct buyers to a value sufficient for the Neurons' Fund to participate.
+    let final_direct_participation_icp_e8s = 300_000 * E8;
+    swap.buyers = btreemap! {
+        "".to_string() => BuyerState {
+            icp: Some(TransferableAmount {
+                amount_e8s: final_direct_participation_icp_e8s,
+                transfer_start_timestamp_seconds: 10,
+                transfer_success_timestamp_seconds: 12,
+                ..Default::default()
+            }),
+            has_created_neuron_recipes: Some(false),
+        },
+    };
+
+    swap.update_derived_fields();
+    let final_nf_participation_icp_e8s = nf_matching_fn
+        .apply_and_rescale_to_icp_e8s(final_direct_participation_icp_e8s)
+        .unwrap();
+    expected = DerivedState {
+        buyer_total_icp_e8s: final_direct_participation_icp_e8s + final_nf_participation_icp_e8s,
+        sns_tokens_per_icp: 0.25f32,
+        direct_participant_count: Some(1),
+        direct_participation_icp_e8s: Some(final_direct_participation_icp_e8s),
+        neurons_fund_participation_icp_e8s: Some(final_nf_participation_icp_e8s),
+        ..expected
+    };
+    assert_eq!(swap.derived_state(), expected);
 }
 
 /// Test that claim_swap_neurons is called with the correct preconditions

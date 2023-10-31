@@ -30,13 +30,12 @@ use crate::{
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
+use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::{
     ledger::ICRC1Ledger,
     pb::v1::{
@@ -578,16 +577,77 @@ impl Swap {
 
     /// Update derived fields:
     /// - direct_participation_icp_e8s (derived from self.buyers)
-    /// - neurons_fund_participation_icp_e8s (derived from self.cf_participants) -- TODO(NNS1-2521)
+    /// - neurons_fund_participation_icp_e8s (derived from `direct_participation_icp_e8s`)
     fn update_total_participation_amounts(&mut self) {
-        self.direct_participation_icp_e8s = Some(
-            self.buyers
-                .values()
-                .map(|x| x.amount_icp_e8s())
-                .fold(0, |sum, v| sum.saturating_add(v)),
-        );
-        // TODO(NNS1-2521): Make NF participation dependent on direct participation.
-        self.neurons_fund_participation_icp_e8s = Some(self.max_neurons_fund_participation_e8s());
+        let direct_participation_icp_e8s = self
+            .buyers
+            .values()
+            .map(|x| x.amount_icp_e8s())
+            .fold(0_u64, |sum, v| sum.saturating_add(v));
+        self.direct_participation_icp_e8s = Some(direct_participation_icp_e8s);
+
+        let (neurons_fund_participation, neurons_fund_participation_constraints) =
+            if let Some(init) = &self.init {
+                (
+                    &init.neurons_fund_participation,
+                    &init.neurons_fund_participation_constraints,
+                )
+            } else {
+                return;
+            };
+        match (
+            neurons_fund_participation,
+            neurons_fund_participation_constraints,
+        ) {
+            (Some(true), Some(constraints)) => {
+                // Matched funding scheme
+                let participation: PolynomialNeuronsFundParticipation = match constraints.try_into()
+                {
+                    Ok(participation) => participation,
+                    Err(err) => {
+                        log!(
+                            ERROR,
+                            "Cannot validate swap.init.neurons_fund_participation_constraints: {}",
+                            err.to_string(),
+                        );
+                        return;
+                    }
+                };
+                let neurons_fund_participation_icp_e8s = match participation
+                    .apply(direct_participation_icp_e8s)
+                {
+                    Ok(neurons_fund_participation_icp_e8s) => neurons_fund_participation_icp_e8s,
+                    Err(err) => {
+                        log!(
+                            ERROR,
+                            "Cannot compute neurons_fund_participation_icp_e8s for \
+                            direct_participation_icp_e8s={}: {}",
+                            direct_participation_icp_e8s,
+                            err.to_string(),
+                        );
+                        return;
+                    }
+                };
+                self.neurons_fund_participation_icp_e8s = Some(neurons_fund_participation_icp_e8s);
+            }
+            (Some(true), None) => {
+                log!(
+                    ERROR,
+                    "neurons_fund_participation=true, but neurons_fund_participation_constraints \
+                    is not set."
+                );
+                self.neurons_fund_participation_icp_e8s = Some(0);
+            }
+            (Some(false), _) => {
+                // No Neurons' Fund participation
+                self.neurons_fund_participation_icp_e8s = Some(0);
+            }
+            (None, _) => {
+                // Fixed funding scheme
+                self.neurons_fund_participation_icp_e8s =
+                    Some(self.max_neurons_fund_participation_e8s());
+            }
+        }
     }
 
     /// This function updates the current contribution from direct and Neurons' Fund participants.
