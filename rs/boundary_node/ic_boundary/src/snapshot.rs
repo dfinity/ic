@@ -250,13 +250,13 @@ impl Run for Runner {
         self.published_registry_snapshot
             .store(Some(Arc::new(rt.clone())));
 
-        self.registry_version = Some(version);
-
         info!(
             version_old = self.registry_version.map(|x| x.get()),
             version_new = version.get(),
             "New registry snapshot published",
         );
+
+        self.registry_version = Some(version);
 
         // Persist the firewall rules if configured
         if let Some(v) = &self.persister {
