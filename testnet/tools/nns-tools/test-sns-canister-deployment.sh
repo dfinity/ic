@@ -93,7 +93,7 @@ upgrade_nns_governance_to_test_version() {
     PEM=$3
 
     GOVERNANCE_CANISTER_ID=$(nns_canister_id governance)
-    GIT_COMMIT=$(canister_git_version "${NNS_URL}" "${GOVERNANCE_CANISTER_ID}")
+    GIT_COMMIT=${GIT_COMMIT:-$(canister_git_version "${NNS_URL}" "${GOVERNANCE_CANISTER_ID}")}
     DOWNLOAD_NAME="governance-canister_test"
     WASM_GZ_FILE=$(_download_canister_gz "${DOWNLOAD_NAME}" "${GIT_COMMIT}")
     WASM_SHA=$(sha_256 "${WASM_GZ_FILE}")
