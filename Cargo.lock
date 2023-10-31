@@ -2862,7 +2862,7 @@ dependencies = [
 [[package]]
 name = "derive_more"
 version = "0.99.8-alpha.0"
-source = "git+https://github.com/dfinity-lab/derive_more?branch=master#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
+source = "git+https://github.com/dfinity-lab/derive_more?rev=9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.31",
@@ -4755,7 +4755,7 @@ dependencies = [
  "async-stream",
  "byte-unit",
  "bytes",
- "derive_more 0.99.17",
+ "derive_more 0.99.8-alpha.0",
  "futures",
  "futures-util",
  "hyper",
