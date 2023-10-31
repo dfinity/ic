@@ -49,6 +49,7 @@ function read_variables() {
             "ipv6_http_ips") ipv6_http_ips+=("${value}") ;;
             "ipv6_debug_ips") ipv6_debug_ips+=("${value}") ;;
             "ipv6_monitoring_ips") ipv6_monitoring_ips+=("${value}") ;;
+            "canary_proxy_port") canary_proxy_port="${value}" ;;
         esac
     done <"${BN_CONFIG}"
 
@@ -69,6 +70,7 @@ define ipv4_http_ips       = { $(csv "${ipv4_http_ips[@]}")       }
 define ipv6_http_ips       = { $(csv "${ipv6_http_ips[@]}")       }
 define ipv6_debug_ips      = { $(csv "${ipv6_debug_ips[@]}")      }
 define ipv6_monitoring_ips = { $(csv "${ipv6_monitoring_ips[@]}") }
+define canary_proxy_port   = ${canary_proxy_port:-0}
 EOF
 
     cat >"${SYSTEM_REPLICAS_FILE}" <<EOF

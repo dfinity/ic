@@ -436,6 +436,14 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             "http-body": crate.spec(
                 version = "^0.4",
             ),
+            "http-body_1_0_0_rc_2": crate.spec(
+                package = "http-body",
+                version = "=1.0.0-rc.2",
+            ),
+            "http-body-util_0_1_0_rc_3": crate.spec(
+                package = "http-body-util",
+                version = "=0.1.0-rc.3",
+            ),
             "http-serde": crate.spec(
                 version = "^1.1.2",
             ),
@@ -460,6 +468,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                     "http2",
                     "server",
                     "tcp",
+                ],
+            ),
+            "hyper_1_0_0_rc_4": crate.spec(
+                package = "hyper",
+                version = "=1.0.0-rc.4",
+                features = [
+                    "full",
                 ],
             ),
             "hyper-rustls": crate.spec(
@@ -766,6 +781,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             ),
             "pico-args": crate.spec(
                 version = "^0.3",
+            ),
+            "pin-project-lite": crate.spec(
+                version = "^0.2",
             ),
             "pkcs8": crate.spec(
                 version = "^0.10.2",

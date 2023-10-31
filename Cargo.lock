@@ -288,9 +288,9 @@ dependencies = [
 
 [[package]]
 name = "aho-corasick"
-version = "0.7.20"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc936419f96fa211c1b9166887b38e5e40b19958e5b895be7c1f93adec7071ac"
+checksum = "b2969dcb958b36655471fc61f7e416fa76033bdd4bfed0678d8fee1e2d07a1f0"
 dependencies = [
  "memchr",
 ]
@@ -327,9 +327,9 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anstream"
-version = "0.5.0"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f58811cfac344940f1a400b6e6231ce35171f614f26439e80f8c1465c5cc0c"
+checksum = "2ab91ebe16eb252986481c5b62f6098f3b698a45e34b5b98200cf20dd2484a44"
 dependencies = [
  "anstyle",
  "anstyle-parse",
@@ -365,9 +365,9 @@ dependencies = [
 
 [[package]]
 name = "anstyle-wincon"
-version = "2.1.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58f54d10c6dfa51283a066ceab3ec1ab78d13fae00aa49243a45e4571fb79dfd"
+checksum = "f0699d10d2f4d628a98ee7b57b289abbc98ff3bad977cb3152709d4bf2330628"
 dependencies = [
  "anstyle",
  "windows-sys 0.48.0",
@@ -740,8 +740,8 @@ dependencies = [
  "futures-util",
  "headers",
  "http",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.26",
  "itoa",
  "matchit",
  "memchr",
@@ -770,7 +770,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "http",
- "http-body",
+ "http-body 0.4.5",
  "mime",
  "rustversion",
  "tower-layer",
@@ -787,8 +787,8 @@ dependencies = [
  "bytes",
  "futures-util",
  "http",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.26",
  "pin-project-lite",
  "rustls",
  "rustls-pemfile",
@@ -1268,7 +1268,7 @@ dependencies = [
  "futures",
  "glob",
  "humantime",
- "hyper",
+ "hyper 0.14.26",
  "ic-agent",
  "ic-utils 0.27.0",
  "indoc 1.0.9",
@@ -1329,7 +1329,7 @@ checksum = "ba3569f383e8f1598449f1a423e72e99569137b47740b1da11ef19af3d5c3223"
 dependencies = [
  "lazy_static",
  "memchr",
- "regex-automata",
+ "regex-automata 0.1.10",
 ]
 
 [[package]]
@@ -1511,6 +1511,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "canary-proxy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "clap 4.4.6",
+ "futures-util",
+ "http",
+ "http-body 1.0.0-rc.2",
+ "http-body-util",
+ "hyper 1.0.0-rc.4",
+ "once_cell",
+ "pin-project-lite",
+ "regex",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "candid"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1685,7 +1706,7 @@ dependencies = [
  "candid",
  "certificate_orchestrator_interface",
  "chacha20poly1305",
- "clap 4.4.5",
+ "clap 4.4.6",
  "cloudflare",
  "flate2",
  "futures",
@@ -1722,9 +1743,9 @@ dependencies = [
  "async-trait",
  "axum",
  "candid",
- "clap 4.4.5",
+ "clap 4.4.6",
  "futures",
- "hyper",
+ "hyper 0.14.26",
  "hyper-rustls",
  "mockall 0.11.4",
  "nix",
@@ -1913,9 +1934,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.4.5"
+version = "4.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "824956d0dca8334758a5b7f7e50518d66ea319330cbceedcf76905c2f6ab30e3"
+checksum = "d04704f56c2cde07f43e8e2c154b43f216dc5c92fc98ada720177362f953b956"
 dependencies = [
  "clap_builder",
  "clap_derive 4.4.2",
@@ -1923,9 +1944,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.4.5"
+version = "4.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "122ec64120a49b4563ccaedcbea7818d069ed8e9aa6d829b82d8a4128936b2ab"
+checksum = "0e231faeaca65ebd1ea3c737966bf858971cd38c3849107aa3ea7de90a804e45"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2361,7 +2382,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.4.5",
+ "clap 4.4.6",
  "criterion-plot",
  "futures",
  "is-terminal",
@@ -2903,7 +2924,7 @@ name = "deterministic_ips"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.5",
+ "clap 4.4.6",
  "ic-crypto-sha2",
  "thiserror",
 ]
@@ -3225,7 +3246,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "erased-serde",
- "hyper",
+ "hyper 0.14.26",
  "serde",
  "serde_json",
  "slog",
@@ -4076,7 +4097,7 @@ name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.4.5",
+ "clap 4.4.6",
  "itertools",
  "regex",
 ]
@@ -4347,6 +4368,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-body"
+version = "1.0.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "951dfc2e32ac02d67c90c0d65bd27009a635dc9b381a2cc7d284ab01e3a0150d"
+dependencies = [
+ "bytes",
+ "http",
+]
+
+[[package]]
+name = "http-body-util"
+version = "0.1.0-rc.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08ef12f041acdd397010e5fb6433270c147d3b8b2d0a840cd7fff8e531dca5c8"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body 1.0.0-rc.2",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "http-range-header"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4406,7 +4450,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "axum-server",
- "clap 4.4.5",
+ "clap 4.4.6",
  "rustls",
  "rustls-pemfile",
  "serde_json",
@@ -4431,7 +4475,7 @@ dependencies = [
  "form_urlencoded",
  "futures",
  "http",
- "hyper",
+ "hyper 0.14.26",
  "log",
  "once_cell",
  "regex",
@@ -4475,7 +4519,7 @@ dependencies = [
  "futures-util",
  "h2",
  "http",
- "http-body",
+ "http-body 0.4.5",
  "httparse",
  "httpdate",
  "itoa",
@@ -4488,6 +4532,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper"
+version = "1.0.0-rc.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d280a71f348bcc670fc55b02b63c53a04ac0bf2daff2980795aeaf53edae10e6"
+dependencies = [
+ "bytes",
+ "futures-channel",
+ "futures-util",
+ "h2",
+ "http",
+ "http-body 1.0.0-rc.2",
+ "httparse",
+ "httpdate",
+ "itoa",
+ "pin-project-lite",
+ "tokio",
+ "tracing",
+ "want",
+]
+
+[[package]]
 name = "hyper-rustls"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4495,7 +4560,7 @@ checksum = "8d78e1e73ec14cf7375674f74d7dde185c8206fd9dea6fb6295e8a98098aaa97"
 dependencies = [
  "futures-util",
  "http",
- "hyper",
+ "hyper 0.14.26",
  "log",
  "rustls",
  "rustls-native-certs",
@@ -4513,7 +4578,7 @@ dependencies = [
  "async-socks5",
  "futures",
  "http",
- "hyper",
+ "hyper 0.14.26",
  "hyper-tls",
  "thiserror",
  "tokio",
@@ -4525,7 +4590,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper",
+ "hyper 0.14.26",
  "pin-project-lite",
  "tokio",
  "tokio-io-timeout",
@@ -4538,7 +4603,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
 dependencies = [
  "bytes",
- "hyper",
+ "hyper 0.14.26",
  "native-tls",
  "tokio",
  "tokio-native-tls",
@@ -4703,8 +4768,8 @@ dependencies = [
  "futures-util",
  "hex",
  "http",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.26",
  "hyper-rustls",
  "ic-certification 0.27.0",
  "ic-verify-bls-signature",
@@ -4801,7 +4866,7 @@ dependencies = [
  "derive_more 0.99.8-alpha.0",
  "futures",
  "futures-util",
- "hyper",
+ "hyper 0.14.26",
  "ic-types",
  "rand 0.8.5",
  "slog",
@@ -4858,7 +4923,7 @@ dependencies = [
  "dashmap",
  "futures",
  "humantime",
- "hyper",
+ "hyper 0.14.26",
  "ic-agent",
  "indoc 1.0.9",
  "mockall 0.11.4",
@@ -4943,15 +5008,15 @@ dependencies = [
  "axum-server",
  "bytes",
  "candid",
- "clap 4.4.5",
+ "clap 4.4.6",
  "dashmap",
  "ethnum",
  "futures",
  "futures-util",
  "hex",
  "http",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.26",
  "hyper-rustls",
  "ic-btc-interface",
  "ic-config",
@@ -5160,7 +5225,7 @@ dependencies = [
  "backoff 0.3.0",
  "futures-util",
  "hex",
- "hyper",
+ "hyper 0.14.26",
  "hyper-rustls",
  "ic-canister-client-sender",
  "ic-canonical-state",
@@ -7335,7 +7400,7 @@ dependencies = [
 name = "ic-http-endpoints-metrics"
 version = "0.8.0"
 dependencies = [
- "hyper",
+ "hyper 0.14.26",
  "ic-async-utils",
  "ic-config",
  "ic-crypto-tls-interfaces",
@@ -7365,7 +7430,7 @@ dependencies = [
  "futures-util",
  "hex",
  "http",
- "hyper",
+ "hyper 0.14.26",
  "ic-agent",
  "ic-async-utils",
  "ic-backtrace",
@@ -7428,7 +7493,7 @@ dependencies = [
  "flate2",
  "hex",
  "http",
- "hyper",
+ "hyper 0.14.26",
  "hyper-tls",
  "ic-crypto-sha2",
  "ic-logger",
@@ -7447,7 +7512,7 @@ dependencies = [
  "clap 3.2.23",
  "futures",
  "http",
- "hyper",
+ "hyper 0.14.26",
  "hyper-socks2",
  "hyper-tls",
  "ic-adapter-metrics-server",
@@ -7628,7 +7693,7 @@ dependencies = [
  "axum",
  "candid",
  "ciborium",
- "clap 4.4.5",
+ "clap 4.4.6",
  "futures",
  "hex",
  "http",
@@ -9104,7 +9169,7 @@ dependencies = [
  "gflags-derive",
  "humantime",
  "humantime-serde",
- "hyper",
+ "hyper 0.14.26",
  "ic-async-utils",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
@@ -11378,7 +11443,7 @@ version = "0.8.0"
 dependencies = [
  "bytes",
  "crossbeam-channel",
- "hyper",
+ "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -11413,7 +11478,7 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.8.0"
 dependencies = [
- "hyper",
+ "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
  "ic-interfaces-registry",
  "ic-xnet-uri",
@@ -11427,7 +11492,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "hyper",
+ "hyper 0.14.26",
  "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
@@ -11628,15 +11693,15 @@ dependencies = [
  "base64 0.13.1",
  "bytes",
  "candid",
- "clap 4.4.5",
+ "clap 4.4.6",
  "flate2",
  "form_urlencoded",
  "futures",
  "h2",
  "hex",
  "http",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.26",
  "hyper-rustls",
  "ic-agent",
  "ic-response-verification",
@@ -11859,7 +11924,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b94f62e8dd2b561e7646bd0cc92e4c9d940859fc1c146ad8ab6e5d3e6f7c03"
 dependencies = [
  "base64 0.21.2",
- "hyper",
+ "hyper 0.14.26",
  "hyper-rustls",
  "ring",
  "serde",
@@ -12616,7 +12681,7 @@ name = "log_vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.5",
+ "clap 4.4.6",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
@@ -12750,7 +12815,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
 dependencies = [
- "regex-automata",
+ "regex-automata 0.1.10",
 ]
 
 [[package]]
@@ -12778,9 +12843,9 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "2.5.0"
+version = "2.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+checksum = "f665ee40bc4a3c5590afb1e9677db74a508659dfd71e126420da8274909a0167"
 
 [[package]]
 name = "memfd"
@@ -13056,7 +13121,7 @@ name = "multiservice_discovery"
 version = "0.1.0"
 dependencies = [
  "base64 0.13.1",
- "clap 4.4.5",
+ "clap 4.4.6",
  "crossbeam",
  "crossbeam-channel",
  "erased-serde",
@@ -13084,7 +13149,7 @@ dependencies = [
 name = "multiservice_discovery_downloader"
 version = "0.1.0"
 dependencies = [
- "clap 4.4.5",
+ "clap 4.4.6",
  "crossbeam",
  "crossbeam-channel",
  "futures-util",
@@ -13166,7 +13231,7 @@ name = "node_status_updater"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.5",
+ "clap 4.4.6",
  "crossbeam",
  "crossbeam-channel",
  "futures-util",
@@ -15219,13 +15284,14 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.7.1"
+version = "1.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48aaa5748ba571fb95cd2c85c09f629215d3a6ece942baa100950af03a34f733"
+checksum = "380b951a9c5e80ddfd6136919eef32310721aa4aacd4889a8d39124b026ab343"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax 0.6.28",
+ "regex-automata 0.4.3",
+ "regex-syntax 0.8.2",
 ]
 
 [[package]]
@@ -15235,6 +15301,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
 dependencies = [
  "regex-syntax 0.6.28",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f804c7828047e88b2d32e2d7fe5a105da8ee3264f01902f796c8e067dc2483f"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax 0.8.2",
 ]
 
 [[package]]
@@ -15248,6 +15325,12 @@ name = "regex-syntax"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dbb5fb1acd8a1a18b3dd5be62d25485eb770e05afb408a9627d14d451bae12da"
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "registry-canister"
@@ -15345,8 +15428,8 @@ dependencies = [
  "futures-util",
  "h2",
  "http",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.26",
  "hyper-rustls",
  "hyper-tls",
  "ipnet",
@@ -16210,7 +16293,7 @@ dependencies = [
  "crossbeam",
  "crossbeam-channel",
  "futures",
- "hyper",
+ "hyper 0.14.26",
  "ic-interfaces-registry",
  "ic-metrics",
  "ic-protobuf",
@@ -16252,7 +16335,7 @@ name = "setupos-disable-checks"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.5",
+ "clap 4.4.6",
  "indoc 2.0.4",
  "tempfile",
  "tokio",
@@ -16263,7 +16346,7 @@ name = "setupos-inject-configuration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.5",
+ "clap 4.4.6",
  "ipnet",
  "once_cell",
  "serde",
@@ -16952,7 +17035,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "clap 4.4.5",
+ "clap 4.4.6",
  "http",
  "itertools",
  "reqwest",
@@ -17167,7 +17250,7 @@ dependencies = [
  "futures",
  "hex",
  "humantime",
- "hyper",
+ "hyper 0.14.26",
  "hyper-rustls",
  "hyper-tls",
  "ic-agent",
@@ -17456,9 +17539,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.32.0"
+version = "1.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ed6077ed6cd6c74735e21f37eb16dc3935f96878b1fe961074089cc80893f9"
+checksum = "4f38200e3ef7995e5ef13baec2f432a6da0aa9ac495b2c0e8f3b7eec2c92d653"
 dependencies = [
  "backtrace",
  "bytes",
@@ -17496,9 +17579,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-metrics"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4b2fc67d5dec41db679b9b052eb572269616926040b7831e32c8a152df77b84"
+checksum = "eace09241d62c98b7eeb1107d4c5c64ca3bd7da92e8c218c153ab3a78f9be112"
 dependencies = [
  "futures-util",
  "pin-project-lite",
@@ -17645,8 +17728,8 @@ dependencies = [
  "futures-util",
  "h2",
  "http",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.26",
  "hyper-timeout",
  "percent-encoding 2.3.0",
  "pin-project",
@@ -17704,7 +17787,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "http",
- "http-body",
+ "http-body 0.4.5",
  "http-range-header",
  "pin-project-lite",
  "tower-layer",
@@ -17724,7 +17807,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "http",
- "http-body",
+ "http-body 0.4.5",
  "http-range-header",
  "pin-project-lite",
  "tokio",
@@ -18273,7 +18356,7 @@ name = "vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.5",
+ "clap 4.4.6",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
@@ -18436,7 +18519,7 @@ dependencies = [
  "futures-util",
  "headers",
  "http",
- "hyper",
+ "hyper 0.14.26",
  "log",
  "mime",
  "mime_guess",
@@ -19159,7 +19242,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "http-types",
- "hyper",
+ "hyper 0.14.26",
  "log",
  "once_cell",
  "regex",

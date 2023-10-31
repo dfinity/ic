@@ -460,6 +460,174 @@ pub fn prefix_canister_id_test(env: TestEnv) {
 }
 
 /* tag::catalog[]
+Title:: Boundary nodes HTTP canister test
+
+Goal:: Install and query an HTTP canister using the proxy
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+
+Success:: The canister installs successfully and HTTP calls against it
+return the expected responses
+
+Coverage:: HTTP Canisters behave as expected using the proxy
+
+end::catalog[] */
+
+pub fn proxy_http_canister_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut install_node = None;
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            install_node = Some((node.get_public_url(), node.effective_canister_id()));
+        }
+    }
+    let install_node = install_node.expect("No install node");
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    rt.block_on(async move {
+        info!(&logger, "Creating replica agent...");
+        let agent = assert_create_agent(install_node.0.as_str()).await;
+        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+
+        info!(&logger, "installing canister");
+        let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
+            .await
+            .expect("Could not create kv_store canister");
+
+        info!(&logger, "created kv_store canister={canister_id}");
+
+        // Wait for the canisters to finish installing
+        // TODO: maybe this should be status calls?
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        let client_builder = reqwest::ClientBuilder::new();
+        let (client_builder, host, invalid_host) =
+            if let Some(playnet) = boundary_node.get_playnet() {
+                (
+                    client_builder,
+                    format!("{canister_id}.raw.{playnet}"),
+                    format!("invalid-canister-id.raw.{playnet}"),
+                )
+            } else {
+                let host = format!("{canister_id}.raw.ic0.app");
+                let invalid_host = "invalid-canister-id.raw.ic0.app".to_string();
+                let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+                let client_builder = client_builder
+                    .danger_accept_invalid_certs(true)
+                    .resolve(&host, bn_addr)
+                    .resolve(&invalid_host, bn_addr);
+                (client_builder, host, invalid_host)
+            };
+        let proxy = format!("http://{host}:8888");
+        info!(&logger, "using proxy={proxy}");
+        let proxy = reqwest::Proxy::http(proxy).expect("Could not create proxy");
+        let client = client_builder.proxy(proxy).build().unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .header("x-ic-test", "no-certificate")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "'/foo' not found" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        // "x-ic-test", "no-certificate"
+        // "x-ic-test", "streaming-callback"
+        // "x-icx-require-certification", "1"
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .put(format!("https://{host}/foo"))
+                .body("bar")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "'/foo' set to 'bar'" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "bar" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{host}/foo"))
+                .header("x-ic-test", "streaming-callback")
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "bar" {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+        // Check that `canisterId` parameters go unused
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{invalid_host}/?canisterId={canister_id}"))
+                .send()
+                .await?
+                .text()
+                .await?;
+
+            if res != "Could not find a canister id to forward to." {
+                bail!(res)
+            }
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+    });
+}
+
+/* tag::catalog[]
 Title:: Boundary nodes valid Nginx configuration test
 
 Goal:: Verify that nginx configuration is valid by running `nginx -T` on the boundary node.
