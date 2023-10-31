@@ -4,8 +4,8 @@ use ic_types::{
     batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
     CanisterId, NumInstructions, QueryStatsEpoch,
 };
-use std::collections::BTreeMap;
 use std::sync::Mutex;
+use std::{collections::BTreeMap, sync::RwLock};
 
 mod payload_builder;
 pub use self::payload_builder::{QueryStatsPayloadBuilderImpl, QueryStatsPayloadBuilderParams};
@@ -18,7 +18,7 @@ pub fn init_query_stats(
         QueryStatsCollector {
             log: log.clone(),
             current_query_stats: Mutex::new(BTreeMap::new()),
-            current_epoch: None,
+            current_epoch: RwLock::new(None),
             sender: tx,
         },
         QueryStatsPayloadBuilderParams(rx),
@@ -32,18 +32,25 @@ pub fn init_query_stats(
 pub struct QueryStatsCollector {
     log: ReplicaLogger,
     pub current_query_stats: Mutex<BTreeMap<CanisterId, QueryStats>>, // Needs to be pub for testing
-    current_epoch: Option<QueryStatsEpoch>,
+    current_epoch: RwLock<Option<QueryStatsEpoch>>,
     sender: Sender<LocalQueryStats>,
 }
 
 impl QueryStatsCollector {
-    pub fn set_epoch(&mut self, new_epoch: QueryStatsEpoch) {
-        let Some(previous_epoch) = self.current_epoch else {
-            self.current_epoch = Some(new_epoch);
+    pub fn set_epoch(&self, new_epoch: QueryStatsEpoch) {
+        let mut current_epoch = self.current_epoch.write().unwrap();
+        let Some(previous_epoch) = *current_epoch else {
+            *current_epoch = Some(new_epoch);
             return;
         };
 
-        if previous_epoch == new_epoch {
+        if previous_epoch >= new_epoch {
+            // Epoch is unchanged or smaller than a previously seen one. This can happen if
+            // concurrent query handler threads get a different certified state and there is
+            // a race for which one will execute first.
+            //
+            // For the purpose of query stats, this does not matter, as we always account queries
+            // to the highest epoch seen when serving query calls.
             return;
         }
 
@@ -76,7 +83,7 @@ impl QueryStatsCollector {
                 );
             }
         }
-        self.current_epoch = Some(new_epoch);
+        *current_epoch = Some(new_epoch);
     }
 
     pub fn register_query_statistics(
@@ -86,7 +93,8 @@ impl QueryStatsCollector {
         ingress_payload_size: u64,
         egress_payload_size: u64,
     ) {
-        if self.current_epoch.is_none() {
+        let current_epoch = *self.current_epoch.read().unwrap();
+        if current_epoch.is_none() {
             info!(
                 every_n_seconds => 30,
                 self.log,

@@ -266,7 +266,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
                 // http_handler::get_latest_certified_state_and_data_certificate
                 print_query_result(query_handler.query(
                     q,
-                    state_manager.get_latest_state().take(),
+                    state_manager.get_latest_state(),
                     Vec::new(),
                 ));
             }

@@ -5,6 +5,7 @@ pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_ic00_types::EcdsaKeyId;
+use ic_interfaces_state_manager::Labeled;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -374,7 +375,7 @@ pub trait QueryHandler: Send + Sync {
     fn query(
         &self,
         query: UserQuery,
-        state: Arc<Self::State>,
+        state: Labeled<Arc<Self::State>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError>;
 }

@@ -14,6 +14,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
 };
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -21,6 +22,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
+    epoch_from_height,
     ingress::WasmResult,
     messages::{
         CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -83,7 +85,7 @@ pub(super) struct QueryContext<'a> {
     hypervisor: &'a Hypervisor,
     own_subnet_type: SubnetType,
     // The state against which all queries in the context will be executed.
-    state: Arc<ReplicatedState>,
+    state: Labeled<Arc<ReplicatedState>>,
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
     data_certificate: (Vec<u8>, CanisterId),
@@ -106,7 +108,7 @@ impl<'a> QueryContext<'a> {
         log: &'a ReplicaLogger,
         hypervisor: &'a Hypervisor,
         own_subnet_type: SubnetType,
-        state: Arc<ReplicatedState>,
+        state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
         subnet_available_memory: SubnetAvailableMemory,
         max_canister_memory_size: NumBytes,
@@ -120,7 +122,7 @@ impl<'a> QueryContext<'a> {
         query_critical_error: &'a IntCounter,
         local_query_execution_stats: Option<&'a QueryStatsCollector>,
     ) -> Self {
-        let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
         let round_limits = RoundLimits {
             instructions: as_round_instructions(max_query_call_graph_instructions),
             execution_complexity: ExecutionComplexity::with_cpu(max_query_call_graph_instructions),
@@ -168,7 +170,7 @@ impl<'a> QueryContext<'a> {
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
-        let old_canister = self.state.get_active_canister(&canister_id)?;
+        let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
 
         let subnet_size = self
             .network_topology
@@ -233,7 +235,7 @@ impl<'a> QueryContext<'a> {
                 if err.code() == ErrorCode::CanisterContractViolation && legacy_icqc_enabled {
                     let measurement_scope =
                         MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
-                    let old_canister = self.state.get_active_canister(&canister_id)?;
+                    let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
                     let (new_canister, new_result) = self.execute_query(
                         old_canister.clone(),
                         method,
@@ -393,7 +395,7 @@ impl<'a> QueryContext<'a> {
                 method_payload,
                 canister,
                 data_certificate,
-                self.state.time(),
+                self.state.get_ref().time(),
                 execution_parameters,
                 &self.network_topology,
                 self.hypervisor,
@@ -414,6 +416,8 @@ impl<'a> QueryContext<'a> {
 
         // Add query statistics to the query aggregator.
         if let Some(query_stats) = self.local_query_execution_stats {
+            query_stats.set_epoch(epoch_from_height(self.state.height()));
+
             query_stats.register_query_statistics(
                 canister.canister_id(),
                 instructions_executed,
@@ -513,7 +517,7 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        let time = self.state.time();
+        let time = self.state.get_ref().time();
         // No cycles are refunded in a response to a query call.
         let incoming_cycles = Cycles::zero();
 
@@ -705,7 +709,7 @@ impl<'a> QueryContext<'a> {
 
         let canister_id = request.receiver;
 
-        let canister = match self.state.get_active_canister(&canister_id) {
+        let canister = match self.state.get_ref().get_active_canister(&canister_id) {
             Ok(canister) => canister,
             Err(err) => {
                 return ExecutionResult::Response(to_query_result(Payload::Reject(

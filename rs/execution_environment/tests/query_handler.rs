@@ -2,6 +2,7 @@ use ic_config::execution_environment::Config;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::ExecutionServices;
+use ic_interfaces_state_manager::Labeled;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -13,7 +14,7 @@ use ic_test_utilities::{
     types::ids::{subnet_test_id, user_test_id},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::{messages::UserQuery, CanisterId, SubnetId};
+use ic_types::{messages::UserQuery, CanisterId, Height, SubnetId};
 use maplit::btreemap;
 use std::{convert::TryFrom, sync::Arc};
 
@@ -62,7 +63,13 @@ async fn query_non_existent() {
                 ingress_expiry: 0,
                 nonce: None,
             },
-            Arc::new(state),
+            // We always pass 0 as the height to the query handler, because we don't run consensus
+            // in these tests and therefore there isn't any height.
+            //
+            // Currently, this height is only used for query stats collection and it doesn't matter which one we pass in here.
+            // Even if consensus was running, it could be that all queries are actually runnning at height 0. The state passed in to
+            // the query handler shouldn't have the height encoded, so there shouldn't be a missmatch between the two.
+            Labeled::new(Height::from(0), Arc::new(state)),
             vec![],
         ) {
             Err(ref e) if e.code() == ErrorCode::CanisterNotFound => (),
