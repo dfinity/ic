@@ -1305,8 +1305,8 @@ message NeuronsFundData {
   optional NeuronsFundParticipation initial_neurons_fund_participation = 1;
 
   // Final Neurons' Fund participation computed at the time of swap finalization. This field should
-  // remain unspecified either (1) until the `settle_neurons_fund_participation` function is called
-  // or (2) until the NNS handles an error at the SNS deployment stage.
+  // remain unspecified until either (1) the `settle_neurons_fund_participation` function is called
+  // or (2) the NNS handles an error at the SNS deployment stage.
   //
   // If specified, this must be a subset of `initial_neurons_fund_participation`.
   optional NeuronsFundParticipation final_neurons_fund_participation = 2;

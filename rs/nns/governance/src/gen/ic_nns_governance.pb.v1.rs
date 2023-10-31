@@ -1368,8 +1368,8 @@ pub struct NeuronsFundData {
     #[prost(message, optional, tag = "1")]
     pub initial_neurons_fund_participation: ::core::option::Option<NeuronsFundParticipation>,
     /// Final Neurons' Fund participation computed at the time of swap finalization. This field should
-    /// remain unspecified either (1) until the `settle_neurons_fund_participation` function is called
-    /// or (2) until the NNS handles an error at the SNS deployment stage.
+    /// remain unspecified until either (1) the `settle_neurons_fund_participation` function is called
+    /// or (2) the NNS handles an error at the SNS deployment stage.
     ///
     /// If specified, this must be a subset of `initial_neurons_fund_participation`.
     #[prost(message, optional, tag = "2")]
