@@ -85,8 +85,9 @@ fn read_response_from_host(stream: &mut VsockStream) -> anyhow::Result<String> {
 
 fn create_stream(port: &u32) -> Result<VsockStream, std::io::Error> {
     let stream = VsockStream::connect_with_cid_port(VMADDR_CID_HOST, *port)?;
-    stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+    // Set a long timeout, so HostOS has enough time to upgrade.
+    stream.set_write_timeout(Some(std::time::Duration::from_secs(60 * 5)))?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(60 * 5)))?;
 
     Ok(stream)
 }
