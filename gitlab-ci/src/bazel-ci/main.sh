@@ -22,8 +22,7 @@ if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 
-if [[ "$CI_COMMIT_REF_NAME" =~ ^hotfix-.+-rc--.+ ]] || [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.+ ]]; then
-    ic_version_rc_only="${CI_COMMIT_SHA}"
+if [[ "${CI_COMMIT_TAG:-}" =~ ^release-.+ ]]; then
     # upload artifacts also to cloudflare r2
     RC="True"
 fi
