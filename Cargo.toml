@@ -23,6 +23,7 @@ members = [
   "rs/bitcoin/consensus",
   "rs/bitcoin/mock",
   "rs/bitcoin/types/internal",
+  "rs/boundary_node/canary_proxy",
   "rs/boundary_node/certificate_issuance/certificate_issuer",
   "rs/boundary_node/certificate_issuance/certificate_orchestrator",
   "rs/boundary_node/certificate_issuance/certificate_syncer",

@@ -17,6 +17,7 @@ NO_STRIP = [
 ]
 
 BINARIES = {
+    "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica",
