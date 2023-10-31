@@ -407,13 +407,22 @@ impl Init {
         assert!(self.max_direct_participation_icp_e8s.is_some());
 
         let params = Params {
-            min_participants: self.min_participants.unwrap(),
+            min_participants: unwrap_verbosely(self.min_participants, "Swap.init.min_participants"),
             min_direct_participation_icp_e8s: self.min_direct_participation_icp_e8s,
             max_direct_participation_icp_e8s: self.max_direct_participation_icp_e8s,
-            min_participant_icp_e8s: self.min_participant_icp_e8s.unwrap(),
-            max_participant_icp_e8s: self.max_participant_icp_e8s.unwrap(),
-            swap_due_timestamp_seconds: self.swap_due_timestamp_seconds.unwrap(),
-            sns_token_e8s: self.sns_token_e8s.unwrap(),
+            min_participant_icp_e8s: unwrap_verbosely(
+                self.min_participant_icp_e8s,
+                "Swap.init.min_participant_icp_e8s",
+            ),
+            max_participant_icp_e8s: unwrap_verbosely(
+                self.max_participant_icp_e8s,
+                "Swap.init.max_participant_icp_e8s",
+            ),
+            swap_due_timestamp_seconds: unwrap_verbosely(
+                self.swap_due_timestamp_seconds,
+                "Swap.init.swap_due_timestamp_seconds",
+            ),
+            sns_token_e8s: unwrap_verbosely(self.sns_token_e8s, "Swap.init.sns_token_e8s"),
             neuron_basket_construction_parameters: self
                 .neuron_basket_construction_parameters
                 .clone(),
@@ -422,34 +431,39 @@ impl Init {
             // Deprecated fields
             // These have to be kept in the struct for backwards compatibility,
             // but aren't used in any of the swap's logic.
-            min_icp_e8s: self
-                .min_icp_e8s
-                .unwrap_or_else(|| self.min_direct_participation_icp_e8s.unwrap()),
+            min_icp_e8s: self.min_icp_e8s.unwrap_or_else(|| {
+                unwrap_verbosely(
+                    self.min_direct_participation_icp_e8s,
+                    "Swap.init.min_direct_participation_icp_e8s",
+                )
+            }),
 
             max_icp_e8s: self.max_icp_e8s.unwrap_or_else(
                 // Only happens after Matched Funding is enabled
                 // In that case The NF will never contribute more than twice the
                 // direct contribution.
                 || {
-                    self.max_direct_participation_icp_e8s
-                        .unwrap()
-                        .saturating_add(
-                            self.neurons_fund_participation_constraints
-                                .as_ref()
-                                .and_then(|x| x.max_neurons_fund_participation_icp_e8s)
-                                .unwrap_or(0),
-                        )
+                    unwrap_verbosely(
+                        self.max_direct_participation_icp_e8s,
+                        "Swap.init.max_direct_participation_icp_e8s",
+                    )
+                    .saturating_add(
+                        self.neurons_fund_participation_constraints
+                            .as_ref()
+                            .and_then(|x| x.max_neurons_fund_participation_icp_e8s)
+                            .unwrap_or(0),
+                    )
                 },
             ),
         };
         OpenRequest {
             params: Some(params),
-            cf_participants: self
-                .neurons_fund_participants
-                .as_ref()
-                .unwrap()
-                .cf_participants
-                .to_vec(),
+            cf_participants: unwrap_verbosely(
+                self.neurons_fund_participants.as_ref(),
+                "Swap.init.neurons_fund_participants",
+            )
+            .cf_participants
+            .to_vec(),
             open_sns_token_swap_proposal_id: self.nns_proposal_id,
         }
     }
@@ -563,6 +577,14 @@ impl Init {
 
         Ok(())
     }
+}
+
+#[track_caller]
+fn unwrap_verbosely<T>(x: Option<T>, err: &str) -> T {
+    let Some(x) = x else {
+        panic!("Cannot unwrap {}.", err);
+    };
+    x
 }
 
 impl Params {
