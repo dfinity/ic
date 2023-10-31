@@ -7237,7 +7237,7 @@ impl Governance {
                 ),
             ));
         }
-        // Check authorization
+        // Check authorization. Note that a Swap could settle each other's participations.
         let target_canister_id: CanisterId = caller.try_into().map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
@@ -7609,7 +7609,8 @@ impl Governance {
     /// Refunds the maturity represented via `refunds` and stores this information in ProposalData
     /// of this `proposal_id` (for auditability).
     ///
-    /// This function may be called only from `settle_neurons_fund_participation`.
+    /// This function may be called only from `settle_neurons_fund_participation`, which also
+    /// handles async safety.
     fn refund_maturity_to_neurons_fund(
         &mut self,
         proposal_id: &ProposalId,
@@ -7767,7 +7768,7 @@ impl Governance {
             }
         };
 
-        // Check authorization
+        // Check authorization. Note that a Swap could settle each other's participations.
         is_caller_authorized_to_settle_neurons_fund_participation(
             &mut *self.env,
             caller,
