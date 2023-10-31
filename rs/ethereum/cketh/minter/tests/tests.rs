@@ -30,12 +30,17 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
 const CKETH_TRANSFER_FEE: u64 = 10;
 const MAX_TICKS: usize = 10;
+const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
 const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
+const DEFAULT_DEPOSIT_FROM_ADDRESS: &str = "0x55654e7405fcb336386ea8f36954a211b2cda764";
+const DEFAULT_DEPOSIT_TRANSACTION_HASH: &str =
+    "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353";
 const DEFAULT_DEPOSIT_LOG_INDEX: u64 = 0x24;
 const DEFAULT_BLOCK_HASH: &str =
     "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4";
@@ -43,60 +48,43 @@ const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
 const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000;
 const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
 
+const DEFAULT_WITHDRAWAL_TRANSACTION_HASH: &str =
+    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5";
+
 #[test]
 fn should_deposit_and_withdraw() {
-    let mut cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::new();
     let caller: Principal = cketh.caller.into();
-
-    cketh.deposit(caller, 100_000_000_000_000_000); // 0.1 ETH
-
-    // Withdraw
-
-    cketh.approve_minter(caller, EXPECTED_BALANCE, None);
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let destination = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string();
 
-    let message_id =
-        cketh.call_minter_withdraw(caller, withdrawal_amount.clone(), destination.clone());
+    let cketh = cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
+        .expect_withdrawal_request_accepted();
 
-    let block_index = Decode!(&assert_reply(
-        cketh
-            .env
-            .await_ingress(message_id, MAX_TICKS)
-            .expect("failed to resolve message with id: {message_id}"),
-    ), Result<RetrieveEthRequest, WithdrawalError>)
-    .unwrap()
-    .unwrap()
-    .block_index;
-
-    let block_index_u64 = block_index.0.to_u64().unwrap();
-
-    cketh.wait_and_validate_withdrawal(
+    let withdrawal_id = cketh.withdrawal_id().clone();
+    let cketh = cketh.wait_and_validate_withdrawal(
         "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
-        block_index_u64,
         true,
     );
     assert_eq!(cketh.balance_of(caller), Nat::from(0));
 
-    let events = cketh.get_all_events();
-    assert_contains_unique_event(
-        &events,
-        EventPayload::AcceptedEthWithdrawalRequest {
-            withdrawal_amount: withdrawal_amount.clone(),
-            destination: destination.clone(),
-            ledger_burn_index: block_index.clone(),
-            from: caller,
-            from_subaccount: None,
-        },
-    );
-
     let max_fee_per_gas = Nat::from(33003708258u64);
     let gas_limit = Nat::from(21_000);
 
-    assert_contains_unique_event(
-        &events,
+    cketh.assert_has_unique_events_in_order(&vec![
+        EventPayload::AcceptedEthWithdrawalRequest {
+            withdrawal_amount: withdrawal_amount.clone(),
+            destination: destination.clone(),
+            ledger_burn_index: withdrawal_id.clone(),
+            from: caller,
+            from_subaccount: None,
+        },
         EventPayload::CreatedTransaction {
-            withdrawal_id: block_index.clone(),
+            withdrawal_id: withdrawal_id.clone(),
             transaction: UnsignedTransaction {
                 chain_id: Nat::from(1),
                 nonce: Nat::from(0),
@@ -109,217 +97,89 @@ fn should_deposit_and_withdraw() {
                 access_list: vec![],
             },
         },
-    );
-
-    assert_contains_unique_event(
-        &events,
         EventPayload::SignedTransaction {
-            withdrawal_id: block_index.clone(),
+            withdrawal_id: withdrawal_id.clone(),
             raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
         },
-    );
-
-    let txhash = "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
-    assert_contains_unique_event(
-        &events,
         EventPayload::FinalizedTransaction {
-            withdrawal_id: block_index,
+            withdrawal_id,
             transaction_receipt: TransactionReceipt {
                 block_hash: DEFAULT_BLOCK_HASH.to_string(),
                 block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
                 effective_gas_price: Nat::from(4277923390u64),
                 gas_used: Nat::from(21_000),
                 status: TransactionStatus::Success,
-                transaction_hash: txhash.clone(),
+                transaction_hash:
+                "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
             },
         },
-    );
-
-    cketh.check_audit_log();
-    cketh.upgrade_minter();
-    assert_eq!(
-        cketh.retrieve_eth_status(block_index_u64),
-        RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(EthTransaction {
-            transaction_hash: txhash
-        }))
-    );
+    ]);
 }
 
 #[test]
-fn should_block_blocked_addresses() {
-    let mut cketh = CkEthSetup::new();
-    let caller: Principal = cketh.caller.into();
-
-    assert_eq!(
-        "0xfD644A761079369962386f8E4259217C2a10B8D0".to_string(),
-        cketh.minter_address()
-    );
-
-    let encoded_principal = encode_principal(cketh.caller.into());
-
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
-    tick_until_next_http_request(&cketh.env, "eth_getBlockByNumber");
-    cketh.handle_rpc_call(
-        "https://rpc.ankr.com/eth",
-        "eth_getBlockByNumber",
-        eth_get_block_by_number(DEFAULT_BLOCK_NUMBER),
-    );
-    cketh.handle_rpc_call(
-        "https://cloudflare-eth.com",
-        "eth_getBlockByNumber",
-        eth_get_block_by_number(DEFAULT_BLOCK_NUMBER),
-    );
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
-    tick_until_next_http_request(&cketh.env, "eth_getLogs");
-
-    let amount: u64 = 100_000_000_000_000_000; // 0.1 ETH
+fn should_block_deposit_from_blocked_address() {
+    let cketh = CkEthSetup::new();
     let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
         .parse()
         .unwrap();
-    let tx_hash = "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f352".to_string();
 
-    cketh.handle_rpc_call(
-        "https://rpc.ankr.com/eth",
-        "eth_getLogs",
-        eth_get_logs(Some(EthLogEntry {
-            encoded_principal: encoded_principal.clone(),
-            amount,
+    cketh
+        .deposit(DepositParams {
             from_address: from_address_blocked,
-            transaction_hash: tx_hash.clone(),
-        })),
-    );
-    cketh.handle_rpc_call(
-        "https://cloudflare-eth.com",
-        "eth_getLogs",
-        eth_get_logs(Some(EthLogEntry {
-            encoded_principal: encoded_principal.clone(),
-            amount,
-            from_address: from_address_blocked,
-            transaction_hash: tx_hash.to_string(),
-        })),
-    );
-
-    for _ in 0..10 {
-        cketh.env.advance_time(Duration::from_secs(1));
-        cketh.env.tick();
-        if cketh.balance_of(caller) != 0 {
-            break;
-        }
-    }
-
-    let balance = cketh.balance_of(caller);
-    assert_eq!(balance, Nat::from(0));
-
-    let events = cketh.get_all_events();
-    assert_contains_unique_event(
-        &events,
-        EventPayload::InvalidDeposit {
+            ..Default::default()
+        })
+        .expect_no_mint()
+        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
             event_source: EventSource {
-                transaction_hash: tx_hash.clone(),
+                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
                 log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
             },
             reason: format!("blocked address {from_address_blocked}"),
-        },
-    );
+        }]);
+}
 
-    let from_address: Address = "0x55654e7405fcb336386ea8f36954a211b2cda764"
-        .parse()
-        .unwrap();
+#[test]
+fn should_block_withdrawal_to_blocked_address() {
+    let cketh = CkEthSetup::new();
+    let caller: Principal = cketh.caller.into();
+    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string();
 
-    let tx_hash = "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353".to_string();
-
-    tick_until_next_http_request(&cketh.env, "eth_getLogs");
-    cketh.handle_rpc_call(
-        "https://rpc.ankr.com/eth",
-        "eth_getLogs",
-        eth_get_logs(Some(EthLogEntry {
-            encoded_principal: encoded_principal.clone(),
-            amount,
-            from_address,
-            transaction_hash: tx_hash.clone(),
-        })),
-    );
-    cketh.handle_rpc_call(
-        "https://cloudflare-eth.com",
-        "eth_getLogs",
-        eth_get_logs(Some(EthLogEntry {
-            encoded_principal,
-            amount,
-            from_address,
-            transaction_hash: tx_hash.clone(),
-        })),
-    );
-
-    for _ in 0..10 {
-        cketh.env.advance_time(Duration::from_secs(1));
-        cketh.env.tick();
-        if cketh.balance_of(caller) != 0 {
-            break;
-        }
-    }
-
-    let balance = cketh.balance_of(caller);
-    const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000;
-    assert_eq!(balance, Nat::from(EXPECTED_BALANCE));
-
-    cketh.approve_minter(caller, EXPECTED_BALANCE, None);
-
-    let message_id = cketh.call_minter_withdraw(
-        caller,
-        Nat::from(EXPECTED_BALANCE),
-        "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string(),
-    );
-    let rest = Decode!(&assert_reply(
-        cketh
-            .env
-            .await_ingress(message_id, MAX_TICKS)
-            .expect("failed to resolve message with id: {message_id}"),
-    ), Result<RetrieveEthRequest, WithdrawalError>)
-    .unwrap();
-    assert_eq!(
-        rest,
-        Err(WithdrawalError::RecipientAddressBlocked {
-            address: "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string()
-        })
-    );
+    cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), blocked_address.clone())
+        .expect_error(WithdrawalError::RecipientAddressBlocked {
+            address: blocked_address,
+        });
 }
 
 #[test]
 fn should_reimburse() {
-    let mut cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::new();
     let caller: Principal = cketh.caller.into();
-
-    cketh.deposit(caller, 100_000_000_000_000_000); // 0.1 ETH
-
-    // Withdraw
-
-    cketh.approve_minter(caller, EXPECTED_BALANCE, None);
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let destination = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string();
 
-    let balance_before_withdrawal = cketh.balance_of(caller);
+    let cketh = cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None);
+
+    let balance_before_withdrawal = cketh.setup.balance_of(caller);
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
-    let message_id =
-        cketh.call_minter_withdraw(caller, withdrawal_amount.clone(), destination.clone());
+    let cketh = cketh
+        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
+        .expect_withdrawal_request_accepted();
 
-    let block_index = Decode!(&assert_reply(
-        cketh
-            .env
-            .await_ingress(message_id, MAX_TICKS)
-            .expect("failed to resolve message with id: {message_id}"),
-    ), Result<RetrieveEthRequest, WithdrawalError>)
-    .unwrap()
-    .unwrap()
-    .block_index;
-
-    let block_index_u64 = block_index.0.to_u64().unwrap();
-
-    cketh.wait_and_validate_withdrawal(
+    let withdrawal_id = cketh.withdrawal_id().clone();
+    let cketh = cketh.wait_and_validate_withdrawal(
         "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
-        block_index_u64,
         false,
     );
+
     assert_eq!(cketh.balance_of(caller), Nat::from(0));
 
     cketh.env.advance_time(PROCESS_REIMBURSEMENT);
@@ -332,36 +192,30 @@ fn should_reimburse() {
         balance_before_withdrawal.clone() - gas_cost.clone()
     );
 
-    let withdrawal_status = cketh.retrieve_eth_status(block_index_u64);
+    let withdrawal_status = cketh.retrieve_eth_status(withdrawal_id.0.to_u64().unwrap());
     assert_eq!(
         withdrawal_status,
         RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
             reimbursed_amount: balance_before_withdrawal.clone() - gas_cost.clone(),
-            reimbursed_in_block: block_index.clone() + 1,
+            reimbursed_in_block: withdrawal_id.clone() + 1,
             transaction_hash: "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5"
                 .to_string(),
         })
     );
 
-    let events = cketh.get_all_events();
-    assert_contains_unique_event(
-        &events,
-        EventPayload::AcceptedEthWithdrawalRequest {
-            withdrawal_amount: withdrawal_amount.clone(),
-            destination: destination.clone(),
-            ledger_burn_index: block_index.clone(),
-            from: caller,
-            from_subaccount: None,
-        },
-    );
-
     let max_fee_per_gas = Nat::from(33003708258u64);
     let gas_limit = Nat::from(21_000);
 
-    assert_contains_unique_event(
-        &events,
+    cketh.assert_has_unique_events_in_order(&vec![
+        EventPayload::AcceptedEthWithdrawalRequest {
+            withdrawal_amount: withdrawal_amount.clone(),
+            destination: destination.clone(),
+            ledger_burn_index: withdrawal_id.clone(),
+            from: caller,
+            from_subaccount: None,
+        },
         EventPayload::CreatedTransaction {
-            withdrawal_id: block_index.clone(),
+            withdrawal_id: withdrawal_id.clone(),
             transaction: UnsignedTransaction {
                 chain_id: Nat::from(1),
                 nonce: Nat::from(0),
@@ -374,19 +228,12 @@ fn should_reimburse() {
                 access_list: vec![],
             },
         },
-    );
-
-    assert_contains_unique_event(
-        &events,
         EventPayload::SignedTransaction {
-            withdrawal_id: block_index.clone(),
+            withdrawal_id: withdrawal_id.clone(),
             raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
         },
-    );
-    assert_contains_unique_event(
-        &events,
         EventPayload::FinalizedTransaction {
-            withdrawal_id: block_index.clone(),
+            withdrawal_id: withdrawal_id.clone(),
             transaction_receipt: TransactionReceipt {
                 block_hash: DEFAULT_BLOCK_HASH.to_string(),
                 block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
@@ -394,18 +241,14 @@ fn should_reimburse() {
                 gas_used: Nat::from(21_000),
                 status: TransactionStatus::Failure,
                 transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
-            },
-        },
-    );
-    assert_contains_unique_event(
-        &events,
+                "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+            }},
         EventPayload::ReimbursedEthWithdrawal {
             reimbursed_amount: balance_before_withdrawal - gas_cost,
-            withdrawal_id: block_index.clone(),
-            reimbursed_in_block: block_index + 1,
+            withdrawal_id: withdrawal_id.clone(),
+            reimbursed_in_block: withdrawal_id + 1,
         },
-    );
+    ]);
 }
 
 #[test]
@@ -531,6 +374,11 @@ fn assert_has_header(req: &CanisterHttpRequestContext, name: &str, value: &str) 
         .any(|h| h.name == name && h.value == value));
 }
 
+fn default_deposit_from_address() -> Address {
+    DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap()
+}
+
+#[derive(Clone)]
 struct EthLogEntry {
     encoded_principal: String,
     amount: u64,
@@ -711,7 +559,7 @@ impl CkEthSetup {
         )
         .unwrap();
         let minter_id = install_minter(&env, ledger_id, minter_id);
-        let caller = PrincipalId::new_user_test_id(10352385);
+        let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
 
         Self {
             env,
@@ -721,90 +569,15 @@ impl CkEthSetup {
         }
     }
 
-    pub fn deposit(&mut self, recipient: Principal, amount: u64) {
+    pub fn deposit(self, params: DepositParams) -> DepositFlow {
         assert_eq!(
             "0xfD644A761079369962386f8E4259217C2a10B8D0".to_string(),
             self.minter_address()
         );
-
-        let encoded_principal = encode_principal(recipient);
-
-        self.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
-        tick_until_next_http_request(&self.env, "eth_getBlockByNumber");
-        self.handle_rpc_call(
-            "https://rpc.ankr.com/eth",
-            "eth_getBlockByNumber",
-            eth_get_block_by_number(DEFAULT_BLOCK_NUMBER),
-        );
-        self.handle_rpc_call(
-            "https://cloudflare-eth.com",
-            "eth_getBlockByNumber",
-            eth_get_block_by_number(DEFAULT_BLOCK_NUMBER),
-        );
-        self.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
-        tick_until_next_http_request(&self.env, "eth_getLogs");
-
-        let from_address: Address = "0x55654e7405fcb336386ea8f36954a211b2cda764"
-            .parse()
-            .unwrap();
-        let tx_hash =
-            "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353".to_string();
-
-        self.handle_rpc_call(
-            "https://rpc.ankr.com/eth",
-            "eth_getLogs",
-            eth_get_logs(Some(EthLogEntry {
-                encoded_principal: encoded_principal.clone(),
-                amount,
-                from_address,
-                transaction_hash: tx_hash.clone(),
-            })),
-        );
-        self.handle_rpc_call(
-            "https://cloudflare-eth.com",
-            "eth_getLogs",
-            eth_get_logs(Some(EthLogEntry {
-                encoded_principal,
-                amount,
-                from_address,
-                transaction_hash: tx_hash.clone(),
-            })),
-        );
-
-        for _ in 0..10 {
-            self.env.advance_time(Duration::from_secs(1));
-            self.env.tick();
-            if self.balance_of(recipient) != 0 {
-                break;
-            }
+        DepositFlow {
+            setup: self,
+            params,
         }
-        let balance = self.balance_of(recipient);
-        assert_eq!(balance, Nat::from(EXPECTED_BALANCE));
-
-        self.check_audit_log();
-
-        let events = self.get_all_events();
-        assert_contains_unique_event(
-            &events,
-            EventPayload::AcceptedDeposit {
-                transaction_hash: tx_hash.clone(),
-                block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
-                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
-                from_address: from_address.to_string(),
-                value: Nat::from(amount),
-                principal: recipient,
-            },
-        );
-        assert_contains_unique_event(
-            &events,
-            EventPayload::MintedCkEth {
-                event_source: EventSource {
-                    transaction_hash: tx_hash.clone(),
-                    log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
-                },
-                mint_block_index: Nat::from(0),
-            },
-        );
     }
 
     pub fn handle_rpc_call(&mut self, provider: &str, method: &str, response_body: Vec<u8>) {
@@ -895,13 +668,13 @@ impl CkEthSetup {
         .unwrap()
     }
 
-    pub fn approve_minter(
-        &self,
+    pub fn call_ledger_approve_minter(
+        self,
         from: Principal,
         amount: u64,
         from_subaccount: Option<[u8; 32]>,
-    ) -> Nat {
-        Decode!(&assert_reply(self.env.execute_ingress_as(
+    ) -> ApprovalFlow {
+        let approval_id = Decode!(&assert_reply(self.env.execute_ingress_as(
             PrincipalId::from(from),
             self.ledger_id,
             "icrc2_approve",
@@ -922,22 +695,11 @@ impl CkEthSetup {
             Result<Nat, ApproveError>
         )
         .unwrap()
-        .expect("approve failed")
-    }
-
-    pub fn call_minter_withdraw(
-        &self,
-        from: Principal,
-        amount: Nat,
-        recipient: String,
-    ) -> MessageId {
-        let arg = WithdrawalArg { amount, recipient };
-        self.env.send_ingress(
-            PrincipalId::from(from),
-            self.minter_id,
-            "withdraw_eth",
-            Encode!(&arg).expect("failed to encode withdraw args"),
-        )
+        .expect("approve failed");
+        ApprovalFlow {
+            setup: self,
+            _approval_id: approval_id,
+        }
     }
 
     pub fn _get_logs(&self, priority: &str) -> Log {
@@ -971,100 +733,37 @@ impl CkEthSetup {
         .unwrap()
     }
 
-    pub fn withdrawal_step(&self) {
-        self.env
-            .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
-    }
-
-    pub fn wait_and_validate_withdrawal(
-        &mut self,
-        transaction_hash: String,
-        block_index: u64,
-        status: bool,
-    ) {
-        assert_eq!(self.retrieve_eth_status(block_index), Pending);
-        self.withdrawal_step();
-        tick_until_next_http_request(&self.env, "eth_feeHistory");
-        self.handle_rpc_call(
-            "https://rpc.ankr.com/eth",
-            "eth_feeHistory",
-            eth_get_fee_history(),
-        );
-        tick_until_next_http_request(&self.env, "eth_getTransactionCount");
-        self.handle_rpc_call(
-            "https://rpc.ankr.com/eth",
-            "eth_getTransactionCount",
-            eth_get_transaction_count(0),
-        );
-        self.handle_rpc_call(
-            "https://cloudflare-eth.com",
-            "eth_getTransactionCount",
-            eth_get_transaction_count(0),
-        );
-        assert_eq!(
-            self.retrieve_eth_status(block_index),
-            RetrieveEthStatus::TxCreated
-        );
-
-        tick_until_next_http_request(&self.env, "eth_sendRawTransaction");
-        self.handle_rpc_call(
-            "https://rpc.ankr.com/eth",
-            "eth_sendRawTransaction",
-            eth_send_raw_transaction(),
-        );
-
-        assert_eq!(
-            self.retrieve_eth_status(block_index),
-            RetrieveEthStatus::TxSent(EthTransaction { transaction_hash })
-        );
-
-        tick_until_next_http_request(&self.env, "eth_getTransactionCount");
-        self.handle_rpc_call(
-            "https://rpc.ankr.com/eth",
-            "eth_getTransactionCount",
-            eth_get_transaction_count(1),
-        );
-        self.handle_rpc_call(
-            "https://cloudflare-eth.com",
-            "eth_getTransactionCount",
-            eth_get_transaction_count(1),
-        );
-
-        let transaction_hash =
-            "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
-        tick_until_next_http_request(&self.env, "eth_getTransactionReceipt");
-        self.handle_rpc_call(
-            "https://rpc.ankr.com/eth",
-            "eth_getTransactionReceipt",
-            eth_get_transaction_receipt(transaction_hash.clone(), status, EFFECTIVE_GAS_PRICE),
-        );
-        self.handle_rpc_call(
-            "https://cloudflare-eth.com",
-            "eth_getTransactionReceipt",
-            eth_get_transaction_receipt(transaction_hash.clone(), status, EFFECTIVE_GAS_PRICE),
-        );
-        let retrieve_eth_status = self.retrieve_eth_status(block_index);
-        if status {
-            assert_eq!(
-                retrieve_eth_status,
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(EthTransaction {
-                    transaction_hash:
-                        "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5"
-                            .to_string(),
-                }))
-            );
-        } else {
-            assert_eq!(
-                retrieve_eth_status,
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                    EthTransaction {
-                        transaction_hash:
-                            "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5"
-                                .to_string(),
-                    }
-                ))
-            );
+    pub fn assert_has_unique_events_in_order(self, expected_events: &[EventPayload]) -> Self {
+        let audit_events = self.get_all_events();
+        let mut found_event_indexes = BTreeMap::new();
+        for (index_expected_event, expected_event) in expected_events.iter().enumerate() {
+            for (index_audit_event, audit_event) in audit_events.iter().enumerate() {
+                if &audit_event.payload == expected_event {
+                    assert_eq!(
+                        found_event_indexes.insert(index_expected_event, index_audit_event),
+                        None,
+                        "Event {:?} occurs multiple times",
+                        expected_event
+                    );
+                }
+            }
+            assert!(
+                found_event_indexes.contains_key(&index_expected_event),
+                "Missing event {:?}",
+                expected_event
+            )
         }
+        let audit_event_indexes = found_event_indexes.into_values().collect::<Vec<_>>();
+        let sorted_audit_event_indexes = {
+            let mut indexes = audit_event_indexes.clone();
+            indexes.sort_unstable();
+            indexes
+        };
+        assert_eq!(
+            audit_event_indexes, sorted_audit_event_indexes,
+            "Events were found in unexpected order"
+        );
+        self
     }
 
     fn get_events(&self, start: u64, length: u64) -> GetEventsResult {
@@ -1155,5 +854,290 @@ impl CkEthSetup {
                 Encode!(&MinterArg::UpgradeArg(Default::default())).unwrap(),
             )
             .unwrap();
+    }
+}
+
+struct DepositParams {
+    pub from_address: Address,
+    pub recipient: Principal,
+    pub amount: u64,
+}
+
+impl Default for DepositParams {
+    fn default() -> Self {
+        Self {
+            from_address: default_deposit_from_address(),
+            recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+            amount: EXPECTED_BALANCE,
+        }
+    }
+}
+
+struct DepositFlow {
+    setup: CkEthSetup,
+    params: DepositParams,
+}
+
+impl DepositFlow {
+    pub fn expect_mint(mut self) -> CkEthSetup {
+        let balance_before = self.setup.balance_of(self.params.recipient);
+        self.handle_deposit();
+        let balance_after: Nat = self.updated_balance(&balance_before);
+        assert_eq!(balance_after - balance_before, self.params.amount);
+
+        self.setup.check_audit_log();
+
+        let events = self.setup.get_all_events();
+        assert_contains_unique_event(
+            &events,
+            EventPayload::AcceptedDeposit {
+                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+                from_address: self.params.from_address.to_string(),
+                value: Nat::from(self.params.amount),
+                principal: self.params.recipient,
+            },
+        );
+        assert_contains_unique_event(
+            &events,
+            EventPayload::MintedCkEth {
+                event_source: EventSource {
+                    transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                    log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+                },
+                mint_block_index: Nat::from(0),
+            },
+        );
+        self.setup
+    }
+
+    fn updated_balance(&self, balance_before: &Nat) -> Nat {
+        let mut current_balance = balance_before.clone();
+        for _ in 0..10 {
+            self.setup.env.advance_time(Duration::from_secs(1));
+            self.setup.env.tick();
+            current_balance = self.setup.balance_of(self.params.recipient);
+            if &current_balance != balance_before {
+                break;
+            }
+        }
+        current_balance
+    }
+
+    pub fn expect_no_mint(mut self) -> CkEthSetup {
+        let balance_before = self.setup.balance_of(self.params.recipient);
+        self.handle_deposit();
+        let balance_after: Nat = self.updated_balance(&balance_before);
+        assert_eq!(balance_before, balance_after);
+        self.setup
+    }
+
+    fn handle_deposit(&mut self) {
+        let encoded_principal = encode_principal(self.params.recipient);
+
+        self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+        tick_until_next_http_request(&self.setup.env, "eth_getBlockByNumber");
+        self.setup.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_getBlockByNumber",
+            eth_get_block_by_number(DEFAULT_BLOCK_NUMBER),
+        );
+        self.setup.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_getBlockByNumber",
+            eth_get_block_by_number(DEFAULT_BLOCK_NUMBER),
+        );
+        self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+        tick_until_next_http_request(&self.setup.env, "eth_getLogs");
+
+        let log_entry = EthLogEntry {
+            encoded_principal: encoded_principal.clone(),
+            amount: self.params.amount,
+            from_address: self.params.from_address,
+            transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+        };
+        self.setup.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_getLogs",
+            eth_get_logs(Some(log_entry.clone())),
+        );
+        self.setup.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_getLogs",
+            eth_get_logs(Some(log_entry)),
+        );
+    }
+}
+
+struct ApprovalFlow {
+    setup: CkEthSetup,
+    _approval_id: Nat,
+}
+
+impl ApprovalFlow {
+    pub fn call_minter_withdraw_eth(
+        self,
+        from: Principal,
+        amount: Nat,
+        recipient: String,
+    ) -> WithdrawalFlow {
+        let arg = WithdrawalArg { amount, recipient };
+        let message_id = self.setup.env.send_ingress(
+            PrincipalId::from(from),
+            self.setup.minter_id,
+            "withdraw_eth",
+            Encode!(&arg).expect("failed to encode withdraw args"),
+        );
+        WithdrawalFlow {
+            setup: self.setup,
+            message_id,
+        }
+    }
+}
+
+struct WithdrawalFlow {
+    setup: CkEthSetup,
+    message_id: MessageId,
+}
+
+impl WithdrawalFlow {
+    pub fn expect_withdrawal_request_accepted(self) -> ProcessWithdrawal {
+        let response = self
+            .minter_response()
+            .expect("BUG: unexpected error from minter during withdrawal");
+        ProcessWithdrawal {
+            setup: self.setup,
+            withdrawal_request: response,
+        }
+    }
+
+    pub fn expect_error(self, error: WithdrawalError) -> CkEthSetup {
+        assert_eq!(
+            self.minter_response(),
+            Err(error),
+            "BUG: unexpected result during withdrawal"
+        );
+        self.setup
+    }
+
+    fn minter_response(&self) -> Result<RetrieveEthRequest, WithdrawalError> {
+        Decode!(&assert_reply(
+        self.setup.env
+            .await_ingress(self.message_id.clone(), MAX_TICKS)
+            .expect("failed to resolve message with id: {message_id}"),
+    ), Result<RetrieveEthRequest, WithdrawalError>)
+        .unwrap()
+    }
+}
+
+struct ProcessWithdrawal {
+    setup: CkEthSetup,
+    withdrawal_request: RetrieveEthRequest,
+}
+
+impl ProcessWithdrawal {
+    pub fn withdrawal_id(&self) -> &Nat {
+        &self.withdrawal_request.block_index
+    }
+
+    pub fn wait_and_validate_withdrawal(
+        mut self,
+        transaction_hash: String,
+        status: bool,
+    ) -> CkEthSetup {
+        let block_index = self.withdrawal_id().0.to_u64().unwrap();
+        assert_eq!(self.setup.retrieve_eth_status(block_index), Pending);
+        self.setup
+            .env
+            .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
+        tick_until_next_http_request(&self.setup.env, "eth_feeHistory");
+        self.setup.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_feeHistory",
+            eth_get_fee_history(),
+        );
+        tick_until_next_http_request(&self.setup.env, "eth_getTransactionCount");
+        self.setup.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_getTransactionCount",
+            eth_get_transaction_count(0),
+        );
+        self.setup.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_getTransactionCount",
+            eth_get_transaction_count(0),
+        );
+        assert_eq!(
+            self.setup.retrieve_eth_status(block_index),
+            RetrieveEthStatus::TxCreated
+        );
+
+        tick_until_next_http_request(&self.setup.env, "eth_sendRawTransaction");
+        self.setup.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_sendRawTransaction",
+            eth_send_raw_transaction(),
+        );
+
+        assert_eq!(
+            self.setup.retrieve_eth_status(block_index),
+            RetrieveEthStatus::TxSent(EthTransaction { transaction_hash })
+        );
+
+        tick_until_next_http_request(&self.setup.env, "eth_getTransactionCount");
+        self.setup.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_getTransactionCount",
+            eth_get_transaction_count(1),
+        );
+        self.setup.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_getTransactionCount",
+            eth_get_transaction_count(1),
+        );
+
+        tick_until_next_http_request(&self.setup.env, "eth_getTransactionReceipt");
+        self.setup.handle_rpc_call(
+            "https://rpc.ankr.com/eth",
+            "eth_getTransactionReceipt",
+            eth_get_transaction_receipt(
+                DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                status,
+                EFFECTIVE_GAS_PRICE,
+            ),
+        );
+        self.setup.handle_rpc_call(
+            "https://cloudflare-eth.com",
+            "eth_getTransactionReceipt",
+            eth_get_transaction_receipt(
+                DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                status,
+                EFFECTIVE_GAS_PRICE,
+            ),
+        );
+
+        self.setup.check_audit_log();
+        self.setup.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
+        self.setup.upgrade_minter();
+
+        let retrieve_eth_status = self.setup.retrieve_eth_status(block_index);
+        let eth_transaction = EthTransaction {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+        };
+        if status {
+            assert_eq!(
+                retrieve_eth_status,
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(eth_transaction))
+            );
+        } else {
+            assert_eq!(
+                retrieve_eth_status,
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                    eth_transaction
+                ))
+            );
+        }
+        self.setup
     }
 }
