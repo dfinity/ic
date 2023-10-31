@@ -53,6 +53,7 @@
         "rust-lang.rust-analyzer",
         "vadimcn.vscode-lldb",
         "bazelbuild.vscode-bazel",
+        "stackbuild.bazel-stack-vscode",
         "bungcip.better-toml"
       ]
     }
