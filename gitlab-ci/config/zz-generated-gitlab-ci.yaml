@@ -3135,11 +3135,23 @@ check-bins-linux:
       "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
       chmod +x /tmp/replica
       ldd /tmp/replica
+
+      if ldd /tmp/replica | grep -q libssl; then
+          echo "OpenSSL seems to be dynamically linked!" >&2
+          exit 1
+      fi
+
       /tmp/replica --print-sample-config --replica-version 1 >/dev/null
 
       "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/ic-starter.gz" | gunzip > /tmp/ic-starter
       chmod +x /tmp/ic-starter
       ldd /tmp/ic-starter
+
+      if ldd /tmp/ic-starter | grep -q libssl; then
+          echo "OpenSSL seems to be dynamically linked!" >&2
+          exit 1
+      fi
+
       /tmp/ic-starter --version
   tags:
     - dfinity-ic
