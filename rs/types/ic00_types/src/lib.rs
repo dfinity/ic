@@ -2276,3 +2276,20 @@ impl InstallChunkedCodeArgs {
             .map(|p| CanisterId::unchecked_from_principal(p))
     }
 }
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct ClearChunkStoreArgs {
+    pub canister_id: PrincipalId,
+}
+
+impl Payload<'_> for ClearChunkStoreArgs {}
+
+impl ClearChunkStoreArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}

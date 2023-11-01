@@ -343,10 +343,11 @@ impl CanisterManager {
     ) -> Result<(), UserError> {
         let method_name = ingress.method_name();
         let sender = ingress.sender();
+        let method = Ic00Method::from_str(ingress.method_name());
         // The message is targeted towards the management canister. The
         // actual type of the method will determine if the message should be
         // accepted or not.
-        match Ic00Method::from_str(ingress.method_name()) {
+        match method {
             // The method is either invalid or it is of a type that users
             // are not allowed to send.
             Err(_)
@@ -383,7 +384,27 @@ impl CanisterManager {
             | Ok(Ic00Method::DeleteCanister)
             | Ok(Ic00Method::UpdateSettings)
             | Ok(Ic00Method::InstallCode)
-            | Ok(Ic00Method::InstallChunkedCode) => {
+            | Ok(Ic00Method::InstallChunkedCode)
+            | Ok(Ic00Method::UploadChunk)
+            | Ok(Ic00Method::StoredChunks)
+            | Ok(Ic00Method::DeleteChunks)
+            | Ok(Ic00Method::ClearChunkStore) => {
+                // Reject large install methods if the flag is not enabled, or
+                // they are not implemented.
+                match method {
+                    Ok(Ic00Method::UploadChunk)
+                    | Ok(Ic00Method::ClearChunkStore)
+                    | Ok(Ic00Method::InstallChunkedCode) if self.config.wasm_chunk_store == FlagStatus::Enabled => {}
+                    Ok(Ic00Method::UploadChunk)
+                    | Ok(Ic00Method::StoredChunks)
+                    | Ok(Ic00Method::DeleteChunks)
+                    | Ok(Ic00Method::ClearChunkStore)
+                    | Ok(Ic00Method::InstallChunkedCode) => return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        "Chunked upload API is not yet implemented"
+                    )),
+                    _ => {}
+                };
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
@@ -420,16 +441,6 @@ impl CanisterManager {
                     ))
                 }
             },
-            Ok(Ic00Method::UploadChunk)  if self.config.wasm_chunk_store == FlagStatus::Enabled => {
-                Ok(())
-            }
-            Ok(Ic00Method::UploadChunk) |
-            Ok(Ic00Method::StoredChunks) |
-            Ok(Ic00Method::DeleteChunks) |
-            Ok(Ic00Method::ClearChunkStore) => Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "Chunked upload API is not yet implemented"
-            )),
         }
     }
 
@@ -1513,6 +1524,22 @@ impl CanisterManager {
         Ok(UploadChunkReply {
             hash: hash.to_vec(),
         })
+    }
+
+    pub(crate) fn clear_chunk_store(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+    ) -> Result<(), CanisterManagerError> {
+        if self.config.wasm_chunk_store == FlagStatus::Disabled {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: "Wasm chunk store not enabled".to_string(),
+            });
+        }
+
+        validate_controller(canister, &sender)?;
+        canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
+        Ok(())
     }
 }
 
