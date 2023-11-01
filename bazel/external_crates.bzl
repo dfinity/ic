@@ -35,7 +35,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
         "ic-wasm": [crate.annotation(
             gen_binaries = True,
         )],
-        "openssl-sys": [] if not (static_openssl or sanitizers_enabled) else [crate.annotation(
+        "openssl-sys": [crate.annotation(
             build_script_data = [
                 "@openssl//:gen_dir",
                 "@openssl//:openssl",
@@ -48,7 +48,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
             },
             data = ["@openssl"],
             deps = ["@openssl"],
-        )],
+        )] if static_openssl or sanitizers_enabled else [],
         "librocksdb-sys": [crate.annotation(
             build_script_env = {
                 # Bazel executors assign only one core when executing
