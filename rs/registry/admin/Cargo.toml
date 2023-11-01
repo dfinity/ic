@@ -12,7 +12,7 @@ ic-prep = { path = "../../prep" }
 async-trait = "0.1.51"
 bytes = { workspace = true }
 base64 = { workspace = true }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"
 humantime = "2.1.0"

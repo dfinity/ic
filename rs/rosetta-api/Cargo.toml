@@ -18,7 +18,7 @@ actix-web = { version = "4.0.1", default-features = false, features = [
 async-trait = "0.1.41"
 base64 = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 hex = "0.4.2"

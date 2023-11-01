@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }

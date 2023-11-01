@@ -8,7 +8,7 @@ edition = "2021"
 async-socks5 = "0.5.1"
 async-stream = "0.3.2"
 byte-unit = "4.0.14"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 futures = { workspace = true }
 http = "0.2"
 hyper = { version = "0.14.18", features = ["full"] }

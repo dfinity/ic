@@ -266,7 +266,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^0.2.1",
             ),
             "clap": crate.spec(
-                version = "^3.1.6",
+                version = "^3.2.25",
                 features = [
                     "derive",
                 ],

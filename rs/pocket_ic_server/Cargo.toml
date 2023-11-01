@@ -25,7 +25,7 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-utils = { path = "../utils" }
 hex = "0.4.2"
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 sha2 = "0.9.3"
 time = "^0.3.20"
 tracing = "0.1"

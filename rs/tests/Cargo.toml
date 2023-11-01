@@ -21,7 +21,7 @@ proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 chrono = { version = "0.4.19", features = ["serde"] }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 crossbeam-channel = "0.5.5"
 crossbeam-utils = "0.8.11"
 cycles-minting-canister = { path = "../nns/cmc" }
