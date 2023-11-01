@@ -14,7 +14,7 @@ async-trait = "0.1.56"
 axum = "0.6.1"
 bytes = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.2.6", features = ["derive"] }
+clap = { workspace = true }
 dashmap = "5.3.4"
 futures = { workspace = true }
 hex = "0.4.3"

@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = "1.0.31"
 base64 = { workspace = true }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-protobuf = { path = "../../protobuf" }

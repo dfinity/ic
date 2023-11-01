@@ -884,7 +884,7 @@ name = "bazelifier"
 version = "0.9.0"
 dependencies = [
  "askama",
- "clap 3.2.23",
+ "clap 3.2.25",
  "eyre",
  "lazy_static",
  "maplit",
@@ -1218,7 +1218,7 @@ dependencies = [
  "axum",
  "bytes",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "dashmap",
  "futures",
  "hex",
@@ -1252,7 +1252,7 @@ dependencies = [
  "async-trait",
  "axum",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "futures",
  "glob",
  "humantime",
@@ -1663,7 +1663,7 @@ dependencies = [
  "base64-url",
  "chrono",
  "ciborium",
- "clap 3.2.23",
+ "clap 3.2.25",
  "codespan-reporting",
  "console_error_panic_hook",
  "crossterm",
@@ -1905,13 +1905,13 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.2.23"
+version = "3.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71655c45cb9845d3270c9d6df84ebe72b4dad3c2ba3f7023ad47c144e4e473a5"
+checksum = "4ea181bf566f71cb9a5d17a59e1871af638180a18fb0035c92ae62b705207123"
 dependencies = [
  "atty",
  "bitflags 1.3.2",
- "clap_derive 3.2.18",
+ "clap_derive 3.2.25",
  "clap_lex 0.2.4",
  "indexmap 1.9.2",
  "once_cell",
@@ -1944,9 +1944,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.2.18"
+version = "3.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea0c8bce528c4be4da13ea6fead8965e95b6073585a2f05204bd8f4119f82a65"
+checksum = "ae6371b8bdc8b7d3959e9cf7b22d4435ef3e79e138688421ec654acf8c81b008"
 dependencies = [
  "heck 0.4.1",
  "proc-macro-error",
@@ -2801,7 +2801,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chacha20poly1305",
- "clap 3.2.23",
+ "clap 3.2.25",
  "flate2",
  "futures",
  "httptest",
@@ -4673,7 +4673,7 @@ dependencies = [
  "bytes",
  "candid",
  "chrono",
- "clap 3.2.23",
+ "clap 3.2.25",
  "cycles-minting-canister",
  "futures",
  "hex",
@@ -4810,7 +4810,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "byteorder",
- "clap 3.2.23",
+ "clap 3.2.25",
  "criterion",
  "ic-config",
  "ic-constants",
@@ -4877,7 +4877,7 @@ name = "ic-backup"
 version = "0.9.0"
 dependencies = [
  "chrono",
- "clap 3.2.23",
+ "clap 3.2.25",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-logger",
@@ -4907,7 +4907,7 @@ dependencies = [
  "async-trait",
  "axum",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "dashmap",
  "futures",
  "humantime",
@@ -5063,7 +5063,7 @@ dependencies = [
  "bitcoin 0.28.2",
  "bitcoincore-rpc",
  "bitcoind",
- "clap 3.2.23",
+ "clap 3.2.25",
  "criterion",
  "futures",
  "hashlink",
@@ -5923,7 +5923,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "bincode",
- "clap 3.2.23",
+ "clap 3.2.25",
  "criterion",
  "ed25519-consensus",
  "hex",
@@ -7174,7 +7174,7 @@ dependencies = [
 name = "ic-determinism-test"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "hex",
  "ic-config",
  "ic-cycles-account-manager",
@@ -7205,7 +7205,7 @@ dependencies = [
 name = "ic-drun"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "hex",
  "ic-canister-sandbox-backend-lib",
  "ic-canister-sandbox-launcher",
@@ -7498,7 +7498,7 @@ dependencies = [
  "async-socks5",
  "async-stream",
  "byte-unit",
- "clap 3.2.23",
+ "clap 3.2.25",
  "futures",
  "http",
  "hyper 0.14.26",
@@ -8034,7 +8034,7 @@ name = "ic-identity"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "clap 3.2.23",
+ "clap 3.2.25",
  "ed25519-consensus",
  "ic-crypto-internal-types",
  "ic-crypto-utils-basic-sig",
@@ -8203,7 +8203,7 @@ dependencies = [
  "async-trait",
  "candid",
  "chrono",
- "clap 3.2.23",
+ "clap 3.2.25",
  "dfn_protobuf",
  "ic-agent",
  "ic-certification 0.9.0",
@@ -8894,7 +8894,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
- "clap 3.2.23",
+ "clap 3.2.25",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces-registry",
@@ -8918,7 +8918,7 @@ dependencies = [
 name = "ic-nns-inspector"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "csv",
  "hex",
  "ic-base-types",
@@ -9163,7 +9163,7 @@ name = "ic-p8s-service-discovery"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "clap 3.2.23",
+ "clap 3.2.25",
  "crossbeam",
  "crossbeam-channel",
  "elastic_common_schema",
@@ -9266,7 +9266,7 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "chrono",
- "clap 3.2.23",
+ "clap 3.2.25",
  "fs_extra",
  "hex",
  "ic-config",
@@ -9378,7 +9378,7 @@ name = "ic-recovery"
 version = "0.1.0"
 dependencies = [
  "base64 0.13.1",
- "clap 3.2.23",
+ "clap 3.2.25",
  "futures",
  "hex",
  "ic-artifact-pool",
@@ -9429,7 +9429,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
- "clap 3.2.23",
+ "clap 3.2.25",
  "ic-base-types",
  "ic-crypto",
  "ic-crypto-sha2",
@@ -9623,7 +9623,7 @@ dependencies = [
 name = "ic-registry-replicator"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "ic-config",
  "ic-crypto-for-verification-only",
  "ic-crypto-utils-threshold-sig-der",
@@ -9710,7 +9710,7 @@ name = "ic-replay"
 version = "0.9.0"
 dependencies = [
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "hex",
  "ic-artifact-pool",
  "ic-canister-client",
@@ -9764,7 +9764,7 @@ dependencies = [
  "assert_cmd",
  "base64 0.13.1",
  "canister-test",
- "clap 3.2.23",
+ "clap 3.2.25",
  "criterion",
  "crossbeam-channel",
  "hex",
@@ -10029,7 +10029,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "dfn_candid",
  "dfn_protobuf",
  "futures",
@@ -10132,7 +10132,7 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "hex",
  "ic-base-types",
  "ic-crypto-sha2",
@@ -10170,7 +10170,7 @@ dependencies = [
  "build-info",
  "build-info-build",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "comparable",
  "dfn_candid",
  "dfn_core",
@@ -10536,7 +10536,7 @@ name = "ic-starter"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "clap 3.2.23",
+ "clap 3.2.25",
  "ic-config",
  "ic-ic00-types",
  "ic-logger",
@@ -10602,7 +10602,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
- "clap 3.2.23",
+ "clap 3.2.25",
  "hex",
  "ic-config",
  "ic-constants",
@@ -10750,7 +10750,7 @@ dependencies = [
 name = "ic-state-tool"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "hex",
  "ic-config",
  "ic-crypto-sha2",
@@ -10774,7 +10774,7 @@ dependencies = [
 name = "ic-subnet-splitting"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "hex",
  "ic-agent",
  "ic-base-types",
@@ -11416,7 +11416,7 @@ dependencies = [
  "byte-unit",
  "candid",
  "chrono",
- "clap 3.2.23",
+ "clap 3.2.25",
  "console 0.11.3",
  "futures",
  "hex",
@@ -12216,7 +12216,7 @@ checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-types",
@@ -13720,7 +13720,7 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "exec",
  "hex",
  "ic-async-utils",
@@ -14286,7 +14286,7 @@ dependencies = [
  "axum",
  "base64 0.13.1",
  "candid",
- "clap 3.2.23",
+ "clap 3.2.25",
  "flate2",
  "hex",
  "ic-cdk",
@@ -14659,7 +14659,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
- "clap 3.2.23",
+ "clap 3.2.25",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
@@ -16652,7 +16652,7 @@ name = "snptool"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 3.2.23",
+ "clap 3.2.25",
  "sev",
 ]
 
@@ -17228,7 +17228,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "chrono",
- "clap 3.2.23",
+ "clap 3.2.25",
  "crossbeam-channel",
  "crossbeam-utils",
  "cycles-minting-canister",
@@ -18402,7 +18402,7 @@ dependencies = [
 name = "vsock_guest"
 version = "1.0.0"
 dependencies = [
- "clap 3.2.23",
+ "clap 3.2.25",
  "vsock_lib",
 ]
 

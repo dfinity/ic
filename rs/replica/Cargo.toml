@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 crossbeam-channel = "0.5.5"
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }

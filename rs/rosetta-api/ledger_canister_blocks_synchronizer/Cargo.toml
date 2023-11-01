@@ -9,7 +9,7 @@ description = "Synchronizes a local copy of the ledger blocks with the ledger"
 async-trait = "0.1.41"
 candid = { workspace = true }
 chrono = "0.4"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 ic-agent = { workspace = true }
 ic-certification = { path = "../../certification" }
