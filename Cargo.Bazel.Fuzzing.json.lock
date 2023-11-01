@@ -1,5 +1,5 @@
 {
-  "checksum": "4152ff31cacb507b26299b692d5107c0524490690fb779bcf4f51c81f2828098",
+  "checksum": "76601f63b82d3735f9dd42904019870146ecc30abeeea9fb2d567ef7eeb01dcd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -33224,6 +33224,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -33237,12 +33243,26 @@
           ],
           "selects": {}
         },
+        "extra_deps": {
+          "common": [
+            "@openssl"
+          ],
+          "selects": {}
+        },
         "edition": "2018",
         "version": "0.9.93"
       },
       "build_script_attrs": {
+        "data": {
+          "common": [
+            "@openssl//:gen_dir",
+            "@openssl//:openssl"
+          ],
+          "selects": {}
+        },
         "data_glob": [
-          "**"
+          "**",
+          "build/**/*.c"
         ],
         "deps": {
           "common": [
@@ -33259,6 +33279,13 @@
               "target": "vcpkg"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
+            "OPENSSL_STATIC": "true"
+          },
           "selects": {}
         },
         "links": "openssl"
