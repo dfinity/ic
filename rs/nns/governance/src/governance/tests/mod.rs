@@ -2651,6 +2651,83 @@ mod cast_vote_and_cascade_follow {
     }
 
     #[test]
+    fn test_cast_vote_and_cascade_doesnt_cascade_neuron_management() {
+        let now = 1000;
+        let topic = Topic::NeuronManagement;
+
+        let make_neuron = |id: u64, followees: Vec<u64>| {
+            make_test_neuron_with_followees(id, topic, followees, now)
+        };
+
+        let add_neuron_with_ballot = |neuron_map: &mut BTreeMap<u64, Neuron>,
+                                      ballots: &mut HashMap<u64, Ballot>,
+                                      id: u64,
+                                      followees: Vec<u64>,
+                                      vote: Vote| {
+            let neuron = make_neuron(id, followees);
+            let voting_power = neuron.voting_power(now);
+            neuron_map.insert(id, neuron);
+            ballots.insert(id, make_ballot(voting_power, vote));
+        };
+
+        let add_neuron_without_ballot =
+            |neuron_map: &mut BTreeMap<u64, Neuron>, id: u64, followees: Vec<u64>| {
+                let neuron = make_neuron(id, followees);
+                neuron_map.insert(id, neuron);
+            };
+
+        let mut heap_neurons = BTreeMap::new();
+        let mut ballots = HashMap::new();
+        for id in 1..=5 {
+            // Each neuron follows all neurons with a lower id
+            let followees = (1..id).collect();
+
+            add_neuron_with_ballot(
+                &mut heap_neurons,
+                &mut ballots,
+                id,
+                followees,
+                Vote::Unspecified,
+            );
+        }
+        // Add another neuron that follows both a neuron with a ballot and without a ballot
+        add_neuron_with_ballot(
+            &mut heap_neurons,
+            &mut ballots,
+            6,
+            vec![1, 7],
+            Vote::Unspecified,
+        );
+
+        // Add a neuron without a ballot for neuron 6 to follow.
+        add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
+
+        let mut neuron_store = NeuronStore::new(heap_neurons, None, Migration::default());
+
+        Governance::cast_vote_and_cascade_follow(
+            &ProposalId { id: 1 },
+            &mut ballots,
+            &NeuronId { id: 1 },
+            Vote::Yes,
+            topic,
+            &mut neuron_store,
+        )
+        .unwrap();
+
+        assert_eq!(
+            ballots,
+            hashmap! {
+                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
+                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+            }
+        );
+    }
+
+    #[test]
     fn test_cast_vote_and_cascade_works() {
         let now = 1000;
         let topic = Topic::NetworkCanisterManagement;
@@ -2711,7 +2788,8 @@ mod cast_vote_and_cascade_follow {
             Vote::Yes,
             topic,
             &mut neuron_store,
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             ballots,

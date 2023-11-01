@@ -4934,17 +4934,10 @@ impl Governance {
             .followees
             .iter()
             .map(|x| {
-                let vote = {
-                    (if x.id == proposer_id.id {
-                        Vote::Yes
-                    } else {
-                        Vote::Unspecified
-                    }) as i32
-                };
                 (
                     x.id,
                     Ballot {
-                        vote,
+                        vote: Vote::Unspecified as i32,
                         voting_power: 1,
                     },
                 )
@@ -4970,7 +4963,7 @@ impl Governance {
         ));
 
         // Create the proposal.
-        let info = ProposalData {
+        let mut info = ProposalData {
             id: Some(proposal_id),
             proposer: Some(*proposer_id),
             proposal: Some(Proposal {
@@ -4992,10 +4985,16 @@ impl Governance {
         self.with_neuron_mut(proposer_id, |proposer| {
             // Charge fee.
             proposer.neuron_fees_e8s += neuron_management_fee_per_proposal_e8s;
-
-            // Add to recent ballots.
-            proposer.register_recent_ballot(Topic::NeuronManagement, &proposal_id, Vote::Yes);
         })?;
+
+        Governance::cast_vote_and_cascade_follow(
+            &proposal_id,
+            &mut info.ballots,
+            proposer_id,
+            Vote::Yes,
+            Topic::NeuronManagement,
+            &mut self.neuron_store,
+        )?;
 
         // Add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
@@ -5622,19 +5621,21 @@ impl Governance {
             Vote::Yes,
             topic,
             &mut self.neuron_store,
-        );
+        )?;
         // Finally, add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
 
         Ok(proposal_id)
     }
 
-    // Register `voting_neuron_id` voting according to
-    // `vote_of_neuron` (which must be `yes` or `no`) in 'ballots' and
-    // cascade voting according to the following relationships
-    // specified in 'followee_index' (mapping followees to followers for
-    // the topic) and 'neurons' (which contains a mapping of followers
-    // to followees).
+    /// Register `voting_neuron_id` voting according to
+    /// `vote_of_neuron` (which must be `yes` or `no`) in 'ballots' and
+    /// cascade voting according to the following relationships
+    /// specified in 'followee_index' (mapping followees to followers for
+    /// the topic) and 'neurons' (which contains a mapping of followers
+    /// to followees).
+    /// Cascading only occurs for proposal topics that support following (i.e.,
+    /// all topics except Topic::NeuronManagement).
     fn cast_vote_and_cascade_follow(
         proposal_id: &ProposalId,
         ballots: &mut HashMap<u64, Ballot>,
@@ -5642,8 +5643,29 @@ impl Governance {
         vote_of_neuron: Vote,
         topic: Topic,
         neuron_store: &mut NeuronStore,
-    ) {
-        assert!(topic != Topic::NeuronManagement && topic != Topic::Unspecified);
+    ) -> Result<(), GovernanceError> {
+        assert!(topic != Topic::Unspecified);
+        // Neuron management proposals don't have following.
+        if topic == Topic::NeuronManagement {
+            let neuron_ballot = ballots.get_mut(&voting_neuron_id.id).ok_or_else(||
+                // This neuron is not eligible to vote on this proposal.
+                GovernanceError::new_with_message(ErrorType::NotAuthorized, "Neuron not authorized to vote on proposal."))?;
+            if neuron_ballot.vote != (Vote::Unspecified as i32) {
+                // Already voted.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Neuron already voted on proposal.",
+                ));
+            }
+
+            // No following for manage neuron proposals.
+            neuron_ballot.vote = vote_of_neuron as i32;
+            neuron_store.with_neuron_mut(voting_neuron_id, |neuron| {
+                neuron.register_recent_ballot(topic, proposal_id, vote_of_neuron)
+            })?;
+            return Ok(());
+        }
+
         // This is the induction variable of the loop: a map from
         // neuron ID to the neuron's vote - 'yes' or 'no' (other
         // values not allowed).
@@ -5759,7 +5781,7 @@ impl Governance {
             // If induction_votes is empty, the loop will terminate
             // here.
             if induction_votes.is_empty() {
-                return;
+                return Ok(());
             }
             // We now continue to the next iteration of the loop.
             // Because induction_votes is not empty, either at least
@@ -5865,24 +5887,15 @@ impl Governance {
             ));
         }
 
-        if topic == Topic::NeuronManagement {
-            // No following for manage neuron proposals.
-            neuron_ballot.vote = vote as i32;
-            // This should not fail as we found the neuron above and the neuron cannot go away since then.
-            self.with_neuron_mut(neuron_id, |neuron| {
-                neuron.register_recent_ballot(topic, proposal_id, vote)
-            })?;
-        } else {
-            Governance::cast_vote_and_cascade_follow(
-                // Actually update the ballot, including following.
-                proposal_id,
-                &mut proposal.ballots,
-                neuron_id,
-                vote,
-                topic,
-                &mut self.neuron_store,
-            );
-        }
+        Governance::cast_vote_and_cascade_follow(
+            // Actually update the ballot, including following.
+            proposal_id,
+            &mut proposal.ballots,
+            neuron_id,
+            vote,
+            topic,
+            &mut self.neuron_store,
+        )?;
 
         self.process_proposal(proposal_id.id);
 
