@@ -70,6 +70,7 @@ pub enum InvalidStateError {
     InvalidLedgerId(String),
     InvalidEthereumContractAddress(String),
     InvalidMinimumWithdrawalAmount(String),
+    InvalidLastScrapedBlockNumber(String),
 }
 
 impl State {

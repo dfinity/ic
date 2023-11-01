@@ -277,7 +277,7 @@ fn two_log_scrappings_should_not_overlap() {
 
     let (first_from_block, first_to_block) = cketh.get_scrap_logs_range();
     assert_eq!(first_from_block, BlockNumber::from(3_956_207_u64));
-    assert_eq!(first_to_block, BlockNumber::from(3_957_231_u64));
+    assert_eq!(first_to_block, BlockNumber::from(3_957_007_u64));
 
     cketh.handle_rpc_call(
         "https://rpc.ankr.com/eth",
@@ -300,7 +300,7 @@ fn two_log_scrappings_should_not_overlap() {
     );
     assert_eq!(
         to_block,
-        from_block.checked_add(BlockNumber::from(1024_u64)).unwrap()
+        from_block.checked_add(BlockNumber::from(800_u64)).unwrap()
     );
 }
 
@@ -360,6 +360,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         ethereum_block_height: Default::default(),
         ethereum_contract_address: Some("0x907b6EFc1a398fD88A8161b3cA02eEc8Eaf72ca1".to_string()),
         minimum_withdrawal_amount: 1.into(),
+        last_scraped_block_number: 3_956_206.into(),
     };
     let minter_arg = MinterArg::InitArg(args);
     env.install_existing_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())

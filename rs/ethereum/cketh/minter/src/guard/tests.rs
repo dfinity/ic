@@ -143,6 +143,7 @@ fn init_state() {
                 ethereum_block_height: Default::default(),
                 minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
                 next_transaction_nonce: Default::default(),
+                last_scraped_block_number: Default::default(),
             })
             .expect("init args should be valid"),
         );
