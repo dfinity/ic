@@ -831,7 +831,7 @@ impl SystemState {
             initial_cycles,
             freeze_threshold,
             status,
-            WasmChunkStore::new_for_testing(),
+            WasmChunkStore::new_for_testing(wasm_chunk_store::DEFAULT_MAX_SIZE),
         )
     }
 
