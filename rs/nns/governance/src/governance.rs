@@ -7253,7 +7253,7 @@ impl Governance {
                 ),
             ));
         }
-        // Check authorization. Note that a Swap could settle each other's participations.
+        // Check authorization. Note that a Swap could settle each other's participation.
         let target_canister_id: CanisterId = caller.try_into().map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,

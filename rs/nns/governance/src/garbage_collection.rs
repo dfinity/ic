@@ -1,8 +1,7 @@
 use crate::{
     governance::{Governance, LOG_PREFIX},
-    pb::v1::{proposal::Action, ProposalData, ProposalStatus, Topic},
+    pb::v1::{ProposalData, Topic},
 };
-use ic_sns_swap::pb::v1::Lifecycle;
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};
@@ -93,102 +92,6 @@ impl ProposalData {
             return false;
         }
 
-        if let Some(Action::OpenSnsTokenSwap(_)) =
-            self.proposal.as_ref().and_then(|p| p.action.as_ref())
-        {
-            return self.open_sns_token_swap_can_be_purged();
-        }
-
-        if let Some(Action::CreateServiceNervousSystem(_)) =
-            self.proposal.as_ref().and_then(|p| p.action.as_ref())
-        {
-            return self.create_service_nervous_system_can_be_purged();
-        }
-
         true
-    }
-
-    // Precondition: action must be OpenSnsTokenSwap (behavior is undefined otherwise).
-    //
-    // The idea here is that we must wait until Neurons' Fund participation has
-    // been settled (part of swap finalization), because in that case, we are
-    // holding NF participation in escrow.
-    //
-    // We can tell whether NF participation settlement has been taken care of by
-    // looking at the sns_token_swap_lifecycle field.
-    fn open_sns_token_swap_can_be_purged(&self) -> bool {
-        match self.status() {
-            ProposalStatus::Rejected => {
-                // Because nothing has been taken from the neurons' fund yet (and never
-                // will). We handle this specially, because in this case,
-                // sns_token_swap_lifecycle will be None, which is later treated as not
-                // terminal.
-                true
-            }
-
-            ProposalStatus::Failed => {
-                // Because because maturity is refunded to the Neurons' Fund before setting
-                // execution status to failed.
-                true
-            }
-
-            ProposalStatus::Executed => {
-                // Need to wait for settle_community_fund_participation.
-                self.sns_token_swap_lifecycle
-                    .and_then(Lifecycle::from_i32)
-                    .unwrap_or(Lifecycle::Unspecified)
-                    .is_terminal()
-            }
-
-            status => {
-                println!(
-                    "{}WARNING: Proposal status unexpectedly {:?}. self={:#?}",
-                    LOG_PREFIX, status, self,
-                );
-                false
-            }
-        }
-    }
-
-    // Precondition: action must be CreateServiceNervousSystem (behavior is undefined otherwise).
-    //
-    // The idea here is that we must wait until Neurons' Fund participation has
-    // been settled (part of swap finalization), because in that case, we are
-    // holding NF participation in escrow.
-    //
-    // We can tell whether NF participation settlement has been taken care of by
-    // looking at the sns_token_swap_lifecycle field.
-    fn create_service_nervous_system_can_be_purged(&self) -> bool {
-        match self.status() {
-            ProposalStatus::Rejected => {
-                // Because nothing has been taken from the community fund yet (and never
-                // will). We handle this specially, because in this case,
-                // sns_token_swap_lifecycle will be None, which is later treated as not
-                // terminal.
-                true
-            }
-
-            ProposalStatus::Failed => {
-                // Because because maturity is refunded to the Community Fund before setting
-                // execution status to failed.
-                true
-            }
-
-            ProposalStatus::Executed => {
-                // Need to wait for settle_community_fund_participation.
-                self.sns_token_swap_lifecycle
-                    .and_then(Lifecycle::from_i32)
-                    .unwrap_or(Lifecycle::Unspecified)
-                    .is_terminal()
-            }
-
-            status => {
-                println!(
-                    "{}WARNING: Proposal status unexpectedly {:?}. self={:#?}",
-                    LOG_PREFIX, status, self,
-                );
-                false
-            }
-        }
     }
 }

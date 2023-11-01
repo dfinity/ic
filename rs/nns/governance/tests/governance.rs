@@ -80,8 +80,8 @@ use ic_nns_governance::{
         settle_community_fund_participation::Committed,
         settle_neurons_fund_participation_request, swap_background_information,
         AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
-        BallotInfoChange, CreateServiceNervousSystem, DerivedProposalInformation, Empty,
-        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceChange, GovernanceError,
+        BallotInfoChange, CreateServiceNervousSystem, Empty, ExecuteNnsFunction,
+        Governance as GovernanceProto, GovernanceChange, GovernanceError,
         IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
         ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
@@ -12086,270 +12086,6 @@ lazy_static! {
 
 const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 
-#[tokio::test]
-async fn test_open_sns_token_swap_proposal_happy() {
-    // Step 1: Prepare the world.
-    let governance_proto = GovernanceProto {
-        economics: Some(NetworkEconomics::with_default_values()),
-        neurons: SWAP_ID_TO_NEURON.clone(),
-        ..Default::default()
-    };
-
-    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
-        [
-            EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
-            // Called by validation.
-            EXPECTED_SWAP_GET_STATE_CALL.clone(),
-            // Called again by fetch_swap_background_information. This is
-            // admittedly a bit wasteful, but not super horrible.
-            EXPECTED_SWAP_GET_STATE_CALL.clone(),
-            EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL.clone(),
-            (
-                EXPECTED_SWAP_OPEN_CALL.clone(),
-                Ok(Encode!(&sns_swap_pb::OpenResponse {}).unwrap()),
-            ),
-        ]
-        .into(),
-    ));
-
-    let driver = fake::FakeDriver::default();
-    let mut gov = Governance::new(
-        governance_proto,
-        Box::new(MockEnvironment {
-            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
-            call_canister_method_min_duration: None,
-        }),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    // Step 2: Run code under test. This is done indirectly via proposal. The
-    // proposal is executed right away, because of the "passage of time", as
-    // experienced via the MockEnvironment in gov.
-    gov.make_proposal(
-        &NeuronId { id: 1 },
-        &principal(1),
-        &OPEN_SNS_TOKEN_SWAP_PROPOSAL,
-    )
-    .await
-    .unwrap();
-
-    // Step 3: Inspect results.
-
-    // Step 3.1: Make sure expected canister call(s) take place.
-    assert!(
-        expected_call_canister_method_calls
-            .lock()
-            .unwrap()
-            .is_empty(),
-        "Calls that should have been made, but were not: {:#?}",
-        expected_call_canister_method_calls,
-    );
-
-    // Step 3.2: Inspect the proposal. In particular, look at its execution status.
-    assert_eq!(
-        gov.heap_data.proposals.len(),
-        1,
-        "{:#?}",
-        gov.heap_data.proposals
-    );
-    let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
-    let (_id, proposal) = proposals.pop().unwrap();
-    assert_eq!(
-        proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
-        "Open SNS Token Swap",
-        "{:#?}",
-        proposal.proposal.as_ref().unwrap()
-    );
-    assert_eq!(
-        proposal.executed_timestamp_seconds, DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-        "{:#?}",
-        proposal
-    );
-    assert_eq!(proposal.cf_participants, *CF_PARTICIPANTS);
-    assert_eq!(
-        proposal.sns_token_swap_lifecycle,
-        Some(sns_swap_pb::Lifecycle::Open as i32)
-    );
-    assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
-    assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
-    assert_eq!(
-        proposal.derived_proposal_information,
-        Some(DerivedProposalInformation {
-            swap_background_information: Some(EXPECTED_SWAP_BACKGROUND_INFORMATION.clone()),
-        }),
-    );
-
-    // Cannot be purged yet, because Community Fund participation has not been settled yet.
-    let proposal = ProposalData {
-        reward_event_round: 1, // Pretend that proposal is now settled.
-        ..proposal.clone()
-    };
-    let now = DEFAULT_TEST_START_TIMESTAMP_SECONDS + 999 * SECONDS_PER_DAY;
-    let voting_period_seconds = gov.voting_period_seconds()(proposal.topic());
-    assert_eq!(
-        proposal.reward_status(now, voting_period_seconds),
-        ProposalRewardStatus::Settled,
-    );
-    assert!(!proposal.can_be_purged(now, voting_period_seconds));
-
-    // Settle CF participation (Aborted).
-    {
-        use settle_community_fund_participation::{Aborted, Result};
-        gov.settle_community_fund_participation(
-            *TARGET_SWAP_CANISTER_ID,
-            &SettleCommunityFundParticipation {
-                open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
-                result: Some(Result::Aborted(Aborted::default())),
-            },
-        )
-        .await
-        .unwrap();
-
-        // Re-inspect the proposal.
-        let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
-        assert_eq!(proposals.len(), 1);
-        let (_id, proposal) = proposals.pop().unwrap();
-
-        // Force proposal to be seen as Settled (from a voting rewards point of view).
-        let proposal = ProposalData {
-            reward_event_round: 1,
-            ..proposal.clone()
-        };
-        assert_eq!(
-            proposal.reward_status(now, voting_period_seconds),
-            ProposalRewardStatus::Settled,
-        );
-
-        // Unlike a short while ago (right before this block), we are now settled
-        assert_eq!(
-            proposal.sns_token_swap_lifecycle,
-            Some(sns_swap_pb::Lifecycle::Aborted as i32),
-        );
-        assert!(proposal.can_be_purged(now, voting_period_seconds));
-    }
-}
-
-#[tokio::test]
-async fn test_open_sns_token_swap_proposal_execution_fails() {
-    // Step 1: Prepare the world.
-    let governance_proto = GovernanceProto {
-        economics: Some(NetworkEconomics::with_default_values()),
-        neurons: SWAP_ID_TO_NEURON.clone(),
-        ..Default::default()
-    };
-
-    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
-        [
-            EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
-            // Called by validation.
-            EXPECTED_SWAP_GET_STATE_CALL.clone(),
-            // Called again by fetch_swap_background_information. This is
-            // admittedly a bit wasteful, but not super horrible.
-            EXPECTED_SWAP_GET_STATE_CALL.clone(),
-            EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL.clone(),
-            (
-                EXPECTED_SWAP_OPEN_CALL.clone(),
-                Err((
-                    Some(999),
-                    "Something went wrong. E.g. invalid request.".to_string(),
-                )),
-            ),
-        ]
-        .into(),
-    ));
-
-    let driver = fake::FakeDriver::default();
-    let mut gov = Governance::new(
-        governance_proto,
-        // This is where the main expectation is set. To wit, we expect that
-        // execution of the proposal will cause governance to call out to the
-        // swap canister.
-        Box::new(MockEnvironment {
-            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
-            call_canister_method_min_duration: None,
-        }),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    // Step 2: Run code under test. This is done indirectly via proposal. The
-    // proposal is executed right away, because of the "passage of time", as
-    // experienced via the MockEnvironment in gov.
-    gov.make_proposal(
-        &NeuronId { id: 1 },
-        &principal(1),
-        &OPEN_SNS_TOKEN_SWAP_PROPOSAL,
-    )
-    .await
-    .unwrap();
-
-    // Step 3: Inspect results.
-
-    // Step 3.1: Make sure expected canister call(s) take place.
-    assert!(
-        expected_call_canister_method_calls
-            .lock()
-            .unwrap()
-            .is_empty(),
-        "Calls that should have been made, but were not: {:#?}",
-        expected_call_canister_method_calls,
-    );
-
-    // Step 3.2: Inspect the proposal. In particular, look at its execution status.
-    assert_eq!(
-        gov.heap_data.proposals.len(),
-        1,
-        "{:#?}",
-        gov.heap_data.proposals
-    );
-    let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
-    let (_id, proposal) = proposals.pop().unwrap();
-    assert_eq!(
-        proposal.proposal.as_ref().unwrap().title.as_ref().unwrap(),
-        "Open SNS Token Swap",
-        "{:#?}",
-        proposal.proposal.as_ref().unwrap()
-    );
-    assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
-    assert_eq!(proposal.cf_participants, *CF_PARTICIPANTS);
-    assert_eq!(proposal.sns_token_swap_lifecycle, None);
-    assert_ne!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
-    let failure_reason = proposal.failure_reason.clone().unwrap();
-    assert_eq!(
-        failure_reason.error_type,
-        ErrorType::External as i32,
-        "{:#?}",
-        proposal,
-    );
-    for snippet in ["Something went wrong", "999"] {
-        assert!(
-            failure_reason.error_message.contains(snippet),
-            "snippet = {}. proposal = {:#?}.",
-            snippet,
-            proposal,
-        );
-    }
-    assert_eq!(
-        proposal.derived_proposal_information,
-        Some(DerivedProposalInformation {
-            swap_background_information: Some(EXPECTED_SWAP_BACKGROUND_INFORMATION.clone()),
-        }),
-    );
-
-    // Step 3.3: Assert that neurons were restored. In particular, their
-    // maturity is back to what it was originally.
-    let mut observed_neurons = gov.neuron_store.heap_neurons().clone();
-    // Clear recent ballots. This is an expected difference when compared with
-    // the original ID -> neuron map.
-    observed_neurons
-        .get_mut(/* voter_neuron_id = */ &1)
-        .unwrap()
-        .recent_ballots
-        .clear();
-    assert_eq!(observed_neurons, *SWAP_ID_TO_NEURON);
-}
-
 /// Multiple calls to settle_community_fund should be idempotent.
 ///
 /// TODO[NNS1-2632]: Remove this test once `settle_community_fund_participation` is deprecated.
@@ -13007,7 +12743,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
     );
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
-        Some(sns_swap_pb::Lifecycle::Open as i32)
+        Some(Lifecycle::Open as i32)
     );
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
@@ -13039,19 +12775,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
         );
     }
 
-    // Cannot be purged yet, because Neurons' Fund participation has not been settled yet.
-    let proposal = ProposalData {
-        reward_event_round: 1, // Pretend that proposal is now settled.
-        ..proposal.clone()
-    };
-    let now = DEFAULT_TEST_START_TIMESTAMP_SECONDS + 999 * SECONDS_PER_DAY;
-    let voting_period_seconds = gov.voting_period_seconds()(proposal.topic());
-    assert_eq!(
-        proposal.reward_status(now, voting_period_seconds),
-        ProposalRewardStatus::Settled,
-    );
-    assert!(!proposal.can_be_purged(now, voting_period_seconds));
-
     // Settle NF participation (Commit).
     {
         use settle_neurons_fund_participation_request::{Committed, Result};
@@ -13076,22 +12799,11 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
         assert_eq!(proposals.len(), 1);
         let (_id, proposal) = proposals.pop().unwrap();
 
-        // Force proposal to be seen as Settled (from a voting rewards point of view).
-        let proposal = ProposalData {
-            reward_event_round: 1,
-            ..proposal.clone()
-        };
-        assert_eq!(
-            proposal.reward_status(now, voting_period_seconds),
-            ProposalRewardStatus::Settled,
-        );
-
         // Unlike a short while ago (right before this block), we are now settled
         assert_eq!(
             proposal.sns_token_swap_lifecycle,
-            Some(sns_swap_pb::Lifecycle::Committed as i32),
+            Some(Lifecycle::Committed as i32),
         );
-        assert!(proposal.can_be_purged(now, voting_period_seconds));
         assert_eq!(
             proposal.neurons_fund_data,
             *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
@@ -13315,7 +13027,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
     );
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
-        Some(sns_swap_pb::Lifecycle::Open as i32)
+        Some(Lifecycle::Open as i32)
     );
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
@@ -13346,19 +13058,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         );
     }
 
-    // Cannot be purged yet, because Neurons Fund participation has not been settled yet.
-    let proposal = ProposalData {
-        reward_event_round: 1, // Pretend that proposal is now settled.
-        ..proposal.clone()
-    };
-    let now = DEFAULT_TEST_START_TIMESTAMP_SECONDS + 999 * SECONDS_PER_DAY;
-    let voting_period_seconds = gov.voting_period_seconds()(proposal.topic());
-    assert_eq!(
-        proposal.reward_status(now, voting_period_seconds),
-        ProposalRewardStatus::Settled,
-    );
-    assert!(!proposal.can_be_purged(now, voting_period_seconds));
-
     // Settle NF participation (Abort).
     {
         use settle_neurons_fund_participation_request::{Aborted, Result};
@@ -13379,22 +13078,11 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         assert_eq!(proposals.len(), 1);
         let (_id, proposal) = proposals.pop().unwrap();
 
-        // Force proposal to be seen as Settled (from a voting rewards point of view).
-        let proposal = ProposalData {
-            reward_event_round: 1,
-            ..proposal.clone()
-        };
-        assert_eq!(
-            proposal.reward_status(now, voting_period_seconds),
-            ProposalRewardStatus::Settled,
-        );
-
         // Unlike a short while ago (right before this block), we are now aborted
         assert_eq!(
             proposal.sns_token_swap_lifecycle,
-            Some(sns_swap_pb::Lifecycle::Aborted as i32),
+            Some(Lifecycle::Aborted as i32),
         );
-        assert!(proposal.can_be_purged(now, voting_period_seconds));
 
         assert_neurons_fund_unchanged(&gov, SWAP_ID_TO_NEURON.clone());
 

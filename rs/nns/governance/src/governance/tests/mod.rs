@@ -2,10 +2,8 @@ use super::*;
 use crate::{
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap, Migration, Migrations},
-        proposal::Action,
         settle_community_fund_participation, ExecuteNnsFunction, GovernanceError, Neuron,
-        OpenSnsTokenSwap, Proposal, ProposalData, ProposalStatus, SettleCommunityFundParticipation,
-        Tally,
+        OpenSnsTokenSwap, SettleCommunityFundParticipation,
     },
     storage::STABLE_NEURON_STORE,
 };
@@ -916,48 +914,6 @@ fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
     );
 
     assert_clean_refund(&mut neuron_store, &observed_cf_neurons, &NEURON_STORE);
-}
-
-#[test]
-fn protect_not_concluded_open_sns_token_swap_proposal_from_gc() {
-    let now_seconds = 1661731390;
-    let voting_period_seconds = ONE_DAY_SECONDS;
-    let mut subject = ProposalData {
-        decided_timestamp_seconds: 1, // has been decided
-        reward_event_round: 1,        // has been rewarded
-        proposal: Some(Proposal::default()),
-        executed_timestamp_seconds: 1,
-        latest_tally: Some(Tally {
-            yes: 1,
-            no: 0,
-            total: 1,
-            timestamp_seconds: now_seconds,
-        }),
-        ..Default::default()
-    };
-    assert_eq!(subject.status(), ProposalStatus::Executed);
-    assert!(subject.can_be_purged(now_seconds, voting_period_seconds));
-
-    // Modify subject slightly to make it no longer ineligible for purge.
-    subject.proposal.as_mut().unwrap().action =
-        Some(Action::OpenSnsTokenSwap(OpenSnsTokenSwap::default()));
-    assert!(!subject.can_be_purged(now_seconds, voting_period_seconds));
-
-    let rejected_proposal_data = ProposalData {
-        latest_tally: Some(Tally {
-            yes: 0,
-            no: 1,
-            total: 1,
-            timestamp_seconds: now_seconds,
-        }),
-        ..subject.clone()
-    };
-    assert_eq!(rejected_proposal_data.status(), ProposalStatus::Rejected);
-    assert!(rejected_proposal_data.can_be_purged(now_seconds, voting_period_seconds));
-
-    // Modify again to make it purge-able.
-    subject.sns_token_swap_lifecycle = Some(Lifecycle::Aborted as i32);
-    assert!(subject.can_be_purged(now_seconds, voting_period_seconds));
 }
 
 #[test]
