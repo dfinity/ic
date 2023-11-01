@@ -14,14 +14,8 @@ LEDGER_CANISTER_ID="ryjl3-tyaaa-aaaaa-aaaba-cai"
 ARCHIVE_CANISTER_ID="qjdve-lqaaa-aaaaa-aaaeq-cai"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 TMP_DIR="$SCRIPT_DIR/tmp" # need a persistent directory from within dev container
-INFO_FILE=$(find "$TMP_DIR" -iname "*.sourceme")
 ROSETTA_DATA_DIR_PARENT="$TMP_DIR/rosetta_data"
-
-#shellcheck source=/dev/null
-source "$INFO_FILE"
-
-source "$SCRIPT_DIR/init_identity.sh"
-init_identity # initialize the dfx identity
+HOME="${DFX_HOME:-$HOME}"
 
 # the directory used to store the ledger blocks is
 # the hash of the ledger and the archive nodes
