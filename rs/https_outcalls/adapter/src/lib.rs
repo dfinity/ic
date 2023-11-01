@@ -17,8 +17,8 @@ pub use rpc_server::CanisterHttp;
 
 use futures::{Future, Stream};
 use hyper::{client::connect::HttpConnector, Client};
+use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
-use hyper_tls::HttpsConnector;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -50,13 +50,19 @@ impl AdapterServer {
             auth: None,
             connector: http_connector.clone(),
         };
-        let mut https_connector = HttpsConnector::new_with_connector(proxy_connector);
-        https_connector.https_only(true);
+        let https_connector = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .wrap_connector(proxy_connector);
         let socks_client = Client::builder().build::<_, hyper::Body>(https_connector);
 
         // Https client setup.
-        let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-        https_connector.https_only(true);
+        let https_connector = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .wrap_connector(http_connector);
         let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
         let canister_http = CanisterHttp::new(https_client, socks_client, logger, metrics);
 

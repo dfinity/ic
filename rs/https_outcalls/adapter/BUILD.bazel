@@ -17,7 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:http",
     "@crate_index//:hyper",
     "@crate_index//:hyper-socks2",
-    "@crate_index//:hyper-tls",
+    "@crate_index//:hyper-rustls",
     "@crate_index//:itertools",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
