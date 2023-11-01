@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ic-config = { path = "../../config" }
 ic-btc-interface = { workspace = true }
 ic-btc-types-internal = { path = "../types/internal" }
 ic-error-types = { path = "../../types/error_types" }

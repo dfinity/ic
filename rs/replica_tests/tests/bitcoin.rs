@@ -7,6 +7,7 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use ic_btc_types_internal::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
+use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_config::{
     execution_environment::{BitcoinConfig, Config as HypervisorConfig},
     subnet_config::SubnetConfig,
@@ -24,6 +25,7 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::ingress::WasmResult;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use tonic::transport::Server;
@@ -183,6 +185,9 @@ fn bitcoin_test_with_config<F: 'static>(
     let _ma = spawn_mock_bitcoin_adapter(tmp_uds_dir.clone(), adapter);
     config.adapters_config.bitcoin_mainnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
     config.adapters_config.bitcoin_testnet_uds_path = Some(tmp_uds_dir.path().join("uds.socket"));
+    config.bitcoin_payload_builder_config = BitcoinPayloadBuilderConfig {
+        adapter_timeout: Duration::from_secs(1),
+    };
 
     utils::canister_test_with_config(config, test);
 }

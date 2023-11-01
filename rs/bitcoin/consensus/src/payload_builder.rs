@@ -13,6 +13,7 @@ use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject,
 };
+use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload},
@@ -82,6 +83,7 @@ pub struct BitcoinPayloadBuilder {
     >,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
+    config: Config,
     log: ReplicaLogger,
 }
 
@@ -103,6 +105,7 @@ impl BitcoinPayloadBuilder {
         >,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient + Send + Sync>,
+        config: Config,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -112,6 +115,7 @@ impl BitcoinPayloadBuilder {
             bitcoin_testnet_adapter_client,
             subnet_id,
             registry,
+            config,
             log,
         }
     }
@@ -146,7 +150,12 @@ impl BitcoinPayloadBuilder {
 
             // Send request to the adapter.
             let timer = Timer::start();
-            let result = adapter_client.send_blocking(request.clone(), Options::default());
+            let result = adapter_client.send_blocking(
+                request.clone(),
+                Options {
+                    timeout: self.config.adapter_timeout,
+                },
+            );
 
             // Update logs and metrics.
             match &result {

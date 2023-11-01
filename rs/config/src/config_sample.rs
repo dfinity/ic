@@ -358,6 +358,8 @@ pub const SAMPLE_CONFIG: &str = r#"
         // The canister http adapter socket file is: /ic-os/guestos/rootfs/systemd/system/ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
     },
+    bitcoin_payload_builder_config: {
+    },
 }
 "#;
 
