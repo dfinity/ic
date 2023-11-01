@@ -1,6 +1,6 @@
 use http::{Method, Response, Uri};
 use hyper::{body::HttpBody as _, client::Client, client::HttpConnector, Body};
-use hyper_tls::HttpsConnector;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use ic_crypto_sha2::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
 use std::error::Error;
@@ -35,7 +35,11 @@ impl FileDownloader {
         timeout: Duration,
         allow_redirects: bool,
     ) -> Self {
-        let https = HttpsConnector::new();
+        let https = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_or_http()
+            .enable_http1()
+            .build();
         let http_client = Client::builder().build::<_, hyper::Body>(https);
 
         Self {
