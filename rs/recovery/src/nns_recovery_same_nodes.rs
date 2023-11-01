@@ -75,7 +75,6 @@ pub struct NNSRecoverySameNodes {
     pub params: NNSRecoverySameNodesArgs,
     pub recovery_args: RecoveryArgs,
     pub recovery: Recovery,
-    interactive: bool,
     logger: Logger,
     new_state_dir: PathBuf,
 }
@@ -85,7 +84,6 @@ impl NNSRecoverySameNodes {
         logger: Logger,
         recovery_args: RecoveryArgs,
         subnet_args: NNSRecoverySameNodesArgs,
-        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -105,7 +103,6 @@ impl NNSRecoverySameNodes {
             recovery,
             logger,
             new_state_dir,
-            interactive,
         }
     }
 
@@ -128,7 +125,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     }
 
     fn interactive(&self) -> bool {
-        self.interactive
+        !self.recovery_args.skip_prompts
     }
 
     fn read_step_params(&mut self, step_type: StepType) {

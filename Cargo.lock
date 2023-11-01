@@ -8313,7 +8313,6 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-governance",
  "ic-nns-test-utils",
- "ic-recovery",
  "ic-registry-subnet-type",
  "ic-sns-wasm",
  "ic-types",

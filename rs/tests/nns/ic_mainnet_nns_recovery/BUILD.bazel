@@ -17,7 +17,6 @@ rust_library(
         "//rs/nns/governance",
         "//rs/nns/sns-wasm",
         "//rs/nns/test_utils",
-        "//rs/recovery",
         "//rs/registry/subnet_type",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rust_canisters/canister_test",

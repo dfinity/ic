@@ -39,6 +39,10 @@ struct SplitArgs {
     #[clap(long)]
     test: bool,
 
+    /// Flag to make the tool non interactive. No input from the user is requested.
+    #[clap(long)]
+    pub skip_prompts: bool,
+
     #[clap(flatten)]
     subnet_splitting_args: SubnetSplittingArgs,
 }
@@ -91,21 +95,21 @@ fn subnet_splitting(
     mut neuron_args: Option<NeuronArgs>,
 ) {
     cli::print_step(&logger, "Subnet Splitting");
-    cli::wait_for_confirmation(&logger);
-
+    if !recovery_args.skip_prompts {
+        cli::wait_for_confirmation(&logger);
+    }
     if neuron_args.is_none() && !recovery_args.test_mode {
         neuron_args = Some(cli::read_neuron_args(&logger));
     }
 
     let subnet_splitting = SubnetSplitting::new(
         logger.clone(),
-        recovery_args,
+        recovery_args.clone(),
         neuron_args,
         subnet_splitting_args,
-        /*interactive=*/ true,
     );
 
-    cli::execute_steps(&logger, subnet_splitting);
+    cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_splitting);
 }
 
 fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
@@ -115,6 +119,7 @@ fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
         replica_version: args.replica_version,
         key_file: args.key_file,
         test_mode: args.test,
+        skip_prompts: args.skip_prompts,
     };
 
     let subnet_splitting_state =

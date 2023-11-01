@@ -20,7 +20,6 @@ ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/te
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-governance = { path = "../../../nns/governance" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
-ic-recovery = { path = "../../../recovery" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-sns-wasm = { path = "../../../nns/sns-wasm" }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }

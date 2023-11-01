@@ -50,6 +50,10 @@ pub struct RecoveryToolArgs {
     #[clap(long)]
     pub test: bool,
 
+    /// Flag to make the tool non interactive. No input from the user is requested.
+    #[clap(long)]
+    pub skip_prompts: bool,
+
     #[clap(subcommand)]
     pub subcmd: Option<SubCommand>,
 }
