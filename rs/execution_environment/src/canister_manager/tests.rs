@@ -24,8 +24,8 @@ use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
-    InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply,
+    InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, StoredChunksArgs, StoredChunksReply,
+    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -6848,7 +6848,7 @@ fn upload_chunk_works_from_controller() {
 }
 
 #[test]
-fn upload_chunk_fails_from_non_controller() {
+fn chunk_store_methods_fail_from_non_controller() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
@@ -6858,37 +6858,57 @@ fn upload_chunk_fails_from_non_controller() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
         .unwrap();
 
-    let chunk = vec![1, 2, 3, 4, 5];
-
-    let args = UploadChunkArgs {
-        canister_id: canister_id.into(),
-        chunk,
-    };
-
-    let upload_chunk = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
+    let methods = [
+        (
             Method::UploadChunk,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            Cycles::new(CYCLES.get() / 2),
-        )
-        .build();
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: vec![1, 2, 3, 4, 5],
+            }
+            .encode(),
+        ),
+        (
+            Method::ClearChunkStore,
+            ClearChunkStoreArgs {
+                canister_id: canister_id.into(),
+            }
+            .encode(),
+        ),
+        (
+            Method::StoredChunks,
+            StoredChunksArgs {
+                canister_id: canister_id.into(),
+            }
+            .encode(),
+        ),
+    ];
 
-    let result = test.ingress(uc, "update", upload_chunk);
-    let expected_err = format!(
-        "Only the controllers of the canister {} can control it.",
-        canister_id
-    );
-    match result {
-        Ok(WasmResult::Reject(reject)) => {
-            assert!(
-                reject.contains(&expected_err),
-                "Reject \"{reject}\" does not contain expected error \"{expected_err}\""
-            );
+    for (method, args) in methods {
+        let wasm = wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                method,
+                call_args()
+                    .other_side(args)
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::new(CYCLES.get() / 2),
+            )
+            .build();
+
+        let result = test.ingress(uc, "update", wasm);
+        let expected_err = format!(
+            "Only the controllers of the canister {} can control it.",
+            canister_id
+        );
+        match result {
+            Ok(WasmResult::Reject(reject)) => {
+                assert!(
+                    reject.contains(&expected_err),
+                    "Reject \"{reject}\" does not contain expected error \"{expected_err}\""
+                );
+            }
+            other => panic!("Expected reject, but got {:?}", other),
         }
-        other => panic!("Expected reject, but got {:?}", other),
     }
 }
 
@@ -7062,28 +7082,48 @@ fn upload_chunk_counts_to_memory_usage() {
 }
 
 #[test]
-fn upload_chunk_fails_with_feature_disabled() {
+fn chunk_store_methods_fail_with_feature_disabled() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(CYCLES);
     let initial_subnet_available_memory = test.subnet_available_memory();
 
-    let chunk = vec![1, 2, 3, 4, 5];
+    let methods = [
+        (
+            Method::UploadChunk,
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: vec![1, 2, 3, 4, 5],
+            }
+            .encode(),
+        ),
+        (
+            Method::ClearChunkStore,
+            ClearChunkStoreArgs {
+                canister_id: canister_id.into(),
+            }
+            .encode(),
+        ),
+        (
+            Method::StoredChunks,
+            StoredChunksArgs {
+                canister_id: canister_id.into(),
+            }
+            .encode(),
+        ),
+    ];
 
-    let upload_args = UploadChunkArgs {
-        canister_id: canister_id.into(),
-        chunk,
-    };
+    for (method, args) in methods {
+        let result = test.subnet_message(method.to_string(), args);
+        let error_code = result.unwrap_err().code();
+        assert_eq!(error_code, ErrorCode::CanisterContractViolation);
 
-    let result = test.subnet_message("upload_chunk", upload_args.encode());
-    let error_code = result.unwrap_err().code();
-    assert_eq!(error_code, ErrorCode::CanisterContractViolation);
-
-    assert_eq!(
-        test.subnet_available_memory(),
-        initial_subnet_available_memory
-    );
+        assert_eq!(
+            test.subnet_available_memory(),
+            initial_subnet_available_memory
+        );
+    }
 }
 
 #[test]
@@ -7308,43 +7348,87 @@ fn clear_chunk_store_works() {
 }
 
 #[test]
-fn clear_chunk_store_fails_from_non_controller() {
+fn stored_chunks_works() {
+    use serde_bytes::ByteBuf;
+
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
 
     let canister_id = test.create_canister(CYCLES);
-    let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
-        .unwrap();
 
-    let args = ClearChunkStoreArgs {
-        canister_id: canister_id.into(),
-    };
+    let chunk1 = vec![1, 2, 3, 4, 5];
+    let hash1 = ic_crypto_sha2::Sha256::hash(&chunk1);
+    let chunk2 = vec![0x42; 1000];
+    let hash2 = ic_crypto_sha2::Sha256::hash(&chunk2);
 
-    let clear_store = wasm()
-        .call_with_cycles(
-            CanisterId::ic_00(),
-            Method::ClearChunkStore,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-            Cycles::new(CYCLES.get() / 2),
-        )
-        .build();
+    // Initial store has no chunks
+    let reply = Decode!(
+        &get_reply(
+            test.subnet_message(
+                "stored_chunks",
+                StoredChunksArgs {
+                    canister_id: canister_id.into(),
+                }
+                .encode(),
+            ),
+        ),
+        StoredChunksReply
+    )
+    .unwrap();
+    assert_eq!(reply, StoredChunksReply(vec![]));
 
-    let result = test.ingress(uc, "update", clear_store);
-    let expected_err = format!(
-        "Only the controllers of the canister {} can control it.",
-        canister_id
-    );
-    match result {
-        Ok(WasmResult::Reject(reject)) => {
-            assert!(
-                reject.contains(&expected_err),
-                "Reject \"{reject}\" does not contain expected error \"{expected_err}\""
-            );
+    // Then one chunk
+    test.subnet_message(
+        "upload_chunk",
+        UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk: chunk1,
         }
-        other => panic!("Expected reject, but got {:?}", other),
-    }
+        .encode(),
+    )
+    .unwrap();
+
+    let reply = Decode!(
+        &get_reply(
+            test.subnet_message(
+                "stored_chunks",
+                StoredChunksArgs {
+                    canister_id: canister_id.into(),
+                }
+                .encode(),
+            ),
+        ),
+        StoredChunksReply
+    )
+    .unwrap();
+    assert_eq!(reply, StoredChunksReply(vec![ByteBuf::from(hash1)]));
+
+    // Then two chunks
+    test.subnet_message(
+        "upload_chunk",
+        UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk: chunk2,
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    let reply = Decode!(
+        &get_reply(
+            test.subnet_message(
+                "stored_chunks",
+                StoredChunksArgs {
+                    canister_id: canister_id.into(),
+                }
+                .encode(),
+            ),
+        ),
+        StoredChunksReply
+    )
+    .unwrap();
+    let mut expected = vec![ByteBuf::from(hash1), ByteBuf::from(hash2)];
+    expected.sort();
+    assert_eq!(reply, StoredChunksReply(expected));
 }

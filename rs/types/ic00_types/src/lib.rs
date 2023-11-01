@@ -2293,3 +2293,27 @@ impl ClearChunkStoreArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct StoredChunksArgs {
+    pub canister_id: PrincipalId,
+}
+
+impl Payload<'_> for StoredChunksArgs {}
+
+impl StoredChunksArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+/// Struct to be returned when listing chunks in the Wasm store
+/// `(vec blob)`
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub struct StoredChunksReply(pub Vec<serde_bytes::ByteBuf>);
+
+impl Payload<'_> for StoredChunksReply {}

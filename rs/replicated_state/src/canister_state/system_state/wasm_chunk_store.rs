@@ -76,7 +76,14 @@ impl WasmChunkStore {
         NumBytes::from(self.metadata.size.get() * PAGE_SIZE as u64)
     }
 
-    pub fn get_chunk_data(&self, chunk_hash: &[u8; 32]) -> Option<impl Iterator<Item = &[u8]>> {
+    pub fn keys(&self) -> impl Iterator<Item = &WasmChunkHash> {
+        self.metadata.chunks.keys()
+    }
+
+    pub fn get_chunk_data(
+        &self,
+        chunk_hash: &WasmChunkHash,
+    ) -> Option<impl Iterator<Item = &[u8]>> {
         self.metadata
             .chunks
             .get(chunk_hash)
