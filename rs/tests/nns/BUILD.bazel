@@ -19,9 +19,11 @@ system_test(
     },
     env_inherit = ["SSH_AUTH_SOCK"],
     tags = [
-        "manual",
+        "experimental_system_test_colocation",
         "no-cache",
         "no-sandbox",
+        "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
