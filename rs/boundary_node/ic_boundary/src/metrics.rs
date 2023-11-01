@@ -1,4 +1,8 @@
-use std::{pin::Pin, sync::Arc, time::Instant};
+use std::{
+    pin::Pin,
+    sync::{atomic::AtomicBool, Arc},
+    time::Instant,
+};
 
 use anyhow::Error;
 use async_trait::async_trait;
@@ -129,6 +133,7 @@ pub struct MetricsBody<D, E> {
     inner: Pin<Box<dyn HttpBody<Data = D, Error = E> + Send + 'static>>,
     // TODO see if we can make this FnOnce somehow
     callback: Box<dyn Fn(u64, Result<(), String>) + Send + 'static>,
+    callback_done: AtomicBool,
     expected_size: Option<u64>,
     bytes_sent: u64,
 }
@@ -152,9 +157,25 @@ impl<D, E> MetricsBody<D, E> {
         Self {
             inner: Box::pin(body),
             callback: Box::new(callback),
+            callback_done: AtomicBool::new(false),
             expected_size,
             bytes_sent: 0,
         }
+    }
+
+    // In certain cases the users of HttpBody trait can cause us to run callbacks more than once
+    // Use AtomicBool to prevent that and run it at most once
+    pub fn do_callback(&mut self, res: Result<(), String>) {
+        // Make locking scope shorter
+        {
+            let done = self.callback_done.get_mut();
+            if *done {
+                return;
+            }
+            *done = true;
+        }
+
+        (self.callback)(self.bytes_sent, res);
     }
 }
 
@@ -195,20 +216,20 @@ where
 
                     // Check if we already got what was expected
                     if Some(self.bytes_sent) >= self.expected_size {
-                        (self.callback)(self.bytes_sent, Ok(()));
+                        self.do_callback(Ok(()));
                     }
                 }
 
                 // Error occured, execute callback
                 Err(e) => {
                     // Error is not Copy/Clone so use string instead
-                    (self.callback)(self.bytes_sent, Err(e.to_string()));
+                    self.do_callback(Err(e.to_string()));
                 }
             },
 
             // Nothing left, execute callback
             Poll::Ready(None) => {
-                (self.callback)(self.bytes_sent, Ok(()));
+                self.do_callback(Ok(()));
             }
 
             // Do nothing
