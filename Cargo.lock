@@ -1259,7 +1259,7 @@ dependencies = [
  "hyper 0.14.26",
  "ic-agent",
  "ic-utils 0.27.0",
- "indoc 1.0.9",
+ "indoc",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -4913,7 +4913,7 @@ dependencies = [
  "humantime",
  "hyper 0.14.26",
  "ic-agent",
- "indoc 1.0.9",
+ "indoc",
  "mockall 0.11.4",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
@@ -11863,12 +11863,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa799dd5ed20a7e349f3b4639aa80d74549c81716d9ec4f994c9b5815598306"
 
 [[package]]
-name = "indoc"
-version = "2.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e186cfbae8084e513daff4240b4797e342f988cecda4fb6c939150f96315fd8"
-
-[[package]]
 name = "infer"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16342,7 +16336,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.4.6",
- "indoc 2.0.4",
+ "indoc",
  "tempfile",
  "tokio",
 ]
@@ -17334,7 +17328,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
- "indoc 1.0.9",
+ "indoc",
  "itertools",
  "json5",
  "k256",
