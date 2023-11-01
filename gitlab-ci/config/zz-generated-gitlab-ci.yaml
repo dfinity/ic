@@ -259,18 +259,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
-".build-env-base":
-  artifacts:
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".build-ic":
   artifacts:
     expire_in: 3 days
@@ -352,7 +340,6 @@
       - coredumps/*.gz
     when: always
   extends:
-    - ".build-env-base"
     - ".ic-build-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:aae2b03ba3505778f0a7f8deb8279351b964d555b1ca9e9ff5c7643600b08666
