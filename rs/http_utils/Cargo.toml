@@ -1,7 +1,10 @@
 [package]
 name = "ic-http-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 flate2 = "1.0.20"

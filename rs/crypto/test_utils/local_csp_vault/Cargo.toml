@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-test-utils-local-csp-vault"
-version = "0.8.0"
-edition = "2021"
 description = "Test utilities for local CSP vault"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider"}

@@ -1,7 +1,10 @@
 [package]
 name = "bazelifier"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 askama = { version = "0.11.1", features = ["serde-json"] }

@@ -1,8 +1,11 @@
 [package]
 name = "dfn_macro"
-version = "0.8.0"
-edition = "2021"
 build = "build.rs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 proc-macro = true

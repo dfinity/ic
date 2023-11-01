@@ -1,7 +1,10 @@
 [package]
 name = "ic-bitcoin-canister-mock"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 bech32 = "0.9.0"

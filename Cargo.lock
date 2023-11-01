@@ -887,7 +887,7 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "bazelifier"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "clap 3.2.23",
@@ -1215,7 +1215,7 @@ dependencies = [
 
 [[package]]
 name = "boundary-node-control-plane"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1485,7 +1485,7 @@ dependencies = [
 
 [[package]]
 name = "call-tree-test"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "dfn_core",
  "dfn_json",
@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "canister-creator"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "canister-test"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "backoff 0.3.0",
  "candid",
@@ -1612,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "canister_sandbox"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "cc",
  "ic-canister-sandbox-backend-lib",
@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "certificate-issuer"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "certificate-syncer"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "certificate_orchestrator"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1783,7 +1783,7 @@ dependencies = [
 
 [[package]]
 name = "certificate_orchestrator_interface"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "addr",
  "candid",
@@ -2105,7 +2105,7 @@ dependencies = [
  "crossbeam-channel",
  "erased-serde",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "regex",
  "serde",
  "serde_derive",
@@ -2407,7 +2407,7 @@ dependencies = [
 
 [[package]]
 name = "criterion-time"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "criterion",
  "libc",
@@ -2679,7 +2679,7 @@ dependencies = [
 
 [[package]]
 name = "cycles-minting-canister"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
@@ -2801,7 +2801,7 @@ dependencies = [
 
 [[package]]
 name = "denylist-updater"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2925,7 +2925,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_candid"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
@@ -2937,7 +2937,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "canister-test",
  "dfn_json",
@@ -2947,7 +2947,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_http"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "dfn_candid",
@@ -2958,7 +2958,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_http_metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "dfn_candid",
  "dfn_core",
@@ -2969,7 +2969,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_json"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "on_wire",
  "serde",
@@ -2978,7 +2978,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_macro"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.31",
@@ -2988,7 +2988,7 @@ dependencies = [
 
 [[package]]
 name = "dfn_protobuf"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "dfn_core",
  "ic-base-types",
@@ -3235,7 +3235,7 @@ checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
 name = "elastic_common_schema"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3271,7 +3271,7 @@ dependencies = [
 
 [[package]]
 name = "embedders_bench"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
@@ -3512,7 +3512,7 @@ dependencies = [
 
 [[package]]
 name = "execution-environment-bench"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "criterion",
  "ic-config",
@@ -3581,7 +3581,7 @@ checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
 
 [[package]]
 name = "fe-derive"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "num-bigint-dig",
@@ -4423,7 +4423,7 @@ dependencies = [
 
 [[package]]
 name = "http_counter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk",
@@ -4440,7 +4440,7 @@ checksum = "d897f394bad6a705d5f4104762e116a75639e470d80901eed05a860a95cb1904"
 
 [[package]]
 name = "httpbin-rs"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "axum",
  "axum-server",
@@ -4629,7 +4629,7 @@ dependencies = [
 
 [[package]]
 name = "ic-adapter-metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-adapter-metrics-service",
  "ic-async-utils",
@@ -4670,7 +4670,7 @@ dependencies = [
 
 [[package]]
 name = "ic-admin"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4745,7 +4745,7 @@ dependencies = [
 
 [[package]]
 name = "ic-admin-derive"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "quote 1.0.31",
  "syn 1.0.109",
@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "ic-artifact-manager"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "bincode",
@@ -4812,7 +4812,7 @@ dependencies = [
 
 [[package]]
 name = "ic-artifact-pool"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "byteorder",
@@ -4831,7 +4831,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "lmdb-rkv",
  "lmdb-rkv-sys",
  "nix",
@@ -4852,7 +4852,7 @@ dependencies = [
 
 [[package]]
 name = "ic-async-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-stream",
  "byte-unit",
@@ -4871,7 +4871,7 @@ dependencies = [
 
 [[package]]
 name = "ic-backtrace"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "lazy_static",
  "regex",
@@ -4880,7 +4880,7 @@ dependencies = [
 
 [[package]]
 name = "ic-backup"
-version = "1.0.0"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "clap 3.2.23",
@@ -4907,7 +4907,7 @@ dependencies = [
 
 [[package]]
 name = "ic-balance-exporter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4934,7 +4934,7 @@ dependencies = [
 
 [[package]]
 name = "ic-base-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "arbitrary",
  "assert_matches",
@@ -4962,7 +4962,7 @@ dependencies = [
 
 [[package]]
 name = "ic-base-types-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -4970,7 +4970,7 @@ dependencies = [
 
 [[package]]
 name = "ic-bitcoin-canister-mock"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "bech32 0.9.1",
  "bitcoin 0.28.2",
@@ -4992,7 +4992,7 @@ dependencies = [
 
 [[package]]
 name = "ic-boundary"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -5064,7 +5064,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-adapter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "bitcoin 0.28.2",
  "bitcoincore-rpc",
@@ -5106,7 +5106,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-adapter-client"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-adapter-metrics",
  "ic-async-utils",
@@ -5127,7 +5127,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-adapter-test-utils"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "bitcoin 0.28.2",
  "hex",
@@ -5136,7 +5136,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-consensus"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-btc-interface",
  "ic-btc-types-internal",
@@ -5177,7 +5177,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-service"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "prost",
  "tonic",
@@ -5194,7 +5194,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-types-internal"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-btc-interface",
@@ -5214,7 +5214,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-client"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "backoff 0.3.0",
@@ -5224,7 +5224,7 @@ dependencies = [
  "hyper-rustls",
  "ic-canister-client-sender",
  "ic-canonical-state",
- "ic-certification 0.8.0",
+ "ic-certification 0.9.0",
  "ic-certification-test-utils",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-test-utils-root-of-trust",
@@ -5252,7 +5252,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-client-sender"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ed25519-consensus",
  "ic-base-types",
@@ -5285,7 +5285,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-profiler"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-metrics-encoder",
  "ic0",
@@ -5293,7 +5293,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-sandbox-backend-lib"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-canister-sandbox-common",
@@ -5310,7 +5310,7 @@ dependencies = [
  "ic-system-api",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-wasm-types",
  "libc",
  "libflate",
@@ -5326,7 +5326,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-sandbox-common"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "bytes",
@@ -5337,7 +5337,7 @@ dependencies = [
  "ic-sys",
  "ic-system-api",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "libc",
  "nix",
  "serde",
@@ -5346,7 +5346,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-sandbox-launcher"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "cc",
  "ic-canister-sandbox-common",
@@ -5357,7 +5357,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-sandbox-replica-controller"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-canister-sandbox-backend-lib",
  "ic-canister-sandbox-common",
@@ -5389,7 +5389,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-serve"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "by_address",
  "ic-canister-log 0.2.0",
@@ -5403,7 +5403,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canisters-http-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "serde",
@@ -5412,7 +5412,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canonical-state"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -5430,7 +5430,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-wasm-types",
  "itertools",
  "lazy_static",
@@ -5450,7 +5450,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canonical-state-tree-hash"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-canonical-state-tree-hash-test-utils",
@@ -5468,7 +5468,7 @@ dependencies = [
 
 [[package]]
 name = "ic-canonical-state-tree-hash-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-canonical-state-tree-hash",
  "ic-crypto-tree-hash",
@@ -5547,7 +5547,7 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "criterion",
@@ -5590,7 +5590,7 @@ dependencies = [
 
 [[package]]
 name = "ic-certification-test-utils"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
@@ -5606,7 +5606,7 @@ dependencies = [
 
 [[package]]
 name = "ic-certification-version"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "strum 0.24.1",
  "strum_macros 0.24.3",
@@ -5625,7 +5625,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ckbtc-agent"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-agent",
@@ -5638,7 +5638,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ckbtc-kyt"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "assert_matches",
@@ -5660,7 +5660,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ckbtc-minter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -5760,7 +5760,7 @@ dependencies = [
 
 [[package]]
 name = "ic-config"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ic-base-types",
@@ -5779,7 +5779,7 @@ dependencies = [
 
 [[package]]
 name = "ic-consensus"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "criterion",
@@ -5822,7 +5822,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "mockall 0.7.2",
  "phantom_newtype",
  "prometheus",
@@ -5868,7 +5868,7 @@ dependencies = [
 
 [[package]]
 name = "ic-consensus-mocks"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-artifact-pool",
  "ic-config",
@@ -5891,7 +5891,7 @@ dependencies = [
 
 [[package]]
 name = "ic-consensus-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-consensus",
@@ -5913,18 +5913,18 @@ dependencies = [
 
 [[package]]
 name = "ic-constants"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-context-logger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "slog",
 ]
 
 [[package]]
 name = "ic-crypto"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -6021,7 +6021,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-ecdsa-secp256k1"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-sha2",
@@ -6038,7 +6038,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-ecdsa-secp256r1"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-getrandom-for-wasm",
@@ -6057,7 +6057,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-extended-bip32"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-threshold-sig-ecdsa",
@@ -6065,7 +6065,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-for-verification-only"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
@@ -6081,7 +6081,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-getrandom-for-wasm"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "getrandom 0.2.8",
 ]
@@ -6095,7 +6095,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-interfaces-sig-verification"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-types",
 ]
@@ -6118,7 +6118,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-der-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-test-vectors",
@@ -6129,7 +6129,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
@@ -6151,7 +6151,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-ecdsa-secp256r1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
@@ -6174,7 +6174,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-ed25519"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
@@ -6204,12 +6204,12 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-iccsa"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
- "ic-certification 0.8.0",
+ "ic-certification 0.9.0",
  "ic-certification-test-utils",
  "ic-crypto",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -6231,7 +6231,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-iccsa-test-utils"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-certification-test-utils",
  "ic-crypto-sha2",
@@ -6242,7 +6242,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-rsa-pkcs1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-getrandom-for-wasm",
@@ -6262,7 +6262,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-bls12-381-type"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "criterion",
  "hex",
@@ -6282,7 +6282,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-bls12-381-vetkd"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "criterion",
  "hex",
@@ -6295,7 +6295,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-csp"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -6343,7 +6343,7 @@ dependencies = [
  "ic-test-utilities-in-memory-logger",
  "ic-types",
  "ic-types-test-utils",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "lazy_static",
  "mockall 0.7.2",
  "parking_lot 0.12.1",
@@ -6378,7 +6378,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-csp-proptest-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
@@ -6398,7 +6398,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-csp-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -6406,7 +6406,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-csp-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-csp",
@@ -6428,7 +6428,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-hmac"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-sha2",
@@ -6437,7 +6437,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-logmon"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "convert_case 0.6.0",
  "ic-metrics",
@@ -6448,7 +6448,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-multi-sig-bls12381"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
@@ -6470,7 +6470,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-seed"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-sha2",
@@ -6483,14 +6483,14 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-sha2"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "sha2 0.10.6",
 ]
 
 [[package]]
 name = "ic-crypto-internal-test-vectors"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
@@ -6500,7 +6500,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-threshold-sig-bls12381"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "cached",
@@ -6530,14 +6530,14 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-threshold-sig-bls12381-der"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "simple_asn1",
 ]
 
 [[package]]
 name = "ic-crypto-internal-threshold-sig-ecdsa"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "bip32",
@@ -6570,7 +6570,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-tls"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -6592,7 +6592,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "arrayvec 0.5.2",
  "hex",
@@ -6643,7 +6643,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-node-key-validation"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "curve25519-dalek",
@@ -6679,7 +6679,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-secrets-containers"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "serde",
  "serde_bytes",
@@ -6689,14 +6689,14 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-sha2"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-sha2",
 ]
 
 [[package]]
 name = "ic-crypto-sha3"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "sha3 0.9.1",
@@ -6704,7 +6704,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-standalone-sig-verifier"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -6731,7 +6731,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tecdsa"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-types",
@@ -6739,7 +6739,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-temp-crypto"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -6775,7 +6775,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-temp-crypto-vault"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-logmon",
@@ -6786,7 +6786,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ed25519-consensus",
  "ic-crypto-internal-csp-test-utils",
@@ -6810,7 +6810,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-canister-sigs"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-certification-test-utils",
  "ic-crypto-internal-basic-sig-iccsa",
@@ -6833,7 +6833,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-canister-threshold-sigs"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-crypto-internal-csp",
@@ -6854,7 +6854,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-csp"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-crypto-internal-csp",
@@ -6869,7 +6869,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-keygen"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-protobuf",
  "ic-registry-keys",
@@ -6879,7 +6879,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-keys"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-protobuf",
@@ -6888,7 +6888,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-local-csp-vault"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-seed",
@@ -6904,7 +6904,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-logmon",
  "ic-metrics",
@@ -6916,7 +6916,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-multi-sigs"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-temp-crypto",
  "ic-interfaces",
@@ -6930,7 +6930,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-ni-dkg"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-bls12-381-type",
@@ -6955,7 +6955,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-reproducible-rng"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -6963,7 +6963,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-root-of-trust"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-types",
  "mockall 0.11.4",
@@ -6972,7 +6972,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-tls"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
@@ -6993,7 +6993,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tls-cert-validation"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "curve25519-dalek",
@@ -7011,7 +7011,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tls-interfaces"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -7029,7 +7029,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tls-interfaces-mocks"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "ic-base-types",
@@ -7040,7 +7040,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tree-hash"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "criterion",
@@ -7061,7 +7061,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-tree-hash-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-crypto-test-utils-reproducible-rng",
@@ -7073,7 +7073,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-basic-sig"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
@@ -7089,7 +7089,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-threshold-sig"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "ic-crypto-internal-csp",
@@ -7100,7 +7100,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-threshold-sig-der"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
@@ -7112,7 +7112,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-time"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces",
  "ic-logger",
@@ -7122,7 +7122,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-tls"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-crypto-tls-interfaces",
@@ -7132,7 +7132,7 @@ dependencies = [
 
 [[package]]
 name = "ic-cup-explorer"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-canister-client",
@@ -7147,7 +7147,7 @@ dependencies = [
 
 [[package]]
 name = "ic-cycles-account-manager"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-base-types",
@@ -7178,7 +7178,7 @@ dependencies = [
 
 [[package]]
 name = "ic-determinism-test"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap 3.2.23",
  "hex",
@@ -7209,7 +7209,7 @@ dependencies = [
 
 [[package]]
 name = "ic-drun"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap 3.2.23",
  "hex",
@@ -7244,7 +7244,7 @@ dependencies = [
 
 [[package]]
 name = "ic-embedders"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -7266,7 +7266,7 @@ dependencies = [
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-utils-lru-cache",
  "ic-wasm-types",
  "insta",
@@ -7296,9 +7296,9 @@ dependencies = [
 
 [[package]]
 name = "ic-error-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "serde",
  "strum 0.24.1",
  "strum_macros 0.24.3",
@@ -7306,7 +7306,7 @@ dependencies = [
 
 [[package]]
 name = "ic-execution-environment"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -7352,7 +7352,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-utils-lru-cache",
  "ic-wasm-types",
  "lazy_static",
@@ -7393,7 +7393,7 @@ dependencies = [
 
 [[package]]
 name = "ic-http-endpoints-metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hyper 0.14.26",
  "ic-async-utils",
@@ -7414,7 +7414,7 @@ dependencies = [
 
 [[package]]
 name = "ic-http-endpoints-public"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "async-trait",
@@ -7432,7 +7432,7 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-canonical-state",
- "ic-certification 0.8.0",
+ "ic-certification 0.9.0",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
@@ -7483,7 +7483,7 @@ dependencies = [
 
 [[package]]
 name = "ic-http-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "flate2",
  "hex",
@@ -7564,7 +7564,7 @@ dependencies = [
 
 [[package]]
 name = "ic-https-outcalls-consensus"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-artifact-pool",
  "ic-config",
@@ -7602,7 +7602,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ic00-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "arbitrary",
  "candid",
@@ -7621,7 +7621,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icos-sev"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -7642,7 +7642,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icos-sev-interfaces"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "ic-types",
@@ -7652,7 +7652,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icp-index"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -7682,7 +7682,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -7753,7 +7753,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -7780,7 +7780,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-archive"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -7800,7 +7800,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-benchmark-generator"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -7864,7 +7864,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-index"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -7895,7 +7895,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-index-ng"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -7930,7 +7930,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-ledger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -7964,7 +7964,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-ledger-sm-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7993,7 +7993,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-icrc1",
@@ -8037,7 +8037,7 @@ dependencies = [
 
 [[package]]
 name = "ic-identity"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "clap 3.2.23",
@@ -8049,7 +8049,7 @@ dependencies = [
 
 [[package]]
 name = "ic-image-upgrader"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "ic-http-utils",
@@ -8060,7 +8060,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ingress-manager"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "criterion",
@@ -8096,7 +8096,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "derive_more 0.99.8-alpha.0",
@@ -8112,7 +8112,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-sys",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-wasm-types",
  "proptest",
  "prost",
@@ -8125,7 +8125,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-adapter-client"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "strum_macros 0.24.3",
  "thiserror",
@@ -8133,14 +8133,14 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-certified-stream-store"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-types",
 ]
 
 [[package]]
 name = "ic-interfaces-registry"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-types",
  "prost",
@@ -8149,7 +8149,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-registry-mocks"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-interfaces-registry",
@@ -8159,7 +8159,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-state-manager"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-tree-hash",
  "ic-types",
@@ -8169,7 +8169,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-state-manager-mocks"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-tree-hash",
  "ic-interfaces-state-manager",
@@ -8180,7 +8180,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-transport"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "phantom_newtype",
@@ -8193,7 +8193,7 @@ dependencies = [
 
 [[package]]
 name = "ic-interfaces-transport-mocks"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-interfaces-transport",
@@ -8212,7 +8212,7 @@ dependencies = [
  "clap 3.2.23",
  "dfn_protobuf",
  "ic-agent",
- "ic-certification 0.8.0",
+ "ic-certification 0.9.0",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -8231,7 +8231,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
  "ic-cdk",
@@ -8251,7 +8251,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ledger-canister-core"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -8261,14 +8261,14 @@ dependencies = [
  "ic-ic00-types",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "num-traits",
  "serde",
 ]
 
 [[package]]
 name = "ic-ledger-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ledger-hash-of",
@@ -8288,7 +8288,7 @@ dependencies = [
 
 [[package]]
 name = "ic-logger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "ic-config",
@@ -8304,7 +8304,7 @@ dependencies = [
 
 [[package]]
 name = "ic-mainnet-nns-recovery"
-version = "0.0.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
@@ -8349,7 +8349,7 @@ dependencies = [
 
 [[package]]
 name = "ic-message"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "dfn_candid",
@@ -8361,7 +8361,7 @@ dependencies = [
 
 [[package]]
 name = "ic-messaging"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -8404,7 +8404,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "lazy_static",
  "maplit",
  "mockall 0.7.2",
@@ -8418,7 +8418,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "futures",
  "ic-adapter-metrics",
@@ -8457,7 +8457,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-common"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8498,7 +8498,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-common-build-metadata"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-nervous-system-common-test-canister"
@@ -8518,7 +8518,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-common-test-keys"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
@@ -8554,7 +8554,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-humanize"
-version = "0.0.1"
+version = "0.9.0"
 dependencies = [
  "humantime",
  "ic-nervous-system-proto",
@@ -8566,7 +8566,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-proto"
-version = "0.0.1"
+version = "0.9.0"
 dependencies = [
  "candid",
  "comparable",
@@ -8580,7 +8580,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-proto-protobuf-generator"
-version = "0.0.1"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -8588,7 +8588,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-proxied-canister-calls-tracker"
-version = "0.0.1"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "maplit",
@@ -8598,7 +8598,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-root"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -8621,7 +8621,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nervous-system-runtime"
-version = "0.0.1"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -8648,7 +8648,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-common"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "comparable",
@@ -8676,7 +8676,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-common-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -8684,14 +8684,14 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-constants"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
 ]
 
 [[package]]
 name = "ic-nns-governance"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -8761,7 +8761,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-governance-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -8769,7 +8769,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-gtc"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "build-info",
  "build-info-build",
@@ -8804,11 +8804,11 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-gtc-accounts"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-nns-gtc-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -8825,7 +8825,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-handler-root"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "build-info",
@@ -8889,7 +8889,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-handler-root-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -8897,7 +8897,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-init"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
@@ -8942,7 +8942,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-integration-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -9016,7 +9016,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -9060,7 +9060,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "icp-ledger",
  "icrc-ledger-types",
  "lifeline",
@@ -9077,7 +9077,7 @@ dependencies = [
 
 [[package]]
 name = "ic-nns-test-utils-macros"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "quote 1.0.31",
  "syn 1.0.109",
@@ -9085,7 +9085,7 @@ dependencies = [
 
 [[package]]
 name = "ic-p2p"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "crossbeam-channel",
@@ -9167,7 +9167,7 @@ dependencies = [
 
 [[package]]
 name = "ic-p8s-service-discovery"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "clap 3.2.23",
@@ -9198,7 +9198,7 @@ dependencies = [
  "ic-registry-nns-data-provider-wrappers",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "itertools",
  "lazy_static",
  "parse_int",
@@ -9219,7 +9219,7 @@ dependencies = [
 
 [[package]]
 name = "ic-p8s-service-discovery-log"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "elastic_common_schema",
@@ -9254,7 +9254,7 @@ dependencies = [
 
 [[package]]
 name = "ic-pprof"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "lazy_static",
@@ -9267,7 +9267,7 @@ dependencies = [
 
 [[package]]
 name = "ic-prep"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -9314,7 +9314,7 @@ dependencies = [
 
 [[package]]
 name = "ic-protobuf"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "candid",
@@ -9332,7 +9332,7 @@ dependencies = [
 
 [[package]]
 name = "ic-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -9432,7 +9432,7 @@ dependencies = [
 
 [[package]]
 name = "ic-regedit"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -9461,7 +9461,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-client"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "crossbeam-channel",
@@ -9473,13 +9473,13 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-test-utilities-metrics",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "prometheus",
 ]
 
 [[package]]
 name = "ic-registry-client-fake"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces-registry",
  "ic-types",
@@ -9487,7 +9487,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-client-helpers"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-base-types",
@@ -9508,7 +9508,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-common-proto"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-registry-common-proto-generator",
  "ic-test-utilities-compare-dirs",
@@ -9518,7 +9518,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-common-proto-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -9526,7 +9526,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-keys"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-base-types",
@@ -9538,7 +9538,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-local-registry"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces-registry",
  "ic-protobuf",
@@ -9557,13 +9557,13 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-local-store"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces-registry",
  "ic-registry-common-proto",
  "ic-registry-local-store-artifacts",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "prost",
  "rand 0.8.5",
  "tempfile",
@@ -9571,15 +9571,15 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-local-store-artifacts"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-registry-nns-data-provider"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "ic-canister-client",
- "ic-certification 0.8.0",
+ "ic-certification 0.9.0",
  "ic-certification-test-utils",
  "ic-crypto-tree-hash",
  "ic-interfaces-registry",
@@ -9596,7 +9596,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-nns-data-provider-wrappers"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-interfaces-registry",
  "ic-registry-nns-data-provider",
@@ -9607,20 +9607,20 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-proto-data-provider"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytes",
  "ic-interfaces-registry",
  "ic-registry-common-proto",
  "ic-registry-transport",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "thiserror",
 ]
 
 [[package]]
 name = "ic-registry-provisional-whitelist"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-protobuf",
@@ -9656,7 +9656,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-routing-table"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -9668,7 +9668,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-subnet-features"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ic00-types",
@@ -9678,7 +9678,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-subnet-type"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-protobuf",
@@ -9689,7 +9689,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-transport"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytes",
  "candid",
@@ -9706,7 +9706,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-transport-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -9714,7 +9714,7 @@ dependencies = [
 
 [[package]]
 name = "ic-replay"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "clap 3.2.23",
@@ -9766,7 +9766,7 @@ dependencies = [
 
 [[package]]
 name = "ic-replica"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_cmd",
  "base64 0.13.1",
@@ -9815,7 +9815,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-xnet-endpoint",
  "ic-xnet-payload-builder",
  "jemalloc-ctl",
@@ -9845,7 +9845,7 @@ dependencies = [
 
 [[package]]
 name = "ic-replica-setup-ic-network"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "crossbeam-channel",
  "either",
@@ -9888,7 +9888,7 @@ dependencies = [
 
 [[package]]
 name = "ic-replica-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -9929,7 +9929,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "maplit",
  "predicates 1.0.8",
  "prometheus",
@@ -9945,7 +9945,7 @@ dependencies = [
 
 [[package]]
 name = "ic-replicated-state"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "criterion",
@@ -9973,7 +9973,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-wasm-types",
  "lazy_static",
  "libc",
@@ -10080,7 +10080,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
@@ -10102,7 +10102,7 @@ dependencies = [
 
 [[package]]
 name = "ic-scenario-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
@@ -10134,7 +10134,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-cli"
-version = "1.0.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -10169,7 +10169,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-governance"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -10233,7 +10233,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-governance-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -10241,7 +10241,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-init"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "candid",
@@ -10272,7 +10272,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-init-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -10280,7 +10280,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-integration-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -10337,7 +10337,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-root"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "build-info",
@@ -10369,7 +10369,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-root-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -10377,7 +10377,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-swap"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "build-info",
@@ -10421,7 +10421,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-swap-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -10429,7 +10429,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -10461,7 +10461,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-state-machine-tests",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "icp-ledger",
  "icrc-ledger-client",
  "icrc-ledger-types",
@@ -10526,7 +10526,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sns-wasm-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -10540,7 +10540,7 @@ checksum = "b4e026318236de13568edafd85534ad29910908bf08cdcf177d4403fd4a5f6c4"
 
 [[package]]
 name = "ic-starter"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "clap 3.2.23",
@@ -10561,7 +10561,7 @@ dependencies = [
 
 [[package]]
 name = "ic-starter-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "ic-agent",
@@ -10572,7 +10572,7 @@ dependencies = [
 
 [[package]]
 name = "ic-state-layout"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-base-types",
@@ -10588,7 +10588,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-tmpdir",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-wasm-types",
  "itertools",
  "libc",
@@ -10605,7 +10605,7 @@ dependencies = [
 
 [[package]]
 name = "ic-state-machine-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -10665,7 +10665,7 @@ dependencies = [
 
 [[package]]
 name = "ic-state-manager"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "bit-vec",
@@ -10701,7 +10701,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-tmpdir",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-wasm-types",
  "maplit",
  "nix",
@@ -10755,7 +10755,7 @@ dependencies = [
 
 [[package]]
 name = "ic-state-tool"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap 3.2.23",
  "hex",
@@ -10771,7 +10771,7 @@ dependencies = [
  "ic-state-manager",
  "ic-sys",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "prost",
  "scoped_threadpool",
  "tempfile",
@@ -10807,7 +10807,7 @@ dependencies = [
 
 [[package]]
 name = "ic-sys"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-sha2",
@@ -10821,7 +10821,7 @@ dependencies = [
 
 [[package]]
 name = "ic-system-api"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -10842,7 +10842,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "ic-wasm-types",
  "maplit",
  "prometheus",
@@ -10853,7 +10853,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-artifact-pool"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-artifact-pool",
  "ic-config",
@@ -10873,7 +10873,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-identity"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
  "ic-crypto-internal-types",
@@ -10898,7 +10898,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -10972,11 +10972,11 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-compare-dirs"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-test-utilities-execution-environment"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-config",
@@ -11008,7 +11008,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-in-memory-logger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-config",
  "ic-logger",
@@ -11021,7 +11021,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-load-wasm"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "cargo_metadata",
  "escargot",
@@ -11029,7 +11029,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-logger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-logger",
  "slog",
@@ -11039,7 +11039,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-metrics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-metrics",
  "prometheus",
@@ -11047,7 +11047,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-registry"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
@@ -11063,7 +11063,7 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-serialization"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-protobuf",
@@ -11075,14 +11075,14 @@ dependencies = [
 
 [[package]]
 name = "ic-test-utilities-tmpdir"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "tempfile",
 ]
 
 [[package]]
 name = "ic-transport"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -11114,7 +11114,7 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-test-utils"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "futures",
  "ic-base-types",
@@ -11139,7 +11139,7 @@ dependencies = [
 
 [[package]]
 name = "ic-tvl-canister"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -11166,7 +11166,7 @@ dependencies = [
 
 [[package]]
 name = "ic-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
@@ -11188,7 +11188,7 @@ dependencies = [
  "ic-exhaustive-derive",
  "ic-ic00-types",
  "ic-protobuf",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "maplit",
  "once_cell",
  "phantom_newtype",
@@ -11212,7 +11212,7 @@ dependencies = [
 
 [[package]]
 name = "ic-types-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-canonical-state",
  "ic-certification-version",
@@ -11223,7 +11223,7 @@ dependencies = [
 
 [[package]]
 name = "ic-universal-canister"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "hex-literal",
@@ -11235,7 +11235,7 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "cvt",
@@ -11272,11 +11272,11 @@ dependencies = [
 
 [[package]]
 name = "ic-utils-ensure"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-utils-lru-cache"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-types",
  "lru",
@@ -11284,11 +11284,11 @@ dependencies = [
 
 [[package]]
 name = "ic-utils-rustfmt"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "ic-validator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
@@ -11309,7 +11309,7 @@ dependencies = [
 
 [[package]]
 name = "ic-validator-http-request-test-utils"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-canister-client-sender",
@@ -11333,7 +11333,7 @@ dependencies = [
 
 [[package]]
 name = "ic-validator-ingress-message"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
@@ -11359,7 +11359,7 @@ dependencies = [
 
 [[package]]
 name = "ic-validator-ingress-message-test-canister"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "build-info",
  "build-info-build",
@@ -11405,19 +11405,19 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-sha2",
  "ic-protobuf",
  "ic-sys",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "serde",
 ]
 
 [[package]]
 name = "ic-workload-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "backoff 0.3.0",
  "byte-unit",
@@ -11452,7 +11452,7 @@ dependencies = [
 
 [[package]]
 name = "ic-xnet-endpoint"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytes",
  "crossbeam-channel",
@@ -11489,7 +11489,7 @@ dependencies = [
 
 [[package]]
 name = "ic-xnet-hyper"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
@@ -11501,7 +11501,7 @@ dependencies = [
 
 [[package]]
 name = "ic-xnet-payload-builder"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -11552,7 +11552,7 @@ dependencies = [
 
 [[package]]
 name = "ic-xnet-uri"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "http",
  "ic-types",
@@ -11591,7 +11591,7 @@ dependencies = [
 
 [[package]]
 name = "icp-ledger"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
@@ -11698,7 +11698,7 @@ dependencies = [
 
 [[package]]
 name = "icx-proxy"
-version = "0.11.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -11753,7 +11753,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity-canister"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "idna"
@@ -12154,7 +12154,7 @@ dependencies = [
 
 [[package]]
 name = "kv_store"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "candid",
@@ -12266,7 +12266,7 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 
 [[package]]
 name = "ledger-archive-node-canister"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -12286,7 +12286,7 @@ dependencies = [
 
 [[package]]
 name = "ledger-canister"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -12320,7 +12320,7 @@ dependencies = [
 
 [[package]]
 name = "ledger-canister-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -12551,7 +12551,7 @@ dependencies = [
 
 [[package]]
 name = "lifeline"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "dfn_candid",
@@ -12922,7 +12922,7 @@ dependencies = [
 
 [[package]]
 name = "memory_tracker"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bit-vec",
  "criterion",
@@ -12931,7 +12931,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-sys",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "lazy_static",
  "libc",
  "nix",
@@ -13144,7 +13144,7 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-registry-client",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "multiservice_discovery_shared",
  "regex",
  "serde",
@@ -13231,7 +13231,7 @@ dependencies = [
 
 [[package]]
 name = "nns-ui-canister"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "no-std-compat"
@@ -13484,7 +13484,7 @@ dependencies = [
 
 [[package]]
 name = "on_wire"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "once_cell"
@@ -13729,7 +13729,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orchestrator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -13770,7 +13770,7 @@ dependencies = [
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-logger",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "mockall 0.8.3",
  "nix",
  "prometheus",
@@ -14081,7 +14081,7 @@ dependencies = [
 
 [[package]]
 name = "phantom_newtype"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "serde",
@@ -14264,13 +14264,13 @@ dependencies = [
 
 [[package]]
 name = "pmap"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "canister-test",
  "dfn_core",
  "dfn_json",
  "dfn_macro",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
 ]
 
 [[package]]
@@ -14313,7 +14313,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "itertools",
  "pocket-ic",
  "rand 0.8.5",
@@ -15347,7 +15347,7 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "registry-canister"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "build-info",
@@ -15413,7 +15413,7 @@ dependencies = [
 
 [[package]]
 name = "registry-canister-protobuf-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
@@ -15485,7 +15485,7 @@ dependencies = [
 
 [[package]]
 name = "response-payload-test"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "dfn_core",
  "dfn_json",
@@ -15671,7 +15671,7 @@ dependencies = [
 
 [[package]]
 name = "rust-canister-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
@@ -16320,7 +16320,7 @@ dependencies = [
  "ic-registry-local-store-artifacts",
  "ic-registry-nns-data-provider",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "itertools",
  "prometheus",
  "regex",
@@ -16681,7 +16681,7 @@ dependencies = [
 
 [[package]]
 name = "sns_tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "ic-nervous-system-common",
@@ -16760,14 +16760,14 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "stable_reader"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "byteorder",
 ]
 
 [[package]]
 name = "stable_structures"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk",
@@ -16791,7 +16791,7 @@ dependencies = [
 
 [[package]]
 name = "statesync-test"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "canister-test",
  "dfn_core",
@@ -17043,7 +17043,7 @@ dependencies = [
 
 [[package]]
 name = "systemd-journal-gatewayd-shim"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -17225,7 +17225,7 @@ dependencies = [
 
 [[package]]
 name = "testnets"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "ic-mainnet-nns-recovery",
@@ -17236,7 +17236,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert-json-diff",
@@ -17274,7 +17274,7 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-cdk",
- "ic-certification 0.8.0",
+ "ic-certification 0.9.0",
  "ic-ckbtc-agent",
  "ic-ckbtc-kyt",
  "ic-ckbtc-minter",
@@ -17337,7 +17337,7 @@ dependencies = [
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-utils 0.27.0",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
@@ -18003,7 +18003,7 @@ dependencies = [
 
 [[package]]
 name = "tree-deserializer"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-tree-hash",
  "leb128",
@@ -18232,7 +18232,7 @@ checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
 
 [[package]]
 name = "universal-canister"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "lazy_static",
@@ -18383,7 +18383,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-nns-data-provider",
  "ic-types",
- "ic-utils 0.8.0",
+ "ic-utils 0.9.0",
  "regex",
  "serde",
  "serde_json",
@@ -18453,7 +18453,7 @@ dependencies = [
 
 [[package]]
 name = "wabt-tests"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "leb128",
  "wat",
@@ -19351,7 +19351,7 @@ dependencies = [
 
 [[package]]
 name = "xnet-test"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "dfn_core",
@@ -19362,7 +19362,7 @@ dependencies = [
 
 [[package]]
 name = "xrc-mock"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk",

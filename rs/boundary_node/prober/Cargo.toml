@@ -1,7 +1,10 @@
 [package]
 name = "boundary-node-prober"
-version = "0.9.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "boundary-node-prober"

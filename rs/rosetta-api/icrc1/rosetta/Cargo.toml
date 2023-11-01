@@ -1,11 +1,11 @@
 [package]
 name = "ic-icrc-rosetta"
-version = "0.1.0"
-authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-icrc-rosetta"

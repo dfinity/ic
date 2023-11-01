@@ -1,9 +1,10 @@
 [package]
 name = "ic-ckbtc-agent"
-version = "0.1.0"
-authors = ["The Internet Computer Project Developers"]
 description = "Agent for the ckBTC minter."
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }

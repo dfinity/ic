@@ -360,6 +360,13 @@ resolver = "2"
 
 exclude = ["universal_canister/impl", "typescript/service-worker/test_utils"]
 
+[workspace.package]
+version = "0.9.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Autonomous serverless cloud functionality for the public Internet."
+documentation = "https://internetcomputer.org/docs/"
+edition = "2021"
+
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
 # Makes flamegraphs more readable.

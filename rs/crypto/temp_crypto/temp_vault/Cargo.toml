@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-temp-crypto-vault"
 description = "Test utility to instantiate a remote CSP vault"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }

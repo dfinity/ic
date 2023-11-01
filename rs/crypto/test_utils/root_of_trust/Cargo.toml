@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-test-utils-root-of-trust"
-version = "0.8.0"
-edition = "2021"
 description = "Test utilities for providing the root of trust"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-types = { path = "../../../types/types" }

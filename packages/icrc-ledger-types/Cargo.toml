@@ -1,13 +1,14 @@
 [package]
 name = "icrc-ledger-types"
-authors = ["The Internet Computer Project Developers"]
 version = "0.1.3"
-edition = "2021"
 description = "Types for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
 license = "Apache-2.0"
 readme = "README.md"
 include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
 repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 base32 = "0.4.0"

@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-utils-threshold-sig"
-version = "0.8.0"
-edition = "2021"
 description = "Utils for threshold signatures"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }

@@ -1,8 +1,10 @@
 [package]
 name = "ic-adapter-metrics"
-version = "0.8.0"
-edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-adapter-metrics-service = { path = "../adapter_metrics_service" }

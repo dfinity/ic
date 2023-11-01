@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-sha3"
-version = "0.8.0"
-edition = "2021"
 description = "Library for SHA-3 and Keccak hashing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 sha3 = "0.9.1"

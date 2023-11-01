@@ -1,9 +1,10 @@
 [package]
 name = "ic-icp-index"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "Index canister for the ICP Ledger"
-edition = "2018"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-icp-index"

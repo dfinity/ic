@@ -1,9 +1,10 @@
 [package]
 name = "ic-icrc1-ledger"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "A ledger canister implementing https://github.com/dfinity/ICRC-1 standard"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-icrc1-ledger"
