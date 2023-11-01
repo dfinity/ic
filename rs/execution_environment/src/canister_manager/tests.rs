@@ -7007,6 +7007,7 @@ fn upload_chunk_counts_to_memory_usage() {
     let canister_id = test.create_canister(CYCLES);
 
     let initial_memory_usage = test.canister_state(canister_id).memory_usage();
+    let initial_subnet_available_memory = test.subnet_available_memory().get_execution_memory();
 
     // Check memory usage after one chunk uploaded.
     let chunk = vec![1, 2, 3, 4, 5];
@@ -7019,6 +7020,10 @@ fn upload_chunk_counts_to_memory_usage() {
     assert_eq!(
         test.canister_state(canister_id).memory_usage(),
         chunk_size + initial_memory_usage
+    );
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory - chunk_size.get() as i64
     );
 
     // Check memory usage after two chunks uploaded.
@@ -7033,6 +7038,10 @@ fn upload_chunk_counts_to_memory_usage() {
         test.canister_state(canister_id).memory_usage(),
         NumBytes::from(2 * chunk_size.get()) + initial_memory_usage
     );
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory - 2 * chunk_size.get() as i64
+    );
 
     // Check memory usage after three chunks uploaded.
     let chunk = vec![6; 1024 * 1024];
@@ -7045,6 +7054,10 @@ fn upload_chunk_counts_to_memory_usage() {
     assert_eq!(
         test.canister_state(canister_id).memory_usage(),
         NumBytes::from(3 * chunk_size.get()) + initial_memory_usage
+    );
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory - 3 * chunk_size.get() as i64
     );
 }
 
@@ -7169,6 +7182,81 @@ fn upload_chunk_fails_when_it_exceeds_chunk_size() {
     assert_eq!(
         test.subnet_available_memory(),
         initial_subnet_available_memory
+    );
+}
+
+#[test]
+fn upload_chunk_reserves_cycles() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let memory_usage_after_uploading_one_chunk = {
+        const CAPACITY: i64 = 1_000_000_000;
+
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_execution_memory(CAPACITY)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(0)
+            .with_wasm_chunk_store()
+            .build();
+        let canister_id = test.create_canister(CYCLES);
+
+        let upload_args = UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk: vec![42; 10],
+        };
+
+        let _hash = test
+            .subnet_message("upload_chunk", upload_args.encode())
+            .unwrap();
+
+        CAPACITY - test.subnet_available_memory().get_execution_memory()
+    };
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store()
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(memory_usage_after_uploading_one_chunk + 1)
+        .build();
+    let canister_id = test.create_canister(CYCLES);
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance(),
+        Cycles::from(0_u128)
+    );
+
+    // Upload a chunk
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    };
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance(),
+        Cycles::from(0_u128)
+    );
+
+    // Upload a second chunk which should reserve some cycles.
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![43; 10],
+    };
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+    let reserved_balance = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance()
+        .get();
+    assert!(
+        reserved_balance > 0,
+        "Reserved balance {} should be positive",
+        reserved_balance
     );
 }
 

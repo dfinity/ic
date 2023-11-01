@@ -1031,6 +1031,8 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UploadChunk) => {
+                let resource_saturation =
+                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
                 let res = match UploadChunkArgs::decode(payload) {
                     Err(err) => Err(err),
                     Ok(request) => self.upload_chunk(
@@ -1039,6 +1041,7 @@ impl ExecutionEnvironment {
                         request,
                         &mut round_limits.subnet_available_memory,
                         registry_settings.subnet_size,
+                        &resource_saturation,
                     ),
                 };
                 Some((res, msg.take_cycles()))
@@ -1540,6 +1543,7 @@ impl ExecutionEnvironment {
         args: UploadChunkArgs,
         subnet_available_memory: &mut SubnetAvailableMemory,
         subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister_mut(args.get_canister_id(), state)?;
         self.canister_manager
@@ -1549,6 +1553,7 @@ impl ExecutionEnvironment {
                 &args.chunk,
                 subnet_available_memory,
                 subnet_size,
+                resource_saturation,
             )
             .map(|reply| reply.encode())
             .map_err(|err| err.into())

@@ -25,6 +25,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
     canister_state::system_state::{
         wasm_chunk_store::{self, WasmChunkStore},
@@ -1449,6 +1450,7 @@ impl CanisterManager {
         chunk: &[u8],
         subnet_available_memory: &mut SubnetAvailableMemory,
         subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<UploadChunkReply, CanisterManagerError> {
         if self.config.wasm_chunk_store == FlagStatus::Disabled {
             return Err(CanisterManagerError::WasmChunkStoreError {
@@ -1464,19 +1466,33 @@ impl CanisterManager {
             .can_insert_chunk(chunk)
             .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
 
-        let new_memory_usage = canister.memory_usage() + wasm_chunk_store::chunk_size();
+        let chunk_bytes = wasm_chunk_store::chunk_size();
+        let new_memory_usage = canister.memory_usage() + chunk_bytes;
 
         match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => {
                 if bytes < new_memory_usage {
                     return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         memory_allocation_given: canister.memory_allocation(),
-                        memory_usage_needed: canister.memory_usage()
-                            + wasm_chunk_store::chunk_size(),
+                        memory_usage_needed: new_memory_usage,
                     });
                 }
             }
             MemoryAllocation::BestEffort => {
+                // Run the following checks on memory usage and return an error
+                // if any fails:
+                // 1. Check new usage will not freeze canister
+                // 2. Check subnet has available memory
+                // 3. Reserve cycles on canister
+                // 4. Actually deduct memory from subnet (asserting it won't fail)
+
+                // Calculate if any cycles will need to be reserved.
+                let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
+                    chunk_bytes,
+                    resource_saturation,
+                    subnet_size,
+                );
+
                 // Memory usage will increase by the chunk size, so we need to
                 // check that it doesn't bump us over the freezing threshold.
                 let threshold = self.cycles_account_manager.freeze_threshold_cycles(
@@ -1486,9 +1502,11 @@ impl CanisterManager {
                     canister.message_memory_usage(),
                     canister.compute_allocation(),
                     subnet_size,
-                    canister.system_state.reserved_balance(),
+                    canister.system_state.reserved_balance() + reservation_cycles,
                 );
-                if threshold > canister.system_state.balance() {
+                // Note: if the subtraction here saturates, then we will get an
+                // error later when trying to actually reserve the cycles.
+                if threshold > canister.system_state.balance() - reservation_cycles {
                     return Err(CanisterManagerError::WasmChunkStoreError {
                         message: format!(
                             "Cannot upload chunk. At least {} additional cycles are required.",
@@ -1497,20 +1515,45 @@ impl CanisterManager {
                     });
                 }
 
+                // Verify subnet has enough memory.
                 subnet_available_memory
-                    .try_decrement(
-                        wasm_chunk_store::chunk_size(),
-                        NumBytes::from(0),
-                        NumBytes::from(0),
-                    )
+                    .check_available_memory(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
                     .map_err(
                         |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: wasm_chunk_store::chunk_size(),
+                            requested: chunk_bytes,
                             available: NumBytes::from(
                                 subnet_available_memory.get_execution_memory().max(0) as u64,
                             ),
                         },
                     )?;
+
+                // Reserve needed cycles if the subnet is becoming saturated.
+                canister
+                    .system_state
+                    .reserve_cycles(reservation_cycles)
+                    .map_err(|err| match err {
+                        ReservationError::InsufficientCycles {
+                            requested,
+                            available,
+                        } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                            bytes: chunk_bytes,
+                            available,
+                            threshold: requested,
+                        },
+                        ReservationError::ReservedLimitExceed { requested, limit } => {
+                            CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
+                                bytes: chunk_bytes,
+                                requested,
+                                limit,
+                            }
+                        }
+                    })?;
+
+                // Actually deduct memory from the subnet. It's safe to unwrap
+                // here because we already checked the available memory above.
+                subnet_available_memory
+                    .try_decrement(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
+                    .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
             }
         }
 
