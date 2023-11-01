@@ -1,8 +1,10 @@
 [package]
 name = "ic-validator-http-request-test-utils"
-version = "0.8.0"
-edition = "2021"
 description = "Test utility to build HTTP requests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-canister-client-sender = { path = "../../canister_client/sender" }

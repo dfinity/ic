@@ -1,9 +1,10 @@
 [package]
 name = "ic-crypto-internal-csp"
 description = "Secret key store and services"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 async-trait = "0.1.41"

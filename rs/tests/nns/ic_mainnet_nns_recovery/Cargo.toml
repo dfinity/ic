@@ -1,8 +1,10 @@
 [package]
 name = "ic-mainnet-nns-recovery"
-version = "0.0.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.31"

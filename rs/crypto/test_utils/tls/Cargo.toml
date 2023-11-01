@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-test-utils-tls"
-version = "0.8.0"
-edition = "2021"
 description = "Test utility for TLS"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-ecdsa-secp256r1 = { path = "../../ecdsa_secp256r1" }

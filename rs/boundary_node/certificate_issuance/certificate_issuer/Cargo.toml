@@ -1,7 +1,10 @@
 [package]
 name = "certificate-issuer"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies.certificate_orchestrator_interface]
 path = "../certificate_orchestrator_interface"

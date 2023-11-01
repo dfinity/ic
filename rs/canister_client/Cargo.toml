@@ -1,7 +1,10 @@
 [package]
 name = "ic-canister-client"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 backoff = "0.3.0"

@@ -1,7 +1,10 @@
 [package]
 name = "ic-crypto-test-utils-metrics"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-logmon = { path = "../../internal/logmon" }

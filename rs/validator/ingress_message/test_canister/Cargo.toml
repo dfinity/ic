@@ -1,7 +1,10 @@
 [package]
 name = "ic-validator-ingress-message-test-canister"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!

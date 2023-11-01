@@ -1,9 +1,10 @@
 [package]
 name = "ic-icrc1"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "ICRC-1 compliant ledger library."
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }

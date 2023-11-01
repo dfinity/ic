@@ -1,7 +1,10 @@
 [package]
 name = "ic-btc-adapter-client"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }

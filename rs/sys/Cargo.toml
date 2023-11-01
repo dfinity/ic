@@ -1,7 +1,10 @@
 [package]
 name = "ic-sys"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 hex = "0.4.2"

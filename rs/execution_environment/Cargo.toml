@@ -1,7 +1,10 @@
 [package]
-edition = "2021"
 name = "ic-execution-environment"
-version = "0.8.0"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }

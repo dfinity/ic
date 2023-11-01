@@ -1,9 +1,10 @@
 [package]
 name = "ic-icrc1-index-ng"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "Index canister for the ICRC1 Ledger"
 edition = "2018"
+version.workspace = true
+authors.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-icrc1-index-ng"

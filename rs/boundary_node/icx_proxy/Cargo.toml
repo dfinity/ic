@@ -1,6 +1,5 @@
 [package]
 name = "icx-proxy"
-version = "0.11.1"
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 edition = "2018"
 description = "CLI tool to create an HTTP proxy to the Internet Computer."
@@ -11,6 +10,7 @@ readme = "README.md"
 categories = ["command-line-interface", "web-programming::http-server"]
 keywords = ["internet-computer", "agent", "icp", "dfinity", "proxy"]
 include = ["src", "Cargo.toml", "../LICENSE", "README.md"]
+version.workspace = true
 
 [[bin]]
 name = "icx-proxy"

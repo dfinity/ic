@@ -1,7 +1,10 @@
 [package]
 name = "ic-sns-integration-tests"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [features]
 # swap_load_test takes a very long time to run, so to run it you have to pass `--features long_bench`.

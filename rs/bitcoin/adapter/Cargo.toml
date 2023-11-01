@@ -1,8 +1,10 @@
 [package]
 name = "ic-btc-adapter"
-version = "0.1.0"
-edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }

@@ -1,9 +1,10 @@
 [package]
 name = "ic-icrc1-ledger-sm-tests"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "StateMachines based tests for https://github.com/dfinity/ICRC-1 ledgers"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.72"

@@ -1,8 +1,10 @@
 [package]
 name = "cycles-minting-canister"
-version = "0.8.0"
-description = "Canister for cycles administration"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!

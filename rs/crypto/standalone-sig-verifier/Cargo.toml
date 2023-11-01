@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-standalone-sig-verifier"
-version = "0.8.0"
-edition = "2021"
 description = "Standalone crypto library to verify cryptographic signatures for the Internet Computer"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-iccsa = { path = "../iccsa" }
