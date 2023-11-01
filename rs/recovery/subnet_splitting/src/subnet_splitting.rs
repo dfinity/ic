@@ -126,7 +126,6 @@ pub struct SubnetSplitting {
     state_tool_helper: StateToolHelper,
     layout: Layout,
     logger: Logger,
-    interactive: bool,
     subnet_type: SubnetType,
 }
 
@@ -136,7 +135,6 @@ impl SubnetSplitting {
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_splitting_args: SubnetSplittingArgs,
-        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -170,7 +168,6 @@ impl SubnetSplitting {
             recovery,
             state_tool_helper,
             logger,
-            interactive,
             subnet_type,
         }
     }
@@ -319,7 +316,7 @@ impl SubnetSplitting {
                 node_ip,
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
-                require_confirmation: self.interactive,
+                require_confirmation: !self.recovery_args.skip_prompts,
                 key_file: self.recovery.key_file.clone(),
                 check_ic_replay_height: false,
             }),
@@ -368,7 +365,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
     }
 
     fn interactive(&self) -> bool {
-        self.interactive
+        !self.recovery_args.skip_prompts
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
@@ -490,7 +487,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     logger: self.recovery.logger.clone(),
                     label: "Canister Migrations".to_string(),
                     querier: move || registry_helper.get_canister_migrations(),
-                    interactive: self.interactive,
+                    interactive: !self.recovery_args.skip_prompts,
                 }
                 .into()
             }
@@ -538,7 +535,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                             },
                         )
                     },
-                    interactive: self.interactive,
+                    interactive: !self.recovery_args.skip_prompts,
                 }
                 .into()
             }

@@ -19,10 +19,6 @@ use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
-use ic_recovery::nns_recovery_failover_nodes::{
-    NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
-};
-use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_wasm::pb::v1::{
     GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateSnsSubnetListRequest,
@@ -62,7 +58,6 @@ use std::fs::OpenOptions;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
-use std::net::IpAddr;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::path::PathBuf;
@@ -86,6 +81,7 @@ const IC_CONFIG_DESTINATION: &str = "recovery/working_dir/ic.json5";
 const NNS_STATE_DIR_PATH: &str = "recovery/working_dir/data";
 const NNS_STATE_BACKUP_TARBALL_PATH: &str = "nns_state.tar.zst";
 const IC_REPLAY: &str = "ic-replay";
+const IC_RECOVERY: &str = "ic-recovery";
 
 /// Path to temporarily store a tarball of the IC registry local store.
 /// This tarball will be created on the recovered NNS node and scp-ed from it.
@@ -213,7 +209,10 @@ fn setup_recovered_nns(
     let fetch_mainnet_ic_replay_thread = std::thread::spawn(move || {
         fetch_mainnet_ic_replay(env_clone);
     });
-
+    let env_clone = env.clone();
+    let fetch_mainnet_ic_recovery_thread = std::thread::spawn(move || {
+        fetch_mainnet_ic_recovery(env_clone);
+    });
     fetch_nns_state_from_backup_pod(env.clone());
 
     let topology = rx_topology.recv().unwrap();
@@ -239,6 +238,10 @@ fn setup_recovered_nns(
     let neuron_id: NeuronId = prepare_nns_state(env.clone(), account_id);
 
     let aux_node = rx_aux_node.recv().unwrap();
+
+    fetch_mainnet_ic_recovery_thread
+        .join()
+        .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
     recover_nns_subnet(env.clone(), nns_node, recovered_nns_node.clone(), aux_node);
     test_recovered_nns(env.clone(), neuron_id, recovered_nns_node.clone());
@@ -667,6 +670,51 @@ fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
     neuron_id
 }
 
+fn fetch_mainnet_ic_recovery(env: TestEnv) {
+    let logger = env.logger();
+    let version = env
+        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+        .unwrap();
+    let mainnet_ic_recovery_url =
+        format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
+    let ic_recovery_path = env.get_path(IC_RECOVERY);
+    let ic_recovery_gz_path = env.get_path("ic-recovery.gz");
+    info!(
+        logger,
+        "Downloading {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?} ..."
+    );
+    let response = reqwest::blocking::get(mainnet_ic_recovery_url.clone())
+        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_recovery_url:?} because {e:?}"));
+    if !response.status().is_success() {
+        panic!("Failed to download {mainnet_ic_recovery_url}");
+    }
+    let bytes = response.bytes().unwrap();
+    let mut content = Cursor::new(bytes);
+    let mut ic_recovery_gz_file = File::create(ic_recovery_gz_path.clone()).unwrap();
+    std::io::copy(&mut content, &mut ic_recovery_gz_file).unwrap_or_else(|e| {
+        panic!("Can't copy {mainnet_ic_recovery_url} to {ic_recovery_gz_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Downloaded {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?}. Uncompressing to {ic_recovery_path:?} ..."
+    );
+    let ic_recovery_gz_file = File::open(ic_recovery_gz_path.clone()).unwrap();
+    let mut gz = GzDecoder::new(&ic_recovery_gz_file);
+    let mut ic_recovery_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .mode(0o755)
+        .open(ic_recovery_path.clone())
+        .unwrap();
+    std::io::copy(&mut gz, &mut ic_recovery_file).unwrap_or_else(|e| {
+        panic!("Can't uncompress {ic_recovery_gz_path:?} to {ic_recovery_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Uncompressed {ic_recovery_gz_path:?} to {ic_recovery_path:?}"
+    );
+}
+
 fn recover_nns_subnet(
     env: TestEnv,
     nns_node: IcNodeSnapshot,
@@ -698,51 +746,57 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    let recovery_args = RecoveryArgs {
-        dir,
-        nns_url: nns_url.clone(),
-        replica_version: Some(replica_version.clone()),
-        key_file: Some(priv_key_path),
-        test_mode: true,
-    };
+    // TODO: replace the next code line with the following commented line
+    // once the mainnet ic-recovery contains the commits we need.
+    // let ic_recovery_path = env.get_path(IC_RECOVERY);
+    let ic_recovery_path = env.get_dependency_path("rs/recovery/ic-recovery");
 
-    let nns_recovery_failover_nodes_args = NNSRecoveryFailoverNodesArgs {
-        subnet_id,
-        replica_version: Some(replica_version),
-        aux_ip: Some(IpAddr::V6(aux_ip)),
-        aux_user: Some(SSH_USERNAME.to_string()),
-        registry_url: None,
-        validate_nns_url: nns_url,
-        download_node: None,
-        upload_node: Some(upload_ip),
-        parent_nns_host_ip: Some(nns_ip),
-        replacement_nodes: Some(vec![recovered_nns_node.node_id]),
-        next_step: None,
-    };
+    let mut cmd = Command::new(ic_recovery_path);
+    cmd.arg("--skip-prompts")
+        .arg("--dir")
+        .arg(dir)
+        .arg("--nns-url")
+        .arg(nns_url.to_string())
+        .arg("--replica-version")
+        .arg(replica_version.to_string())
+        .arg("--key-file")
+        .arg(priv_key_path)
+        .arg("--test")
+        .arg("nns-recovery-failover-nodes")
+        .arg("--subnet-id")
+        .arg(subnet_id.to_string())
+        .arg("--replica-version")
+        .arg(replica_version.to_string())
+        .arg("--aux-ip")
+        .arg(aux_ip.to_string())
+        .arg("--aux-user")
+        .arg(SSH_USERNAME)
+        .arg("--validate-nns-url")
+        .arg(nns_url.to_string())
+        .arg("--upload-node")
+        .arg(upload_ip.to_string())
+        .arg("--parent-nns-host-ip")
+        .arg(nns_ip.to_string())
+        .arg("--replacement-nodes")
+        .arg(recovered_nns_node.node_id.to_string())
+        .arg("--skip")
+        .arg("DownloadCertifications")
+        .arg("--skip")
+        .arg("MergeCertificationPools")
+        .arg("--skip")
+        .arg("ValidateReplayOutput");
+    info!(logger, "{cmd:?} ...");
+    let mut ic_recovery_child = cmd
+        .spawn()
+        .unwrap_or_else(|e| panic!("Failed to run {cmd:?} because {e:?}"));
 
-    let nns_recovery_failover_nodes = NNSRecoveryFailoverNodes::new(
-        logger.clone(),
-        recovery_args,
-        None,
-        nns_recovery_failover_nodes_args,
-        false,
-    );
+    let exit_status = ic_recovery_child
+        .wait()
+        .unwrap_or_else(|e| panic!("Failed to wait for {cmd:?} because {e:?}"));
 
-    // go over all steps of the NNS recovery
-    for (step_type, step) in nns_recovery_failover_nodes {
-        if step_type == StepType::DownloadCertifications
-            || step_type == StepType::MergeCertificationPools
-            || step_type == StepType::ValidateReplayOutput
-        {
-            info!(logger, "Skipping step: {:?}", step_type);
-            continue;
-        }
-        info!(logger, "Executing step: {:?}", step_type);
-        info!(logger, "{}", step.descr());
-        step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+    if !exit_status.success() {
+        panic!("{cmd:?} failed!");
     }
-
     wait_until_ready_for_interaction(logger.clone(), recovered_nns_node);
 }
 

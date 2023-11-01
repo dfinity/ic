@@ -136,6 +136,7 @@ pub fn subnet_splitting_test(env: TestEnv) {
                 .join(SSH_USERNAME),
         ),
         test_mode: true,
+        skip_prompts: true,
     };
 
     let subnet_splitting_args = SubnetSplittingArgs {
@@ -164,7 +165,6 @@ pub fn subnet_splitting_test(env: TestEnv) {
         recovery_args,
         /*neuron_args=*/ None,
         subnet_splitting_args,
-        /*interactive=*/ false,
     );
 
     for (step_type, step) in subnet_splitting {

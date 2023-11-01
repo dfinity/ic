@@ -110,6 +110,7 @@ pub fn test(env: TestEnv) {
         replica_version: Some(ic_version),
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
+        skip_prompts: true,
     };
 
     // unlike during a production recovery using the CLI, here we already know all of parameters
@@ -124,12 +125,7 @@ pub fn test(env: TestEnv) {
         next_step: None,
     };
 
-    let mut subnet_recovery = NNSRecoverySameNodes::new(
-        logger.clone(),
-        recovery_args,
-        subnet_args,
-        /*interactive=*/ false,
-    );
+    let mut subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
     // let's take f+1 nodes and break them.
     let f = (SUBNET_SIZE - 1) / 3;

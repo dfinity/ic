@@ -174,6 +174,7 @@ mod tests {
                 replica_version: None,
                 key_file: Some(PathBuf::from(dir)),
                 test_mode: true,
+                skip_prompts: true,
             },
             subcommand_args: SubCommand::AppSubnetRecovery(AppSubnetRecoveryArgs {
                 subnet_id: fake_subnet_id(),

@@ -103,6 +103,7 @@ pub struct RecoveryArgs {
     pub replica_version: Option<ReplicaVersion>,
     pub key_file: Option<PathBuf>,
     pub test_mode: bool,
+    pub skip_prompts: bool,
 }
 
 /// The recovery struct comprises working directories for the recovery of a
