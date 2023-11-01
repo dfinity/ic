@@ -98,7 +98,7 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
 }
 
 pub enum UnvalidatedArtifactEvent<Artifact: ArtifactKind> {
-    Insert(UnvalidatedArtifact<Artifact::Message>),
+    Insert((Artifact::Message, NodeId)),
     Remove(Artifact::Id),
 }
 

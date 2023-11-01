@@ -105,7 +105,7 @@ use ic_interfaces::{
         ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
         UnvalidatedArtifactEvent, ValidatedPoolReader,
     },
-    time_source::{SysTimeSource, TimeSource},
+    time_source::SysTimeSource,
 };
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
@@ -317,7 +317,6 @@ pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// TODO: long term we can remove the 'ArtifactClient' and directly use
     /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.
     pub pool_reader: Box<dyn ArtifactClient<Artifact>>,
-    pub time_source: Arc<dyn TimeSource>,
 }
 
 pub fn create_ingress_handlers<
@@ -355,7 +354,6 @@ pub fn create_ingress_handlers<
                 priority_fn_and_filter_producer,
                 malicious_flags,
             )),
-            time_source,
         },
         jh,
     )
@@ -390,7 +388,6 @@ pub fn create_consensus_handlers<
                 consensus_pool,
                 consensus_gossip,
             )),
-            time_source,
         },
         jh,
     )
@@ -432,7 +429,6 @@ pub fn create_certification_handlers<
                 certification_pool,
                 certifier_gossip,
             )),
-            time_source,
         },
         jh,
     )
@@ -462,7 +458,6 @@ pub fn create_dkg_handlers<
         ArtifactClientHandle::<DkgArtifact> {
             sender,
             pool_reader: Box::new(pool_readers::DkgClient::new(dkg_pool, dkg_gossip)),
-            time_source,
         },
         jh,
     )
@@ -494,7 +489,6 @@ pub fn create_ecdsa_handlers<
         ArtifactClientHandle::<EcdsaArtifact> {
             sender,
             pool_reader: Box::new(pool_readers::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
-            time_source,
         },
         jh,
     )
@@ -536,7 +530,6 @@ pub fn create_https_outcalls_handlers<
                 canister_http_pool,
                 canister_http_gossip,
             )),
-            time_source,
         },
         jh,
     )

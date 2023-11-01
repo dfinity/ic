@@ -3,7 +3,9 @@
 
 use ic_interfaces::{
     artifact_manager::ArtifactProcessor,
-    artifact_pool::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifactEvent},
+    artifact_pool::{
+        ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact, UnvalidatedArtifactEvent,
+    },
     time_source::TimeSource,
 };
 use ic_types::{artifact::*, artifact_kind::*};
@@ -49,7 +51,14 @@ impl<
             let mut pool = self.pool.write().unwrap();
             for artifact_event in artifact_events {
                 match artifact_event {
-                    UnvalidatedArtifactEvent::Insert(artifact) => pool.insert(artifact),
+                    UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
+                        let unvalidated_artifact = UnvalidatedArtifact {
+                            message,
+                            peer_id,
+                            timestamp: time_source.get_relative_time(),
+                        };
+                        pool.insert(unvalidated_artifact);
+                    }
                     UnvalidatedArtifactEvent::Remove(id) => pool.remove(&id),
                 }
             }
@@ -106,7 +115,14 @@ impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact_event in artifact_events {
                 match artifact_event {
-                    UnvalidatedArtifactEvent::Insert(artifact) => ingress_pool.insert(artifact),
+                    UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
+                        let unvalidated_artifact = UnvalidatedArtifact {
+                            message,
+                            peer_id,
+                            timestamp: time_source.get_relative_time(),
+                        };
+                        ingress_pool.insert(unvalidated_artifact);
+                    }
                     UnvalidatedArtifactEvent::Remove(id) => ingress_pool.remove(&id),
                 }
             }

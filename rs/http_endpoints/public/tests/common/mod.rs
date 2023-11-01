@@ -14,7 +14,6 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
-    time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -422,7 +421,6 @@ pub fn start_http_endpoint(
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
     let crypto = Arc::new(CryptoReturningOk::default());
 
-    let time_source = Arc::new(SysTimeSource::new());
     let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
     let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
     ingress_pool_throtller
@@ -436,7 +434,6 @@ pub fn start_http_endpoint(
         query_exe,
         Arc::new(RwLock::new(ingress_pool_throtller)),
         ingress_tx,
-        time_source,
         state_manager,
         crypto as Arc<_>,
         registry_client,
