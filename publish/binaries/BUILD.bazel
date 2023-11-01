@@ -55,6 +55,7 @@ BINARIES = {
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
     "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",
+    "sns-test-feature": "//rs/sns/cli:sns--test_feature",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
