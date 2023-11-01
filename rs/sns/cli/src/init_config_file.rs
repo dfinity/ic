@@ -178,6 +178,9 @@ pub struct SnsSwapConfig {
     /// An optional set of countries that should not participate in the swap. If the
     /// field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
     pub restricted_countries: Option<Vec<String>>,
+
+    /// An optional flag indicating whether the Neurons' Fund matched participation is requested.
+    pub neurons_fund_participation: Option<bool>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
@@ -263,6 +266,7 @@ impl Default for SnsCliInitConfig {
             sns_swap: SnsSwapConfig {
                 confirmation_text: None,
                 restricted_countries: None,
+                neurons_fund_participation: Some(false),
             },
         }
     }
@@ -517,8 +521,7 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             neurons_fund_participants: None,
             token_logo: None,
             neurons_fund_participation_constraints: None,
-            // TODO NNS1-2662: populate this field
-            neurons_fund_participation: None,
+            neurons_fund_participation: sns_cli_init_config.sns_swap.neurons_fund_participation,
         })
     }
 }
@@ -1110,6 +1113,7 @@ mod test {
             Self {
                 confirmation_text: Some("Please confirm that 2+2=4".to_string()),
                 restricted_countries: Some(vec!["CH".to_string()]),
+                neurons_fund_participation: Some(true),
             }
         }
     }
@@ -1247,7 +1251,7 @@ wait_for_quiet_deadline_increase_seconds: 1000
             neurons_fund_participants: _,
             token_logo: _,
             neurons_fund_participation_constraints: _,
-            neurons_fund_participation: _,
+            neurons_fund_participation,
         } = sns_init_payload;
 
         assert_eq!(
@@ -1350,6 +1354,11 @@ wait_for_quiet_deadline_increase_seconds: 1000
         assert_eq!(
             sns_cli_init_config.sns_swap.restricted_countries,
             restricted_countries.map(|items| items.iso_codes)
+        );
+
+        assert_eq!(
+            sns_cli_init_config.sns_swap.neurons_fund_participation,
+            neurons_fund_participation,
         );
 
         // Read the test.png file into memory
