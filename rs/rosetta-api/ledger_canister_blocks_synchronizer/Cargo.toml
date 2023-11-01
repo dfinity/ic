@@ -8,7 +8,7 @@ description = "Synchronizes a local copy of the ledger blocks with the ledger"
 [dependencies]
 async-trait = "0.1.41"
 candid = { workspace = true }
-chrono = "0.4"
+chrono = { workspace = true }
 clap = { workspace = true }
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 ic-agent = { workspace = true }

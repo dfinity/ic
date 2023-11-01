@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-chrono = "0.4.19"
+chrono = { workspace = true }
 ic-config = { path = "../../config" }
 ic-context-logger = { path = "../context_logger" }
 ic-protobuf = { path = "../../protobuf" }

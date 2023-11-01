@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-chrono = "0.4.19"
+chrono = { workspace = true }
 elastic_common_schema = { path = "../../elastic_common_schema" }
 gflags = "0.3.7"
 gflags-derive = "0.1"

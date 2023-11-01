@@ -74,7 +74,7 @@ tempfile = "3.1.0"
 url = { version = "2.1.1", features = ["serde"] }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-chrono = "0.4"
+chrono = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.4.0"
