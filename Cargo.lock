@@ -993,7 +993,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e1e6fb1c9e3d6fcdec57216a74eaa03e41f52a22f13a16438251d8e88b89da"
 dependencies = [
- "bit-vec 0.6.3",
+ "bit-vec",
 ]
 
 [[package]]
@@ -1002,14 +1002,8 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
 dependencies = [
- "bit-vec 0.6.3",
+ "bit-vec",
 ]
-
-[[package]]
-name = "bit-vec"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f59bbe95d4e52a6398ec21238d31577f2b28a9d86807f06ca59d191d8440d0bb"
 
 [[package]]
 name = "bit-vec"
@@ -10673,7 +10667,7 @@ name = "ic-state-manager"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "bit-vec 0.6.3",
+ "bit-vec",
  "criterion",
  "criterion-time",
  "crossbeam-channel",
@@ -12929,7 +12923,7 @@ dependencies = [
 name = "memory_tracker"
 version = "0.8.0"
 dependencies = [
- "bit-vec 0.5.1",
+ "bit-vec",
  "criterion",
  "ic-config",
  "ic-logger",

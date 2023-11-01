@@ -5,7 +5,7 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
 [dependencies]
-bit-vec = "0.5"
+bit-vec = "0.6.3"
 lazy_static = "*"
 libc = "*"
 memory_tracker = { path = "../../../rs/memory_tracker" }
