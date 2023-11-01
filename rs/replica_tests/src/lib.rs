@@ -12,9 +12,8 @@ use ic_ic00_types::{
     IC_00,
 };
 use ic_interfaces::{
-    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    artifact_pool::UnvalidatedArtifactEvent,
     execution_environment::{IngressHistoryReader, QueryHandler},
-    time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -73,11 +72,7 @@ fn process_ingress(
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-            message: msg,
-            peer_id: node_test_id(1),
-            timestamp: SysTimeSource::new().get_relative_time(),
-        }))
+        .send(UnvalidatedArtifactEvent::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();

@@ -8,7 +8,7 @@
 use crate::ArtifactClientHandle;
 use ic_interfaces::{
     artifact_manager::{ArtifactManager, OnArtifactError},
-    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    artifact_pool::UnvalidatedArtifactEvent,
 };
 use ic_types::{
     artifact,
@@ -249,13 +249,8 @@ where
             Ok(message) => {
                 // this sends to an unbounded channel, which is what we want here
                 self.sender
-                    .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message,
-                        peer_id,
-                        timestamp: self.time_source.get_relative_time(),
-                    }))
+                    .send(UnvalidatedArtifactEvent::Insert((message, peer_id)))
                     .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
-
                 Ok(())
             }
             Err(_) => Err(OnArtifactError::NotProcessed),

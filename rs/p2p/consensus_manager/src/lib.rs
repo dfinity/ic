@@ -8,7 +8,6 @@ use crossbeam_channel::Sender as CrossbeamSender;
 use ic_interfaces::{
     artifact_manager::ArtifactProcessorEvent,
     artifact_pool::{PriorityFnAndFilterProducer, UnvalidatedArtifactEvent, ValidatedPoolReader},
-    time_source::TimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -43,7 +42,6 @@ pub fn start_consensus_manager<Artifact, Pool>(
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
     sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
-    time_source: Arc<dyn TimeSource>,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
 ) where
@@ -73,7 +71,6 @@ pub fn start_consensus_manager<Artifact, Pool>(
         raw_pool,
         priority_fn_producer,
         sender,
-        time_source,
         transport,
         topology_watcher,
     );

@@ -147,12 +147,12 @@ pub fn setup_consensus_and_p2p(
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
-    time_source: Arc<SysTimeSource>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
+    let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let (advert_tx, advert_rx) = bounded(MAX_ADVERT_BUFFER);
 
@@ -233,7 +233,6 @@ pub fn setup_consensus_and_p2p(
                 Box::new(ArtifactClientHandle {
                     pool_reader: Box::new(client),
                     sender,
-                    time_source: time_source.clone(),
                 }),
             );
 

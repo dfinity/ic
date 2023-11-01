@@ -61,7 +61,6 @@ use ic_interfaces::{
     crypto::BasicSigner,
     execution_environment::{IngressFilterService, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
-    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -253,7 +252,6 @@ pub fn start_server(
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactEvent<IngressArtifact>>,
-    time_source: Arc<dyn TimeSource>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -294,7 +292,6 @@ pub fn start_server(
         metrics.clone(),
         node_id,
         subnet_id,
-        time_source,
         Arc::clone(&registry_client),
         ValidatorExecutor::new(
             Arc::clone(&registry_client),

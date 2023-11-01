@@ -20,12 +20,8 @@ use axum::{
 };
 use bytes::Bytes;
 use crossbeam_channel::Sender as CrossbeamSender;
-use ic_interfaces::{
-    artifact_pool::{
-        PriorityFnAndFilterProducer, UnvalidatedArtifact, UnvalidatedArtifactEvent,
-        ValidatedPoolReader,
-    },
-    time_source::TimeSource,
+use ic_interfaces::artifact_pool::{
+    PriorityFnAndFilterProducer, UnvalidatedArtifactEvent, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_peer_manager::SubnetTopology;
@@ -134,7 +130,6 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, Receive
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
     sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
-    time_source: Arc<dyn TimeSource>,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
     active_downloads: HashMap<Artifact::Id, watch::Sender<HashSet<NodeId>>>,
@@ -170,7 +165,6 @@ where
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
         sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
-        time_source: Arc<dyn TimeSource>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) {
@@ -187,7 +181,6 @@ where
             priority_fn_producer,
             current_priority_fn,
             sender,
-            time_source,
             transport,
             active_downloads: HashMap::new(),
             slot_table: HashMap::new(),
@@ -230,7 +223,6 @@ where
                                 peer_rx,
                                 self.current_priority_fn.subscribe(),
                                 self.sender.clone(),
-                                self.time_source.clone(),
                                 self.transport.clone(),
                                 self.metrics.clone()
                             ),
@@ -320,7 +312,6 @@ where
                             rx,
                             self.current_priority_fn.subscribe(),
                             self.sender.clone(),
-                            self.time_source.clone(),
                             self.transport.clone(),
                             self.metrics.clone(),
                         ),
@@ -467,7 +458,6 @@ where
         mut peer_rx: watch::Receiver<HashSet<NodeId>>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
         sender: CrossbeamSender<UnvalidatedArtifactEvent<Artifact>>,
-        time_source: Arc<dyn TimeSource>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
     ) -> (
@@ -491,11 +481,7 @@ where
             DownloadResult::Completed(artifact, peer_id) => {
                 // Send artifact to pool
                 sender
-                    .send(UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: artifact,
-                        peer_id,
-                        timestamp: time_source.get_relative_time(),
-                    }))
+                    .send(UnvalidatedArtifactEvent::Insert((artifact, peer_id)))
                     .expect("Channel should not be closed");
 
                 // wait for deletion from peers

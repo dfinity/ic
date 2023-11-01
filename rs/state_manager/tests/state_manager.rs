@@ -6,10 +6,7 @@ use ic_crypto_tree_hash::{
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
 use ic_interfaces::artifact_pool::ChangeResult;
-use ic_interfaces::{
-    artifact_pool::{UnvalidatedArtifact, UnvalidatedArtifactEvent},
-    certification::Verifier,
-};
+use ic_interfaces::{artifact_pool::UnvalidatedArtifactEvent, certification::Verifier};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
@@ -310,11 +307,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 assert_eq!(
@@ -1987,11 +1980,7 @@ fn can_do_simple_state_sync_transfer() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let recovered_state = dst_state_manager
@@ -2192,11 +2181,7 @@ fn can_state_sync_from_cache() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2229,11 +2214,7 @@ fn can_state_sync_from_cache() {
 
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2336,11 +2317,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
-                    vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    })],
+                    vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
                 );
 
                 let recovered_state = dst_state_manager
@@ -2454,11 +2431,7 @@ fn state_sync_can_reject_invalid_chunks() {
             let dst_msg = pipe_state_sync(msg.clone(), chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let recovered_state = dst_state_manager
@@ -2513,11 +2486,7 @@ fn can_state_sync_into_existing_checkpoint() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             assert_no_remaining_chunks(dst_metrics);
@@ -2593,11 +2562,7 @@ fn can_group_small_files_in_state_sync() {
 
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let recovered_state = dst_state_manager
@@ -2651,11 +2616,7 @@ fn can_commit_after_prev_state_is_gone() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             dst_state_manager.remove_states_below(height(2));
@@ -2714,11 +2675,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
@@ -2767,11 +2724,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let expected_state = src_state_manager.get_latest_state();
@@ -2961,11 +2914,7 @@ fn can_recover_from_corruption_on_state_sync() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
 
             let expected_state = src_state_manager.get_latest_state();
@@ -3014,11 +2963,7 @@ fn can_commit_below_state_sync() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -3073,11 +3018,7 @@ fn can_state_sync_below_commit() {
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.process_changes(
                 time_source.as_ref(),
-                vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                })],
+                vec![UnvalidatedArtifactEvent::Insert((dst_msg, node_test_id(0)))],
             );
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),

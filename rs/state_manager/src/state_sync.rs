@@ -8,7 +8,7 @@ use crate::{
 use ic_base_types::NodeId;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor},
-    artifact_pool::{ChangeResult, UnvalidatedArtifact, UnvalidatedArtifactEvent},
+    artifact_pool::{ChangeResult, UnvalidatedArtifactEvent},
     state_sync_client::StateSyncClient,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -22,7 +22,6 @@ use ic_types::{
     chunkable::{ArtifactChunk, ChunkId, Chunkable, ChunkableArtifact},
     crypto::crypto_hash,
     state_sync::FileGroupChunks,
-    time::UNIX_EPOCH,
     Height,
 };
 use std::sync::{Arc, Mutex};
@@ -311,11 +310,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
         // Processes received state sync artifacts.
         for artifact_event in artifact_events {
             match artifact_event {
-                UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                    message,
-                    peer_id,
-                    timestamp: _,
-                }) => {
+                UnvalidatedArtifactEvent::Insert((message, peer_id)) => {
                     let height = message.height;
                     info!(
                         self.log,
@@ -403,11 +398,7 @@ impl StateSyncClient for StateSync {
     fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
         let _ = self.process_changes(
             &SysTimeSource::new(),
-            vec![UnvalidatedArtifactEvent::Insert(UnvalidatedArtifact {
-                message: msg,
-                peer_id,
-                timestamp: UNIX_EPOCH,
-            })],
+            vec![UnvalidatedArtifactEvent::Insert((msg, peer_id))],
         );
     }
 }

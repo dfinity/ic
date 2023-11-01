@@ -2,7 +2,6 @@ use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::{subnet_config::SubnetConfig, transport::TransportConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
-use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, ReplicaLogger};
@@ -145,7 +144,6 @@ fn execute_test(
             fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
             0,
-            Arc::new(SysTimeSource::new()),
         );
 
         let mut p2p_test_context = P2PTestContext::new(
