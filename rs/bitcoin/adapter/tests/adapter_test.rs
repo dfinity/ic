@@ -12,6 +12,7 @@ use ic_btc_types_internal::{
     SendTransactionRequest,
 };
 use ic_config::adapters::AdaptersConfig;
+use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -60,7 +61,12 @@ fn make_get_successors_request(
         processed_block_hashes: headers,
     });
 
-    adapter_client.send_blocking(request, Options::default())
+    adapter_client.send_blocking(
+        request,
+        Options {
+            timeout: BitcoinPayloadBuilderConfig::default().adapter_timeout,
+        },
+    )
 }
 
 fn make_send_tx_request(
@@ -72,7 +78,12 @@ fn make_send_tx_request(
         transaction: raw_tx.to_vec(),
     });
 
-    adapter_client.send_blocking(request, Options::default())
+    adapter_client.send_blocking(
+        request,
+        Options {
+            timeout: BitcoinPayloadBuilderConfig::default().adapter_timeout,
+        },
+    )
 }
 
 async fn start_adapter(

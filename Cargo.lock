@@ -5140,6 +5140,7 @@ version = "0.1.0"
 dependencies = [
  "ic-btc-interface",
  "ic-btc-types-internal",
+ "ic-config",
  "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-adapter-client",

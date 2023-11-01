@@ -238,6 +238,7 @@ pub fn construct_ic_stack(
         btc_testnet_client,
         subnet_id,
         registry.clone(),
+        config.bitcoin_payload_builder_config,
         log.clone(),
     ));
     // ---------- HTTPS OUTCALLS DEPS FOLLOW ----------

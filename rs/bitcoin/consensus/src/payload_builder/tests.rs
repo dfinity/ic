@@ -4,6 +4,7 @@ use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
 };
+use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload},
@@ -113,6 +114,7 @@ fn bitcoin_payload_builder_test(
             Box::new(bitcoin_testnet_adapter_client),
             subnet_test_id(0),
             Arc::new(registry_client),
+            Config::default(),
             log,
         );
 

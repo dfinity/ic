@@ -33,16 +33,6 @@ pub struct Options {
     pub timeout: Duration,
 }
 
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            // Since we are allowed to block only for few milliseconds the consensus thread,
-            // set reasonable defaults.
-            timeout: Duration::from_millis(50),
-        }
-    }
-}
-
 /// Sync interface for communicating with an adapter.
 pub trait RpcAdapterClient<T>: Send + Sync {
     type Response;
