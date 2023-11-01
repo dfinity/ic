@@ -23,8 +23,9 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
-    Method, Payload, SkipPreUpgrade, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
+    InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -7169,4 +7170,93 @@ fn upload_chunk_fails_when_it_exceeds_chunk_size() {
         test.subnet_available_memory(),
         initial_subnet_available_memory
     );
+}
+
+#[test]
+fn clear_chunk_store_works() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let chunk = vec![1, 2, 3, 4, 5];
+    let hash = ic_crypto_sha2::Sha256::hash(&chunk);
+    let initial_memory_usage = test.canister_state(canister_id).memory_usage();
+
+    // After uploading the chunk, it is present in the store and the memory
+    // usage is positive.
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    test.subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+    assert!(test.canister_state(canister_id).memory_usage() > initial_memory_usage);
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .wasm_chunk_store
+        .get_chunk_data(&hash)
+        .is_some());
+
+    // After clearing, the chunk should be absent and memory usage should be
+    // zero.
+    let clear_args = ClearChunkStoreArgs {
+        canister_id: canister_id.into(),
+    };
+    test.subnet_message("clear_chunk_store", clear_args.encode())
+        .unwrap();
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage(),
+        initial_memory_usage
+    );
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .wasm_chunk_store
+        .get_chunk_data(&hash)
+        .is_none());
+}
+
+#[test]
+fn clear_chunk_store_fails_from_non_controller() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    let args = ClearChunkStoreArgs {
+        canister_id: canister_id.into(),
+    };
+
+    let clear_store = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::ClearChunkStore,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", clear_store);
+    let expected_err = format!(
+        "Only the controllers of the canister {} can control it.",
+        canister_id
+    );
+    match result {
+        Ok(WasmResult::Reject(reject)) => {
+            assert!(
+                reject.contains(&expected_err),
+                "Reject \"{reject}\" does not contain expected error \"{expected_err}\""
+            );
+        }
+        other => panic!("Expected reject, but got {:?}", other),
+    }
 }

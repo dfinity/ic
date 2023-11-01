@@ -31,7 +31,7 @@ use ic_cycles_account_manager::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType,
+    CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
     ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2,
     Method as Ic00Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
@@ -1044,9 +1044,16 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
+            Ok(Ic00Method::ClearChunkStore) => {
+                let res = match ClearChunkStoreArgs::decode(payload) {
+                    Err(err) => Err(err),
+                    Ok(request) => self.clear_chunk_store(*msg.sender(), &mut state, request),
+                };
+                Some((res, msg.take_cycles()))
+            }
+
             Ok(Ic00Method::StoredChunks)
             | Ok(Ic00Method::DeleteChunks)
-            | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::InstallChunkedCode) => Some((
                 Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -1544,6 +1551,19 @@ impl ExecutionEnvironment {
                 subnet_size,
             )
             .map(|reply| reply.encode())
+            .map_err(|err| err.into())
+    }
+
+    fn clear_chunk_store(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: ClearChunkStoreArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister_mut(args.get_canister_id(), state)?;
+        self.canister_manager
+            .clear_chunk_store(sender, canister)
+            .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
 

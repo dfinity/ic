@@ -6,7 +6,7 @@ use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
+    BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallChunkedCodeArgs,
     InstallCodeArgsV2, Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs,
     SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
@@ -211,9 +211,21 @@ pub(super) fn resolve_destination(
                     ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UploadChunk)
                 })
         }
-        Ok(Ic00Method::StoredChunks)
-        | Ok(Ic00Method::DeleteChunks)
-        | Ok(Ic00Method::ClearChunkStore) => {
+        Ok(Ic00Method::ClearChunkStore) => {
+            let args = ClearChunkStoreArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
+                .ok_or({
+                    ResolveDestinationError::SubnetNotFound(
+                        canister_id,
+                        Ic00Method::ClearChunkStore,
+                    )
+                })
+        }
+        Ok(Ic00Method::StoredChunks) | Ok(Ic00Method::DeleteChunks) => {
             Err(ResolveDestinationError::UserError(UserError::new(
                 ic_error_types::ErrorCode::CanisterRejectedMessage,
                 "Chunked upload API is not yet implemented",

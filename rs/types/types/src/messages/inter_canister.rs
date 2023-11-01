@@ -3,8 +3,9 @@ use ic_error_types::{RejectCode, TryFromError, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, Method,
-    Payload as _, ProvisionalTopUpCanisterArgs, UpdateSettingsArgs, UploadChunkArgs,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, Method, Payload as _, ProvisionalTopUpCanisterArgs, UpdateSettingsArgs,
+    UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -132,9 +133,13 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::StoredChunks) | Ok(Method::DeleteChunks) | Ok(Method::ClearChunkStore) => {
-                None
+            Ok(Method::ClearChunkStore) => {
+                match ClearChunkStoreArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
             }
+            Ok(Method::StoredChunks) | Ok(Method::DeleteChunks) => None,
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
