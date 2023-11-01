@@ -547,7 +547,7 @@ fn state_equivalence() {
     use crate::transactions::{
         EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
     };
-    use crate::tx::{Eip1559Signature, Eip1559TransactionRequest, FinalizedEip1559Transaction};
+    use crate::tx::{Eip1559Signature, Eip1559TransactionRequest};
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
     use maplit::btreemap;
 
@@ -610,8 +610,8 @@ fn state_equivalence() {
         sent_tx: singleton_map(
             1,
             3,
-            vec![SignedEip1559TransactionRequest {
-                transaction: Eip1559TransactionRequest {
+            vec![SignedEip1559TransactionRequest::from((
+                Eip1559TransactionRequest {
                     chain_id: 1,
                     nonce: TransactionNonce::new(1),
                     max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
@@ -624,52 +624,50 @@ fn state_equivalence() {
                     data: vec![],
                     access_list: Default::default(),
                 },
-                signature: Eip1559Signature {
+                Eip1559Signature {
                     signature_y_parity: true,
                     r: Default::default(),
                     s: Default::default(),
                 },
-            }],
+            ))],
         ),
         finalized_tx: singleton_map(
             0,
             2,
-            FinalizedEip1559Transaction {
-                transaction: SignedEip1559TransactionRequest {
-                    transaction: Eip1559TransactionRequest {
-                        chain_id: 1,
-                        nonce: TransactionNonce::new(0),
-                        max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
-                        max_fee_per_gas: WeiPerGas::new(100_000_000),
-                        gas_limit: GasAmount::new(21_000),
-                        destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
-                            .parse()
-                            .unwrap(),
-                        amount: Wei::new(1_000_000_000_000),
-                        data: vec![],
-                        access_list: Default::default(),
-                    },
-                    signature: Eip1559Signature {
-                        signature_y_parity: true,
-                        r: Default::default(),
-                        s: Default::default(),
-                    },
+            SignedEip1559TransactionRequest::from((
+                Eip1559TransactionRequest {
+                    chain_id: 1,
+                    nonce: TransactionNonce::new(0),
+                    max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
+                    max_fee_per_gas: WeiPerGas::new(100_000_000),
+                    gas_limit: GasAmount::new(21_000),
+                    destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
+                        .parse()
+                        .unwrap(),
+                    amount: Wei::new(1_000_000_000_000),
+                    data: vec![],
+                    access_list: Default::default(),
                 },
-                receipt: TransactionReceipt {
-                    block_hash:
-                        "0x9e1e2124a453e7b5afaabe42fb66fffb12d4b1053403d2f487d250007f3cb550"
-                            .parse()
-                            .unwrap(),
-                    block_number: BlockNumber::new(400_000),
-                    effective_gas_price: WeiPerGas::new(100_000_000),
-                    gas_used: GasAmount::new(21_000),
-                    status: TransactionStatus::Success,
-                    transaction_hash:
-                        "0xf0c4f26bedc5d42f492a38c23d2d8f090aba0a3264af1a1edde5e6d089d08825"
-                            .parse()
-                            .unwrap(),
+                Eip1559Signature {
+                    signature_y_parity: true,
+                    r: Default::default(),
+                    s: Default::default(),
                 },
-            },
+            ))
+            .try_finalize(TransactionReceipt {
+                block_hash: "0x9e1e2124a453e7b5afaabe42fb66fffb12d4b1053403d2f487d250007f3cb550"
+                    .parse()
+                    .unwrap(),
+                block_number: BlockNumber::new(400_000),
+                effective_gas_price: WeiPerGas::new(100_000_000),
+                gas_used: GasAmount::new(21_000),
+                status: TransactionStatus::Success,
+                transaction_hash:
+                    "0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
+                        .parse()
+                        .unwrap(),
+            })
+            .expect("valid receipt"),
         ),
         next_nonce: TransactionNonce::new(3),
         maybe_reimburse: btreemap! {

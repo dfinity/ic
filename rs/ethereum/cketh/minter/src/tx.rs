@@ -113,21 +113,26 @@ impl rlp::Encodable for Eip1559Signature {
     }
 }
 
+/// Immutable signed EIP-1559 transaction.
+/// Use `Eip1559TransactionRequest::sign()` to create a newly signed transaction or
+/// `SignedEip1559TransactionRequest::from()` if the signature is already known
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct SignedEip1559TransactionRequest {
     #[n(0)]
-    pub transaction: Eip1559TransactionRequest,
+    transaction: Eip1559TransactionRequest,
     #[n(1)]
-    pub signature: Eip1559Signature,
+    signature: Eip1559Signature,
     // TODO FI-984: transaction hash should be computed only once
 }
 
+/// Immutable finalized transaction.
+/// Use `SignedEip1559TransactionRequest::try_finalize()` to create a finalized transaction.
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct FinalizedEip1559Transaction {
     #[n(0)]
-    pub transaction: SignedEip1559TransactionRequest,
+    transaction: SignedEip1559TransactionRequest,
     #[n(1)]
-    pub receipt: TransactionReceipt,
+    receipt: TransactionReceipt,
 }
 
 impl FinalizedEip1559Transaction {
