@@ -154,7 +154,7 @@ impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
     }
 
     fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = dkg::Message>> {
-        unimplemented!()
+        Box::new(std::iter::empty())
     }
 }
 

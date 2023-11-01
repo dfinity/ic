@@ -177,7 +177,7 @@ impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         &self,
         _filter: &(),
     ) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
-        unimplemented!()
+        Box::new(std::iter::empty())
     }
 }
 
