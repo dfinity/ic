@@ -17,7 +17,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
     CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
-    UploadChunkReply,
+    StoredChunksReply, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -394,7 +394,8 @@ impl CanisterManager {
                 match method {
                     Ok(Ic00Method::UploadChunk)
                     | Ok(Ic00Method::ClearChunkStore)
-                    | Ok(Ic00Method::InstallChunkedCode) if self.config.wasm_chunk_store == FlagStatus::Enabled => {}
+                    | Ok(Ic00Method::InstallChunkedCode)
+                    | Ok(Ic00Method::StoredChunks) if self.config.wasm_chunk_store == FlagStatus::Enabled => {}
                     Ok(Ic00Method::UploadChunk)
                     | Ok(Ic00Method::StoredChunks)
                     | Ok(Ic00Method::DeleteChunks)
@@ -1540,6 +1541,27 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
         canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
         Ok(())
+    }
+
+    pub(crate) fn stored_chunks(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+    ) -> Result<StoredChunksReply, CanisterManagerError> {
+        if self.config.wasm_chunk_store == FlagStatus::Disabled {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: "Wasm chunk store not enabled".to_string(),
+            });
+        }
+        validate_controller(canister, &sender)?;
+
+        let keys = canister
+            .system_state
+            .wasm_chunk_store
+            .keys()
+            .map(|k| serde_bytes::ByteBuf::from(*k))
+            .collect();
+        Ok(StoredChunksReply(keys))
     }
 }
 

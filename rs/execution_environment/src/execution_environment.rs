@@ -35,8 +35,8 @@ use ic_ic00_types::{
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
     ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2,
     Method as Ic00Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -1033,10 +1033,10 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadChunk) => {
                 let res = match UploadChunkArgs::decode(payload) {
                     Err(err) => Err(err),
-                    Ok(request) => self.upload_chunk(
+                    Ok(args) => self.upload_chunk(
                         *msg.sender(),
                         &mut state,
-                        request,
+                        args,
                         &mut round_limits.subnet_available_memory,
                         registry_settings.subnet_size,
                     ),
@@ -1047,14 +1047,20 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ClearChunkStore) => {
                 let res = match ClearChunkStoreArgs::decode(payload) {
                     Err(err) => Err(err),
-                    Ok(request) => self.clear_chunk_store(*msg.sender(), &mut state, request),
+                    Ok(args) => self.clear_chunk_store(*msg.sender(), &mut state, args),
                 };
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
-            | Ok(Ic00Method::InstallChunkedCode) => Some((
+            Ok(Ic00Method::StoredChunks) => {
+                let res = match StoredChunksArgs::decode(payload) {
+                    Err(err) => Err(err),
+                    Ok(args) => self.stored_chunks(*msg.sender(), &state, args),
+                };
+                Some((res, msg.take_cycles()))
+            }
+
+            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
                 Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "Chunked upload API is not yet implemented.",
@@ -1564,6 +1570,19 @@ impl ExecutionEnvironment {
         self.canister_manager
             .clear_chunk_store(sender, canister)
             .map(|()| EmptyBlob.encode())
+            .map_err(|err| err.into())
+    }
+
+    fn stored_chunks(
+        &self,
+        sender: PrincipalId,
+        state: &ReplicatedState,
+        args: StoredChunksArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+        self.canister_manager
+            .stored_chunks(sender, canister)
+            .map(|reply| reply.encode())
             .map_err(|err| err.into())
     }
 
