@@ -192,6 +192,17 @@ pub fn dummy_transcript_for_tests_with_params(
     threshold: u32,
     registry_version: u64,
 ) -> NiDkgTranscript {
+    // The functionality in this function, and the one in `dummy_transcript_for_tests` below, are
+    // copied from the `impl NiDkgTranscript` block in `ic_types::crypto::threshold_sig::ni_dkg`.
+    // The reasons for not being able to reuse the code are:
+    // - The functions/methods should not be available to production code, i.e., they should either
+    //   have a `#[cfg(test)]` annotation, or be in a `test-utils` crate.
+    // - We can annotate the method in the `ic-types` crate with `#[cfg(test)]`, since it is only
+    //   used for tests within that crate.
+    // - We cannot use the functions in this `ic-crypto-test-utils-ni-dkg` crate from the `ic-types`
+    //   crate even just for tests, due to the quasi-circular dependency that it would introduce.
+    // Since the code is not very complex and a dozen lines, duplicating it is not a big issue.
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     NiDkgTranscript {
         dkg_id: NiDkgId {
             start_block_height: Height::from(0),
@@ -204,7 +215,14 @@ pub fn dummy_transcript_for_tests_with_params(
         committee: NiDkgReceivers::new(committee.into_iter().collect())
             .expect("Couldn't create non-interactive DKG committee"),
         registry_version: RegistryVersion::from(registry_version),
-        internal_csp_transcript: CspNiDkgTranscript::placeholder_to_delete(),
+        internal_csp_transcript: CspNiDkgTranscript::Groth20_Bls12_381(
+            ni_dkg_groth20_bls12_381::Transcript {
+                public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
+                    coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
+                },
+                receiver_data: BTreeMap::new(),
+            },
+        ),
     }
 }
 pub fn dummy_transcript_for_tests() -> NiDkgTranscript {

@@ -3,7 +3,6 @@ pub use crate::encrypt::forward_secure::{CspFsEncryptionPop, CspFsEncryptionPubl
 use crate::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::hash::Hash;
 use strum_macros::IntoStaticStr;
 
@@ -71,18 +70,6 @@ pub enum CspNiDkgTranscript {
     Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript),
 }
 impl CspNiDkgTranscript {
-    /// Generates an instance of a transcript, for use in stub implementations.
-    /// TODO (CRP-824): Delete when stub implementations are complete.
-    pub fn placeholder_to_delete() -> Self {
-        use crate::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-        CspNiDkgTranscript::Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript {
-            public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-                coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
-            },
-            receiver_data: BTreeMap::new(),
-        })
-    }
-
     /// From a general transcript to general public coefficients.
     pub fn public_coefficients(&self) -> CspPublicCoefficients {
         match &self {

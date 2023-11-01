@@ -1,7 +1,7 @@
 use super::*;
+use crate::crypto::threshold_sig::ni_dkg::dummy_internal_transcript;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetSubnet};
 use crate::{Height, PrincipalId, SubnetId};
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 
 pub const NODE_1: u64 = 1;
 pub const NODE_2: u64 = 2;
@@ -23,7 +23,7 @@ fn should_succeed_creating_valid_config_for_single_node() {
         threshold: dkg_threshold(1),
         committee: NiDkgReceivers::new(set_of(&[node_id(NODE_1)])).unwrap(),
         registry_version: REG_V1,
-        internal_csp_transcript: CspNiDkgTranscript::placeholder_to_delete(),
+        internal_csp_transcript: dummy_internal_transcript(),
     };
     let config_data = NiDkgConfigData {
         dkg_id: dkg_id(1),
@@ -374,7 +374,7 @@ fn transcript() -> NiDkgTranscript {
         ]))
         .unwrap(),
         registry_version: REG_V2,
-        internal_csp_transcript: CspNiDkgTranscript::placeholder_to_delete(),
+        internal_csp_transcript: dummy_internal_transcript(),
     }
 }
 
