@@ -56,6 +56,7 @@ fn a_state() -> State {
         ethereum_block_height: Default::default(),
         minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
         next_transaction_nonce: Default::default(),
+        last_scraped_block_number: Default::default(),
     })
     .expect("init args should be valid")
 }
@@ -181,6 +182,7 @@ mod mint_transaction {
             ethereum_block_height: Default::default(),
             minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
             next_transaction_nonce: Default::default(),
+            last_scraped_block_number: Default::default(),
         })
         .expect("init args should be valid")
     }
@@ -296,6 +298,7 @@ mod upgrade {
             ethereum_block_height: Default::default(),
             minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
             next_transaction_nonce: Default::default(),
+            last_scraped_block_number: Default::default(),
         })
         .expect("valid init args")
     }
@@ -363,6 +366,7 @@ prop_compose! {
         next_transaction_nonce in arb_nat(),
         ledger_id in arb_principal(),
         ecdsa_key_name in "[a-z_]*",
+        last_scraped_block_number in arb_nat(),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -372,6 +376,7 @@ prop_compose! {
             ethereum_block_height,
             minimum_withdrawal_amount,
             next_transaction_nonce,
+            last_scraped_block_number
         }
     }
 }

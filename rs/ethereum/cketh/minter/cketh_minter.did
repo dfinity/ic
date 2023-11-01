@@ -58,7 +58,11 @@ type InitArg = record {
     minimum_withdrawal_amount : nat;
 
     // Nonce of the next transaction to be sent to the Ethereum network.
-    next_transaction_nonce : nat
+    next_transaction_nonce : nat;
+    
+    // Block number to start scrapping from on the Ethereum network.
+    // Scrapping the logs will resume at `last_scraped_block_number + 1` (inclusive).
+    last_scraped_block_number : nat;
 };
 
 type UpgradeArg = record {

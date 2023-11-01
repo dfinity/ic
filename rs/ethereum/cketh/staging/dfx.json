@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "dfx": "0.14.3",
+  "canisters": {
+    "minter": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ethereum/cketh/minter:cketh_minter"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ethereum/cketh/minter/cketh_minter.wasm",
+      "candid": "../minter/cketh_minter.did",
+      "shrink": false
+    },
+    "ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
+}

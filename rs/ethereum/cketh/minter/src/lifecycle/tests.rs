@@ -88,6 +88,7 @@ mod init {
             ethereum_block_height: Default::default(),
             minimum_withdrawal_amount: Wei::TWO.into(),
             next_transaction_nonce: TransactionNonce::ZERO.into(),
+            last_scraped_block_number: Default::default(),
         }
     }
 }
