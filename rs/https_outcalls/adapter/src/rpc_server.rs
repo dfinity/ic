@@ -11,8 +11,8 @@ use hyper::{
     header::{HeaderMap, ToStrError},
     Body, Client, Method,
 };
+use hyper_rustls::HttpsConnector;
 use hyper_socks2::SocksConnector;
-use hyper_tls::HttpsConnector;
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
 use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,

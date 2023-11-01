@@ -1,13 +1,6 @@
 // These tests rely on being able to set SSL_CERT_FILE environment variable to trust
 // a self signed certificate.
-// At the moment we use `hyper-tls` which uses OpenSSL. OpenSSL correctly respects the
-// SSL_CERT_FILE variable but on MacOS OpenSSL is symlinked to LibreSSL which ignores
-// the environment variables.
-// In the future we want to use rustls (also respects the variables) to stop relying on
-// external libraries for tls. But rustls does not currently support certificates for
-// IP addresses and this is needed for our e2e system tests.
-// https://github.com/rustls/rustls/issues/184.
-#[cfg(not(target_os = "macos"))]
+// We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
     use futures::TryFutureExt;
     use http::{header::HeaderValue, StatusCode};
