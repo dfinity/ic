@@ -10,7 +10,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
-chrono = "0.4.19"
+chrono = { workspace = true }
 colored = "2.0.0"
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }

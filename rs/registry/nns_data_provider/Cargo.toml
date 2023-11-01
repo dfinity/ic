@@ -14,7 +14,7 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
-chrono = "0.4.19"
+chrono = { workspace = true }
 prost = { workspace = true }
 rand = "0.8"
 serde = { workspace = true }
