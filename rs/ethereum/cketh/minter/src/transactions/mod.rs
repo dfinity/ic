@@ -161,6 +161,10 @@ impl EthTransactions {
         self.reimbursement_requests.values().cloned().collect()
     }
 
+    pub fn get_reimbursed_transactions(&self) -> Vec<Reimbursed> {
+        self.reimbursed.values().cloned().collect()
+    }
+
     pub fn record_withdrawal_request(&mut self, request: EthWithdrawalRequest) {
         let burn_index = request.ledger_burn_index;
         if self

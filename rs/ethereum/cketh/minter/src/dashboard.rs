@@ -11,7 +11,7 @@ use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::{MintedEvent, State};
-use ic_cketh_minter::transactions::EthWithdrawalRequest;
+use ic_cketh_minter::transactions::{EthWithdrawalRequest, Reimbursed};
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
@@ -49,6 +49,7 @@ pub struct DashboardTemplate {
     pub withdrawal_requests: Vec<EthWithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
+    pub reimbursed_transactions: Vec<Reimbursed>,
 }
 
 impl DashboardTemplate {
@@ -105,6 +106,10 @@ impl DashboardTemplate {
             .collect();
         finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
 
+        let mut reimbursed_transactions = state.eth_transactions.get_reimbursed_transactions();
+        reimbursed_transactions
+            .sort_unstable_by_key(|reimbursed_tx| std::cmp::Reverse(reimbursed_tx.withdrawal_id));
+
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
             ecdsa_key_name: state.ecdsa_key_name.clone(),
@@ -125,6 +130,7 @@ impl DashboardTemplate {
             withdrawal_requests,
             pending_transactions,
             finalized_transactions,
+            reimbursed_transactions,
         }
     }
 }

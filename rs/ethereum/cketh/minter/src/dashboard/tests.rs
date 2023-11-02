@@ -15,6 +15,7 @@ use ic_cketh_minter::transactions::{EthWithdrawalRequest, Subaccount};
 use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
 };
+use std::str::FromStr;
 
 #[test]
 fn should_display_metadata() {
@@ -424,7 +425,114 @@ fn should_display_etherscan_links_according_to_chosen_network() {
     );
 }
 
-//TODO FI-1025: add tests for reimbursed transactions
+#[test]
+fn should_display_reimbursed_requests() {
+    use ic_cketh_minter::transactions::Reimbursed;
+
+    DashboardAssert::assert_that(initial_dashboard())
+        .has_no_elements_matching("#reimbursed-transactions");
+
+    let reimbursed_in_block = LedgerMintIndex::new(123);
+    let reimbursed_amount = Wei::new(100_102);
+
+    let dashboard = {
+        let mut state = initial_state();
+
+        for (req, tx, signed_tx, receipt) in vec![
+            withdrawal_flow(
+                LedgerBurnIndex::new(15),
+                TransactionNonce::from(0_u8),
+                TransactionStatus::Success,
+            ),
+            withdrawal_flow(
+                LedgerBurnIndex::new(16),
+                TransactionNonce::from(1_u8),
+                TransactionStatus::Failure,
+            ),
+            withdrawal_flow(
+                LedgerBurnIndex::new(17),
+                TransactionNonce::from(2_u8),
+                TransactionStatus::Failure,
+            ),
+        ] {
+            let id = req.ledger_burn_index;
+            apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req));
+            apply_state_transition(
+                &mut state,
+                &EventType::CreatedTransaction {
+                    withdrawal_id: id,
+                    transaction: tx,
+                },
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::SignedTransaction {
+                    withdrawal_id: id,
+                    transaction: signed_tx,
+                },
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::FinalizedTransaction {
+                    withdrawal_id: id,
+                    transaction_receipt: receipt.clone(),
+                },
+            );
+            if receipt.status == TransactionStatus::Failure {
+                apply_state_transition(
+                    &mut state,
+                    &EventType::ReimbursedEthWithdrawal(Reimbursed {
+                        withdrawal_id: id,
+                        reimbursed_in_block,
+                        reimbursed_amount,
+                    }),
+                );
+            }
+        }
+        DashboardTemplate::from_state(&state)
+    };
+
+    // Check that we show latest first.
+    DashboardAssert::assert_that(dashboard)
+        .has_finalized_transactions(
+            1,
+            &vec![
+                "17",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_099_999_999_979_000",
+                "21_000",
+                "4190269",
+                "0x08f2a390f1872d7bc71881f36d847066f794bedb4938f5802d8ec13669bb0740",
+                "Failure",
+            ],
+        )
+        .has_finalized_transactions(
+            2,
+            &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_099_999_999_979_000",
+                "21_000",
+                "4190269",
+                "0xbc13db18c10a03d92e187580a6c93478f22c76cf79b35fca492f9720ab7710ec",
+                "Failure",
+            ],
+        )
+        .has_finalized_transactions(
+            3,
+            &vec![
+                "15",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "1_099_999_999_979_000",
+                "21_000",
+                "4190269",
+                "0x0a691dc3335c49c443a2e503f4ae903855873f279a0d14357ba3bf2c3e4d15b7",
+                "Success",
+            ],
+        )
+        .has_reimbursed_transactions(1, &vec!["17", "123", "1_099_999_999_979_000"])
+        .has_reimbursed_transactions(2, &vec!["16", "123", "1_099_999_999_979_000"]);
+}
 
 fn initial_dashboard() -> DashboardTemplate {
     DashboardTemplate::from_state(&initial_state())
@@ -464,7 +572,6 @@ fn received_eth_event() -> ReceivedEthEvent {
 }
 
 fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
-    use std::str::FromStr;
     const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
     const DEFAULT_PRINCIPAL: &str =
         "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
@@ -691,6 +798,18 @@ mod assertions {
                 &format!("#finalized-transactions + table > tbody > tr:nth-child({row_index})"),
                 expected_value,
                 "finalized-transactions",
+            )
+        }
+
+        pub fn has_reimbursed_transactions(
+            &self,
+            row_index: u8,
+            expected_value: &Vec<&str>,
+        ) -> &Self {
+            self.has_table_row_string_value(
+                &format!("#reimbursed-transactions + table > tbody > tr:nth-child({row_index})"),
+                expected_value,
+                "reimbursed-transactions",
             )
         }
 
