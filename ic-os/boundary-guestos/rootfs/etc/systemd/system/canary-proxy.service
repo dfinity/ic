@@ -11,7 +11,7 @@ Group=root
 LimitNOFILE=524288
 EnvironmentFile=/run/ic-node/etc/default/canary-proxy
 ExecStart=/opt/ic/bin/canary-proxy \
-    --listen-port "${PROXY_PORT}"  \
+    --listen-port "${CANARY_PROXY_PORT}"  \
     --target-host 127.0.0.1
 
 Restart=always
