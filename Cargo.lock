@@ -1230,7 +1230,7 @@ dependencies = [
  "ic-types",
  "lazy_static",
  "mockall 0.11.4",
- "nix",
+ "nix 0.24.3",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.11.0",
  "prometheus",
@@ -1736,7 +1736,7 @@ dependencies = [
  "hyper 0.14.26",
  "hyper-rustls",
  "mockall 0.11.4",
- "nix",
+ "nix 0.24.3",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
  "prometheus",
@@ -2806,7 +2806,7 @@ dependencies = [
  "futures",
  "httptest",
  "mockall 0.11.4",
- "nix",
+ "nix 0.24.3",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus 0.13.0",
  "prometheus",
@@ -4129,7 +4129,7 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "log",
- "nix",
+ "nix 0.24.3",
  "rand 0.8.5",
  "rand_distr",
  "reqwest",
@@ -4828,7 +4828,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "lmdb-rkv",
  "lmdb-rkv-sys",
- "nix",
+ "nix 0.24.3",
  "prometheus",
  "prost",
  "rand 0.8.5",
@@ -5310,7 +5310,7 @@ dependencies = [
  "libflate",
  "memory_tracker",
  "mockall 0.7.2",
- "nix",
+ "nix 0.24.3",
  "rayon",
  "serde_json",
  "slog",
@@ -5333,7 +5333,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "libc",
- "nix",
+ "nix 0.24.3",
  "serde",
  "serde_bytes",
 ]
@@ -5346,7 +5346,7 @@ dependencies = [
  "ic-canister-sandbox-common",
  "ic-test-utilities",
  "ic-types",
- "nix",
+ "nix 0.24.3",
 ]
 
 [[package]]
@@ -5368,7 +5368,7 @@ dependencies = [
  "ic-wasm-types",
  "lazy_static",
  "libc",
- "nix",
+ "nix 0.24.3",
  "once_cell",
  "prometheus",
  "regex",
@@ -7269,7 +7269,7 @@ dependencies = [
  "libflate",
  "maplit",
  "memory_tracker",
- "nix",
+ "nix 0.24.3",
  "pretty_assertions",
  "prometheus",
  "proptest",
@@ -7354,7 +7354,7 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "mockall 0.7.2",
- "nix",
+ "nix 0.24.3",
  "num-rational",
  "num-traits",
  "phantom_newtype",
@@ -9814,7 +9814,7 @@ dependencies = [
  "jemalloc-ctl",
  "jemallocator",
  "libc",
- "nix",
+ "nix 0.24.3",
  "num_cpus",
  "pprof",
  "predicates 1.0.8",
@@ -9971,7 +9971,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "maplit",
- "nix",
+ "nix 0.24.3",
  "phantom_newtype",
  "prometheus",
  "proptest",
@@ -10082,7 +10082,7 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "log",
- "nix",
+ "nix 0.24.3",
  "rand 0.8.5",
  "reqwest",
  "serde",
@@ -10697,7 +10697,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "ic-wasm-types",
  "maplit",
- "nix",
+ "nix 0.24.3",
  "parking_lot 0.12.1",
  "prometheus",
  "proptest",
@@ -10806,7 +10806,7 @@ dependencies = [
  "ic-crypto-sha2",
  "lazy_static",
  "libc",
- "nix",
+ "nix 0.24.3",
  "phantom_newtype",
  "tempfile",
  "wsl",
@@ -10943,7 +10943,7 @@ dependencies = [
  "ic-wasm-types",
  "lazy_static",
  "mockall 0.7.2",
- "nix",
+ "nix 0.24.3",
  "parking_lot 0.12.1",
  "phantom_newtype",
  "proptest",
@@ -11235,7 +11235,7 @@ dependencies = [
  "hex",
  "ic-sys",
  "libc",
- "nix",
+ "nix 0.24.3",
  "prost",
  "rand 0.8.5",
  "scoped_threadpool",
@@ -11530,7 +11530,7 @@ dependencies = [
  "ic-xnet-uri",
  "maplit",
  "mockall 0.7.2",
- "nix",
+ "nix 0.24.3",
  "prometheus",
  "proptest",
  "rand 0.8.5",
@@ -12858,9 +12858,9 @@ dependencies = [
 
 [[package]]
 name = "memmap2"
-version = "0.5.10"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83faa42c0a078c393f6b29d5db232d8be22776a891f8f56e5284faee4a20b327"
+checksum = "43a5a03cefb0d953ec0be133036f14e109412fa594edc2f77227249db66cc3ed"
 dependencies = [
  "libc",
 ]
@@ -12921,7 +12921,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "lazy_static",
  "libc",
- "nix",
+ "nix 0.24.3",
  "proptest",
  "slog",
  "tempfile",
@@ -13214,6 +13214,17 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "memoffset 0.6.5",
+]
+
+[[package]]
+name = "nix"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
+dependencies = [
+ "bitflags 1.3.2",
+ "cfg-if 1.0.0",
+ "libc",
 ]
 
 [[package]]
@@ -13759,7 +13770,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "mockall 0.8.3",
- "nix",
+ "nix 0.24.3",
  "prometheus",
  "prost",
  "rand 0.8.5",
@@ -14353,8 +14364,9 @@ checksum = "26f6a7b87c2e435a3241addceeeff740ff8b7e76b74c13bf9acb17fa454ea00b"
 
 [[package]]
 name = "pprof"
-version = "0.10.1"
-source = "git+https://github.com/tikv/pprof-rs?rev=059d3c80395c74e9f82ca1f9cbb3c013acfffb75#059d3c80395c74e9f82ca1f9cbb3c013acfffb75"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978385d59daf9269189d052ca8a84c1acfd0715c0599a5d5188d4acc078ca46a"
 dependencies = [
  "backtrace",
  "cfg-if 1.0.0",
@@ -14362,7 +14374,7 @@ dependencies = [
  "inferno",
  "libc",
  "log",
- "nix",
+ "nix 0.26.4",
  "once_cell",
  "parking_lot 0.12.1",
  "prost",
@@ -16947,9 +16959,9 @@ checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 
 [[package]]
 name = "symbolic-common"
-version = "9.2.1"
+version = "12.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "800963ba330b09a2ae4a4f7c6392b81fbc2784099a98c1eac68c3437aa9382b2"
+checksum = "6d3aa424281de488c1ddbaffb55a421ad87d04b0fdd5106e7e71d748c0c71ea6"
 dependencies = [
  "debugid",
  "memmap2",
@@ -16959,9 +16971,9 @@ dependencies = [
 
 [[package]]
 name = "symbolic-demangle"
-version = "9.2.1"
+version = "12.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b940a1fdbc72bb3369e38714efe6cd332dbbe46d093cf03d668b9ac390d1ad0"
+checksum = "9bdcf77effe2908a21c1011b4d49a7122e0f44487a6ad89db67c55a1687e2572"
 dependencies = [
  "rustc-demangle",
  "symbolic-common",
@@ -17327,7 +17339,7 @@ dependencies = [
  "libflate",
  "lifeline",
  "maplit",
- "nix",
+ "nix 0.24.3",
  "num_cpus",
  "on_wire",
  "openssh-keys",
@@ -18395,7 +18407,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c8e1df0bf1e1b28095c24564d1b90acae64ca69b097ed73896e342fa6649c57"
 dependencies = [
  "libc",
- "nix",
+ "nix 0.24.3",
 ]
 
 [[package]]
