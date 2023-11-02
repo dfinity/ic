@@ -320,6 +320,28 @@
                 </tbody>
             </table>
             {% endif %}
+
+            {% if !reimbursed_transactions.is_empty() %}
+            <h3 id="reimbursed-transactions">Reimbursed Transactions</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ledger Burn Index</th>
+                        <th>Ledger Mint Index</th>
+                        <th>Value (Wei)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reimbursed_transactions %}
+                    <tr>
+                        <td class="numeric">{{ r.withdrawal_id }}</td>
+                        <td class="numeric">{{ r.reimbursed_in_block }}</td>
+                        <td class="numeric">{{ r.reimbursed_amount }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
         </div>
     </div>
 
@@ -356,3 +378,4 @@
     </script>
     </body>
 </html>
+
