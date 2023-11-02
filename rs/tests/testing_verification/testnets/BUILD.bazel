@@ -163,6 +163,8 @@ system_test(
             "@dfx",
             "@idl2json",
             "@sns_quill//:sns-quill",
+            # TODO: remove once the mainnet ic-recovery contains the commits we need.
+            "//rs/recovery:ic-recovery",
         ],
     deps = [
         "//rs/tests",
