@@ -393,7 +393,7 @@ fn check_proposal_status_after_voting_and_after_expiration(
                     Neuron {
                         id: Some(NeuronId { id: i }),
                         controller: Some(principal(i)),
-                        account: fake_driver.get_fake_env().random_byte_array().to_vec(),
+                        account: fake_driver.random_byte_array().to_vec(),
                         ..neuron
                     },
                 )
@@ -3311,7 +3311,7 @@ fn compute_maturities(
                         controller: Some(principal(i as u64)),
                         cached_neuron_stake_e8s: *stake_e8s,
                         dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
-                        account: fake_driver.get_fake_env().random_byte_array().to_vec(),
+                        account: fake_driver.random_byte_array().to_vec(),
                         ..Default::default()
                     },
                 )
@@ -8401,6 +8401,7 @@ fn test_omit_large_fields() {
 // view it.
 #[test]
 fn test_list_neurons() {
+    let mut driver = fake::FakeDriver::default();
     // Create 100 neurons with IDs 1-100.
     let mut proto = GovernanceProto {
         neurons: (1..100)
@@ -8411,6 +8412,7 @@ fn test_list_neurons() {
                     *x,
                     Neuron {
                         id: Some(NeuronId { id: *x }),
+                        account: driver.random_byte_array().to_vec(),
                         ..Default::default()
                     },
                 )
@@ -8439,7 +8441,6 @@ fn test_list_neurons() {
             followees: [NeuronId { id: 2 }, NeuronId { id: 4 }].to_vec(),
         },
     };
-    let driver = fake::FakeDriver::default();
     let gov = Governance::new(
         proto,
         driver.get_fake_env(),
@@ -9029,6 +9030,9 @@ proptest! {
 fn test_merge_maturity_of_neuron(
     starting_maturity in 1_000_000u64..250_000_000_000
 ) {
+    // Since it's a proptest and it uses stable storage, we need to reset the stable memory before
+    // each iteration.
+    ic_nns_governance::storage::reset_stable_memory();
     let (driver, mut gov, neuron) = create_mature_neuron(false);
 
     let id = neuron.id.unwrap();
@@ -11048,10 +11052,11 @@ fn test_wfq_constant_flipping() {
 /// - Assert than when querying the neuron the updated name is correct.
 #[tokio::test]
 async fn test_known_neurons() {
-    let driver = fake::FakeDriver::default();
+    let mut driver = fake::FakeDriver::default();
     let neurons = btreemap! {
         1 => Neuron {
             id: Some(NeuronId { id: 1 }),
+            account: driver.random_byte_array().to_vec(),
             controller: Some(principal(1)),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS)),
@@ -11059,6 +11064,7 @@ async fn test_known_neurons() {
         },
         2 => Neuron {
             id: Some(NeuronId { id: 2 }),
+            account: driver.random_byte_array().to_vec(),
             controller: Some(principal(2)),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS)),
@@ -11066,6 +11072,7 @@ async fn test_known_neurons() {
         },
         3 => Neuron {
             id: Some(NeuronId { id: 3 }),
+            account: driver.random_byte_array().to_vec(),
             controller: Some(principal(3)),
             cached_neuron_stake_e8s: 100_000_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS)),

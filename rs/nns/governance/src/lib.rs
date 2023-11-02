@@ -543,7 +543,6 @@ fn neuron_stable_indexes_building_is_enabled() -> bool {
 }
 
 /// Whether we should use neuron indexes in stable storage (instead of the ones on heap memory).
-#[allow(dead_code)]
 fn use_neuron_stable_indexes() -> bool {
-    cfg! { any(test, feature = "test") }
+    true
 }

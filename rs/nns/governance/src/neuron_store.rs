@@ -14,8 +14,8 @@ use crate::{
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
-        with_stable_neuron_indexes_mut, with_stable_neuron_store, with_stable_neuron_store_mut,
-        NeuronIdU64, TopicSigned32,
+        with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
+        with_stable_neuron_store_mut, NeuronIdU64, TopicSigned32,
     },
     Clock, IcClock,
 };
@@ -257,7 +257,11 @@ impl NeuronStore {
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
             principal_to_neuron_ids_index: HeapNeuronPrincipalIndex::new(),
             known_neuron_name_set: HashSet::new(),
-            indexes_migration: Migration::default(),
+            indexes_migration: Migration {
+                status: Some(MigrationStatus::Succeeded as i32),
+                failure_reason: None,
+                progress: None,
+            },
             clock: Box::new(IcClock::new()),
         };
 
@@ -460,14 +464,23 @@ impl NeuronStore {
 
     /// Get NeuronId for a particular subaccount.
     pub fn get_neuron_id_for_subaccount(&self, subaccount: Subaccount) -> Option<NeuronId> {
-        self.heap_neurons
-            .values()
-            .find(|n| {
-                n.subaccount()
-                    .map(|neuron_subaccount| neuron_subaccount == subaccount)
-                    .unwrap_or_default()
+        let neuron_id = if crate::use_neuron_stable_indexes() {
+            with_stable_neuron_indexes(|indexes| {
+                indexes
+                    .subaccount()
+                    .get_neuron_id_by_subaccount(&subaccount)
             })
-            .and_then(|n| n.id)
+        } else {
+            self.heap_neurons
+                .values()
+                .find(|n| {
+                    n.subaccount()
+                        .map(|neuron_subaccount| neuron_subaccount == subaccount)
+                        .unwrap_or_default()
+                })
+                .and_then(|n| n.id)
+        };
+        neuron_id
     }
 
     pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
@@ -550,11 +563,15 @@ impl NeuronStore {
 
     /// List all neuron ids of known neurons
     pub fn list_known_neuron_ids(&self) -> Vec<NeuronId> {
-        let filter = |n: &Neuron| n.known_neuron_data.is_some();
-        self.map_heap_neurons_filtered(filter, |n| n.id)
-            .into_iter()
-            .flatten()
-            .collect()
+        if crate::use_neuron_stable_indexes() {
+            with_stable_neuron_indexes(|indexes| indexes.known_neuron().list_known_neuron_ids())
+        } else {
+            let filter = |n: &Neuron| n.known_neuron_data.is_some();
+            self.map_heap_neurons_filtered(filter, |n| n.id)
+                .into_iter()
+                .flatten()
+                .collect()
+        }
     }
 
     /// List all neurons that are spawning
@@ -945,13 +962,32 @@ impl NeuronStore {
         &self,
         principal_id: PrincipalId,
     ) -> HashSet<NeuronId> {
-        self.principal_to_neuron_ids_index
-            .get_neuron_ids(principal_id)
+        if crate::use_neuron_stable_indexes() {
+            with_stable_neuron_indexes(|indexes| {
+                indexes
+                    .principal()
+                    .get_neuron_ids(principal_id)
+                    .into_iter()
+                    .map(|id| NeuronId { id })
+                    .collect()
+            })
+        } else {
+            self.principal_to_neuron_ids_index
+                .get_neuron_ids(principal_id)
+        }
     }
 
     // Returns whether the known neuron name already exists.
     pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
-        self.known_neuron_name_set.contains(known_neuron_name)
+        if crate::use_neuron_stable_indexes() {
+            with_stable_neuron_indexes(|indexes| {
+                indexes
+                    .known_neuron()
+                    .contains_known_neuron_name(known_neuron_name)
+            })
+        } else {
+            self.known_neuron_name_set.contains(known_neuron_name)
+        }
     }
 
     // Census
