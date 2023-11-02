@@ -771,9 +771,9 @@ mod tests {
     use std::{cell::RefCell, collections::BTreeMap};
 
     use ic_base_types::PrincipalId;
-    use maplit::hashmap;
+    use maplit::{btreemap, hashmap};
 
-    use crate::pb::v1::{governance::Migration, neuron::Followees, KnownNeuronData, Neuron};
+    use crate::pb::v1::{neuron::Followees, KnownNeuronData, Neuron};
 
     thread_local! {
         static NEXT_TEST_NEURON_ID: RefCell<u64> = RefCell::new(1);
@@ -831,12 +831,14 @@ mod tests {
 
     #[test]
     fn test_finish_validation() {
-        let neuron_store = NeuronStore::new_for_test(vec![Neuron {
+        let neuron = Neuron {
             id: Some(NeuronId { id: 1 }),
             account: [1u8; 32].to_vec(),
             controller: Some(PrincipalId::new_user_test_id(1)),
             ..Default::default()
-        }]);
+        };
+        let mut neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron});
+        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
         let mut validation = NeuronDataValidator::new();
 
         // Each index use 3 rounds and invalid neuron validator takes 2 rounds.
@@ -867,7 +869,7 @@ mod tests {
         };
         btree_map.insert(non_idle.id.unwrap().id, non_idle);
 
-        let neuron_store = NeuronStore::new(btree_map, None, Migration::default());
+        let neuron_store = NeuronStore::new(btree_map);
 
         STABLE_NEURON_STORE.with(|stable_neuron_store| {
             for neuron in idle_neurons {
@@ -911,7 +913,7 @@ mod tests {
         btree_map.get_mut(&2).unwrap().cached_neuron_stake_e8s += 1;
         btree_map.remove(&3);
 
-        let neuron_store = NeuronStore::new(btree_map, None, Migration::default());
+        let neuron_store = NeuronStore::new(btree_map);
 
         STABLE_NEURON_STORE.with(|stable_neuron_store| {
             for neuron in idle_neurons {
@@ -963,7 +965,7 @@ mod tests {
     fn test_validator_valid() {
         // Both followees and principals (controller is a hot key) have duplicates since we do allow
         // it at this time.
-        let neuron_store = NeuronStore::new_for_test(vec![Neuron {
+        let neuron = Neuron {
             cached_neuron_stake_e8s: 1,
             controller: Some(PrincipalId::new_user_test_id(1)),
             hot_keys: vec![
@@ -982,7 +984,9 @@ mod tests {
                 },
             },
             ..next_test_neuron()
-        }]);
+        };
+        let mut neuron_store = NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron});
+        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
         let mut validator = NeuronDataValidator::new();
         let mut now = 1;
         while validator.maybe_validate(now, &neuron_store) {
@@ -997,7 +1001,9 @@ mod tests {
         // Step 1: Cause as many issues as possible by having an inactive neuron (without adding it
         // to STABLE_NEURON_STORE, and remove the only neuron from indexes).
         let neuron = next_test_neuron();
-        let neuron_store = NeuronStore::new_for_test(vec![neuron.clone()]);
+        let mut neuron_store =
+            NeuronStore::new(btreemap! {neuron.id.unwrap().id => neuron.clone()});
+        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
         NEURON_INDEXES
             .with(|indexes| indexes.borrow_mut().remove_neuron(&neuron))
             .unwrap();
@@ -1102,11 +1108,17 @@ mod tests {
     fn test_validator_truncate_same_type_of_issues() {
         // Create 11 issues of each type by adding 11 neurons and removing all of them from the
         // indexes.
-        let neurons: Vec<_> = (0..=10).map(|_| next_test_neuron()).collect();
-        let neuron_store = NeuronStore::new_for_test(neurons.clone());
+        let neurons: BTreeMap<_, _> = (0..=10)
+            .map(|_| {
+                let neuron = next_test_neuron();
+                (neuron.id.unwrap().id, neuron)
+            })
+            .collect();
+        let mut neuron_store = NeuronStore::new(neurons.clone());
+        neuron_store.maybe_batch_add_heap_neurons_to_stable_indexes();
         NEURON_INDEXES.with(|indexes| {
-            for neuron in neurons {
-                indexes.borrow_mut().remove_neuron(&neuron).unwrap()
+            for neuron in neurons.values() {
+                indexes.borrow_mut().remove_neuron(neuron).unwrap()
             }
         });
 

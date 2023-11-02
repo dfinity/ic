@@ -98,7 +98,7 @@ pub fn split_governance_proto(
     governance_proto: GovernanceProto,
 ) -> (
     BTreeMap<u64, Neuron>,
-    Option<HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>>,
+    HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
     HeapGovernanceData,
 ) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
@@ -131,13 +131,7 @@ pub fn split_governance_proto(
 
     let neuron_management_voting_period_seconds =
         neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
-
-    // There won't be anything in this the first time we boot after the upgrade.
-    let topic_followee_index = if !topic_followee_index.is_empty() {
-        Some(proto_to_heap_topic_followee_index(topic_followee_index))
-    } else {
-        None
-    };
+    let topic_followee_index = proto_to_heap_topic_followee_index(topic_followee_index);
 
     (
         neurons,
@@ -271,13 +265,8 @@ mod tests {
         let (heap_neurons, topic_followee_index, heap_governance_data) =
             split_governance_proto(governance_proto.clone());
 
-        assert!(topic_followee_index.is_none());
-
-        let reassembled_governance_proto = reassemble_governance_proto(
-            heap_neurons,
-            topic_followee_index.unwrap_or_default(),
-            heap_governance_data,
-        );
+        let reassembled_governance_proto =
+            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
 
         assert_eq!(reassembled_governance_proto, governance_proto);
     }
@@ -298,13 +287,8 @@ mod tests {
         let (heap_neurons, topic_followee_index, heap_governance_data) =
             split_governance_proto(governance_proto.clone());
 
-        assert!(topic_followee_index.is_some());
-
-        let reassembled_governance_proto = reassemble_governance_proto(
-            heap_neurons,
-            topic_followee_index.unwrap_or_default(),
-            heap_governance_data,
-        );
+        let reassembled_governance_proto =
+            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
 
         assert_eq!(reassembled_governance_proto.topic_followee_index.len(), 1);
         assert_eq!(reassembled_governance_proto, governance_proto);
@@ -317,13 +301,10 @@ mod tests {
             ..simple_governance_proto()
         };
 
-        let (heap_neurons, topic_followee_map, heap_governance_data) =
+        let (heap_neurons, topic_followee_index, heap_governance_data) =
             split_governance_proto(governance_proto.clone());
-        let reassembled_governance_proto = reassemble_governance_proto(
-            heap_neurons,
-            topic_followee_map.unwrap_or_default(),
-            heap_governance_data,
-        );
+        let reassembled_governance_proto =
+            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
 
         assert_eq!(
             reassembled_governance_proto,

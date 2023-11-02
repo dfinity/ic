@@ -1540,6 +1540,8 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
 }
 
 impl Governance {
+    /// Initializes Governance for the first time from init payload. When restoring after an upgrade
+    /// with its persisted state, `Governance::new_restored` should be called instead.
     pub fn new(
         mut governance_proto: GovernanceProto,
         env: Box<dyn Environment>,
@@ -1583,6 +1585,35 @@ impl Governance {
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
 
+        let (neurons, topic_followee_index, heap_governance_proto) =
+            split_governance_proto(governance_proto);
+
+        assert!(
+            topic_followee_index.num_entries() == 0,
+            "Topic followee index should not be empty when initializing for the first time"
+        );
+
+        // Step 3: Final assembly.
+        Self {
+            heap_data: heap_governance_proto,
+            neuron_store: NeuronStore::new(neurons),
+            env,
+            ledger,
+            cmc,
+            closest_proposal_deadline_timestamp_seconds: 0,
+            latest_gc_timestamp_seconds: 0,
+            latest_gc_num_proposals: 0,
+            neuron_data_validator: NeuronDataValidator::new(),
+        }
+    }
+
+    /// Restores Governance after an upgrade from its persisted state.
+    pub fn new_restored(
+        governance_proto: GovernanceProto,
+        env: Box<dyn Environment>,
+        ledger: Box<dyn IcpLedger>,
+        cmc: Box<dyn CMC>,
+    ) -> Self {
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
@@ -1592,10 +1623,9 @@ impl Governance {
             .and_then(|migrations| migrations.neuron_indexes_migration.clone())
             .unwrap_or_default();
 
-        // Step 3: Final assembly.
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(
+            neuron_store: NeuronStore::new_restored(
                 heap_neurons,
                 topic_followee_map,
                 neuron_indexes_migration,

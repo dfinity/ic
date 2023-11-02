@@ -542,8 +542,6 @@ fn craft_neuron_store(
                 (id, neuron)
             })
             .collect(),
-        None,
-        Migration::default(),
     )
 }
 
@@ -553,8 +551,7 @@ fn assert_clean_refund(
     expected_neuron_store: &NeuronStore,
 ) {
     let original_id_to_neuron = neuron_store.clone_neurons();
-    let mut original_neuron_store =
-        NeuronStore::new(original_id_to_neuron, None, Migration::default());
+    let mut original_neuron_store = NeuronStore::new(original_id_to_neuron);
 
     let failed_refunds = refund_community_fund_maturity(neuron_store, cf_participants);
     assert!(failed_refunds.is_empty(), "{:#?}", failed_refunds);
@@ -800,7 +797,7 @@ fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
 
 #[test]
 fn draw_funds_from_the_community_fund_trivial() {
-    let mut neuron_store = NeuronStore::new(btreemap! {}, None, Migration::default());
+    let mut neuron_store = NeuronStore::new(btreemap! {});
     let original_total_community_fund_maturity_e8s_equivalent = 0;
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
@@ -812,15 +809,12 @@ fn draw_funds_from_the_community_fund_trivial() {
 
     // Inspect results.
     assert_eq!(observed_cf_neurons, vec![]);
-    assert_eq!(
-        neuron_store,
-        NeuronStore::new(btreemap! {}, None, Migration::default())
-    );
+    assert_eq!(neuron_store, NeuronStore::new(btreemap! {}));
 
     assert_clean_refund(
         &mut neuron_store,
         &observed_cf_neurons,
-        &NeuronStore::new(btreemap! {}, None, Migration::default()),
+        &NeuronStore::new(btreemap! {}),
     );
 }
 
@@ -2610,7 +2604,6 @@ mod cast_vote_and_cascade_follow {
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
         neuron_store::NeuronStore,
         pb::v1::{
-            governance::Migration,
             neuron::{DissolveState, Followees},
             Ballot, Neuron, Topic, Vote,
         },
@@ -2702,7 +2695,7 @@ mod cast_vote_and_cascade_follow {
         // Add a neuron without a ballot for neuron 6 to follow.
         add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
 
-        let mut neuron_store = NeuronStore::new(heap_neurons, None, Migration::default());
+        let mut neuron_store = NeuronStore::new(heap_neurons);
 
         Governance::cast_vote_and_cascade_follow(
             &ProposalId { id: 1 },
@@ -2753,33 +2746,21 @@ mod cast_vote_and_cascade_follow {
                 neuron_map.insert(id, neuron);
             };
 
-        let mut heap_neurons = BTreeMap::new();
+        let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
         for id in 1..=5 {
             // Each neuron follows all neurons with a lower id
             let followees = (1..id).collect();
 
-            add_neuron_with_ballot(
-                &mut heap_neurons,
-                &mut ballots,
-                id,
-                followees,
-                Vote::Unspecified,
-            );
+            add_neuron_with_ballot(&mut neurons, &mut ballots, id, followees, Vote::Unspecified);
         }
         // Add another neuron that follows both a neuron with a ballot and without a ballot
-        add_neuron_with_ballot(
-            &mut heap_neurons,
-            &mut ballots,
-            6,
-            vec![1, 7],
-            Vote::Unspecified,
-        );
+        add_neuron_with_ballot(&mut neurons, &mut ballots, 6, vec![1, 7], Vote::Unspecified);
 
         // Add a neuron without a ballot for neuron 6 to follow.
-        add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
+        add_neuron_without_ballot(&mut neurons, 7, vec![1]);
 
-        let mut neuron_store = NeuronStore::new(heap_neurons, None, Migration::default());
+        let mut neuron_store = NeuronStore::new(neurons);
 
         Governance::cast_vote_and_cascade_follow(
             &ProposalId { id: 1 },
@@ -2894,7 +2875,7 @@ fn test_pre_and_post_upgrade_first_time() {
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
 
     // We now simulate the post_upgrade
-    let mut governance = Governance::new(
+    let mut governance = Governance::new_restored(
         extracted_proto,
         Box::<MockEnvironment<'_>>::default(),
         Box::new(StubIcpLedger {}),
