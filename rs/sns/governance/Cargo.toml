@@ -26,8 +26,7 @@ name = "proposal-test"
 path = "tests/proposal.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 async-trait = "0.1.42"
 base64 = { workspace = true }
@@ -73,9 +72,7 @@ strum_macros = { workspace = true }
 ic-types = { path = "../../types/types" }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 ic-base-types = { path = "../../types/base_types" }
 prost-build = { workspace = true }

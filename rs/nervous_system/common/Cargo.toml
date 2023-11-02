@@ -11,8 +11,7 @@ name = "ic_nervous_system_common"
 path = "src/lib.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 anyhow = "1.0.57"
 bytes = { workspace = true }
@@ -45,9 +44,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 [dev-dependencies]
 ic-nns-governance = { path = "../../nns/governance" }

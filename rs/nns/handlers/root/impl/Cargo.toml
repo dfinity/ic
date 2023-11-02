@@ -18,8 +18,7 @@ path = "test_canisters/upgrade_test_canister.rs"
 path = "src/lib.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 candid = { workspace = true }
 dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
@@ -66,9 +65,7 @@ hex = "0.4.2"
 registry-canister = { path = "../../../../registry/canister" }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 [dev-dependencies]
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }

@@ -1323,18 +1323,18 @@ dependencies = [
 [[package]]
 name = "build-info"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "242c6293ad5acf5d9adb75231c1bd0c9cb0aecb64dd40e6579e36e0da7260f9b"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
+ "build-info-common",
  "build-info-proc",
+ "lazy_static",
  "proc-macro-hack",
 ]
 
 [[package]]
 name = "build-info-build"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ebfef0dcb94d65cc2cd98ce285de89ed40c9a1d2bb10175f548867d0e26cda0"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -1353,8 +1353,7 @@ dependencies = [
 [[package]]
 name = "build-info-common"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db629469a6955021b15eb99cf5983ae8dcf9d0432ba2a8295715efee232da912"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "chrono",
  "derive_more 0.99.17",
@@ -1365,15 +1364,13 @@ dependencies = [
 [[package]]
 name = "build-info-proc"
 version = "0.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0965fa7159aa2cee4c5428ccec2d09dabb6ac5db2fe80d81cb8a158f5c47b335"
+source = "git+https://github.com/dfinity-lab/build-info?rev=abb2971c5d07a9b40d41a0c84b63a3156f2ff764#abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
  "bincode",
  "build-info-common",
  "chrono",
- "format-buf",
  "num-bigint 0.4.3",
  "num-traits",
  "proc-macro-error",
@@ -3737,12 +3734,6 @@ checksum = "a62bc1cf6f830c2ec14a513a9fb124d0a213a629668a4186f329db21fe045652"
 dependencies = [
  "percent-encoding 2.3.0",
 ]
-
-[[package]]
-name = "format-buf"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7aea5a5909a74969507051a3b17adc84737e31a5f910559892aedce026f4d53"
 
 [[package]]
 name = "forwarded-header-value"
