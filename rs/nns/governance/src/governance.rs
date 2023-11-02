@@ -5024,7 +5024,7 @@ impl Governance {
             Vote::Yes,
             Topic::NeuronManagement,
             &mut self.neuron_store,
-        )?;
+        );
 
         // Add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
@@ -5651,7 +5651,7 @@ impl Governance {
             Vote::Yes,
             topic,
             &mut self.neuron_store,
-        )?;
+        );
         // Finally, add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
 
@@ -5673,28 +5673,8 @@ impl Governance {
         vote_of_neuron: Vote,
         topic: Topic,
         neuron_store: &mut NeuronStore,
-    ) -> Result<(), GovernanceError> {
+    ) {
         assert!(topic != Topic::Unspecified);
-        // Neuron management proposals don't have following.
-        if topic == Topic::NeuronManagement {
-            let neuron_ballot = ballots.get_mut(&voting_neuron_id.id).ok_or_else(||
-                // This neuron is not eligible to vote on this proposal.
-                GovernanceError::new_with_message(ErrorType::NotAuthorized, "Neuron not authorized to vote on proposal."))?;
-            if neuron_ballot.vote != (Vote::Unspecified as i32) {
-                // Already voted.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Neuron already voted on proposal.",
-                ));
-            }
-
-            // No following for manage neuron proposals.
-            neuron_ballot.vote = vote_of_neuron as i32;
-            neuron_store.with_neuron_mut(voting_neuron_id, |neuron| {
-                neuron.register_recent_ballot(topic, proposal_id, vote_of_neuron)
-            })?;
-            return Ok(());
-        }
 
         // This is the induction variable of the loop: a map from
         // neuron ID to the neuron's vote - 'yes' or 'no' (other
@@ -5785,6 +5765,11 @@ impl Governance {
             // new set now.
             induction_votes.clear();
 
+            // Following is not enabled for neuron management proposals
+            if topic == Topic::NeuronManagement {
+                return;
+            }
+
             // Calling "would_follow_ballots" for neurons that cannot vote is wasteful.
             retain_neurons_with_castable_ballots(&mut all_followers, ballots);
 
@@ -5811,7 +5796,7 @@ impl Governance {
             // If induction_votes is empty, the loop will terminate
             // here.
             if induction_votes.is_empty() {
-                return Ok(());
+                return;
             }
             // We now continue to the next iteration of the loop.
             // Because induction_votes is not empty, either at least
@@ -5925,7 +5910,7 @@ impl Governance {
             vote,
             topic,
             &mut self.neuron_store,
-        )?;
+        );
 
         self.process_proposal(proposal_id.id);
 

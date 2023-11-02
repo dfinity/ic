@@ -2703,8 +2703,7 @@ mod cast_vote_and_cascade_follow {
             Vote::Yes,
             topic,
             &mut neuron_store,
-        )
-        .unwrap();
+        );
 
         assert_eq!(
             ballots,
@@ -2768,8 +2767,7 @@ mod cast_vote_and_cascade_follow {
             Vote::Yes,
             topic,
             &mut neuron_store,
-        )
-        .unwrap();
+        );
 
         assert_eq!(
             ballots,
