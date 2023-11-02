@@ -916,12 +916,16 @@ impl CanisterInstallMode {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy, Default)]
-pub struct SkipPreUpgrade(pub Option<bool>);
+pub struct UpgradeOptions {
+    /// Determine whether the pre-upgrade hook should be skipped during upgrade.
+    pub skip_pre_upgrade: Option<bool>,
+    /// Support for enhanced orthogonal persistence: Retain the main memory on upgrade.
+    pub keep_main_memory: Option<bool>,
+}
 
 /// The mode with which a canister is installed.
 ///
-/// This second version of the mode allows someone to specify the
-/// optional `SkipPreUpgrade` parameter in case of an upgrade
+/// This second version of the mode allows someone to specify upgrade options.
 #[derive(
     Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy, Default,
 )]
@@ -938,18 +942,31 @@ pub enum CanisterInstallModeV2 {
     /// Upgrade an existing canister.
     #[serde(rename = "upgrade")]
     #[strum(serialize = "upgrade")]
-    Upgrade(Option<SkipPreUpgrade>),
+    Upgrade(Option<UpgradeOptions>),
 }
 
 impl CanisterInstallModeV2 {
     pub fn iter() -> Iter<'static, CanisterInstallModeV2> {
-        static MODES: [CanisterInstallModeV2; 6] = [
+        static MODES: [CanisterInstallModeV2; 7] = [
             CanisterInstallModeV2::Install,
             CanisterInstallModeV2::Reinstall,
             CanisterInstallModeV2::Upgrade(None),
-            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(None))),
-            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(Some(false)))),
-            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(Some(true)))),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory: Some(true),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                keep_main_memory: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                keep_main_memory: Some(true),
+            })),
         ];
         MODES.iter()
     }
@@ -1025,9 +1042,10 @@ impl TryFrom<CanisterInstallModeV2Proto> for CanisterInstallModeV2 {
 
             ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode2(
                 upgrade_mode,
-            ) => Ok(CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(
-                upgrade_mode.skip_pre_upgrade,
-            )))),
+            ) => Ok(CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: upgrade_mode.skip_pre_upgrade,
+                keep_main_memory: upgrade_mode.keep_main_memory,
+            }))),
         }
     }
 }
@@ -1071,10 +1089,11 @@ impl From<&CanisterInstallModeV2> for CanisterInstallModeV2Proto {
                         CanisterInstallModeProto::Upgrade.into(),
                     )
                 }
-                CanisterInstallModeV2::Upgrade(Some(skip_pre_upgrade)) => {
+                CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
                     ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode2(
                         CanisterUpgradeOptions {
-                            skip_pre_upgrade: skip_pre_upgrade.0,
+                            skip_pre_upgrade: upgrade_options.skip_pre_upgrade,
+                            keep_main_memory: upgrade_options.keep_main_memory,
                         },
                     )
                 }
@@ -1120,7 +1139,6 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     memory_allocation: opt nat;
 ///     query_allocation: opt nat;
 ///     sender_canister_version : opt nat64;
-///     keep_main_memory: opt bool;
 /// })`
 #[derive(Clone, CandidType, Deserialize, Debug)]
 pub struct InstallCodeArgs {
@@ -1134,7 +1152,6 @@ pub struct InstallCodeArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
-    pub keep_main_memory: Option<bool>,
 }
 
 impl std::fmt::Display for InstallCodeArgs {
@@ -1168,15 +1185,6 @@ impl std::fmt::Display for InstallCodeArgs {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(f, "}}")?;
-        writeln!(
-            f,
-            "  keep_main_memory: {:?}",
-            &self
-                .keep_main_memory
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1192,7 +1200,6 @@ impl InstallCodeArgs {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
         query_allocation: Option<u64>,
-        keep_main_memory: Option<bool>,
     ) -> Self {
         Self {
             mode,
@@ -1203,7 +1210,6 @@ impl InstallCodeArgs {
             memory_allocation: memory_allocation.map(candid::Nat::from),
             query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
-            keep_main_memory,
         }
     }
 

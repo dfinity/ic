@@ -1425,6 +1425,5 @@ fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
         memory_allocation: None,
         query_allocation: None,
         sender_canister_version: None,
-        keep_main_memory: None,
     }
 }

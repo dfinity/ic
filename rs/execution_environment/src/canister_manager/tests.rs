@@ -23,7 +23,7 @@ use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2,
-    Method, Payload, SkipPreUpgrade, UpdateSettingsArgs,
+    Method, Payload, UpdateSettingsArgs, UpgradeOptions,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -6168,7 +6168,10 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     test.upgrade_canister_v2(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        Some(SkipPreUpgrade(Some(true))),
+        Some(UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        }),
     )
     .unwrap();
 
@@ -6185,7 +6188,10 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         .upgrade_canister_v2(
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
-            Some(SkipPreUpgrade(None)),
+            Some(UpgradeOptions {
+                skip_pre_upgrade: Some(false),
+                keep_main_memory: None,
+            }),
         )
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
