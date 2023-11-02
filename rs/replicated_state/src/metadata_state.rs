@@ -1515,14 +1515,18 @@ impl<'a> StreamHandle<'a> {
     }
 
     /// Appends the given message to the tail of the stream.
-    pub fn push(&mut self, message: RequestOrResponse) {
+    ///
+    /// Returns the byte size of the pushed message.
+    pub fn push(&mut self, message: RequestOrResponse) -> usize {
+        let size_bytes = message.count_bytes();
         if let RequestOrResponse::Response(response) = &message {
             *self
                 .responses_size_bytes
                 .entry(response.respondent)
-                .or_default() += message.count_bytes();
+                .or_default() += size_bytes;
         }
         self.stream.push(message);
+        size_bytes
     }
 
     /// Increments the index of the last sent signal.
