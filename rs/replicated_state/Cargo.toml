@@ -57,7 +57,7 @@ serde_cbor = { workspace = true }
 proptest = "1.0"
 prost = { workspace = true }
 scoped_threadpool = "0.1.*"
-static_assertions = "1.1.0"
+static_assertions = "0.3.4"
 
 [[bench]]
 name = "bench_allocator"
