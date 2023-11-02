@@ -10,12 +10,10 @@ if (($# != 0)); then
     exit 1
 fi
 
-LEDGER_CANISTER_ID="ryjl3-tyaaa-aaaaa-aaaba-cai"
-ARCHIVE_CANISTER_ID="qjdve-lqaaa-aaaaa-aaaeq-cai"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-TMP_DIR="$SCRIPT_DIR/tmp" # need a persistent directory from within dev container
+source "$SCRIPT_DIR/constants.sh"
+
 ROSETTA_DATA_DIR_PARENT="$TMP_DIR/rosetta_data"
-HOME="${DFX_HOME:-$HOME}"
 
 # the directory used to store the ledger blocks is
 # the hash of the ledger and the archive nodes
