@@ -10,6 +10,6 @@ documentation.workspace = true
 proc-macro = true
 
 [dependencies]
-syn = { version = "1.0.42", features = ["full"] }
+syn = { workspace = true }
 quote = "1.0"
 

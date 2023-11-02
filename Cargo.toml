@@ -459,6 +459,7 @@ signature = "2.1.0"
 simple_asn1 = "0.6.2"
 strum = { version = "0.24.1", features = ["derive"] }
 strum_macros = "0.24.1"
+syn = { version = "1.0.109", features = ["fold", "full"] }
 tokio = { version = "1.32.0", features = ["full"] }
 tonic = "0.9.2"
 tonic-build = "0.9.2"

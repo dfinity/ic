@@ -1131,7 +1131,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile, s
                 version = "^2.4",
             ),
             "syn": crate.spec(
-                version = "^1.0",
+                version = "^1.0.109",
                 features = [
                     "fold",
                     "full",
