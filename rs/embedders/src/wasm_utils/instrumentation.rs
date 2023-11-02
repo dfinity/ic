@@ -1,6 +1,8 @@
 //! This module is responsible for instrumenting wasm binaries on the Internet
 //! Computer.
 //!
+//! Supports 64-bit main memory by using `wasm64`.
+//!
 //! It exports the function [`instrument`] which takes a Wasm binary and
 //! injects some instrumentation that allows to:
 //!  * Quantify the amount of execution every function of that module conducts.
@@ -26,6 +28,7 @@
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
 //! (import "__" "update_available_memory" (func (;1;) ((param i32 i32 i32) (result i32))))
+//! (import "__" "update_available_memory_64" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
@@ -458,6 +461,7 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
 const INSTRUMENTED_FUN_MODULE: &str = "__";
 const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
 const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
+const UPDATE_MEMORY_64_FUN_NAME: &str = "update_available_memory_64";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const STABLE_READ_FIRST_ACCESS_NAME: &str = "stable_read_first_access";
@@ -560,10 +564,21 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// added as the last imports, we'd need to increment only non imported
 /// functions, since imported functions precede all others in the function index
 /// space, but this would be error-prone).
-fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
+fn inject_helper_functions(
+    mut module: Module,
+    wasm_native_stable_memory: FlagStatus,
+    main_memory_mode: MemoryMode,
+) -> Module {
     // insert types
     let ooi_type = FuncType::new([], []);
-    let uam_type = FuncType::new([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
+    let uam_type = match main_memory_mode {
+        MemoryMode::Memory32 => {
+            FuncType::new([ValType::I32, ValType::I32, ValType::I32], [ValType::I32])
+        }
+        MemoryMode::Memory64 => {
+            FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64])
+        }
+    };
 
     let ooi_type_idx = add_func_type(&mut module, ooi_type);
     let uam_type_idx = add_func_type(&mut module, uam_type);
@@ -575,9 +590,13 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         ty: TypeRef::Func(ooi_type_idx),
     };
 
+    let uam_name = match main_memory_mode {
+        MemoryMode::Memory32 => UPDATE_MEMORY_FUN_NAME,
+        MemoryMode::Memory64 => UPDATE_MEMORY_64_FUN_NAME,
+    };
     let uam_imp = Import {
         module: INSTRUMENTED_FUN_MODULE,
-        name: UPDATE_MEMORY_FUN_NAME,
+        name: uam_name,
         ty: TypeRef::Func(uam_type_idx),
     };
 
@@ -628,6 +647,8 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
     debug_assert!(
         module.imports[InjectedImports::UpdateAvailableMemory as usize].name
             == "update_available_memory"
+            || module.imports[InjectedImports::UpdateAvailableMemory as usize].name
+                == "update_available_memory_64"
     );
     if wasm_native_stable_memory == FlagStatus::Enabled {
         debug_assert!(
@@ -659,6 +680,23 @@ pub(super) struct SpecialIndices {
     pub stable_memory_index: u32,
 }
 
+// Address space used in a Wasm memory.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum MemoryMode {
+    Memory32,
+    Memory64,
+}
+
+impl MemoryMode {
+    pub fn get(module: &Module<'_>) -> MemoryMode {
+        if module.memories.iter().any(|memory| memory.memory64) {
+            MemoryMode::Memory64
+        } else {
+            MemoryMode::Memory32
+        }
+    }
+}
+
 /// Takes a Wasm binary and inserts the instructions metering and memory grow
 /// instrumentation.
 ///
@@ -674,10 +712,15 @@ pub(super) fn instrument(
     dirty_page_overhead: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let stable_memory_index;
-    let mut module = inject_helper_functions(module, wasm_native_stable_memory);
+    let main_memory_mode = MemoryMode::get(&module);
+    let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_mode);
     module = export_table(module);
-    (module, stable_memory_index) =
-        update_memories(module, write_barrier, wasm_native_stable_memory);
+    (module, stable_memory_index) = update_memories(
+        module,
+        write_barrier,
+        wasm_native_stable_memory,
+        main_memory_mode,
+    );
 
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
@@ -731,7 +774,12 @@ pub(super) fn instrument(
 
     // inject instructions counter decrementation
     for func_body in &mut module.code_sections {
-        inject_metering(&mut func_body.instructions, &special_indices, metering_type);
+        inject_metering(
+            &mut func_body.instructions,
+            &special_indices,
+            metering_type,
+            main_memory_mode,
+        );
     }
 
     // Collect all the function types of the locally defined functions inside the
@@ -758,7 +806,7 @@ pub(super) fn instrument(
     if !func_types.is_empty() {
         let func_bodies = &mut module.code_sections;
         for (func_ix, func_type) in func_types.into_iter() {
-            inject_update_available_memory(&mut func_bodies[func_ix], &func_type);
+            inject_update_available_memory(&mut func_bodies[func_ix], &func_type, main_memory_mode);
             if write_barrier == FlagStatus::Enabled {
                 inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
             }
@@ -774,6 +822,7 @@ pub(super) fn instrument(
             subnet_type,
             dirty_page_overhead,
             metering_type,
+            main_memory_mode,
         )
     }
 
@@ -853,6 +902,7 @@ fn replace_system_api_functions(
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     metering_type: MeteringType,
+    main_memory_mode: MemoryMode,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -869,6 +919,7 @@ fn replace_system_api_functions(
         subnet_type,
         dirty_page_overhead,
         metering_type,
+        main_memory_mode,
     ) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_func_type(module, ty);
@@ -1121,8 +1172,9 @@ enum Scope {
 
 // Describes how to calculate the instruction cost at this injection point.
 // `StaticCost` injection points contain information about the cost of the
-// following basic block. `DynamicCost` injection points assume there is an i32
-// on the stack which should be decremented from the instruction counter.
+// following basic block. `DynamicCost` injection points assume there is an
+// i32 on 32-bit Wasm or an i64 on Wasm Memory64 on the stack which should
+// be decremented from the instruction counter.
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum InjectionPointCostDetail {
     StaticCost { scope: Scope, cost: u64 },
@@ -1176,6 +1228,7 @@ fn inject_metering(
     code: &mut Vec<Operator>,
     export_data_module: &SpecialIndices,
     metering_type: MeteringType,
+    main_memory_mode: MemoryMode,
 ) {
     let points = match metering_type {
         MeteringType::Old => injections_old(code),
@@ -1228,16 +1281,25 @@ fn inject_metering(
                 }
             }
             InjectionPointCostDetail::DynamicCost => {
-                elems.extend_from_slice(&[
-                    I64ExtendI32U,
-                    Call {
-                        function_index: export_data_module.decr_instruction_counter_fn,
-                    },
-                    // decr_instruction_counter returns it's argument unchanged,
-                    // so we can convert back to I32 without worrying about
-                    // overflows.
-                    I32WrapI64,
-                ]);
+                let call = Call {
+                    function_index: export_data_module.decr_instruction_counter_fn,
+                };
+
+                match main_memory_mode {
+                    MemoryMode::Memory32 => {
+                        elems.extend_from_slice(&[
+                            I64ExtendI32U,
+                            call,
+                            // decr_instruction_counter returns it's argument unchanged,
+                            // so we can convert back to I32 without worrying about
+                            // overflows.
+                            I32WrapI64,
+                        ]);
+                    }
+                    MemoryMode::Memory64 => {
+                        elems.extend_from_slice(&[call]);
+                    }
+                };
             }
         }
         last_injection_position = point.position;
@@ -1457,7 +1519,11 @@ fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType
 // `table.grow` instruction to make sure that there's enough available memory
 // left to support the requested extra memory. If no `memory.grow` or
 // `table.grow` instructions are present then the code remains unchanged.
-fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
+fn inject_update_available_memory(
+    func_body: &mut wasm_transform::Body,
+    func_type: &FuncType,
+    main_memory_mode: MemoryMode,
+) {
     // This is an overestimation of table element size computed based on the
     // existing canister limits.
     const TABLE_ELEMENT_SIZE: u32 = 1024;
@@ -1481,7 +1547,12 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
         // the total number of locals.
         let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
         let memory_local_ix = func_type.params().len() as u32 + n_locals;
-        func_body.locals.push((1, ValType::I32));
+
+        let local_type = match main_memory_mode {
+            MemoryMode::Memory32 => ValType::I32,
+            MemoryMode::Memory64 => ValType::I64,
+        };
+        func_body.locals.push((1, local_type));
 
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
@@ -1643,6 +1714,7 @@ fn get_data(
                     offset_expr,
                 } => match offset_expr {
                     Operator::I32Const { value } => *value as usize,
+                    Operator::I64Const { value } => *value as usize,
                     _ => return Err(WasmInstrumentationError::WasmDeserializeError(WasmError::new(
                         "complex initialization expressions for data segments are not supported!".into()
                     ))),
@@ -1689,6 +1761,7 @@ fn update_memories(
     mut module: Module,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    main_memory_mode: MemoryMode,
 ) -> (Module, u32) {
     let mut stable_index = 0;
 
@@ -1711,7 +1784,7 @@ fn update_memories(
 
     if write_barrier == FlagStatus::Enabled && !module.memories.is_empty() {
         module.memories.push(MemoryType {
-            memory64: false,
+            memory64: main_memory_mode == MemoryMode::Memory64,
             shared: false,
             initial: BYTEMAP_SIZE_IN_WASM_PAGES,
             maximum: Some(BYTEMAP_SIZE_IN_WASM_PAGES),

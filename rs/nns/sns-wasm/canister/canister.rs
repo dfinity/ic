@@ -126,6 +126,7 @@ impl CanisterApi for CanisterApiImpl {
             memory_allocation: None,
             query_allocation: None,
             sender_canister_version: Some(dfn_core::api::canister_version()),
+            keep_main_memory: None,
         };
         let install_res: Result<(), (Option<i32>, String)> = dfn_core::call(
             CanisterId::ic_00(),

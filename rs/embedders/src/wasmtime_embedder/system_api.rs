@@ -174,7 +174,7 @@ fn charge_for_cpu(
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
     system_api_overhead: NumInstructions,
-    num_bytes: u32,
+    num_bytes: u64,
     complexity: ExecutionComplexity,
     dirty_page_cost: NumInstructions,
     stable_memory_dirty_page_limit: NumPages,
@@ -375,13 +375,38 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, dst: i32, offset: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(MSG_CALLER_COPY, metering_type, size as u32),
+                    overhead!(MSG_CALLER_COPY, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst as u32, offset as u32, size as u32, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_copy_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_CALLER_COPY, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_caller_copy_64(
+                        dst as u64,
+                        offset as u64,
+                        size as u64,
+                        memory,
+                    )
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u32 as usize)
                 } else {
                     Ok(())
                 }
@@ -420,13 +445,33 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, dst: i32, offset: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(MSG_ARG_DATA_COPY, metering_type, size as u32),
+                    overhead!(MSG_ARG_DATA_COPY, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, mem)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_arg_data_copy_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_ARG_DATA_COPY, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, mem| {
+                    system_api.ic0_msg_arg_data_copy_64(dst as u64, offset as u64, size as u64, mem)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
                 } else {
                     Ok(())
                 }
@@ -455,7 +500,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, dst: i32, offset: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(MSG_METHOD_NAME_COPY, metering_type, size as u32),
+                    overhead!(MSG_METHOD_NAME_COPY, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(
@@ -467,6 +512,31 @@ pub(crate) fn syscalls(
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_method_name_copy_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_METHOD_NAME_COPY, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_method_name_copy_64(
+                        dst as u64,
+                        offset as u64,
+                        size as u64,
+                        memory,
+                    )
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
                 } else {
                     Ok(())
                 }
@@ -488,10 +558,25 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, src: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(MSG_REPLY_DATA_APPEND, metering_type, size as u32),
+                    overhead!(MSG_REPLY_DATA_APPEND, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src as u32, size as u32, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_reply_data_append_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_REPLY_DATA_APPEND, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_reply_data_append_64(src as u64, size as u64, memory)
                 })
             }
         })
@@ -520,10 +605,25 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, src: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(MSG_REJECT, metering_type, size as u32),
+                    overhead!(MSG_REJECT, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src as u32, size as u32, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_reject_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_REJECT, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_reject_64(src as u64, size as u64, memory)
                 })
             }
         })
@@ -550,7 +650,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, dst: i32, offset: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(MSG_REJECT_MSG_COPY, metering_type, size as u32),
+                    overhead!(MSG_REJECT_MSG_COPY, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(
@@ -562,6 +662,31 @@ pub(crate) fn syscalls(
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_reject_msg_copy_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_REJECT_MSG_COPY, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_reject_msg_copy_64(
+                        dst as u64,
+                        offset as u64,
+                        size as u64,
+                        memory,
+                    )
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
                 } else {
                     Ok(())
                 }
@@ -587,7 +712,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, dst: i32, offset: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(CANISTER_SELF_COPY, metering_type, size as u32),
+                    overhead!(CANISTER_SELF_COPY, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(
@@ -607,11 +732,36 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "canister_self_copy_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(CANISTER_SELF_COPY, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_canister_self_copy_64(
+                        dst as u64,
+                        offset as u64,
+                        size as u64,
+                        memory,
+                    )
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u64 as usize, size as u64 as usize)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "debug_print", {
             move |mut caller: Caller<'_, StoreData>, offset: i32, length: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(DEBUG_PRINT, metering_type, length as u32),
+                    overhead!(DEBUG_PRINT, metering_type, length as u64),
                 )?;
                 match (
                     caller.data().system_api.as_ref().unwrap().subnet_type(),
@@ -633,11 +783,51 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "debug_print_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(DEBUG_PRINT, metering_type, length as u64),
+                )?;
+                match (
+                    caller.data().system_api.subnet_type(),
+                    feature_flags.rate_limiting_of_debug_prints,
+                ) {
+                    // Debug print is a no-op on non-system subnets with rate limiting.
+                    (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
+                    (SubnetType::VerifiedApplication, FlagStatus::Enabled) => Ok(()),
+                    // If rate limiting is disabled or the subnet is a system subnet, then
+                    // debug print produces output.
+                    (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
+                        with_memory_and_system_api(&mut caller, |system_api, memory| {
+                            system_api.ic0_debug_print_64(offset as u64, length as u64, memory)
+                        })
+                    }
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "trap", {
+            let log = log.clone();
             move |mut caller: Caller<'_, StoreData>, offset: i32, length: i32| -> Result<(), _> {
-                charge_for_cpu(&mut caller, overhead!(TRAP, metering_type, length as u32))?;
+                charge_for_cpu(&mut caller, overhead!(TRAP, metering_type, length as u64))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset as u32, length as u32, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "trap_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| -> Result<(), _> {
+                charge_for_cpu(&mut caller, overhead!(TRAP, metering_type, length as u64))?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_trap_64(offset as u64, length as u64, memory)
                 })
             }
         })
@@ -659,7 +849,7 @@ pub(crate) fn syscalls(
                     overhead!(
                         CALL_NEW,
                         metering_type,
-                        (callee_size as u32).saturating_add(name_len as u32)
+                        (callee_size as u64).saturating_add(name_len as u64)
                     ),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -680,14 +870,66 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "call_new_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>,
+                  callee_src: i64,
+                  callee_size: i64,
+                  name_src: i64,
+                  name_len: i64,
+                  reply_fun: i32,
+                  reply_env: i32,
+                  reject_fun: i32,
+                  reject_env: i32| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(
+                        CALL_NEW,
+                        metering_type,
+                        (callee_size as u64).saturating_add(name_len as u64)
+                    ),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_call_new_64(
+                        callee_src as u64,
+                        callee_size as u64,
+                        name_src as u64,
+                        name_len as u64,
+                        reply_fun as u32,
+                        reply_env as u32,
+                        reject_fun as u32,
+                        reject_env as u32,
+                        memory,
+                    )
+                })
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "call_data_append", {
             move |mut caller: Caller<'_, StoreData>, src: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(CALL_DATA_APPEND, metering_type, size as u32),
+                    overhead!(CALL_DATA_APPEND, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src as u32, size as u32, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "call_data_append_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(CALL_DATA_APPEND, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_call_data_append_64(src as u64, size as u64, memory)
                 })
             }
         })
@@ -762,7 +1004,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, dst: i32, offset: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(STABLE_READ, metering_type, size as u32),
+                    overhead!(STABLE_READ, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
@@ -789,7 +1031,7 @@ pub(crate) fn syscalls(
                 charge_for_system_api_call(
                     &mut caller,
                     system_api::complexity_overhead!(STABLE_WRITE, metering_type),
-                    size,
+                    size as u64,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_WRITE,
                         stable_dirty_pages,
@@ -853,7 +1095,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, dst: i64, offset: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(STABLE64_READ, metering_type, size as u32),
+                    overhead!(STABLE64_READ, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
@@ -879,7 +1121,7 @@ pub(crate) fn syscalls(
                 charge_for_system_api_call(
                     &mut caller,
                     system_api::complexity_overhead!(STABLE64_WRITE, metering_type),
-                    size as u32,
+                    size,
                     ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_WRITE,
                         stable_dirty_pages,
@@ -975,6 +1217,26 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "canister_cycle_balance128_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(CANISTER_CYCLE_BALANCE128, metering_type, 0),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_canister_cycle_balance128_64(dst, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(
@@ -999,6 +1261,26 @@ pub(crate) fn syscalls(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_cycles_available128_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_CYCLES_AVAILABLE128, metering_type, 0),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_cycles_available128_64(dst, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as usize, 16)
@@ -1045,6 +1327,26 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "msg_cycles_refunded128_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_CYCLES_REFUNDED128, metering_type, 0),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_cycles_refunded128_64(dst, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "msg_cycles_accept", {
             move |mut caller: Caller<'_, StoreData>, amount: i64| {
                 charge_for_cpu(&mut caller, overhead!(MSG_CYCLES_ACCEPT, metering_type, 0))?;
@@ -1062,6 +1364,33 @@ pub(crate) fn syscalls(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_accept128(
+                        Cycles::from_parts(amount_high as u64, amount_low as u64),
+                        dst,
+                        memory,
+                    )
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_cycles_accept128_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>,
+                  amount_high: i64,
+                  amount_low: i64,
+                  dst: u64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(MSG_CYCLES_ACCEPT128, metering_type, 0),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_cycles_accept128_64(
                         Cycles::from_parts(amount_high as u64, amount_low as u64),
                         dst,
                         memory,
@@ -1106,6 +1435,25 @@ pub(crate) fn syscalls(
                     )
                 })
                 .map(|()| native_memory_grow_res)
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("__", "update_available_memory_64", {
+            move |mut caller: Caller<'_, StoreData<S>>,
+                  native_memory_grow_res: i64,
+                  additional_elements: i64,
+                  element_size: i32| {
+                with_system_api(&mut caller, |s| {
+                    s.update_available_memory(
+                        native_memory_grow_res,
+                        additional_elements as u64,
+                        element_size as u32 as u64,
+                    )
+                })
+                .map(|()| native_memory_grow_res)
+                .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -1158,10 +1506,25 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(CERTIFIED_DATA_SET, metering_type, size),
+                    overhead!(CERTIFIED_DATA_SET, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_certified_data_set(src, size, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "certified_data_set_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, src: u64, size: u64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(CERTIFIED_DATA_SET, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_certified_data_set_64(src, size, memory)
                 })
             }
         })
@@ -1196,7 +1559,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>, src: i32, size: i32| {
                 charge_for_cpu(
                     &mut caller,
-                    overhead!(IS_CONTROLLER, metering_type, size as u32),
+                    overhead!(IS_CONTROLLER, metering_type, size as u64),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_is_controller(src as u32, size as u32, memory)
@@ -1206,7 +1569,23 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "is_controller_64", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(IS_CONTROLLER, metering_type, size as u64),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_is_controller_64(src as u64, size as u64, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "data_certificate_copy", {
+            let log = log.clone();
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
                 charge_for_cpu(
                     &mut caller,
@@ -1214,6 +1593,25 @@ pub(crate) fn syscalls(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "data_certificate_copy_64", {
+            move |mut caller: Caller<'_, StoreData<S>>, dst: u64, offset: u64, size: u64| {
+                charge_for_cpu(
+                    &mut caller,
+                    overhead!(DATA_CERTIFICATE_COPY, metering_type, size),
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_data_certificate_copy_64(dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)

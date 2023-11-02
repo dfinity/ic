@@ -489,7 +489,7 @@ pub enum LongExecutionMode {
 /// Represents the memory allocation of a canister.
 #[derive(Copy, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Hash)]
 pub enum MemoryAllocation {
-    /// A reserved number of bytes between 0 and 2^48 inclusively that is
+    /// A reserved number of bytes between 0 and 2^64 inclusively that is
     /// guaranteed to be available to the canister. Charging happens based on
     /// the reserved amount of memory, regardless of how much of it is in use.
     Reserved(NumBytes),
@@ -570,7 +570,7 @@ pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 96 * GB;
 /// The upper limit on the Wasm memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GB;
+pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 64 * GB;
 
 const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
 pub const MAX_MEMORY_ALLOCATION: NumBytes =

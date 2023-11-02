@@ -81,6 +81,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "msg_caller_copy_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "msg_arg_data_size",
             vec![(
                 API_VERSION_IC0,
@@ -101,6 +111,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "msg_arg_data_copy_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "msg_method_name_size",
             vec![(
                 API_VERSION_IC0,
@@ -116,6 +136,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_method_name_copy_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
                     return_type: vec![],
                 },
             )],
@@ -161,11 +191,31 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "msg_reject_msg_copy_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "msg_reply_data_append",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_reply_data_append_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
                     return_type: vec![],
                 },
             )],
@@ -191,6 +241,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "msg_reject_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "canister_self_size",
             vec![(
                 API_VERSION_IC0,
@@ -206,6 +266,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "canister_self_copy_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
                     return_type: vec![],
                 },
             )],
@@ -241,11 +311,40 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "call_new_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I32,
+                        ValType::I32,
+                        ValType::I32,
+                        ValType::I32,
+                    ],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "call_data_append",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "call_data_append_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
                     return_type: vec![],
                 },
             )],
@@ -287,6 +386,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "debug_print_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
                     return_type: vec![],
                 },
             )],
@@ -422,6 +531,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "trap_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "canister_cycle_balance",
             vec![(
                 API_VERSION_IC0,
@@ -472,6 +591,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "certified_data_set_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "data_certificate_present",
             vec![(
                 API_VERSION_IC0,
@@ -497,6 +626,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "data_certificate_copy_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
                     return_type: vec![],
                 },
             )],
@@ -542,11 +681,31 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "canister_cycle_balance128_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "msg_cycles_available128",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_available128_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
                     return_type: vec![],
                 },
             )],
@@ -562,6 +721,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "msg_cycles_refunded128_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "msg_cycles_accept128",
             vec![(
                 API_VERSION_IC0,
@@ -572,11 +741,31 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
+            "msg_cycles_accept128_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "is_controller",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "is_controller_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64],
                     return_type: vec![ValType::I32],
                 },
             )],
@@ -914,26 +1103,37 @@ fn validate_export_section(
 // expression. Required because of OP. See also:
 // instrumentation.rs
 fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
-    fn validate_segment(s: &DataSegment) -> Result<(), WasmValidationError> {
+    fn validate_segment(module: &Module, s: &DataSegment) -> Result<(), WasmValidationError> {
         match &s.kind {
             DataSegmentKind::Passive => Err(WasmValidationError::InvalidDataSection(
                 "Empty offset in data segment.".to_string(),
             )),
             DataSegmentKind::Active {
-                memory_index: _,
+                memory_index,
                 offset_expr,
-            } => match offset_expr {
-                Operator::I32Const { .. } => Ok(()),
-                _ => Err(WasmValidationError::InvalidDataSection(format!(
-                    "Invalid offset expression in data segment: {:?}",
-                    offset_expr
-                ))),
-            },
+            } => {
+                let memory_index = *memory_index as usize;
+                if memory_index >= module.memories.len() {
+                    return Err(WasmValidationError::InvalidDataSection(format!(
+                        "Invalid memory index in data segment: {:?}",
+                        memory_index
+                    )));
+                }
+                let memory64 = module.memories[memory_index].memory64;
+                match offset_expr {
+                    Operator::I32Const { .. } if !memory64 => Ok(()),
+                    Operator::I64Const { .. } if memory64 => Ok(()),
+                    _ => Err(WasmValidationError::InvalidDataSection(format!(
+                        "Invalid offset expression in data segment: {:?}",
+                        offset_expr
+                    ))),
+                }
+            }
         }
     }
 
     for d in &module.data {
-        validate_segment(d)?;
+        validate_segment(module, d)?;
     }
     Ok(())
 }
@@ -1324,6 +1524,8 @@ pub fn ensure_determinism(config: &mut Config) {
 fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
     let mut config = wasmtime::Config::default();
     ensure_determinism(&mut config);
+    // Support 64-bit main memory.
+    config.wasm_memory64(true);
     let engine = wasmtime::Engine::new(&config).map_err(|_| {
         WasmValidationError::WasmtimeValidation(String::from("Failed to initialize Wasm engine"))
     })?;

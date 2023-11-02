@@ -143,6 +143,7 @@ pub struct InstallCodeContext {
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
     pub query_allocation: QueryAllocation,
+    pub keep_main_memory: bool,
 }
 
 impl InstallCodeContext {
@@ -245,6 +246,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             ))?),
             None => None,
         };
+        let keep_main_memory = args.keep_main_memory.unwrap_or(false);
 
         // TODO(EXE-294): Query allocations are not supported and should be deleted.
         let query_allocation = QueryAllocation::default();
@@ -258,6 +260,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             compute_allocation,
             memory_allocation,
             query_allocation,
+            keep_main_memory,
         })
     }
 }
