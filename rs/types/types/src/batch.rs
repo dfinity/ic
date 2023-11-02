@@ -7,21 +7,22 @@ mod ingress;
 mod self_validating;
 mod xnet;
 
-pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
-pub use self::execution_environment::{
-    CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
-    TotalQueryStats,
+pub use self::{
+    canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
+    execution_environment::{
+        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
+        TotalQueryStats,
+    },
+    ingress::{IngressPayload, IngressPayloadError},
+    self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    xnet::XNetPayload,
 };
-pub use self::ingress::{IngressPayload, IngressPayloadError};
-pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
-pub use self::xnet::XNetPayload;
-
-use super::{
+use crate::{
+    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     messages::{Response, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
-use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_base_types::NodeId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 #[cfg(test)]
