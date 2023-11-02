@@ -283,6 +283,9 @@ fn canister_manager_config(
         rate_limiting_of_instructions,
         100,
         FlagStatus::Enabled,
+        FlagStatus::Enabled,
+        // 10 MiB should be enough for all the tests.
+        NumBytes::from(10 * 1024 * 1024),
     )
 }
 
@@ -7431,4 +7434,73 @@ fn stored_chunks_works() {
     let mut expected = vec![ByteBuf::from(hash1), ByteBuf::from(hash2)];
     expected.sort();
     assert_eq!(reply, StoredChunksReply(expected));
+}
+
+#[test]
+fn upload_chunk_fails_when_heap_delta_rate_limited() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store()
+        .with_heap_delta_rate_limit(wasm_chunk_store::chunk_size())
+        .build();
+    let canister_id = test.create_canister(CYCLES);
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance(),
+        Cycles::from(0_u128)
+    );
+
+    // Uploading one chunk will succeed
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    };
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
+    // Uploading the second chunk will fail because of rate limiting.
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![43; 10],
+    };
+    let error = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(
+        error .description(),
+        "Error from Wasm chunk store: Canister is heap delta rate limited. Current delta debit: 1048576, limit: 1048576",
+    );
+
+    assert_eq!(
+        test.subnet_available_memory(),
+        initial_subnet_available_memory
+    );
+}
+
+#[test]
+fn upload_chunk_increases_subnet_heap_delta() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let canister_id = test.create_canister(CYCLES);
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
+    // Uploading one chunk will increase the delta.
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 10],
+    };
+    let _hash = test
+        .subnet_message("upload_chunk", upload_args.encode())
+        .unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate,
+        wasm_chunk_store::chunk_size()
+    );
 }

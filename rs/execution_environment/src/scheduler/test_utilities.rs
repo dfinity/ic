@@ -809,6 +809,7 @@ impl SchedulerTestBuilder {
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            self.scheduler_config.heap_delta_rate_limit,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,

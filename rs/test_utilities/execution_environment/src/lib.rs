@@ -1563,6 +1563,7 @@ pub struct ExecutionTestBuilder {
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     time: Time,
     resource_saturation_scaling: usize,
+    heap_delta_rate_limit: NumBytes,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1602,6 +1603,7 @@ impl Default for ExecutionTestBuilder {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             time: mock_time(),
             resource_saturation_scaling: 1,
+            heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
         }
     }
 }
@@ -1896,6 +1898,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_heap_delta_rate_limit(mut self, heap_delta_rate_limit: NumBytes) -> Self {
+        self.heap_delta_rate_limit = heap_delta_rate_limit;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2030,6 +2037,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             self.resource_saturation_scaling,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            self.heap_delta_rate_limit,
         );
         let (query_stats_collector, _) = init_query_stats(self.log.clone());
 
