@@ -135,7 +135,6 @@ system_test(
 # recovered_mainnet_nns is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 system_test(
     name = "recovered_mainnet_nns",
-    colocated_test_driver_vm_enable_ipv4 = True,  # because zh1-pyr07 is only available over IPv4
     colocated_test_driver_vm_forward_ssh_agent = True,
     colocated_test_driver_vm_required_host_features = ["dc=zh1"],
     colocated_test_driver_vm_resources = {
