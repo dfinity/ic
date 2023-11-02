@@ -275,7 +275,7 @@ pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>,
     Ok(result)
 }
 
-/// This structure allows checking the total amount of swap participation
+/// This structure allows checking the direct amount of swap participation
 /// at any state of the SNS lifecycle.
 #[derive(Debug)]
 pub enum IcpTargetProgress {
@@ -283,8 +283,8 @@ pub enum IcpTargetProgress {
     /// been reached, e.g., at the beginning and during the swap, or at the ond of
     /// a swap that did not reach the target.
     NotReached {
-        current_total_participation_e8s: u64,
-        max_total_participation_e8s: u64,
+        current_direct_participation_e8s: u64,
+        max_direct_participation_e8s: u64,
     },
     /// This value is reserved for the situation in which the ICP target has been
     /// reached *exactly*.
@@ -292,8 +292,8 @@ pub enum IcpTargetProgress {
     /// This value is reserved for situations in which the ICP target has been
     /// somehow exceeded. This should not happen under normal circumstances.
     Exceeded {
-        current_total_participation_e8s: u64,
-        max_total_participation_e8s: u64,
+        current_direct_participation_e8s: u64,
+        max_direct_participation_e8s: u64,
     },
     /// The ICP target cannot be defined or reached in some abnormal situations, e.g.,
     /// when the Swap Params is not available. This value covers such cases.
@@ -335,17 +335,17 @@ impl IcpTargetProgress {
     pub fn validate(&self) -> Result<(), IcpTargetError> {
         match self {
             Self::Exceeded {
-                current_total_participation_e8s,
-                max_total_participation_e8s,
+                current_direct_participation_e8s,
+                max_direct_participation_e8s,
             } => {
-                let excess = current_total_participation_e8s
-                    .checked_sub(*max_total_participation_e8s)
+                let excess = current_direct_participation_e8s
+                    .checked_sub(*max_direct_participation_e8s)
                     .unwrap_or_else(|| {
                         log!(
                             ERROR,
                             "Invariant violated in IcpTargetProgress::Exceeded: \
-                            current_total_participation_e8s = {current_total_participation_e8s} \
-                            <= max_total_participation_e8s = {max_total_participation_e8s}",
+                            current_direct_participation_e8s = {current_direct_participation_e8s} \
+                            <= max_direct_participation_e8s = {max_direct_participation_e8s}",
                         );
                         0
                     });
@@ -3038,18 +3038,18 @@ impl Swap {
     /// the target total ICP amount (both direct and NF contributions).
     pub fn icp_target_progress(&self) -> IcpTargetProgress {
         if self.params.is_some() {
-            let current_total_participation_e8s = self.current_total_participation_e8s();
-            let max_total_participation_e8s = self.max_total_participation_e8s();
-            match current_total_participation_e8s.cmp(&max_total_participation_e8s) {
+            let current_direct_participation_e8s = self.current_direct_participation_e8s();
+            let max_direct_participation_e8s = self.max_direct_participation_e8s();
+            match current_direct_participation_e8s.cmp(&max_direct_participation_e8s) {
                 Ordering::Less => IcpTargetProgress::NotReached {
-                    current_total_participation_e8s,
-                    max_total_participation_e8s,
+                    current_direct_participation_e8s,
+                    max_direct_participation_e8s,
                 },
                 Ordering::Greater => IcpTargetProgress::Exceeded {
-                    current_total_participation_e8s,
-                    max_total_participation_e8s,
+                    current_direct_participation_e8s,
+                    max_direct_participation_e8s,
                 },
-                Ordering::Equal => IcpTargetProgress::Reached(max_total_participation_e8s),
+                Ordering::Equal => IcpTargetProgress::Reached(max_direct_participation_e8s),
             }
         } else {
             IcpTargetProgress::Undefined
