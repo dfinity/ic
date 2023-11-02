@@ -146,7 +146,7 @@ fn charge_for_cpu(
     charge_for_system_api_call(
         caller,
         overhead.system_api_overhead,
-        overhead.num_bytes.get() as u32,
+        overhead.num_bytes.get() as u64,
         complexity,
         NumInstructions::from(0),
         // since we are not adding any stable dirty pages, process this as if there was no limit
@@ -391,8 +391,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_caller_copy_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, dst: i64, offset: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_CALLER_COPY, metering_type, size as u64),
@@ -461,8 +460,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_arg_data_copy_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, dst: i64, offset: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_ARG_DATA_COPY, metering_type, size as u64),
@@ -521,8 +519,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_method_name_copy_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, dst: i64, offset: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_METHOD_NAME_COPY, metering_type, size as u64),
@@ -569,8 +566,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reply_data_append_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, src: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_REPLY_DATA_APPEND, metering_type, size as u64),
@@ -616,8 +612,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reject_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, src: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_REJECT, metering_type, size as u64),
@@ -671,8 +666,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reject_msg_copy_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, dst: i64, offset: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_REJECT_MSG_COPY, metering_type, size as u64),
@@ -733,8 +727,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "canister_self_copy_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, dst: i64, offset: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(CANISTER_SELF_COPY, metering_type, size as u64),
@@ -784,14 +777,13 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "debug_print_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| {
+            move |mut caller: Caller<'_, StoreData>, offset: i64, length: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(DEBUG_PRINT, metering_type, length as u64),
                 )?;
                 match (
-                    caller.data().system_api.subnet_type(),
+                    caller.data().system_api.as_ref().unwrap().subnet_type(),
                     feature_flags.rate_limiting_of_debug_prints,
                 ) {
                     // Debug print is a no-op on non-system subnets with rate limiting.
@@ -811,7 +803,6 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "trap", {
-            let log = log.clone();
             move |mut caller: Caller<'_, StoreData>, offset: i32, length: i32| -> Result<(), _> {
                 charge_for_cpu(&mut caller, overhead!(TRAP, metering_type, length as u64))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -823,8 +814,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "trap_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, offset: i64, length: i64| -> Result<(), _> {
+            move |mut caller: Caller<'_, StoreData>, offset: i64, length: i64| -> Result<(), _> {
                 charge_for_cpu(&mut caller, overhead!(TRAP, metering_type, length as u64))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap_64(offset as u64, length as u64, memory)
@@ -871,8 +861,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "call_new_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>,
+            move |mut caller: Caller<'_, StoreData>,
                   callee_src: i64,
                   callee_size: i64,
                   name_src: i64,
@@ -922,8 +911,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "call_data_append_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, src: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(CALL_DATA_APPEND, metering_type, size as u64),
@@ -1218,8 +1206,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "canister_cycle_balance128_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+            move |mut caller: Caller<'_, StoreData>, dst: u64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(CANISTER_CYCLE_BALANCE128, metering_type, 0),
@@ -1273,8 +1260,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_cycles_available128_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+            move |mut caller: Caller<'_, StoreData>, dst: u64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_CYCLES_AVAILABLE128, metering_type, 0),
@@ -1328,8 +1314,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_cycles_refunded128_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64| {
+            move |mut caller: Caller<'_, StoreData>, dst: u64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_CYCLES_REFUNDED128, metering_type, 0),
@@ -1380,11 +1365,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_cycles_accept128_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>,
-                  amount_high: i64,
-                  amount_low: i64,
-                  dst: u64| {
+            move |mut caller: Caller<'_, StoreData>, amount_high: i64, amount_low: i64, dst: u64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(MSG_CYCLES_ACCEPT128, metering_type, 0),
@@ -1441,7 +1422,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("__", "update_available_memory_64", {
-            move |mut caller: Caller<'_, StoreData<S>>,
+            move |mut caller: Caller<'_, StoreData>,
                   native_memory_grow_res: i64,
                   additional_elements: i64,
                   element_size: i32| {
@@ -1453,7 +1434,6 @@ pub(crate) fn syscalls(
                     )
                 })
                 .map(|()| native_memory_grow_res)
-                .map_err(|e| process_err(&mut caller, e))
             }
         })
         .unwrap();
@@ -1517,8 +1497,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "certified_data_set_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: u64, size: u64| {
+            move |mut caller: Caller<'_, StoreData>, src: u64, size: u64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(CERTIFIED_DATA_SET, metering_type, size as u64),
@@ -1570,8 +1549,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "is_controller_64", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, src: i64, size: i64| {
+            move |mut caller: Caller<'_, StoreData>, src: i64, size: i64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(IS_CONTROLLER, metering_type, size as u64),
@@ -1585,7 +1563,6 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "data_certificate_copy", {
-            let log = log.clone();
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
                 charge_for_cpu(
                     &mut caller,
@@ -1605,7 +1582,7 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "data_certificate_copy_64", {
-            move |mut caller: Caller<'_, StoreData<S>>, dst: u64, offset: u64, size: u64| {
+            move |mut caller: Caller<'_, StoreData>, dst: u64, offset: u64, size: u64| {
                 charge_for_cpu(
                     &mut caller,
                     overhead!(DATA_CERTIFICATE_COPY, metering_type, size),
