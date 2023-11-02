@@ -58,12 +58,12 @@ use ic_nns_governance::{
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
-    storage::{grow_upgrades_memory_to, UPGRADES_MEMORY},
+    storage::{grow_upgrades_memory_to, with_upgrades_memory},
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{borrow::Cow, boxed::Box, ops::Deref, str::FromStr, time::SystemTime};
+use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -346,12 +346,9 @@ fn canister_init_(init_payload: GovernanceProto) {
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
 
-    UPGRADES_MEMORY.with(|um| {
-        let memory = um.borrow();
-
+    with_upgrades_memory(|memory| {
         let governance_proto = governance_mut().take_heap_proto();
-        store_protobuf(memory.deref(), &governance_proto)
-            .expect("Failed to encode protobuf pre_upgrade");
+        store_protobuf(memory, &governance_proto).expect("Failed to encode protobuf pre_upgrade");
     });
 }
 
@@ -373,16 +370,14 @@ fn canister_post_upgrade() {
     // Meaning there is no real possibility of these bytes being misinterpreted
     // TODO NNS1-2357 Remove conditional after deploying the updated version to production
     let restored_state = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
-        UPGRADES_MEMORY
-            .with(|um| {
-                let result: Result<GovernanceProto, _> =
-                    load_protobuf(um.borrow().deref());
-                result
-            })
-            .expect(
-                "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+        with_upgrades_memory(|memory| {
+            let result: Result<GovernanceProto, _> = load_protobuf(memory);
+            result
+        })
+        .expect(
+            "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-            )
+        )
     } else {
         let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
         GovernanceProto::decode(reader).expect(
